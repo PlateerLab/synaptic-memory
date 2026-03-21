@@ -35,9 +35,11 @@ synaptic-mcp = "synaptic.mcp.server:main"
 postgresql = ["asyncpg>=0.30", "pgvector>=0.3"]
 sqlite = ["aiosqlite>=0.20"]
 neo4j = ["neo4j>=5.25"]
+qdrant = ["qdrant-client>=1.12"]
+minio = ["miniopy-async>=1.21"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
-scale = ["neo4j>=5.25"]
-all = ["asyncpg>=0.30", "pgvector>=0.3", "aiosqlite>=0.20", "neo4j>=5.25", "mcp[cli]>=1.5"]
+scale = ["neo4j>=5.25", "qdrant-client>=1.12", "miniopy-async>=1.21"]
+all = ["asyncpg>=0.30", "pgvector>=0.3", "aiosqlite>=0.20", "neo4j>=5.25", "qdrant-client>=1.12", "miniopy-async>=1.21", "mcp[cli]>=1.5"]
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.8", "pyright>=1.1"]
 
 [tool.hatch.build.targets.wheel]
@@ -49,6 +51,9 @@ testpaths = ["tests"]
 markers = [
     "integration: PostgreSQL integration tests (require running PG server)",
     "neo4j: Neo4j integration tests (require running Neo4j server)",
+    "qdrant: Qdrant integration tests (require running Qdrant server)",
+    "minio: MinIO integration tests (require running MinIO server)",
+    "composite: Composite backend integration tests (require Neo4j + Qdrant + MinIO)",
     "qa: Quality assurance tests with real external data",
 ]
 

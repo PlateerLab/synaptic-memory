@@ -10,5 +10,13 @@ services:
     volumes:
       - neo4j_data:/data
 
+  qdrant:
+    image: qdrant/qdrant:v1.12
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
 volumes:
   neo4j_data:
+  qdrant_data:
