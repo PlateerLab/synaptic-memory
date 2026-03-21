@@ -2,6 +2,12 @@
 
 from synaptic.activity import ActivityTracker
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
+from synaptic.extensions.embedder import (
+    EmbeddingProvider,
+    MockEmbeddingProvider,
+    OllamaEmbeddingProvider,
+    OpenAIEmbeddingProvider,
+)
 from synaptic.graph import SynapticGraph
 from synaptic.models import (
     ActivatedNode,
@@ -32,10 +38,14 @@ __all__ = [
     "Digester",
     "Edge",
     "EdgeKind",
+    "EmbeddingProvider",
     "GraphTraversal",
+    "MockEmbeddingProvider",
     "Node",
     "NodeKind",
+    "OllamaEmbeddingProvider",
     "OntologyRegistry",
+    "OpenAIEmbeddingProvider",
     "PropertyDef",
     "QueryRewriter",
     "RelationConstraint",

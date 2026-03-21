@@ -29,6 +29,8 @@ _backend: Any = None
 _tracker: Any = None
 _db_path: str = "knowledge.db"
 _dsn: str = ""
+_embed_url: str = ""
+_embed_model: str = "default"
 
 
 async def _ensure_graph() -> Any:
@@ -52,10 +54,20 @@ async def _ensure_graph() -> Any:
         _backend = SQLiteBackend(_db_path)
 
     await _backend.connect()
+
+    # Auto-embedding: connect to any OpenAI-compatible endpoint
+    embedder = None
+    if _embed_url:
+        from synaptic.extensions.embedder import OpenAIEmbeddingProvider  # noqa: PLC0415
+
+        embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
+        logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
+
     _graph = SynapticGraph(
         _backend,
         tag_extractor=RegexTagExtractor(),
         ontology=build_agent_ontology(),
+        embedder=embedder,
     )
     logger.info("Knowledge graph initialized (backend=%s)", type(_backend).__name__)
     return _graph
@@ -652,7 +664,7 @@ async def ontology_query_schema(
 
 def main() -> None:
     """Entry point for synaptic-mcp command."""
-    global _db_path, _dsn
+    global _db_path, _dsn, _embed_url, _embed_model
 
     if "--version" in sys.argv:
         print(f"synaptic-mcp {__version__}")
@@ -660,22 +672,30 @@ def main() -> None:
 
     if "--help" in sys.argv or "-h" in sys.argv:
         print(
-            "Usage: synaptic-mcp [--db PATH] [--dsn DSN]\n"
+            "Usage: synaptic-mcp [OPTIONS]\n"
             "\n"
             "Options:\n"
-            "  --db PATH    SQLite database path (default: knowledge.db)\n"
-            "  --dsn DSN    PostgreSQL connection string\n"
-            "  --version    Show version\n"
+            "  --db PATH          SQLite database path (default: knowledge.db)\n"
+            "  --dsn DSN          PostgreSQL connection string\n"
+            "  --embed-url URL    Embedding API base URL (OpenAI-compatible)\n"
+            "                     Examples: http://localhost:8080/v1 (vLLM/llama.cpp)\n"
+            "                              http://localhost:11434/v1 (Ollama)\n"
+            "  --embed-model NAME Embedding model name (default: 'default')\n"
+            "  --version          Show version\n"
         )
         return
 
-    # Parse --db and --dsn args
+    # Parse args
     args = sys.argv[1:]
     for i, arg in enumerate(args):
         if arg == "--db" and i + 1 < len(args):
             _db_path = args[i + 1]
         elif arg == "--dsn" and i + 1 < len(args):
             _dsn = args[i + 1]
+        elif arg == "--embed-url" and i + 1 < len(args):
+            _embed_url = args[i + 1]
+        elif arg == "--embed-model" and i + 1 < len(args):
+            _embed_model = args[i + 1]
 
     # Configure logging to stderr (stdout is MCP protocol)
     logging.basicConfig(
@@ -685,6 +705,8 @@ def main() -> None:
     )
 
     logger.info("Starting Synaptic Memory MCP server (db=%s, dsn=%s)", _db_path, _dsn or "none")
+    if _embed_url:
+        logger.info("Embedding: %s (model=%s)", _embed_url, _embed_model)
     server.run()
 
 

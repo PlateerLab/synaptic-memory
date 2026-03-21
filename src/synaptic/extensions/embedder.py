@@ -1,8 +1,19 @@
-"""Embedding providers — generate vector embeddings for nodes."""
+"""Embedding providers — generate vector embeddings for nodes.
+
+Supports any OpenAI-compatible endpoint:
+- OpenAI API
+- vLLM (--served-model-name)
+- llama.cpp (server --embedding)
+- Ollama (/api/embeddings)
+- TEI (Text Embeddings Inference)
+"""
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingProvider(Protocol):
@@ -21,7 +32,6 @@ class MockEmbeddingProvider:
         self._dim = dim
 
     async def embed(self, text: str) -> list[float]:
-        # Deterministic: hash text into a vector
         h = hash(text) & 0xFFFFFFFF
         return [((h >> (i * 8)) & 0xFF) / 255.0 for i in range(self._dim)]
 
@@ -30,34 +40,39 @@ class MockEmbeddingProvider:
 
 
 class OpenAIEmbeddingProvider:
-    """OpenAI-compatible embedding provider (works with OpenAI, vLLM, Ollama).
+    """OpenAI-compatible embedding provider.
 
-    Usage:
-        provider = OpenAIEmbeddingProvider(
-            api_base="https://api.openai.com/v1",
-            api_key="sk-...",
-            model="text-embedding-3-small",
-        )
+    Works with any server implementing the /v1/embeddings endpoint:
+    - OpenAI: api_base="https://api.openai.com/v1", model="text-embedding-3-small"
+    - vLLM:   api_base="http://localhost:8000/v1", model="BAAI/bge-m3"
+    - llama.cpp: api_base="http://localhost:8080/v1", model="default"
+    - Ollama: api_base="http://localhost:11434/v1", model="nomic-embed-text"
+    - TEI:    api_base="http://localhost:8080/v1", model="default"
+
+    Uses aiohttp (zero extra deps — already pulled in by miniopy-async).
     """
 
-    __slots__ = ("_api_base", "_api_key", "_model")
+    __slots__ = ("_api_base", "_api_key", "_model", "_timeout")
 
     def __init__(
         self,
-        api_base: str = "https://api.openai.com/v1",
+        api_base: str = "http://localhost:8080/v1",
+        *,
         api_key: str = "",
-        model: str = "text-embedding-3-small",
+        model: str = "default",
+        timeout: int = 60,
     ) -> None:
         self._api_base = api_base.rstrip("/")
         self._api_key = api_key
         self._model = model
+        self._timeout = timeout
 
     async def embed(self, text: str) -> list[float]:
         results = await self.embed_batch([text])
         return results[0]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        import httpx  # type: ignore[import-untyped]  # noqa: PLC0415
+        import aiohttp  # noqa: PLC0415
 
         url = f"{self._api_base}/embeddings"
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -66,12 +81,63 @@ class OpenAIEmbeddingProvider:
 
         payload = {"model": self._model, "input": texts}
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        timeout = aiohttp.ClientTimeout(total=self._timeout)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, headers=headers, json=payload) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    msg = f"Embedding API error {resp.status}: {body[:200]}"
+                    raise RuntimeError(msg)
+                data = await resp.json()
 
         embeddings: list[list[float]] = []
         for item in sorted(data["data"], key=lambda x: x["index"]):  # type: ignore[no-any-return]
             embeddings.append(item["embedding"])  # type: ignore[index]
         return embeddings
+
+
+class OllamaEmbeddingProvider:
+    """Ollama native embedding endpoint (/api/embed).
+
+    For Ollama servers that don't expose /v1/embeddings.
+
+    Usage:
+        provider = OllamaEmbeddingProvider(
+            base_url="http://localhost:11434",
+            model="nomic-embed-text",
+        )
+    """
+
+    __slots__ = ("_base_url", "_model", "_timeout")
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        *,
+        model: str = "nomic-embed-text",
+        timeout: int = 60,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._timeout = timeout
+
+    async def embed(self, text: str) -> list[float]:
+        results = await self.embed_batch([text])
+        return results[0]
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        import aiohttp  # noqa: PLC0415
+
+        url = f"{self._base_url}/api/embed"
+        payload = {"model": self._model, "input": texts}
+
+        timeout = aiohttp.ClientTimeout(total=self._timeout)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, json=payload) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    msg = f"Ollama embed error {resp.status}: {body[:200]}"
+                    raise RuntimeError(msg)
+                data = await resp.json()
+
+        return data["embeddings"]  # type: ignore[no-any-return]

@@ -10,6 +10,7 @@ from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
 from synaptic.consolidation import ConsolidationCascade
 from synaptic.exporter import JSONExporter, MarkdownExporter
+from synaptic.extensions.embedder import EmbeddingProvider
 from synaptic.hebbian import HebbianEngine
 from synaptic.models import (
     ConsolidationLevel,
@@ -34,6 +35,7 @@ class SynapticGraph:
         "_backend",
         "_cache",
         "_consolidation",
+        "_embedder",
         "_hebbian",
         "_json_exporter",
         "_md_exporter",
@@ -49,6 +51,7 @@ class SynapticGraph:
         query_rewriter: QueryRewriter | None = None,
         tag_extractor: TagExtractor | None = None,
         ontology: OntologyRegistry | None = None,
+        embedder: EmbeddingProvider | None = None,
         cache_size: int = 256,
     ) -> None:
         self._backend = backend
@@ -60,6 +63,7 @@ class SynapticGraph:
         self._json_exporter = JSONExporter()
         self._cache = NodeCache(maxsize=cache_size)
         self._ontology = ontology
+        self._embedder = embedder
         self._agent_search = AgentSearch(hybrid=self._search)
 
     @property
@@ -91,6 +95,12 @@ class SynapticGraph:
             if errors:
                 msg = f"Ontology validation failed: {'; '.join(errors)}"
                 raise ValueError(msg)
+
+        # Auto-embed if embedder is available and no embedding provided
+        if embedding is None and self._embedder is not None:
+            text = f"{title} {content}".strip()
+            if text:
+                embedding = await self._embedder.embed(text)
 
         node = await self._store.add_node(
             title, content, kind=kind, tags=tags, source=source,
@@ -127,6 +137,9 @@ class SynapticGraph:
         limit: int = 10,
         embedding: list[float] | None = None,
     ) -> SearchResult:
+        # Auto-embed query for vector search
+        if embedding is None and self._embedder is not None:
+            embedding = await self._embedder.embed(query)
         return await self._search.search(self._backend, query, limit=limit, embedding=embedding)
 
     async def agent_search(
@@ -143,6 +156,9 @@ class SynapticGraph:
 
         Set intent="auto" (default) to infer intent from query keywords.
         """
+        # Auto-embed query for vector search
+        if embedding is None and self._embedder is not None:
+            embedding = await self._embedder.embed(query)
         if intent == "auto":
             search_intent = suggest_intent(query)
         else:
