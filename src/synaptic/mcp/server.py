@@ -26,6 +26,7 @@ server = FastMCP(
 # Module-level state (initialized on first tool call)
 _graph: Any = None
 _backend: Any = None
+_tracker: Any = None
 _db_path: str = "knowledge.db"
 _dsn: str = ""
 
@@ -39,6 +40,7 @@ async def _ensure_graph() -> Any:
 
     from synaptic.extensions.tagger_regex import RegexTagExtractor  # noqa: PLC0415
     from synaptic.graph import SynapticGraph  # noqa: PLC0415
+    from synaptic.ontology import build_agent_ontology  # noqa: PLC0415
 
     if _dsn:
         from synaptic.backends.postgresql import PostgreSQLBackend  # noqa: PLC0415
@@ -50,9 +52,27 @@ async def _ensure_graph() -> Any:
         _backend = SQLiteBackend(_db_path)
 
     await _backend.connect()
-    _graph = SynapticGraph(_backend, tag_extractor=RegexTagExtractor())
+    _graph = SynapticGraph(
+        _backend,
+        tag_extractor=RegexTagExtractor(),
+        ontology=build_agent_ontology(),
+    )
     logger.info("Knowledge graph initialized (backend=%s)", type(_backend).__name__)
     return _graph
+
+
+async def _ensure_tracker() -> Any:
+    """Lazy-initialize the ActivityTracker."""
+    global _tracker
+
+    if _tracker is not None:
+        return _tracker
+
+    from synaptic.activity import ActivityTracker  # noqa: PLC0415
+
+    graph = await _ensure_graph()
+    _tracker = ActivityTracker(graph)
+    return _tracker
 
 
 # --- Tools ---
@@ -255,6 +275,378 @@ async def knowledge_consolidate() -> dict[str, Any]:
         "nodes_created": len(result.nodes_created),
         "vitality_decayed": decayed,
         "edges_pruned": pruned,
+    }
+
+
+# --- Agent Workflow Tools ---
+
+
+@server.tool()
+async def agent_start_session(
+    agent_id: str = "",
+    description: str = "",
+) -> dict[str, Any]:
+    """Start an agent work session. All subsequent actions can be linked to this session.
+
+    Args:
+        agent_id: Identifier for the agent (e.g. "claude-code", "deploy-bot")
+        description: What this session is about
+    """
+    tracker = await _ensure_tracker()
+    session = await tracker.start_session(agent_id=agent_id, description=description)
+    return {
+        "success": True,
+        "session_id": session.id,
+        "agent_id": agent_id,
+    }
+
+
+@server.tool()
+async def agent_log_action(
+    session_id: str,
+    tool_name: str,
+    result: str = "",
+    parameters: str = "",
+    success: bool = True,
+    duration_ms: float = 0.0,
+) -> dict[str, Any]:
+    """Log a tool call or action within an agent session.
+
+    Args:
+        session_id: Session ID from agent_start_session
+        tool_name: Name of the tool that was called
+        result: Summary of the tool's output
+        parameters: JSON string of parameters passed to the tool
+        success: Whether the tool call succeeded
+        duration_ms: How long the tool call took in milliseconds
+    """
+    import json as _json  # noqa: PLC0415
+
+    tracker = await _ensure_tracker()
+    params = _json.loads(parameters) if parameters else None
+    node = await tracker.log_tool_call(
+        session_id,
+        tool_name=tool_name,
+        parameters=params,
+        result=result,
+        success=success,
+        duration_ms=duration_ms,
+    )
+    return {
+        "success": True,
+        "node_id": node.id,
+        "tool_name": tool_name,
+    }
+
+
+@server.tool()
+async def agent_record_decision(
+    session_id: str,
+    title: str,
+    rationale: str,
+    alternatives: str = "",
+    context_node_ids: str = "",
+) -> dict[str, Any]:
+    """Record a decision made by the agent with rationale and considered alternatives.
+
+    Args:
+        session_id: Session ID from agent_start_session
+        title: What was decided
+        rationale: Why this choice was made
+        alternatives: Comma-separated list of alternatives that were considered
+        context_node_ids: Comma-separated IDs of related knowledge nodes
+    """
+    tracker = await _ensure_tracker()
+    alt_list = [a.strip() for a in alternatives.split(",") if a.strip()] if alternatives else None
+    ctx_ids = (
+        [c.strip() for c in context_node_ids.split(",") if c.strip()]
+        if context_node_ids else None
+    )
+
+    node = await tracker.record_decision(
+        session_id,
+        title=title,
+        rationale=rationale,
+        alternatives=alt_list,
+        context_node_ids=ctx_ids,
+    )
+    return {
+        "success": True,
+        "decision_id": node.id,
+        "title": title,
+    }
+
+
+@server.tool()
+async def agent_record_outcome(
+    decision_id: str,
+    title: str,
+    content: str,
+    success: bool = True,
+) -> dict[str, Any]:
+    """Record the outcome of a previous decision. Triggers Hebbian learning.
+
+    Args:
+        decision_id: ID of the decision this outcome relates to
+        title: Short summary of the outcome
+        content: Detailed description of what happened
+        success: Whether the outcome was positive
+    """
+    tracker = await _ensure_tracker()
+    node = await tracker.record_outcome(
+        decision_id,
+        title=title,
+        content=content,
+        success=success,
+    )
+    return {
+        "success": True,
+        "outcome_id": node.id,
+        "decision_id": decision_id,
+        "outcome": "success" if success else "failure",
+    }
+
+
+# --- Semantic Search Tools ---
+
+
+@server.tool()
+async def agent_find_similar(
+    query: str,
+    intent: str = "general",
+    context_tags: str = "",
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search knowledge with agent-aware intent for smarter results.
+
+    Intents:
+    - similar_decisions: find past decisions on similar problems
+    - past_failures: find what went wrong before
+    - related_rules: find governing rules and constraints
+    - reasoning_chain: follow decision → outcome → lesson paths
+    - context_explore: explore neighborhood of a topic
+    - general: standard hybrid search
+
+    Args:
+        query: Search query (Korean or English)
+        intent: Search intent (see above)
+        context_tags: Comma-separated tags for context-aware ranking
+        limit: Maximum results
+    """
+    graph = await _ensure_graph()
+    tags = [t.strip() for t in context_tags.split(",") if t.strip()] if context_tags else None
+
+    try:
+        result = await graph.agent_search(
+            query, intent=intent, context_tags=tags, limit=limit,
+        )
+    except ValueError as e:
+        return {"success": False, "message": str(e)}
+
+    results = []
+    for activated in result.nodes:
+        node = activated.node
+        results.append({
+            "id": node.id,
+            "kind": str(node.kind),
+            "title": node.title,
+            "content": node.content[:500],
+            "tags": node.tags,
+            "score": round(activated.resonance, 3),
+            "properties": node.properties,
+        })
+
+    return {
+        "success": True,
+        "intent": intent,
+        "results": results,
+        "total_candidates": result.total_candidates,
+        "search_time_ms": round(result.search_time_ms, 1),
+        "stages_used": result.stages_used,
+    }
+
+
+@server.tool()
+async def agent_get_reasoning_chain(
+    decision_id: str,
+) -> dict[str, Any]:
+    """Get the full reasoning chain for a decision: decision → outcome → lessons learned.
+
+    Args:
+        decision_id: ID of the decision node to trace
+    """
+    tracker = await _ensure_tracker()
+    graph = await _ensure_graph()
+
+    decision = await graph.backend.get_node(decision_id)
+    if decision is None:
+        return {"success": False, "message": f"Decision {decision_id} not found"}
+
+    chain = await tracker.get_decision_chain(decision_id)
+    result = {
+        "success": True,
+        "decision": {
+            "id": decision.id,
+            "title": decision.title,
+            "properties": decision.properties,
+        },
+        "chain": [
+            {
+                "id": node.id,
+                "kind": str(node.kind),
+                "title": node.title,
+                "edge_kind": str(edge.kind),
+                "properties": node.properties,
+            }
+            for node, edge in chain
+        ],
+    }
+    return result
+
+
+@server.tool()
+async def agent_explore_context(
+    node_id: str,
+    depth: int = 2,
+) -> dict[str, Any]:
+    """Explore the knowledge graph around a specific node, following semantic relationships.
+
+    Args:
+        node_id: ID of the center node to explore from
+        depth: How many hops to traverse (1-3)
+    """
+    graph = await _ensure_graph()
+    node = await graph.backend.get_node(node_id)
+    if node is None:
+        return {"success": False, "message": f"Node {node_id} not found"}
+
+    depth = max(1, min(3, depth))
+    neighbors = await graph.backend.get_neighbors(node_id, depth=depth)
+
+    return {
+        "success": True,
+        "center": {"id": node.id, "title": node.title, "kind": str(node.kind)},
+        "neighbors": [
+            {
+                "id": n.id,
+                "kind": str(n.kind),
+                "title": n.title,
+                "edge_kind": str(e.kind),
+                "edge_weight": e.weight,
+            }
+            for n, e in neighbors
+        ],
+        "total": len(neighbors),
+    }
+
+
+# --- Ontology Tools ---
+
+
+@server.tool()
+async def ontology_define_type(
+    name: str,
+    parent: str = "",
+    description: str = "",
+    properties: str = "",
+) -> dict[str, Any]:
+    """Define or update a custom node/edge type in the ontology.
+
+    Args:
+        name: Type name (e.g. "incident", "api_endpoint")
+        parent: Parent type for inheritance (e.g. "knowledge", "agent_activity")
+        description: What this type represents
+        properties: JSON array of property defs, e.g. [{"name":"severity","required":true}]
+    """
+    import json as _json  # noqa: PLC0415
+
+    from synaptic.ontology import PropertyDef, TypeDef  # noqa: PLC0415
+
+    graph = await _ensure_graph()
+    ontology = graph.ontology
+    if ontology is None:
+        return {"success": False, "message": "Ontology not initialized"}
+
+    props: list[PropertyDef] = []
+    if properties:
+        try:
+            raw = _json.loads(properties)
+            if isinstance(raw, list):
+                for p in raw:
+                    if isinstance(p, dict):
+                        props.append(PropertyDef(
+                            name=str(p.get("name", "")),
+                            value_type=str(p.get("value_type", "str")),
+                            required=bool(p.get("required", False)),
+                            default=str(p.get("default", "")),
+                        ))
+        except _json.JSONDecodeError:
+            return {"success": False, "message": "Invalid JSON in properties parameter"}
+
+    try:
+        ontology.register_type(TypeDef(
+            name=name,
+            parent=parent,
+            properties=props,
+            description=description,
+        ))
+    except ValueError as e:
+        return {"success": False, "message": str(e)}
+
+    return {
+        "success": True,
+        "type": name,
+        "parent": parent,
+        "properties_count": len(props),
+    }
+
+
+@server.tool()
+async def ontology_query_schema(
+    type_name: str = "",
+) -> dict[str, Any]:
+    """Query the ontology schema. Returns type definitions including inherited properties.
+
+    Args:
+        type_name: Specific type to query. If empty, returns all types.
+    """
+    graph = await _ensure_graph()
+    ontology = graph.ontology
+    if ontology is None:
+        return {"success": False, "message": "Ontology not initialized"}
+
+    if type_name:
+        td = ontology.get_type(type_name)
+        if td is None:
+            return {"success": False, "message": f"Type '{type_name}' not found"}
+        all_props = ontology.infer_properties(type_name)
+        return {
+            "success": True,
+            "type": {
+                "name": td.name,
+                "parent": td.parent,
+                "description": td.description,
+                "ancestors": ontology.get_ancestors(type_name),
+                "subtypes": ontology.subtypes_of(type_name),
+                "properties": [
+                    {"name": p.name, "type": p.value_type, "required": p.required}
+                    for p in all_props
+                ],
+            },
+        }
+
+    # Return all types
+    return {
+        "success": True,
+        "types": [
+            {
+                "name": td.name,
+                "parent": td.parent,
+                "description": td.description,
+            }
+            for td in ontology.all_types()
+        ],
+        "total": len(ontology.all_types()),
     }
 
 

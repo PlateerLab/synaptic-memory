@@ -8,6 +8,7 @@ from synaptic.backends.memory import MemoryBackend
 from synaptic.consolidation import (
     L0_TTL_HOURS,
     L1_PROMOTION_ACCESS,
+    L3_PROMOTION_RATE,
     L3_PROMOTION_SUCCESS,
     ConsolidationCascade,
 )
@@ -89,6 +90,40 @@ class TestConsolidationCascade:
 
         await cascade.consolidate(backend)
         assert await backend.get_node(node.id) is not None
+
+    async def test_l3_demotion_on_low_success_rate(self, backend: MemoryBackend) -> None:
+        """L3 node with success rate below 60% should be demoted to L2."""
+        cascade = ConsolidationCascade()
+        node = Node(
+            title="Degraded Knowledge",
+            level=ConsolidationLevel.L3_PERMANENT,
+            access_count=30,
+            success_count=L3_PROMOTION_SUCCESS,  # 10
+            failure_count=20,  # rate = 10/30 = 33% < 60%
+        )
+        await backend.save_node(node)
+
+        await cascade.consolidate(backend)
+        updated = await backend.get_node(node.id)
+        assert updated is not None
+        assert updated.level == ConsolidationLevel.L2_MONTHLY
+
+    async def test_l3_no_demotion_when_rate_ok(self, backend: MemoryBackend) -> None:
+        """L3 node with acceptable success rate stays at L3."""
+        cascade = ConsolidationCascade()
+        node = Node(
+            title="Still Valid",
+            level=ConsolidationLevel.L3_PERMANENT,
+            access_count=20,
+            success_count=15,
+            failure_count=5,  # rate = 15/20 = 75% > 60%
+        )
+        await backend.save_node(node)
+
+        await cascade.consolidate(backend)
+        updated = await backend.get_node(node.id)
+        assert updated is not None
+        assert updated.level == ConsolidationLevel.L3_PERMANENT
 
     async def test_consolidate_with_digester(self, backend: MemoryBackend) -> None:
         cascade = ConsolidationCascade()

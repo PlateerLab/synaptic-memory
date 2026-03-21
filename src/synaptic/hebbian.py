@@ -12,6 +12,7 @@ REINFORCE_DELTA = 0.1
 WEAKEN_DELTA = 0.15  # Failure learning is stronger
 MAX_WEIGHT = 5.0
 MIN_WEIGHT = -2.0  # Anti-resonance
+DECAY_FACTOR = 0.02  # Adaptive rate: delta / (1 + DECAY_FACTOR * maturity)
 
 
 class HebbianEngine:
@@ -48,12 +49,20 @@ class HebbianEngine:
         if len(node_ids) < 2:
             return
 
-        delta = REINFORCE_DELTA if success else -WEAKEN_DELTA
+        base_delta = REINFORCE_DELTA if success else -WEAKEN_DELTA
 
         for src_id, tgt_id in combinations(node_ids, 2):
             edge = await self._find_edge(backend, src_id, tgt_id)
             if edge is not None:
-                edge.weight = _clamp(edge.weight + delta)
+                # Adaptive rate: delta shrinks as edge is used more (stabilization)
+                # Uses sum of connected nodes' access counts as maturity signal
+                src = await backend.get_node(src_id)
+                tgt = await backend.get_node(tgt_id)
+                maturity = (
+                    (src.access_count if src else 0) + (tgt.access_count if tgt else 0)
+                ) / 2.0
+                adaptive_delta = base_delta / (1.0 + DECAY_FACTOR * maturity)
+                edge.weight = _clamp(edge.weight + adaptive_delta)
                 await backend.update_edge(edge)
             elif success:
                 # Create new edge only on success

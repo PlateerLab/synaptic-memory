@@ -61,6 +61,25 @@ class StorageBackend(Protocol):
     async def decay_vitality(self, *, factor: float = 0.95) -> int: ...
 
 
+class GraphTraversal(Protocol):
+    """Extended protocol for graph-native backends (Neo4j, etc.).
+
+    Provides advanced traversal operations beyond StorageBackend.get_neighbors().
+    """
+
+    async def shortest_path(
+        self, from_id: str, to_id: str, *, max_depth: int = 5
+    ) -> list[tuple[Node, Edge]]: ...
+
+    async def pattern_match(
+        self, pattern: str, *, limit: int = 20
+    ) -> list[dict[str, object]]: ...
+
+    async def find_by_type_hierarchy(
+        self, type_name: str, *, limit: int = 50
+    ) -> list[Node]: ...
+
+
 class Digester(Protocol):
     """Converts structured context into knowledge nodes and edges."""
 

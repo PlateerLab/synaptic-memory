@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from time import time
 
-from synaptic.models import ActivatedNode, Node, SearchResult
+from synaptic.models import ActivatedNode, Node, NodeKind, SearchResult
 from synaptic.protocols import QueryRewriter, StorageBackend
 from synaptic.resonance import ResonanceScorer
 from synaptic.synonyms import expand_synonyms
@@ -31,6 +31,7 @@ class HybridSearch:
         *,
         limit: int = 10,
         embedding: list[float] | None = None,
+        node_kinds: list[NodeKind] | None = None,
     ) -> SearchResult:
         start = time()
         stages_used: list[str] = []
@@ -93,6 +94,15 @@ class HybridSearch:
                 if neighbor_node.id not in all_nodes:
                     activation = all_nodes[nid][1] * edge.weight * 0.5
                     all_nodes[neighbor_node.id] = (neighbor_node, max(0.0, min(1.0, activation)))
+
+        # Filter by node_kinds if specified
+        if node_kinds:
+            kind_set = set(node_kinds)
+            all_nodes = {
+                nid: (node, score)
+                for nid, (node, score) in all_nodes.items()
+                if node.kind in kind_set
+            }
 
         # Score with resonance
         now = time()

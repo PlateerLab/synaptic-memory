@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS syn_nodes (
     success_count INTEGER NOT NULL DEFAULT 0,
     failure_count INTEGER NOT NULL DEFAULT 0,
     source      TEXT NOT NULL DEFAULT '',
+    properties_json TEXT NOT NULL DEFAULT '{}',
     created_at  DOUBLE PRECISION NOT NULL,
     updated_at  DOUBLE PRECISION NOT NULL
 );
@@ -104,6 +106,13 @@ class PostgreSQLBackend:
         async with self._pool.acquire() as conn:
             schema = _SCHEMA.replace("vector(1536)", f"vector({self._embedding_dim})")
             await conn.execute(schema)
+            # Migrate: add properties_json column if missing (v0.4 → v0.5)
+            try:
+                await conn.execute(
+                    "ALTER TABLE syn_nodes ADD COLUMN properties_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            except Exception:  # noqa: S110
+                pass  # Column already exists
             # pg_trgm (optional — graceful fallback to LIKE)
             try:
                 await conn.execute(_TRGM_SCHEMA)
@@ -142,12 +151,14 @@ class PostgreSQLBackend:
         await pool.execute(
             """INSERT INTO syn_nodes
             (id, kind, title, content, tags, level, embedding, vitality,
-             access_count, success_count, failure_count, source, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, $9, $10, $11, $12, $13, $14)
+             access_count, success_count, failure_count, source, properties_json,
+             created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT(id) DO UPDATE SET
                 title=EXCLUDED.title, content=EXCLUDED.content, tags=EXCLUDED.tags,
                 level=EXCLUDED.level, embedding=EXCLUDED.embedding,
-                vitality=EXCLUDED.vitality, updated_at=EXCLUDED.updated_at""",
+                vitality=EXCLUDED.vitality, properties_json=EXCLUDED.properties_json,
+                updated_at=EXCLUDED.updated_at""",
             node.id,
             str(node.kind),
             node.title,
@@ -160,6 +171,7 @@ class PostgreSQLBackend:
             node.success_count,
             node.failure_count,
             node.source,
+            json.dumps(node.properties),
             node.created_at,
             node.updated_at,
         )
@@ -177,7 +189,7 @@ class PostgreSQLBackend:
         await pool.execute(
             """UPDATE syn_nodes SET kind=$1, title=$2, content=$3, tags=$4, level=$5,
             embedding=$6::vector, vitality=$7, access_count=$8, success_count=$9,
-            failure_count=$10, source=$11, updated_at=$12 WHERE id=$13""",
+            failure_count=$10, source=$11, properties_json=$12, updated_at=$13 WHERE id=$14""",
             str(node.kind),
             node.title,
             node.content,
@@ -189,6 +201,7 @@ class PostgreSQLBackend:
             node.success_count,
             node.failure_count,
             node.source,
+            json.dumps(node.properties),
             node.updated_at,
             node.id,
         )
@@ -430,6 +443,7 @@ class PostgreSQLBackend:
 
 def _row_to_node(row: asyncpg.Record) -> Node:
     tags = list(row["tags"]) if row["tags"] else []
+    props_raw = row.get("properties_json", "{}")
     return Node(
         id=row["id"],
         kind=NodeKind(row["kind"]),
@@ -441,6 +455,7 @@ def _row_to_node(row: asyncpg.Record) -> Node:
         access_count=row["access_count"],
         success_count=row["success_count"],
         failure_count=row["failure_count"],
+        properties=json.loads(props_raw) if props_raw else {},
         source=row["source"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],

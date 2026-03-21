@@ -40,6 +40,7 @@ class Store:
         source: str = "",
         level: ConsolidationLevel = ConsolidationLevel.L0_RAW,
         embedding: list[float] | None = None,
+        properties: dict[str, str] | None = None,
     ) -> Node:
         if tags is None and self._tag_extractor is not None:
             tags = self._tag_extractor.extract(f"{title} {content}")
@@ -51,6 +52,7 @@ class Store:
             tags=tags or [],
             level=level,
             embedding=embedding or [],
+            properties=properties or {},
             source=source,
         )
         await self._backend.save_node(node)

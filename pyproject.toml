@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synaptic-memory"
-version = "0.4.0"
+version = "0.5.0"
 description = "Brain-inspired knowledge graph: spreading activation, Hebbian learning, memory consolidation."
 license = "MIT"
 requires-python = ">=3.12"
@@ -34,8 +34,10 @@ synaptic-mcp = "synaptic.mcp.server:main"
 [project.optional-dependencies]
 postgresql = ["asyncpg>=0.30", "pgvector>=0.3"]
 sqlite = ["aiosqlite>=0.20"]
+neo4j = ["neo4j>=5.25"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
-all = ["asyncpg>=0.30", "pgvector>=0.3", "aiosqlite>=0.20", "mcp[cli]>=1.5"]
+scale = ["neo4j>=5.25"]
+all = ["asyncpg>=0.30", "pgvector>=0.3", "aiosqlite>=0.20", "neo4j>=5.25", "mcp[cli]>=1.5"]
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.8", "pyright>=1.1"]
 
 [tool.hatch.build.targets.wheel]
@@ -46,6 +48,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "integration: PostgreSQL integration tests (require running PG server)",
+    "neo4j: Neo4j integration tests (require running Neo4j server)",
     "qa: Quality assurance tests with real external data",
 ]
 

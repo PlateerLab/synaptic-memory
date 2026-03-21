@@ -15,6 +15,7 @@ class ResonanceWeights:
     importance: float = 0.25
     recency: float = 0.2
     vitality: float = 0.15
+    context: float = 0.0  # v0.5: context affinity axis (tag overlap with session)
 
 
 _DEFAULT_WEIGHTS = ResonanceWeights()
@@ -36,6 +37,7 @@ class ResonanceScorer:
         search_score: float = 0.0,
         now: float | None = None,
         weights: ResonanceWeights | None = None,
+        context_tags: list[str] | None = None,
     ) -> float:
         w = weights or self._weights
         ts = now or time()
@@ -55,9 +57,19 @@ class ResonanceScorer:
         # Relevance: search score, already [0, 1]
         relevance = max(0.0, min(1.0, search_score))
 
+        # Context: tag overlap with current session context
+        context_score = 0.0
+        if context_tags and node.tags:
+            node_tag_set = set(node.tags)
+            ctx_tag_set = set(context_tags)
+            overlap = len(node_tag_set & ctx_tag_set)
+            total_tags = len(node_tag_set | ctx_tag_set)
+            context_score = overlap / total_tags if total_tags > 0 else 0.0
+
         return (
             w.relevance * relevance
             + w.importance * importance
             + w.recency * recency
             + w.vitality * vitality
+            + w.context * context_score
         )

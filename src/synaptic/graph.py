@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from difflib import SequenceMatcher
 from time import time
 
+from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
 from synaptic.consolidation import ConsolidationCascade
 from synaptic.exporter import JSONExporter, MarkdownExporter
 from synaptic.hebbian import HebbianEngine
 from synaptic.models import (
+    ConsolidationLevel,
     DigestResult,
     Edge,
     EdgeKind,
@@ -17,6 +20,7 @@ from synaptic.models import (
     NodeKind,
     SearchResult,
 )
+from synaptic.ontology import OntologyRegistry
 from synaptic.protocols import Digester, QueryRewriter, StorageBackend, TagExtractor
 from synaptic.search import HybridSearch
 from synaptic.store import Store
@@ -26,12 +30,14 @@ class SynapticGraph:
     """Facade over the synaptic memory system."""
 
     __slots__ = (
+        "_agent_search",
         "_backend",
         "_cache",
         "_consolidation",
         "_hebbian",
         "_json_exporter",
         "_md_exporter",
+        "_ontology",
         "_search",
         "_store",
     )
@@ -42,6 +48,7 @@ class SynapticGraph:
         *,
         query_rewriter: QueryRewriter | None = None,
         tag_extractor: TagExtractor | None = None,
+        ontology: OntologyRegistry | None = None,
         cache_size: int = 256,
     ) -> None:
         self._backend = backend
@@ -52,6 +59,8 @@ class SynapticGraph:
         self._md_exporter = MarkdownExporter()
         self._json_exporter = JSONExporter()
         self._cache = NodeCache(maxsize=cache_size)
+        self._ontology = ontology
+        self._agent_search = AgentSearch(hybrid=self._search)
 
     @property
     def backend(self) -> StorageBackend:
@@ -60,6 +69,10 @@ class SynapticGraph:
     @property
     def cache(self) -> NodeCache:
         return self._cache
+
+    @property
+    def ontology(self) -> OntologyRegistry | None:
+        return self._ontology
 
     async def add(
         self,
@@ -70,9 +83,18 @@ class SynapticGraph:
         tags: list[str] | None = None,
         source: str = "",
         embedding: list[float] | None = None,
+        properties: dict[str, str] | None = None,
     ) -> Node:
+        # Validate against ontology if available
+        if self._ontology and properties:
+            errors = self._ontology.validate_node(str(kind), properties)
+            if errors:
+                msg = f"Ontology validation failed: {'; '.join(errors)}"
+                raise ValueError(msg)
+
         node = await self._store.add_node(
-            title, content, kind=kind, tags=tags, source=source, embedding=embedding
+            title, content, kind=kind, tags=tags, source=source,
+            embedding=embedding, properties=properties,
         )
         self._cache.put(node)
         return node
@@ -85,6 +107,17 @@ class SynapticGraph:
         kind: EdgeKind = EdgeKind.RELATED,
         weight: float = 1.0,
     ) -> Edge:
+        # Validate against ontology relation constraints if available
+        if self._ontology:
+            src_node = await self._backend.get_node(source_id)
+            tgt_node = await self._backend.get_node(target_id)
+            if src_node is not None and tgt_node is not None:
+                errors = self._ontology.validate_edge(
+                    str(kind), str(src_node.kind), str(tgt_node.kind),
+                )
+                if errors:
+                    msg = f"Ontology validation failed: {'; '.join(errors)}"
+                    raise ValueError(msg)
         return await self._store.add_edge(source_id, target_id, kind=kind, weight=weight)
 
     async def search(
@@ -95,6 +128,34 @@ class SynapticGraph:
         embedding: list[float] | None = None,
     ) -> SearchResult:
         return await self._search.search(self._backend, query, limit=limit, embedding=embedding)
+
+    async def agent_search(
+        self,
+        query: str,
+        *,
+        intent: str = "auto",
+        context_tags: list[str] | None = None,
+        limit: int = 10,
+        embedding: list[float] | None = None,
+        depth: int = 2,
+    ) -> SearchResult:
+        """Agent-optimized search with intent and context awareness.
+
+        Set intent="auto" (default) to infer intent from query keywords.
+        """
+        if intent == "auto":
+            search_intent = suggest_intent(query)
+        else:
+            search_intent = SearchIntent(intent)
+        return await self._agent_search.search(
+            self._backend,
+            query,
+            intent=search_intent,
+            context_tags=context_tags,
+            limit=limit,
+            embedding=embedding,
+            depth=depth,
+        )
 
     async def get(self, node_id: str) -> Node | None:
         cached = self._cache.get(node_id)
@@ -239,3 +300,34 @@ class SynapticGraph:
         result["cache_hit_rate"] = cache_stats["hit_rate"]
         result["cache_size"] = cache_stats["size"]
         return result
+
+    # --- Ontology persistence ---
+
+    async def save_ontology(self) -> None:
+        """Persist the OntologyRegistry to the graph as a TYPE_DEF node."""
+        if self._ontology is None:
+            return
+        data = self._ontology.to_dict()
+        # Use a fixed ID so we can find/update it
+        node = Node(
+            id="_ontology_schema_",
+            kind=NodeKind.TYPE_DEF,
+            title="Ontology Schema",
+            content=json.dumps(data),
+            tags=["_ontology", "_system"],
+            level=ConsolidationLevel.L3_PERMANENT,
+        )
+        await self._backend.save_node(node)
+
+    async def load_ontology(self) -> OntologyRegistry | None:
+        """Load OntologyRegistry from the graph. Returns None if not found."""
+        node = await self._backend.get_node("_ontology_schema_")
+        if node is None:
+            return None
+        try:
+            data = json.loads(node.content)
+            registry = OntologyRegistry.from_dict(data)
+            self._ontology = registry
+            return registry
+        except (json.JSONDecodeError, KeyError):
+            return None

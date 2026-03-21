@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS syn_nodes (
     success_count INTEGER NOT NULL DEFAULT 0,
     failure_count INTEGER NOT NULL DEFAULT 0,
     source TEXT NOT NULL DEFAULT '',
+    properties_json TEXT NOT NULL DEFAULT '{}',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -73,6 +74,13 @@ class SQLiteBackend:
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.executescript(_SCHEMA)
+        # Migrate: add properties_json column if missing (v0.4 → v0.5)
+        async with self._conn.execute("PRAGMA table_info(syn_nodes)") as cur:
+            columns = {row[1] for row in await cur.fetchall()}
+        if "properties_json" not in columns:
+            await self._conn.execute(
+                "ALTER TABLE syn_nodes ADD COLUMN properties_json TEXT NOT NULL DEFAULT '{}'"
+            )
         await self._conn.commit()
 
     async def close(self) -> None:
@@ -93,11 +101,13 @@ class SQLiteBackend:
         await db.execute(
             """INSERT INTO syn_nodes
             (id, kind, title, content, tags_json, level, vitality,
-             access_count, success_count, failure_count, source, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             access_count, success_count, failure_count, source, properties_json,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title=excluded.title, content=excluded.content, tags_json=excluded.tags_json,
-                level=excluded.level, vitality=excluded.vitality, updated_at=excluded.updated_at""",
+                level=excluded.level, vitality=excluded.vitality,
+                properties_json=excluded.properties_json, updated_at=excluded.updated_at""",
             (
                 node.id,
                 str(node.kind),
@@ -110,6 +120,7 @@ class SQLiteBackend:
                 node.success_count,
                 node.failure_count,
                 node.source,
+                json.dumps(node.properties),
                 node.created_at,
                 node.updated_at,
             ),
@@ -135,7 +146,7 @@ class SQLiteBackend:
         await db.execute(
             """UPDATE syn_nodes SET kind=?, title=?, content=?, tags_json=?, level=?,
             vitality=?, access_count=?, success_count=?, failure_count=?,
-            source=?, updated_at=? WHERE id=?""",
+            source=?, properties_json=?, updated_at=? WHERE id=?""",
             (
                 str(node.kind),
                 node.title,
@@ -147,6 +158,7 @@ class SQLiteBackend:
                 node.success_count,
                 node.failure_count,
                 node.source,
+                json.dumps(node.properties),
                 node.updated_at,
                 node.id,
             ),
@@ -348,6 +360,7 @@ class SQLiteBackend:
 
 
 def _row_to_node(row: aiosqlite.Row) -> Node:
+    props_raw = row["properties_json"] if "properties_json" in row.keys() else "{}"
     return Node(
         id=row["id"],
         kind=NodeKind(row["kind"]),
@@ -359,6 +372,7 @@ def _row_to_node(row: aiosqlite.Row) -> Node:
         access_count=row["access_count"],
         success_count=row["success_count"],
         failure_count=row["failure_count"],
+        properties=json.loads(props_raw),
         source=row["source"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],

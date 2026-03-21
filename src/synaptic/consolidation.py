@@ -71,21 +71,39 @@ class ConsolidationCascade:
             ConsolidationLevel.L0_RAW,
             ConsolidationLevel.L1_SPRINT,
             ConsolidationLevel.L2_MONTHLY,
+            ConsolidationLevel.L3_PERMANENT,
         )
+        page_size = 500
         for level in levels:
-            nodes = await backend.list_nodes(level=level, limit=1000)
-            for node in nodes:
-                action = self._evaluate(node, now=now)
-                match action:
-                    case "delete":
-                        await backend.delete_node(node.id)
-                    case "promote":
-                        node.level = self._next_level(node.level)
-                        node.updated_at = now
-                        await backend.update_node(node)
-                        result.nodes_updated.append(node.id)
-                    case _:
-                        pass
+            # Paginate to handle large node counts
+            while True:
+                nodes = await backend.list_nodes(level=level, limit=page_size)
+                if not nodes:
+                    break
+                processed = 0
+                for node in nodes:
+                    action = self._evaluate(node, now=now)
+                    match action:
+                        case "delete":
+                            await backend.delete_node(node.id)
+                            processed += 1
+                        case "promote":
+                            node.level = self._next_level(node.level)
+                            node.updated_at = now
+                            await backend.update_node(node)
+                            result.nodes_updated.append(node.id)
+                            processed += 1
+                        case "demote":
+                            node.level = self._prev_level(node.level)
+                            node.updated_at = now
+                            await backend.update_node(node)
+                            result.nodes_updated.append(node.id)
+                            processed += 1
+                        case _:
+                            pass
+                # If nothing was modified in this batch, no point re-fetching
+                if processed == 0:
+                    break
 
         return result
 
@@ -111,9 +129,20 @@ class ConsolidationCascade:
                 if self._qualifies_for_l3(node):
                     return "promote"
             case ConsolidationLevel.L3_PERMANENT:
-                pass  # Never expires
+                # L3 demotion: if success rate drops below threshold, demote to L2
+                if self._should_demote_l3(node):
+                    return "demote"
 
         return "keep"
+
+    def _should_demote_l3(self, node: Node) -> bool:
+        """Demote L3 if it accumulated enough failures to drop below threshold."""
+        total = node.success_count + node.failure_count
+        if total < self.l3_promotion_success:
+            return False  # not enough data to judge
+        rate = node.success_count / total if total > 0 else 0.0
+        # Demote if rate drops below 60% (stricter threshold than promotion at 80%)
+        return rate < self.l3_promotion_rate * 0.75
 
     def _qualifies_for_l3(self, node: Node) -> bool:
         if node.success_count < self.l3_promotion_success:
@@ -131,5 +160,16 @@ class ConsolidationCascade:
                 return ConsolidationLevel.L2_MONTHLY
             case ConsolidationLevel.L2_MONTHLY:
                 return ConsolidationLevel.L3_PERMANENT
+            case _:
+                return level
+
+    def _prev_level(self, level: ConsolidationLevel) -> ConsolidationLevel:
+        match level:
+            case ConsolidationLevel.L3_PERMANENT:
+                return ConsolidationLevel.L2_MONTHLY
+            case ConsolidationLevel.L2_MONTHLY:
+                return ConsolidationLevel.L1_SPRINT
+            case ConsolidationLevel.L1_SPRINT:
+                return ConsolidationLevel.L0_RAW
             case _:
                 return level

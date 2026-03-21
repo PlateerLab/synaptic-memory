@@ -18,6 +18,10 @@ def _float_list() -> list[float]:
     return []
 
 
+def _str_dict() -> dict[str, str]:
+    return {}
+
+
 class ConsolidationLevel(StrEnum):
     L0_RAW = "L0"
     L1_SPRINT = "L1"
@@ -35,6 +39,13 @@ class NodeKind(StrEnum):
     AGENT = "agent"
     TASK = "task"
     SPRINT = "sprint"
+    # v0.5: Agent activity & ontology
+    TOOL_CALL = "tool_call"
+    OBSERVATION = "observation"
+    REASONING = "reasoning"
+    OUTCOME = "outcome"
+    SESSION = "session"
+    TYPE_DEF = "type_def"
 
 
 class EdgeKind(StrEnum):
@@ -45,6 +56,12 @@ class EdgeKind(StrEnum):
     PRODUCED = "produced"
     CONTRADICTS = "contradicts"
     SUPERSEDES = "supersedes"
+    # v0.5: Ontology & agent activity
+    IS_A = "is_a"
+    INVOKED = "invoked"
+    RESULTED_IN = "resulted_in"
+    PART_OF = "part_of"
+    FOLLOWED_BY = "followed_by"
 
 
 @dataclass(slots=True)
@@ -60,6 +77,7 @@ class Node:
     access_count: int = 0
     success_count: int = 0
     failure_count: int = 0
+    properties: dict[str, str] = field(default_factory=_str_dict)
     source: str = ""
     created_at: float = field(default_factory=time)
     updated_at: float = field(default_factory=time)
