@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from time import time
+from typing import Literal
 
 from synaptic.models import (
     ConsolidationLevel,
@@ -96,7 +97,9 @@ class Store:
         await self._backend.save_edge(edge)
         return edge
 
-    async def get_edges(self, node_id: str, *, direction: str = "both") -> list[Edge]:
+    async def get_edges(
+        self, node_id: str, *, direction: Literal["both", "incoming", "outgoing"] = "both"
+    ) -> list[Edge]:
         return await self._backend.get_edges(node_id, direction=direction)
 
     async def add_nodes_batch(self, nodes: Sequence[Node]) -> None:

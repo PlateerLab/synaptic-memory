@@ -19,7 +19,34 @@ L3_PROMOTION_RATE = 0.8
 class ConsolidationCascade:
     """Manages memory lifecycle: TTL expiry + promotion based on usage."""
 
-    __slots__ = ()
+    __slots__ = (
+        "l0_ttl_hours",
+        "l1_promotion_access",
+        "l1_ttl_days",
+        "l2_promotion_access",
+        "l2_ttl_days",
+        "l3_promotion_rate",
+        "l3_promotion_success",
+    )
+
+    def __init__(
+        self,
+        *,
+        l0_ttl_hours: float = L0_TTL_HOURS,
+        l1_promotion_access: int = L1_PROMOTION_ACCESS,
+        l1_ttl_days: float = L1_TTL_DAYS,
+        l2_promotion_access: int = L2_PROMOTION_ACCESS,
+        l2_ttl_days: float = L2_TTL_DAYS,
+        l3_promotion_success: int = L3_PROMOTION_SUCCESS,
+        l3_promotion_rate: float = L3_PROMOTION_RATE,
+    ) -> None:
+        self.l0_ttl_hours = l0_ttl_hours
+        self.l1_promotion_access = l1_promotion_access
+        self.l1_ttl_days = l1_ttl_days
+        self.l2_promotion_access = l2_promotion_access
+        self.l2_ttl_days = l2_ttl_days
+        self.l3_promotion_success = l3_promotion_success
+        self.l3_promotion_rate = l3_promotion_rate
 
     async def consolidate(
         self,
@@ -67,19 +94,19 @@ class ConsolidationCascade:
 
         match node.level:
             case ConsolidationLevel.L0_RAW:
-                if age_hours > L0_TTL_HOURS and node.access_count < L1_PROMOTION_ACCESS:
+                if age_hours > self.l0_ttl_hours and node.access_count < self.l1_promotion_access:
                     return "delete"
-                if node.access_count >= L1_PROMOTION_ACCESS:
+                if node.access_count >= self.l1_promotion_access:
                     return "promote"
             case ConsolidationLevel.L1_SPRINT:
                 age_days = age_hours / 24
-                if age_days > L1_TTL_DAYS and node.access_count < L2_PROMOTION_ACCESS:
+                if age_days > self.l1_ttl_days and node.access_count < self.l2_promotion_access:
                     return "delete"
-                if node.access_count >= L2_PROMOTION_ACCESS:
+                if node.access_count >= self.l2_promotion_access:
                     return "promote"
             case ConsolidationLevel.L2_MONTHLY:
                 age_days = age_hours / 24
-                if age_days > L2_TTL_DAYS and not self._qualifies_for_l3(node):
+                if age_days > self.l2_ttl_days and not self._qualifies_for_l3(node):
                     return "delete"
                 if self._qualifies_for_l3(node):
                     return "promote"
@@ -89,12 +116,12 @@ class ConsolidationCascade:
         return "keep"
 
     def _qualifies_for_l3(self, node: Node) -> bool:
-        if node.success_count < L3_PROMOTION_SUCCESS:
+        if node.success_count < self.l3_promotion_success:
             return False
         total = node.success_count + node.failure_count
         if total == 0:
             return False
-        return (node.success_count / total) >= L3_PROMOTION_RATE
+        return (node.success_count / total) >= self.l3_promotion_rate
 
     def _next_level(self, level: ConsolidationLevel) -> ConsolidationLevel:
         match level:

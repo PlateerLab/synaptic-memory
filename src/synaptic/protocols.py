@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Literal, Protocol
 
 from synaptic.models import (
     ConsolidationLevel,
@@ -36,7 +36,9 @@ class StorageBackend(Protocol):
 
     # Edge CRUD
     async def save_edge(self, edge: Edge) -> None: ...
-    async def get_edges(self, node_id: str, *, direction: str = "both") -> list[Edge]: ...
+    async def get_edges(
+        self, node_id: str, *, direction: Literal["both", "incoming", "outgoing"] = "both"
+    ) -> list[Edge]: ...
     async def update_edge(self, edge: Edge) -> None: ...
     async def delete_edge(self, edge_id: str) -> None: ...
 

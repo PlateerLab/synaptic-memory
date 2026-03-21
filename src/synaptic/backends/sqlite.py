@@ -268,7 +268,7 @@ class SQLiteBackend:
         return [_row_to_node(r) for r in rows]
 
     async def search_vector(self, embedding: list[float], *, limit: int = 20) -> list[Node]:
-        # Vector search not available in SQLite v1 — return empty
+        # Vector search not available in SQLite — use PostgreSQL backend for vector support
         return []
 
     # --- Graph traversal (recursive CTE) ---
@@ -307,12 +307,22 @@ class SQLiteBackend:
     # --- Batch ---
 
     async def save_nodes_batch(self, nodes: Sequence[Node]) -> None:
-        for node in nodes:
-            await self.save_node(node)
+        db = self._db()
+        try:
+            for node in nodes:
+                await self.save_node(node)
+        except Exception:
+            await db.rollback()
+            raise
 
     async def save_edges_batch(self, edges: Sequence[Edge]) -> None:
-        for edge in edges:
-            await self.save_edge(edge)
+        db = self._db()
+        try:
+            for edge in edges:
+                await self.save_edge(edge)
+        except Exception:
+            await db.rollback()
+            raise
 
     # --- Maintenance ---
 

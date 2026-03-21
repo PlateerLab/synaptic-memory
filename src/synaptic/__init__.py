@@ -12,6 +12,7 @@ from synaptic.models import (
     SearchResult,
 )
 from synaptic.protocols import Digester, QueryRewriter, StorageBackend, TagExtractor
+from synaptic.resonance import ResonanceWeights
 
 __all__ = [
     "ActivatedNode",
@@ -23,6 +24,7 @@ __all__ = [
     "Node",
     "NodeKind",
     "QueryRewriter",
+    "ResonanceWeights",
     "SearchResult",
     "StorageBackend",
     "SynapticGraph",
