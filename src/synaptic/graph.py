@@ -99,6 +99,10 @@ class SynapticGraph:
     async def get(self, node_id: str) -> Node | None:
         cached = self._cache.get(node_id)
         if cached is not None:
+            # Still track access in backend for consolidation
+            cached.access_count += 1
+            cached.updated_at = time()
+            await self._backend.update_node(cached)
             return cached
         node = await self._store.get_node(node_id)
         if node is not None:

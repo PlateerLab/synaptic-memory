@@ -1,0 +1,842 @@
+[
+  {
+    "date": "2026-03-21T03:29:22Z",
+    "message": "feat: Synaptic Memory 통합 — 뇌 신경망 기반 Knowledge Graph로 에이전트 지식 접근\n\nsynaptic-memory v0.1.0 라이브러리 (PlateerLab/synaptic-memory) 통합:\n- Spreading Activation + Hebbian Learning + L0→L3 Memory Consolidation\n- 3단계 하이브리드 검색 (FTS+fuzzy → 동의어 확장 → query rewrite)\n- 4축 Resonance Scoring (relevance × importance × recency × vitality)\n\n새 모듈 src/hive/knowledge/:\n- digesters.py: SprintDigester — sprint/task 결과를 knowledge 노드로 변환 (zero-LLM)\n- tool.py: KnowledgeSearchTool — 모든 에이전트에 knowledge_search 도구 제공\n- assembler.py: ResonanceAssembler — 기존 MemoryStore 20개 dump 대체\n- reflection.py: AgentReflectionDigester — Haiku 기반 에이전트 자기 회고\n\n수정 사항:\n- sprint.py: sprint 완료 후 자동 knowledge digest + Hebbian reinforce\n- service.py: SynapticGraph 초기화 (.hive/knowledge.db) + 24h decay/prune\n- tools/registry.py: 전 role에 knowledge_search 도구 추가\n- cli/main.py: hive knowledge search/stats/export/consolidate/migrate 명령어\n\n기존 MemoryStore 미삭제 — ResonanceAssembler가 fallback으로 활용\n581 tests passed (기존 572 + 신규 9)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-20T07:07:44Z",
+    "message": "fix: 자율주행 안정화 — max_lite=1 순차 실행 + timeout 300초 + LLMClient 캐시 수정\n\n로컬 LLM(Qwen) 환경 최적화:\n- WorkerPool max_lite=1, max_code=1 (동시 요청으로 서버 죽는 문제 해결)\n- httpx timeout 120s → 300s (27B 모델 응답 대기)\n- LLMClient._client_cache dict 기반 캐싱 (__slots__ 호환)\n- OpenAI tool loop에서 500 에러 graceful 처리\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T23:28:15Z",
+    "message": "fix: LLM 500 에러 graceful 처리 + CEO 채팅 순차 처리 + 계정 설정\n\nLLM 서버 에러 처리:\n- run_openai_tool_loop에서 500 에러 시 raise 대신 에러 메시지 반환\n- tool loop 중간에 서버 에러가 나도 전체 서비스가 죽지 않음\n\nCEO 채팅 동시성:\n- asyncio.Lock으로 CEO 채팅 순차 처리 (Matrix 히스토리 동시 유입 방지)\n- 로컬 LLM 서버의 동시 요청 부하 해소\n\n대시보드 계정:\n- .hive/dashboard_username, .hive/dashboard_password 파일 기반 설정\n- HIVE_DASHBOARD_USERNAME/PASSWORD 환경변수 우선\n- verify_credentials에서 username도 파일에서 읽도록 변경\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T23:22:25Z",
+    "message": "feat: 로그인 기능 — 세션 쿠키 기반 인증 + DaisyUI 로그인 페이지\n\n인증 체계 변경:\n- 기존: API key(?token=) 필수 → 불편\n- 변경: 로그인 페이지 + 세션 쿠키 + API key 병행\n\n로그인 플로우:\n- GET /login → 로그인 폼 (DaisyUI dark theme)\n- POST /login → 자격 검증 → Set-Cookie(hive_session) → /로 리다이렉트\n- POST /logout → 쿠키 삭제 → /login으로\n\n세션 토큰: HMAC-SHA256 서명 (username:timestamp:signature), 24시간 만료\n비밀번호: .hive/dashboard_password 자동 생성 또는 HIVE_DASHBOARD_PASSWORD 환경변수\nUsername: company.yaml의 name (case-insensitive)\n\n인증 우선순위: Bearer token > 세션 쿠키 > ?token= 쿼리\nHTML 뷰: 미인증 → /login 리다이렉트\nAPI: 미인증 → 401 JSON\n\nnav.html에 Logout 버튼 추가\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T22:59:35Z",
+    "message": "feat: Provider-agnostic tool use — OpenAI function calling loop 추가\n\n기존: tool use는 Anthropic SDK 전용 → OpenAI provider면 plain chat fallback\n변경: provider.kind에 따라 자동으로 적합한 tool loop 프로토콜 선택\n\nOpenAI function calling loop (run_openai_tool_loop):\n- vLLM, llama.cpp, Ollama 등 OpenAI-compatible 서버 지원\n- Anthropic schema → OpenAI function format 자동 변환 (_to_openai_tools)\n- 동일한 ToolRegistry, 동일한 tool 실행, 동일한 결과 형식\n\nToolWorker: match provider.kind → _run_anthropic / _run_openai 분기\nservice.py CEO 채팅: 동일 분기 적용 (fallback 제거)\n\n효과: Qwen 같은 로컬 모델에서도 web_search, file_read, shell_exec 등\ntool use가 동작 (서버가 function calling 지원 시)\n\n테스트 572개 전체 통과, pyright 0 errors\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T19:06:36Z",
+    "message": "fix: CEO 채팅 tool use에서 OpenAI provider 감지 → plain chat fallback\n\n_ceo_chat_with_tools에서 Anthropic SDK로 Qwen 모델 호출 시 404 에러 발생:\n- llm.resolve_model()로 provider 확인\n- provider.kind != \"anthropic\"이면 tool use 대신 plain LLM chat으로 fallback\n- Anthropic client 생성 시 provider의 api_key/api_base 사용 (하드코딩 제거)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T16:19:12Z",
+    "message": "fix: CI 에러 전체 해결 — pyright private 함수 public화 + format + pytest.approx 제거\n\npyright 에러 수정:\n- _efficiency → efficiency, _build_routing_table → build_routing_table (adaptive.py)\n- _resolve_safe_path → resolve_safe_path (file_ops.py)\n- _validate_command → validate_command (shell_exec.py)\n- pytest.approx 사용 → abs(a - b) < 0.01 직접 비교 (pyright 타입 에러 회피)\n\nformat 수정: scorer.py, store.py, sprint.py, test_qa_evaluator.py reformat\n\n전체 CI 통과: 572 passed, ruff 0, pyright 0\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T16:12:46Z",
+    "message": "feat: AgentLearner — 품질 피드백 기반 에이전트 자기 개선 (zero-LLM prompt hints)\n\nAgentLearner:\n- 스프린트 후 에이전트별 품질 dimension 집계 (length/structure/relevance/completeness/consistency)\n- weak_threshold(0.5) 미만 dimension → worst 2개에 대해 템플릿 기반 개선 힌트 생성\n- agent_learnings 테이블에 저장, max_active_per_agent(5) 초과 시 오래된 것 자동 decay\n- applied_count로 힌트 적용 횟수 추적\n\nLiteWorker 통합:\n- system prompt에 \"## Improvement Notes\" 섹션으로 활성 학습 자동 주입\n- Company Memory 뒤, Task 앞에 위치 → 에이전트가 약점을 인식하고 개선\n\nSprintRunner 파이프라인 최종:\n  Plan → Execute → Quality → Metrics → AutoQA → Learning → Report\n\nDB: agent_learnings 테이블 + 2개 인덱스\n테스트 10개 추가 (572 passed total)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T16:05:36Z",
+    "message": "feat: AdaptiveRouter — 데이터 기반 모델 자동 라우팅 (quality_scores + token_logs 집계)\n\nAdaptiveRouter:\n- task_type별 모델 성적표(ModelScorecard) 자동 집계\n  - avg_quality, avg_cost, efficiency(quality/cost) 산출\n  - min_samples(3)·min_quality(0.4) 필터링으로 신뢰성 보장\n- 5분 TTL 캐시로 매 호출마다 DB 쿼리 방지\n- budget_tight 모드: 품질 기준 완화 + 비용 최소화\n\nLiteWorker 통합:\n- AdaptiveRouter가 모델 선택 → LLMClient.chat(model=...) 직접 지정\n- 데이터 부족 시 기존 하드코딩 router fallback\n- optimization_flags에 \"adaptive\" 추가로 추적\n\nCLI: hive models [--task-type TYPE] — 모델별 품질/비용/효율성 성적표\n\n효과: \"summarize는 Qwen(비용 0), generate_code는 Claude\" 같은 라우팅을\n하드코딩이 아닌 실행 데이터로 자동 결정\n\n테스트 17개 추가 (562 passed total)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T15:58:00Z",
+    "message": "feat: AutoQA Loop — 저품질 태스크 자동 재시도 + DNA 정리 + 품질 저하 알림\n\nQAEvaluator (sprint 완료 후 자동 실행, zero LLM):\n- 저품질 태스크 식별 (score < 0.5) → 자동 retry 큐잉 ([Retry] prefix)\n- qa_retries 테이블로 재시도 추적, max_retries=2 무한 루프 방지\n- 저품질 DNA 패턴 자동 삭제 (avg quality < 0.3, 최소 2회 사용)\n- CEO 품질 알림 (avg_quality < 0.4 → Office.notify_ceo)\n- qa_reports 테이블에 스프린트별 QA 리포트 저장\n\nGrowthEngine 확장:\n- CompanyState.avg_quality 필드 추가 (metrics 테이블에서 최신값 조회)\n- QualityDegradationTrigger: 지속적 품질 하락 시 프로세스 개선 제안\n\nAgentDNAStore.delete() 메서드 추가 (DNA 패턴 삭제용)\n\nSprintRunner 파이프라인: Plan → Execute → Quality → Metrics → AutoQA → Report\n\nDB: qa_reports + qa_retries 테이블 추가\n테스트 10개 추가 (545 passed total)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T15:49:00Z",
+    "message": "feat: MetricsCollector — 스프린트별 8개 시계열 지표 자동 수집 + hive metrics CLI\n\nMetricsCollector (sprint 완료 후 자동 실행, token 0):\n- token_zero_rate: E1+E2 캐시 히트율 (%)\n- escalation_rate: E3 Sonnet 상향 비율 (%)\n- avg_quality: QualityScorer 평균 점수\n- cost_per_quality: 비용 대비 품질 효율\n- total_cost: 스프린트 총 비용 (USD)\n- tasks_completed / tasks_failed: 완료/실패 건수\n- retry_success_rate: E4 재시도 성공률 (%)\n\nMetricsStore (DB):\n- save_batch (bulk insert) + get_trend/get_latest/get_summary\n- metric_name + collected_at 복합 인덱스로 시계열 조회 최적화\n\nSprintRunner 통합:\n- 품질 점수 산출 → 메트릭 수집 → 리포트 순서 자동화\n- SprintResult.started_at 필드 추가 (정확한 시간 범위 쿼리)\n\nCLI: hive metrics [--days N] [--metric name] 명령어 추가\n\n테스트 14개 추가 (535 passed total)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T15:41:18Z",
+    "message": "feat: QualityScorer — zero-LLM heuristic 품질 평가 (5차원 0.0~1.0 점수화 + DB 집계)\n\nQualityScorer (token 비용 0):\n- length_score: task_type별 기대 길이 대비 적절성\n- structure_score: 코드 블록/리스트/헤딩/테이블 구조 탐지\n- relevance_score: task title ↔ output 키워드 overlap (한/영)\n- completeness_score: FAILURE_KEYWORDS 부재 (escalation.py 재사용)\n- consistency_score: 자기 모순 패턴 탐지 (완료+불가능 등)\n- 가중 평균으로 종합 점수 산출, weights 커스텀 가능\n\nQualityStore (DB CRUD + aggregate):\n- save/get_by_task + avg_by_agent/model/task_type\n- get_low_quality_agents(threshold) — 성능 저하 에이전트 탐지\n\nSprintRunner 통합:\n- sprint 완료 후 자동 품질 점수 산출 → quality_scores 테이블 저장\n- SprintResult.avg_quality_score 필드 추가, 리뷰 리포트에 표시\n\nDB: quality_scores 테이블 + 3개 인덱스 (task, agent+time, time)\n테스트 34개 추가 (521 passed total)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T15:28:37Z",
+    "message": "refactor: LiteWorker/EscalatingWorker/ToolWorker를 LLMClient 기반으로 통합 — 로컬 Qwen 엔드포인트 지원\n\n기존 anthropic.AsyncAnthropic 직접 사용 → LLMClient provider-agnostic 호출로 전환:\n- LiteWorker: llm=LLMClient 파라미터로 교체, Anthropic SDK 직접 의존 제거\n- EscalatingWorker: 동일하게 LLMClient 기반으로 전환\n- ToolWorker: Anthropic tool use는 유지하되, OpenAI provider일 때 fallback (no-tools)\n- experimental.py: client → llm 파라미터 통일\n- service.py/cli: build_llm_client(config.providers) → build_lite_executor에 전달\n\ncompany.yaml에 local-qwen provider 추가:\n  api_base: http://118.223.251.22:10051 (Qwen3.5-27B-BF16, llama.cpp)\n  premium/standard/economy 전부 로컬 모델로 매핑\n\n테스트 487개 전체 통과, 기존 test_tools.py 외 pyright 0 errors\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-19T15:17:04Z",
+    "message": "feat: CEO Console Engine Phase A — 하나의 대화창으로 회사 운영 (규칙 기반 의도 분류 + zero LLM 현황 조회)\n\nConsole Engine 핵심 구조:\n- IntentClassifier: 10개 intent 한/영 키워드 매칭 (hire, fire, query, approve 등)\n- SessionManager: ceo_sessions/ceo_messages DB 기반 세션 히스토리 관리\n- QueryHandler: 조직/예산/태스크/결재 현황을 DB 직접 조회 (token 0)\n- CEOConsoleEngine: 의도분류 → 핸들러 디스패치 → 세션 기록 파이프라인\n- hive console REPL 명령어 추가\n\nDB 스키마: ceo_sessions, ceo_messages, proposals 3개 테이블 추가\n모델: Intent, ProposalStatus enum + ClassifiedIntent, ConsoleResponse, CEOSession, CEOMessage, Proposal dataclass\nPhase B stub: HireHandler, FireHandler, ChatHandler 등은 다음 단계에서 구현\n\n+ Tool Worker, Tool Registry, multi-provider LLM 리팩터링 포함\n\n테스트 488개 전체 통과, pyright 0 errors (console 관련)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T22:43:58Z",
+    "message": "feat: Multi-provider LLM 지원 — vLLM/llama.cpp/Ollama 등 OpenAI-compatible 엔드포인트 연동\n\nLLMClient (src/hive/runtime/llm.py):\n- Anthropic + OpenAI-compatible 통합 클라이언트\n- ProviderConfig로 엔드포인트/API key/모델 매핑 설정\n- ModelTier → provider 자동 라우팅 (첫 매칭 provider 사용)\n- calculate_cost: 알 수 없는 모델은 비용 0 (self-hosted)\n\ncompany.yaml providers 설정:\n  providers:\n    - name: anthropic\n      kind: anthropic\n      models:\n        premium: claude-opus-4-6\n        standard: claude-sonnet-4-6\n        economy: claude-haiku-4-5-20251001\n    - name: local-vllm\n      kind: openai\n      api_base: http://localhost:8080\n      models:\n        economy: qwen3-8b\n\n기타:\n- MatrixOffice: CEO 메시지 아무 방에서 감지 + 같은 방에 응답\n- _on_message 리팩토링: ask_ceo 플래그 기반 분기 (메시지 소실 버그 수정)\n- send_message에 room 파라미터 추가\n- _send_as_user plain text 전송 (formatted_body 제거 → 빨간 글씨 문제 해소)\n- MODEL_MAP public 전환 (lite_worker.py)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T15:41:05Z",
+    "message": "fix: hive serve에서 Matrix sync loop 미시작 버그 수정\n\n- _build_runners를 async로 전환, office.setup(company) 호출 추가\n- DB에서 company 로드 → Office 초기화 → sync loop 시작\n- office.close() finally 블록에서 호출 (리소스 정리)\n- QA 완료: CEO 메시지 감지, 결재 승인 흐름 정상 확인\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T15:12:15Z",
+    "message": "feat: Docker Compose 서비스 배포 구조 — Dashboard + Scheduler + Matrix + Element\n\n서비스 모드:\n- `hive serve` 커맨드 추가 (Dashboard + Scheduler 동시 실행)\n- run_scheduler: 스프린트 1h 주기, Growth Engine 2h 주기 자동 실행\n- uvicorn.Server 비동기 통합 (단일 asyncio loop)\n\nDocker Compose (4 서비스):\n- hive: Dashboard(:8000) + Scheduler + Matrix sync\n- synapse: Matrix homeserver(:8008) + PostgreSQL\n- element: Element Web(:8080) — CEO 접속용\n- postgres: Synapse DB\n\n배포 도구:\n- Dockerfile: Python 3.14 slim + uv + matrix-nio deps\n- deploy/init-synapse.sh: Synapse 초기 설정 (admin/ceo 유저 생성, 토큰 발급)\n- deploy/element-config.json: Element Web 설정\n- deploy/env.example: 환경변수 템플릿\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T14:35:12Z",
+    "message": "fix: 셀프 리뷰 — scanner 중복 코드 제거, 에러 처리 강화, 도메인 검증 추가\n\n리팩토링:\n- _score_fit → score_fit, _as_str → as_str (public 전환, algora/devto에서 재사용)\n- algora/devto의 중복 _str(), _score() 제거 → scanner.py의 공통 함수로 대체\n- protocols.py 삭제 (aggregate.py에 이미 동일 Protocol 존재)\n\n에러 처리 강화:\n- json.JSONDecodeError catch 추가 (malformed JSON → 빈 결과 반환)\n- RuntimeError catch 추가 (네트워크 오류 → 빈 결과 반환)\n- HTTPError 처리 추가 (API 에러 → RuntimeError로 변환)\n\n보안:\n- URL 도메인 검증 추가 (algora: console.algora.io, devto: dev.to)\n- 정렬 키 3-tuple 통일 (fit_score, reward, title)\n- .gitignore에 company.yaml 추가 (admin_token 노출 방지)\n\n테스트: 에러 케이스 4개 추가 (malformed JSON, network error) — 405 total\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T13:39:08Z",
+    "message": "feat: Phase 6 완료 — Revenue diversification (Algora/Dev.to/Aggregate) + PyPI 배포 준비\n\nRevenue diversification:\n- AlgoraScanner: algora.io 바운티 스캔 (reward_amount 파싱, fit scoring)\n- DevtoScanner: Dev.to listings 스캔 (cfp/forhire/collabs 3 카테고리)\n- AggregateScanner: 다중 소스 병렬 실행, URL 기반 중복 제거, fit 정렬\n- OpportunityScanner Protocol 정의 (소스 독립적 인터페이스)\n- CLI `hive revenue scan --source github|algora|devto|all` 플래그 추가\n- 15개 테스트 추가 (401 total)\n\nPyPI 배포 준비:\n- project.urls 추가 (Homepage, Repository, Issues)\n- __version__ = importlib.metadata.version(\"hive-corp\")\n- .github/workflows/publish.yml (GitHub Release → PyPI trusted publisher)\n- pyright pythonPlatform Darwin → Linux 수정\n\nROADMAP: Phase 4/6 체크박스 정리, Stats 현행화 (401 tests, 14 CLI commands)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T13:28:05Z",
+    "message": "fix: ruff PLW0108 lambda 제거, I001 import 정렬 — CI 재수정\n\n- credentials.py: lambda factory → pyright ignore 주석으로 전환 (ruff PLW0108 충돌 해소)\n- test_backup.py: import 알파벳 정렬 (I001)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T13:24:11Z",
+    "message": "fix: CI pyright 에러 2건 수정 — credentials issues 타입 명시, _prune_old_backups public 전환\n\n- credentials.py: list[Unknown] → lambda factory로 타입 명시 (reportUnknownVariableType)\n- backup.py: _prune_old_backups → prune_old_backups (테스트에서 사용하므로 public)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T13:20:19Z",
+    "message": "Merge pull request #1 from SonAIengine/claude/next-todo-imuYk\n\nfeat: Tier 0 운영 안전망 + Self-optimizing org",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T13:16:18Z",
+    "message": "feat: self-optimizing organization — model auto-tuning, circuit breaker, cleanup\n\nPhase 6 핵심 기능: 회사가 스스로 최적화하는 자율 운영 엔진.\n\n- Optimizer: 성과+예산 기반 모델 티어 자동 조정, 연속 실패 에이전트 차단,\n  완료 태스크 정리(30일), 오래된 메모리 아카이브(90일)\n- New triggers: CircuitBreakerTrigger, ModelDowngradeTrigger, TaskQueueTrigger\n- CompanyState에 blocked_agents, completed_tasks 필드 추가\n- 22개 테스트 (전체 248개 통과)\n\nhttps://claude.ai/code/session_01A5AvHjgVkayrxCbXg3ZHuG",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T08:36:56Z",
+    "message": "fix: 셀프 리뷰 — 월 필터 누락, 데드코드, alias 중복, rotation 데이터 유실 수정\n\n- get_cost_by_agent/get_cost_by_model에 현재 월 필터 추가 (get_monthly_spent와 일관성)\n- rotation INSERT OR REPLACE → ON CONFLICT DO UPDATE (재실행 시 누적, 덮어쓰기 방지)\n- get_current_month_start() 데드코드 제거 (controller._month_start_epoch과 중복)\n- ensure_api_key/get_api_key 중복 함수 → get_api_key 하나로 통합\n\nhttps://claude.ai/code/session_01A5AvHjgVkayrxCbXg3ZHuG",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T08:31:15Z",
+    "message": "docs: CLAUDE.md에 UP017(datetime.UTC), B008(FastAPI Depends) 패턴 추가\n\nTier 0 구현 중 반복 발생한 lint 패턴 2건을 Common Mistakes에 추가.\n\nhttps://claude.ai/code/session_01A5AvHjgVkayrxCbXg3ZHuG",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T08:29:12Z",
+    "message": "feat: Tier 0 운영 안전망 — Dashboard 인증, DB 백업, 로그 rotation, credential 검증\n\n- Dashboard API/View에 Bearer 토큰 인증 추가 (.hive/api_key 자동 생성)\n- CORS를 localhost로 제한 (기존 allow_origins=[\"*\"] 제거)\n- SQLite 백업 모듈 (online backup API, 7개 보존 정책, 복원 지원)\n- token_logs/runtime_events 월별 집계 후 상세 로그 정리 (rotation)\n- Credential 검증 (미설정, 미해결 env var, placeholder 감지)\n- BudgetController.get_monthly_spent() 월 기준 필터링 버그 수정\n- 24개 신규 테스트 추가 (211 전체 통과)\n\nhttps://claude.ai/code/session_01A5AvHjgVkayrxCbXg3ZHuG",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T03:41:39Z",
+    "message": "feat: publish benchmarks and add project portfolio",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T03:13:23Z",
+    "message": "feat: promote validated runtime experiments",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-18T00:22:44Z",
+    "message": "feat: add agent DNA and experiment benchmarks",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T23:43:04Z",
+    "message": "feat: finance 대시보드와 revenue 스캔 및 실험 런타임 추가",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T17:09:14Z",
+    "message": "feat: (E3) Progressive Escalation — Haiku first, Sonnet 승격 (Phase 4)\n\n- EscalatingWorker: Standard 태스크를 Haiku로 먼저 시도\n  - 응답 품질 충분 → Haiku 결과 반환 (3배 비용 절약)\n  - 응답 부족 → Sonnet으로 자동 escalation\n  - Economy/Premium 태스크는 escalation 없이 원래 모델 사용\n- needs_escalation(): 응답 품질 판단 기준\n  - 빈 응답, 50자 미만, failure 키워드 감지\n  - (\"sorry\", \"I can't\", \"불가능\", \"모르겠\" 등)\n- token_logs에 E3_haiku/E3_escalated 플래그 기록\n  - A/B 비교 가능: Haiku 성공률, escalation 비율 추적\n- budget tight 시 Standard→Economy 다운그레이드되면 escalation 안 함\n- 테스트: 12개 (품질판단, Haiku 성공, escalation, Premium/Economy 예외)\n\nSonnet $3/$15 vs Haiku $1/$5 = 성공 시 3배 절약\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T16:58:27Z",
+    "message": "fix: Anthropic API 가격표 업데이트 (2026-03 기준)\n\n- Opus 4.6: $15/$75 → $5/$25 (3배 인하)\n- Haiku 4.5: $0.80/$4.0 → $1.0/$5.0 (소폭 인상)\n- Sonnet 4.6: $3/$15 (변동 없음)\n- 출처: platform.claude.com/docs/en/docs/about-claude/pricing\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T16:53:59Z",
+    "message": "feat: (E1) LLM as Compiler — 루틴 태스크 코드 변환으로 토큰 절약 (Phase 4)\n\n- CompiledWorker: LiteWorker를 감싸서 E1 컴파일 최적화 적용\n  - Cache hit → sandbox에서 컴파일 코드 실행 (token 0, cost 0)\n  - Cache miss → LiteWorker 호출 + 응답에서 코드 블록 추출 → DB 저장\n  - 실행 실패 → fail_count 증가, 3회 초과 시 invalidate → 재컴파일\n- CompilerPolicy: 태스크 유형 기반 compilable 판단\n  - summarize, classify, write_docs만 대상 (Economy 모델용)\n- CompiledTaskStore: compiled_tasks 테이블 CRUD\n  - upsert (재컴파일 시 version 증가, fail_count 리셋)\n  - hit_count/fail_count 추적, compiler 통계\n- CodeSandbox (run_in_sandbox): 제한된 환경에서 코드 실행\n  - 허용 builtin만 노출 (len, str, list 등)\n  - 허용 모듈만 import 가능 (json, re, datetime 등)\n  - os, subprocess, open, eval 등 차단\n- token_logs 연동: E1 히트 시 optimization_flags=[\"E1\"], dna_hit=1 기록\n- DB: compiled_tasks 테이블 + CompiledTask dataclass 추가\n- 테스트: 21개 (policy, sandbox, store CRUD, worker 캐시/fallback)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T16:35:29Z",
+    "message": "docs: Phase 3 완료 체크 + Phase 4 Dynamic room 완료\n\n- Phase 3: Push notifications, hive found Matrix E2E 완료 체크\n- Phase 4: Dynamic room/channel creation 완료 체크\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T16:29:08Z",
+    "message": "feat: Dynamic room 생성 — 에이전트 고용 시 부서 채널 자동 생성 (Phase 4)\n\n- hire_agent에서 부서 Room 동적 생성 (_ensure_department_room)\n  - 부서명 → room alias 매핑 (기술팀→tech, 개발팀→dev, 품질팀→qa 등)\n  - 이미 존재하는 room은 재사용 (alias resolve)\n  - CEO 자동 참여 + 생성 알림 메시지\n- hire_agent 인사 메시지에 에이전트 이름 포함\n- E2E 검증: QA 고용 → #qa room 자동 생성 확인\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T16:26:49Z",
+    "message": "fix: Matrix E2E founding 완료 — 버그 수정 + 문서 업데이트\n\n- MatrixOffice 버그 수정:\n  - _on_message: room ID 체크 추가 (ceo-office만 처리)\n  - _on_message: agent 메시지(@agent-*) 필터 추가\n  - _admin_join_room: 이미 참여한 경우 403 무시\n  - request_approval: 리액션 외 텍스트 승인/거절 지원\n    (\"승인\",\"ㅇㅇ\",\"yes\" 등 → 승인, \"거절\",\"ㄴㄴ\",\"no\" 등 → 거절)\n- CEO 자동 초대: _ensure_ready에서 CEO를 모든 Room에 자동 참여\n- OfficeConfig에 matrix_ceo_user 필드 추가\n- founding engine: 월 예산 질문 제거 (기본값 사용, hive budget set으로 변경)\n- ARCHITECTURE.md: \"월 예산\" → \"토큰 사용량 추적/한도\" 용어 통일\n  - Anthropic API에 잔액 조회 없어서 자체 추적하는 구조 명시\n- ROADMAP.md: Phase 3 Matrix 항목 체크 + stats 업데이트\n- 실서버 E2E 검증: Element에서 대화→승인→설립 전 과정 성공\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T15:48:58Z",
+    "message": "feat: Matrix Office 구현 + Agent 이름/부서 시스템 (Phase 3)\n\n- MatrixOffice: Synapse Admin API 기반 Office Protocol 구현체\n  - Space + Room 자동 생성 (ceo-office, general, standup)\n  - Agent hire/fire → Matrix 유저 생성/비활성화 + Room 참여/퇴장\n  - CEO 리액션(👍/👎) 기반 결재 승인/거절 (sync loop)\n  - ask_ceo: CEO 텍스트 응답 대기\n  - lazy initialization: setup 전 ask_ceo 등 호출 가능\n  - URL encode 수정: Room alias의 # 문자 처리\n- office/factory.py: config 기반 CLI/Matrix 분기 팩토리\n  - company.yaml의 office.type에 따라 자동 선택\n- Agent 이름/부서 시스템:\n  - Agent 모델에 name, department 필드 추가\n  - names.py: 한국 이름 생성기 (성 20개 × 이름 32개)\n  - 역할 → 부서 자동 매핑 (CTO→기술팀, Developer→개발팀 등)\n  - Matrix displayname: \"김서연 (CTO, 기술팀)\" 형태\n  - CLI도 이름/부서 표시\n- Wiring 변경:\n  - cli/main.py, api/deps.py: CLIOffice() → create_office()\n  - founding/engine.py: CLIOffice 타입 → Office Protocol, office 설정 보존\n  - registry.py, hiring.py: name/department INSERT/SELECT 반영\n  - config.py: save_config에 matrix/discord 설정 보존\n- 테스트: test_matrix_office.py 29개 (httpx mock 기반)\n- E2E 검증: Synapse 실서버 메시지 전송 확인\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T04:55:38Z",
+    "message": "docs: update ROADMAP (Phase 1~4 checked) + rewrite README\n\nROADMAP: Phase 1~2 ✅, Phase 3~4 🔶 (핵심 완료, Matrix/E1~E4 미착수).\nE2E 운영 루프 섹션 추가, Stats 테이블 추가.\nREADME: 실제 CLI 출력 기반으로 재작성, 12개 명령어 문서화,\nQuick Start, Tech Stack, Development 가이드 업데이트.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T04:45:35Z",
+    "message": "feat: auto .env loading + task CLI + entry point fix\n\n.env 파일 자동 로드 (외부 의존성 없음, __main__.py에서 처리).\nhive task add/list CLI 추가. entry point를 __main__:main으로 변경.\n.env는 .gitignore로 커밋 방지.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T01:58:49Z",
+    "message": "feat: E2E operational loop + task CLI + worker wiring\n\nhive task add/list CLI 추가. Sprint에서 LiteWorker 실제 연결.\nE2E 통합 테스트 7개: hire→task→sprint→standup→growth→learn→perf\n전체 루프가 mock LLM으로 동작 검증됨. 217 tests.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T01:50:45Z",
+    "message": "feat: full CLI — 10 commands wiring all modules together\n\nhive found/status/budget (기존) + sprint/standup/growth/learn/perf/\nfinance/dashboard (신규). 모든 Phase 1~4 모듈이 CLI로 연결됨.\nE2E 운영 루프: found → sprint → standup → growth → learn → perf.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T01:45:04Z",
+    "message": "feat: Memory Learning + Finance Tracking (Phase 4)\n\nMemoryLearner: 반복 실패→rule, 비용 패턴→lesson, 고성과→lesson 자동 감지.\nFinanceTracker: 수익/비용 기록, P&L 리포트, token_logs 합산, 카테고리별 집계.\n10 tests 추가 (총 210개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T01:41:01Z",
+    "message": "feat: Growth Engine + Hire/Fire flow + Performance Evaluation (Phase 4)\n\nGrowthEngine: 4개 트리거 (Overload, BudgetWarning, Failure, IdleAgent),\nCompanyState 스냅샷, evaluate→CEO Gateway 제출.\nHiringManager: propose_hire/fire → CEO 승인 → Registry+Office 실행.\nPerformanceEvaluator: 태스크 성공률 기반 성과 측정, DB 점수 반영.\n22 tests 추가 (총 200개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T00:45:39Z",
+    "message": "feat: CEO Dashboard — htmx + Jinja2 + DaisyUI (Phase 3)\n\n5개 HTML 페이지: Overview, Org Chart, Approvals, Budget, Memory.\nhtmx로 partial 업데이트 (polling 15~60s), DaisyUI dark theme,\nChart.js 도넛 차트 (비용 분석), 실시간 검색 (debounce 400ms).\nJSON API와 HTML 뷰가 같은 FastAPI 앱에서 공존.\nNode.js/npm 불필요 — CDN으로 전부 해결.\n12 view tests 추가 (총 178개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-17T00:18:39Z",
+    "message": "feat: FastAPI backend — CEO Dashboard API (Phase 3)\n\n6개 라우트: dashboard(회사 개요), org(조직도), approvals(결재),\nmemory(기억 CRUD+검색), budget(비용 요약+baseline 리포트), tasks(태스크).\nCORS 설정, lifespan DB 관리, Pydantic request models.\n14 tests 추가 (총 166개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T23:03:58Z",
+    "message": "feat: Daily Standup + Sprint Cycle + Sliding Context + Baseline Report\n\nStandupReport: zero LLM cost, DB 조회→마크다운 (완료/진행/블로커/비용).\nSprintRunner: plan→execute→review 순서, Scheduler+Office 통합.\nSlidingContextWindow: 최근 N턴 유지, 요약 압축, 토큰 예산 제한 (P5).\nBaselineReport: 모델별/에이전트별/기법별 비용 분석 마크다운.\n23 tests 추가 (총 152개). Phase 2 완료.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T22:54:31Z",
+    "message": "docs: add Design Patterns guide (PATTERNS.md)\n\nFlyweight+Object Pool(Agent/Worker), Protocol, Repository,\nGateway, Strategy(model routing), DAG Scheduler, DTO(slots),\nConstructor Injection. 의도적 미사용 패턴과 패턴 간 관계도 포함.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T22:51:09Z",
+    "message": "docs: add Common Mistakes section to CLAUDE.md\n\n개발 중 ruff/pyright에 반복 걸린 패턴 5가지 정리:\n함수 내 import, _prefix 남발, type: ignore 복붙,\nasync blocking I/O, 하드코딩 시크릿.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T22:47:45Z",
+    "message": "feat: Lite Worker + Code Worker + Git Worktree (Phase 2 complete)\n\nLiteWorker: Anthropic API 직접 호출, cache_control(P3), task-based\nmodel routing(P2), memory context 주입, token logging.\nCodeWorker: Claude Code subprocess, timeout, JSON/plain 출력 파싱.\nWorktreeManager: git worktree로 에이전트별 브랜치 격리.\n20 tests 추가 (총 129개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T16:08:16Z",
+    "message": "feat: DAG Scheduler — dependency resolution + parallel execution\n\nget_ready_tasks: DAG 의존성 해석, 실행 가능 태스크 추출.\nassign_and_execute: idle 에이전트 배정→Worker Pool 실행→상태 업데이트.\nrun_until_complete: 모든 태스크 순차/병렬 실행 (교착 방지).\n10 tests 추가 (총 109개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T16:06:22Z",
+    "message": "feat: Agent Registry + Worker Pool (Phase 2 runtime core)\n\nAgentRegistry: hire/fire/get/list/find_available, DB 기반 에이전트 관리.\nWorkerPool: Semaphore 기반 고정 크기 실행 슬롯 (lite 5, code 3),\n동시성 제한, 에러 핸들링, 실행 통계 추적.\n22 tests 추가 (총 99개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T16:00:47Z",
+    "message": "feat: Token Budget Controller + Model Router\n\nBudgetController: log_usage, 월 지출/잔여 조회, 에이전트/모델별 집계,\n80% 사용 시 다운그레이드 권고. ModelRouter: 태스크 유형→모델 tier 매핑,\nbudget_tight 시 한 단계 다운그레이드. 16 tests 추가 (총 77개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T15:58:25Z",
+    "message": "feat: CEO Gateway — escalation logic + approval routing\n\nEscalationLevel(APPROVE/NOTIFY/SILENT) 분류,\nsubmit→Office 승인 요청, resolve→수동 승인/거절,\nget_pending→대기 목록, RULE 타입은 자동 승인+알림.\nMockOffice에 approve_all 파라미터 추가.\n13 tests 추가 (총 61개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T15:54:52Z",
+    "message": "feat: Company Memory store — CRUD + FTS5 search + agent context\n\nMemoryStore: save/get/update/delete with FTS5 sync,\n영어→FTS5 MATCH, 한국어→LIKE fallback 자동 판별,\nget_context_for_agent()로 culture/rule/preference 자동 주입.\n19 tests 추가 (총 48개).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T15:47:33Z",
+    "message": "chore: Python 3.14 + pytest-memray + memory management guide\n\n- Python 3.12→3.14 업그레이드 (PEP 649 지연 평가, incremental GC)\n- from __future__ import annotations / TYPE_CHECKING 보일러플레이트 제거\n- pytest-memray dev dependency 추가 (테스트별 메모리 프로파일링)\n- CLAUDE.md에 Memory Management 가이드 추가\n- pre-commit hooks, build 명령어 문서화\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T15:16:30Z",
+    "message": "chore: strict ruff + pyright + lefthook pre-commit hook\n\nruff 룰셋 10→35+ 확대 (보안, 성능, 비동기, 복잡도, 모던 Python),\nlefthook으로 commit 시 ruff check/format + pyright 자동 실행,\npush 시 pytest 실행. 전체 코드 lint 수정 완료.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T02:04:20Z",
+    "message": "docs+test: testing guide in CLAUDE.md, shared fixtures in conftest.py\n\nCLAUDE.md: comprehensive testing rules — what to test, how to mock,\nchecklist for new features, module-to-test mapping table.\n\nconftest.py: shared fixtures (db, MockOffice, MockLLMClient) for all tests.\nRemoved duplicate db fixture from test_database.py.\n\n29 tests passing.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T02:01:48Z",
+    "message": "test: add 29 tests for models, database, config\n\n- test_models: domain model defaults, enums, unique IDs\n- test_database: CRUD, WAL mode, FTS5 (English + Korean LIKE fallback),\n  token_logs aggregation, agent hire/fire queries\n- test_config: load/save YAML, env var resolution, defaults\n\nAll 29 tests passing.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T01:15:56Z",
+    "message": "feat: Phase 1 foundation — hive found + hive status working\n\nCore modules:\n- core/models.py: all domain models (slots=True, StrEnum)\n- core/config.py: company.yaml loader/saver\n- storage/schema.sql: full SQLite schema with FTS5 triggers\n- storage/database.py: async SQLite wrapper (WAL mode)\n- office/protocol.py: Office Protocol abstraction\n- office/cli.py: CLI Office implementation (rich panels/prompts)\n- founding/engine.py: conversational founding flow\n- cli/main.py: hive found, hive status, hive budget commands\n\nTested: hive found creates company, hires CTO + Developer,\nCTO sends first meeting request. hive status shows org chart.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-16T01:09:28Z",
+    "message": "docs: add open questions — decisions to make during development\n\nPhase-by-phase checklist of unresolved design decisions.\nMark ✅ as each is resolved during implementation.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T16:53:08Z",
+    "message": "chore: add pyproject.toml + CLAUDE.md for development\n\n- pyproject.toml: uv + hatchling, deps (anthropic, litellm, click, rich, aiosqlite)\n- Optional deps: matrix, discord, dashboard, dev\n- CLAUDE.md: project context, architecture decisions, code rules\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T16:49:27Z",
+    "message": "docs: agents are data, not processes — Worker Pool architecture\n\nFundamental shift: Agent = config data (mem ~0), Worker = execution slot.\n- Agent Registry: 100 agents = just DB rows, no memory cost\n- Worker Pool: fixed-size (3 code + 5 lite), ~1GB regardless of agent count\n- Hire = DB INSERT (instant), Fire = DB UPDATE (instant)\n- Stale context naturally prevented (agent config loaded fresh each task)\n- Prompt caching synergy (same prompts reused across workers)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T16:41:34Z",
+    "message": "docs: CLI-only Phase 1, Matrix moved to Phase 3\n\n- Phase 1: CLI Office (rich prompt, zero external deps)\n- Phase 2: Agent runtime + sprints (core logic)\n- Phase 3: Matrix + Dashboard (async notifications)\n- README, ARCHITECTURE, ROADMAP all aligned\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T16:32:43Z",
+    "message": "docs: token efficiency — proven vs experimental, measurement framework\n\nProven (Phase 1-2): zero-LLM ops, model routing, prompt caching,\nstructured output, sliding window, structured agent comms.\n\nExperimental (Phase 4-5): LLM-as-compiler, Agent DNA pattern learning,\nprogressive escalation, delta retry. All require baseline measurement\nbefore claiming savings.\n\nMonitoring costs zero tokens (SQL + tiktoken, no LLM calls).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T16:22:01Z",
+    "message": "docs: Matrix as primary office, Office abstraction layer\n\n- Each agent = real Matrix user (not webhook/bot tag)\n- Office Protocol: pluggable interface (Matrix primary, Discord alt)\n- Agent types: Lite (raw API) for PM/docs, Code (Claude Code) for dev\n- Synapse self-hosted on home server\n- Discord moved to Phase 6 as alternative\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T16:07:09Z",
+    "message": "docs: remove predefined structure — company grows from conversation\n\nNothing is fixed upfront. No departments, no roles, no business model.\nThe system provides growth mechanisms, not structure.\n- Founding Engine: start from a conversation\n- Growth Engine: trigger-based proposals (CEO approves)\n- Channels, roles, revenue all emerge at runtime\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T15:56:35Z",
+    "message": "docs: rewrite vision — autonomous AI company, not a dev tool\n\nCore shift: user is the CEO, not a developer using a tool.\n- Discord = office (meetings, reports, approvals)\n- Dashboard = executive console (company health at a glance)\n- Company grows autonomously (hire/fire, revenue, self-optimize)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-15T15:36:32Z",
+    "message": "docs: initial project plan and architecture\n\nToken-efficient multi-agent orchestration platform.\nCore concepts: Budget Controller, Knowledge Graph, Adaptive Model Router, DAG Scheduler.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "repo": "SonAIengine/hive-corp"
+  },
+  {
+    "date": "2026-03-20T02:35:06Z",
+    "message": "fix(data): Add type check before 'in' operator in JSON dot-notation path resolver\n\nWhen data.json has dotted key names (e.g. \"Rev.Q1\") and sparse rows, the dot-notation\nfallback could attempt 'in' operator on a primitive value, causing TypeError.\n\nFix #4116",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-19T10:14:28Z",
+    "message": "refactor(resolver): split monolithic resolvers into per-type modules (#4115)\n\nSplit shape.ts (30+ static imports, 20 resolver functions) into\nindividual resolver files grouped by chart type dependency:\n- Arc types (pie, donut, gauge, polar, funnel) - no axis dependency\n- Radar - partial axis dependency (eventrect only)\n- Axis types (line, area, bar, bubble, candlestick, scatter, treemap)\n- Shared helpers (arc.helpers.ts, axis.helpers.ts)\n\nSplit interaction.ts into 3 individual files (selection, subchart, zoom).\n\nThis enables bundlers to tree-shake unused chart types from ESM builds.\nPreviously, importing any single type pulled all 30+ shape/axis modules.\n\nCo-authored-by: Jae Sung Park <jaesung.park@navercorp.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-18T09:32:52Z",
+    "message": "refactor(build): Switch ESM build to preserveModules for better tree-shaking (#4113)\n\n- Switch Rollup ESM output from single flat file to preserveModules,\n  enabling consumer bundlers to import only used modules\n- Fix sideEffects: mark only CSS and UMD entry as side-effectful\n- Update module/exports paths to dist-esm/index.esm.js\n- Update tree-shaking test scenario import paths",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-18T07:57:11Z",
+    "message": "refactor(build): Improve ESM tree-shaking support (#4112)\n\n- Fix sideEffects declaration: replace invalid \"src/**/*.js\" with\n  \"dist-esm/**/*.css\" so consumer bundlers correctly identify all JS\n  modules as side-effect-free\n- Add treeshake options (moduleSideEffects, propertyReadSideEffects)\n  to Rollup ESM main bundle config, matching plugin builds\n- Add tree-shaking measurement scripts under test/treeshake/ for\n  verifying bundle size reduction per import scenario",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-16T09:08:54Z",
+    "message": "refactor(all): Optimize redraw with generation caching and selective updates (#4110)\n\n- Generation-based caching for getMaxTickSize() to avoid\n  redundant DOM measurements within same redraw cycle\n- Skip D3 enter/merge when data/visibility unchanged\n  via dirty flags\n- Scale fingerprinting in updateEventRectData() to skip\n  O(n) recalculation when domain is unchanged\n- Batch filterTargetsToShow() in state for reuse by\n  sub-methods during redraw\n- Set dirty flags across all data-mutating APIs\n\nCo-authored-by: netil <netil@netilui-Mac-Studio.local>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-16T05:34:38Z",
+    "message": "fix(types): Export shape option types from main entry point (#4109)\n\nExport all interfaces from options.shape.d.ts (BarOptions, LineOptions, etc.)\nso users can import them directly from \"billboard.js\".\n\nFix #4104",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-16T05:08:39Z",
+    "message": "chore: update CI node matrix, fix dprint and vite config\n\n- Update CI node-version matrix to [22.x, 23.x, 24.x] for vite 8/rolldown compatibility\n- Add --allow-no-files flag to dprint in lint-staged config\n- Replace deprecated resolve.alias customResolver with resolveId plugin\n\nRef https://github.com/naver/billboard.js/actions/runs/23126207982/job/67176892044#step:6:9",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-16T03:04:49Z",
+    "message": "fix(data): Handle non-array value for data.json\n\nFix json data to handle non array value\n\nRef #4103",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-16T02:40:55Z",
+    "message": "chore(deps-dev): update dependency (#4107)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-13T06:22:33Z",
+    "message": "fix(util): camelCase SVG tag/attribute matching in sanitizer\n\n- update on allowed tags\n- make tags/attributes to match camelCase form\n\nRef #4078\nClose #4106",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-13T05:58:58Z",
+    "message": "fix(util): update sanitization function (#4105)",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-09T12:06:21Z",
+    "message": "chore(deps-dev): update dependency (#4102)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-03-03T06:39:31Z",
+    "message": "chore(deps-dev): update dependency (#4100)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-02-28T12:03:14Z",
+    "message": "style(lint): Fix no-useless-assignment (#4099)\n\nhttps://github.com/naver/billboard.js/actions/runs/22055451998/job/63722266686#step:5:1",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-02-16T08:30:53Z",
+    "message": "chore(deps-dev): update dependency (#4098)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-02-11T23:20:35Z",
+    "message": "fix(types): Add file extensions to types\n\nUpdate moduleResolution='bundler' strategy to support\nmodern ecosystem versions.\n\nClose #4097",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-02-09T00:27:24Z",
+    "message": "chore(deps-dev): update dependency (#4095)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-02-06T09:13:16Z",
+    "message": "feat(funnel): Rotate and spline option\n\nImplement funnel rotate and spline option\n\nClose #4024",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-02-02T00:25:08Z",
+    "message": "chore(deps-dev): update dependency (#4093)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-28T07:57:00Z",
+    "message": "fix(boost): Reuse Worker and Object URL to prevent memory leak\n\n- Cache Worker instance and Object URL for reuse instead of creating new ones on every call\n- Add defensive check for undefined cache entry in getWorker()\n- Add cleanupWorkers() function for resource cleanup\n- Include depsFn in cache key to handle different dependencies\n- Update tests for new Worker caching implementation\n\nRef #3720",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-27T09:48:10Z",
+    "message": "refactor(all): Remove some d3 dependencies (#4091)\n\n- Remove some d3.js dependencies to make lighter\n- Change object type to use Record utility type\n- Minimize layout thrashing",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-26T02:45:23Z",
+    "message": "chore(deps-dev): update dependency (#4090)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-23T08:10:45Z",
+    "message": "chore(release): 3.18.0 [skip ci]\n\n# [3.18.0](https://github.com/naver/billboard.js/compare/3.17.4...3.18.0) (2026-01-23)\n\n### Bug Fixes\n\n* **color:** Fix color update on gradient ([9d6d392](https://github.com/naver/billboard.js/commit/9d6d392c00c586a490e3a606be96e45f064b12d9)), closes [#4048](https://github.com/naver/billboard.js/issues/4048)\n* **data:** Handle undefined values in total calculation ([18a5b9b](https://github.com/naver/billboard.js/commit/18a5b9b8bf43456d2167140040f9e05ad08e6544)), closes [#4073](https://github.com/naver/billboard.js/issues/4073)\n* **interaction:** Fix data.onover call in touch event ([5fe448c](https://github.com/naver/billboard.js/commit/5fe448c455dc725857f77ec4e39a93021e19a735)), closes [#4076](https://github.com/naver/billboard.js/issues/4076)\n* **load:** Update call sequence to be after data are unloaded ([f9f4a86](https://github.com/naver/billboard.js/commit/f9f4a866134afd8e1b484a857c878895801cf3c4)), closes [#4052](https://github.com/naver/billboard.js/issues/4052)\n* **text:** Fix multiline data labels vertial position ([6b5580a](https://github.com/naver/billboard.js/commit/6b5580af7c59579de1331904b2d859235e5b9497)), closes [#4062](https://github.com/naver/billboard.js/issues/4062)\n* **text:** Fix text alignment to center ([9f2960d](https://github.com/naver/billboard.js/commit/9f2960d93b366a5b53cc42d488a2d00b9701fef3)), closes [#4081](https://github.com/naver/billboard.js/issues/4081)\n* **util:** update sanitization function ([#4085](https://github.com/naver/billboard.js/issues/4085)) ([49e079c](https://github.com/naver/billboard.js/commit/49e079cdd466fc8ba7ab208988181e5b7a5f336b)), closes [#4078](https://github.com/naver/billboard.js/issues/4078)\n\n### Features\n\n* **arc:** Intent to ship Arc's annotation ([c740a3b](https://github.com/naver/billboard.js/commit/c740a3bad506ab08b32a2efff00e7bcbc4c41b18)), closes [#3602](https://github.com/naver/billboard.js/issues/3602)\n* **data:** Intent to ship data.stack.normalize.perGroup ([c879c25](https://github.com/naver/billboard.js/commit/c879c259337ee2516970303660231b5452707f55)), closes [#4060](https://github.com/naver/billboard.js/issues/4060)\n* **treemap:** Enhance label formatter to include tile size ([71c0d06](https://github.com/naver/billboard.js/commit/71c0d06868fb4849ca923c50dc7759d5752c7844)), closes [#4066](https://github.com/naver/billboard.js/issues/4066)",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-23T05:37:50Z",
+    "message": "refactor(util): reenforce sanitization (#4089)\n\nAdd prevention for property attack pattern\n\nRef #4085",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-22T06:16:02Z",
+    "message": "refactor(util): Update sanitization (#4088)\n\nUpdate the way to sanitize: blacklist --> whitelist\nTo increment prevention possibility.\n\nRef #4085",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-21T08:39:42Z",
+    "message": "refactor(util): reenforce sanitization (#4086)\n\nupdate patterns to reenforce prevention\n\nRef #4085",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-19T07:40:28Z",
+    "message": "fix(util): update sanitization function (#4085)\n\nEnforce prevention for html encoding, PortSwigger, OWASP filter, Mutation, polyglot attack\n\nRef #4078",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-19T05:55:53Z",
+    "message": "chore(deps-dev): update dependency (#4083)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-19T05:55:36Z",
+    "message": "refactor(all): Perf optimization (#4084)\n\nRefactoring for perf optimization.\n- Decrease time, space complexity by caching and the use of map\n- Batching transition tasks by RAF\n- rename all module's private function with prefix \"_\"",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-15T07:25:20Z",
+    "message": "chore(ci): upgrade node version on release\n\nhttps://github.com/naver/billboard.js/actions/runs/21022972531/job/60441503726#step:5:14",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-15T06:44:30Z",
+    "message": "fix(text): Fix text alignment to center\n\nUpdate getting text element's dimension for treemap type.\nelement.getBoundingRectClient() --> element.getBBox()\n\nRef #4081",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-14T09:39:18Z",
+    "message": "feat(arc): Intent to ship Arc's annotation\n\nImplement arc annotation\n\nClose #3602",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-12T08:38:22Z",
+    "message": "fix(interaction): Fix data.onover call in touch event\n\nUpdate conditional to trigger onover event.\nThe state.mouseover value is released in onout for desktop, but\nin touch \"onout\" doesn't exist, so add conditional to handle trigger point.\n\nFix #4076",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-12T05:44:03Z",
+    "message": "fix(data): Handle undefined values in total calculation\n\nUpdated the total calculation to safely handle undefined values by using nullish coalescing.\n\nFix #4073",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2026-01-09T13:40:56Z",
+    "message": "chore(deps-dev): update dependency (#4074)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-29T09:58:48Z",
+    "message": "chore(deps-dev): update dependency (#4072)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-22T02:15:38Z",
+    "message": "Merge branch 'pr/4069'",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-22T02:11:38Z",
+    "message": "docs(all): Correct typos and improve clarity in documentation",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-14T12:47:11Z",
+    "message": "docs(all): Fix typo\n\nFix typo in general\n\nClose #4069",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-22T01:36:34Z",
+    "message": "chore(deps-dev): update dependency (#4071)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-17T13:08:22Z",
+    "message": "chore(deps-dev): update dependency (#4070)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-14T12:41:11Z",
+    "message": "revert",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-14T12:38:07Z",
+    "message": "fix typo",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-09T08:19:01Z",
+    "message": "docs(demo): update description text",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-09T07:11:26Z",
+    "message": "feat(treemap): Enhance label formatter to include tile size\n\nUpdated the treemap label formatter to accept an additional parameter for tile size,\nallowing for more dynamic label rendering based on the width and height of the tiles.\nUpdated documentation to reflect the new argument.\n\nClose #4066",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-08T09:37:37Z",
+    "message": "feat(data): Intent to ship data.stack.normalize.perGroup\n\nImplement normalize per group option\n\nClose #4060",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-08T05:55:03Z",
+    "message": "chore(deps-dev): update dependency (#4065)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-12-01T00:50:16Z",
+    "message": "chore(deps-dev): update dependency (#4064)\n\nupdate dependencies to the latest\n\nCo-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-11-25T06:28:41Z",
+    "message": "fix(text): Fix multiline data labels vertial position\n\nMake vertical multiline text positioned at the middle as default\n\nFix #4062",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-11-25T01:32:04Z",
+    "message": "chore(deps): bump actions/checkout from 5 to 6 (#4061)\n\nBumps [actions/checkout](https://github.com/actions/checkout) from 5 to 6.\n- [Release notes](https://github.com/actions/checkout/releases)\n- [Changelog](https://github.com/actions/checkout/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/actions/checkout/compare/v5...v6)\n\n---\nupdated-dependencies:\n- dependency-name: actions/checkout\n  dependency-version: '6'\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+    "repo": "naver/billboard.js"
+  },
+  {
+    "date": "2025-11-18T00:57:39Z",
+    "message": "build(deps): bump k8s.io/client-go from 0.34.1 to 0.34.2\n\nBumps [k8s.io/client-go](https://github.com/kubernetes/client-go) from 0.34.1 to 0.34.2.\n- [Changelog](https://github.com/kubernetes/client-go/blob/master/CHANGELOG.md)\n- [Commits](https://github.com/kubernetes/client-go/compare/v0.34.1...v0.34.2)\n\n---\nupdated-dependencies:\n- dependency-name: k8s.io/client-go\n  dependency-version: 0.34.2\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-17T23:31:59Z",
+    "message": "build(deps): bump go.etcd.io/etcd/client/pkg/v3 from 3.6.5 to 3.6.6\n\nBumps [go.etcd.io/etcd/client/pkg/v3](https://github.com/etcd-io/etcd) from 3.6.5 to 3.6.6.\n- [Release notes](https://github.com/etcd-io/etcd/releases)\n- [Commits](https://github.com/etcd-io/etcd/compare/v3.6.5...v3.6.6)\n\n---\nupdated-dependencies:\n- dependency-name: go.etcd.io/etcd/client/pkg/v3\n  dependency-version: 3.6.6\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-17T12:05:41Z",
+    "message": "build(deps): bump go.etcd.io/etcd/raft/v3 from 3.5.24 to 3.5.25\n\nBumps [go.etcd.io/etcd/raft/v3](https://github.com/etcd-io/etcd) from 3.5.24 to 3.5.25.\n- [Release notes](https://github.com/etcd-io/etcd/releases)\n- [Commits](https://github.com/etcd-io/etcd/compare/v3.5.24...v3.5.25)\n\n---\nupdated-dependencies:\n- dependency-name: go.etcd.io/etcd/raft/v3\n  dependency-version: 3.5.25\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-14T00:33:40Z",
+    "message": "build(deps): bump alpine from 3.22.1 to 3.22.2 in /build\n\nBumps alpine from 3.22.1 to 3.22.2.\n\n---\nupdated-dependencies:\n- dependency-name: alpine\n  dependency-version: 3.22.2\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-14T00:09:11Z",
+    "message": "build(deps): bump python from 3.13-alpine to 3.14-alpine in /build\n\nBumps python from 3.13-alpine to 3.14-alpine.\n\n---\nupdated-dependencies:\n- dependency-name: python\n  dependency-version: 3.14-alpine\n  dependency-type: direct:production\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-13T23:41:07Z",
+    "message": "build(deps): bump github/codeql-action from 3 to 4\n\nBumps [github/codeql-action](https://github.com/github/codeql-action) from 3 to 4.\n- [Release notes](https://github.com/github/codeql-action/releases)\n- [Changelog](https://github.com/github/codeql-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/github/codeql-action/compare/v3...v4)\n\n---\nupdated-dependencies:\n- dependency-name: github/codeql-action\n  dependency-version: '4'\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-13T23:19:52Z",
+    "message": "build(deps): bump golangci/golangci-lint-action from 8.0.0 to 9.0.0\n\nBumps [golangci/golangci-lint-action](https://github.com/golangci/golangci-lint-action) from 8.0.0 to 9.0.0.\n- [Release notes](https://github.com/golangci/golangci-lint-action/releases)\n- [Commits](https://github.com/golangci/golangci-lint-action/compare/v8.0.0...v9.0.0)\n\n---\nupdated-dependencies:\n- dependency-name: golangci/golangci-lint-action\n  dependency-version: 9.0.0\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-13T22:58:42Z",
+    "message": "build(deps): bump googleapis/release-please-action from 4.3.0 to 4.4.0\n\nBumps [googleapis/release-please-action](https://github.com/googleapis/release-please-action) from 4.3.0 to 4.4.0.\n- [Release notes](https://github.com/googleapis/release-please-action/releases)\n- [Changelog](https://github.com/googleapis/release-please-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/googleapis/release-please-action/compare/v4.3.0...v4.4.0)\n\n---\nupdated-dependencies:\n- dependency-name: googleapis/release-please-action\n  dependency-version: 4.4.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-13T22:27:20Z",
+    "message": "build(deps): bump golang.org/x/sync from 0.17.0 to 0.18.0\n\nBumps [golang.org/x/sync](https://github.com/golang/sync) from 0.17.0 to 0.18.0.\n- [Commits](https://github.com/golang/sync/compare/v0.17.0...v0.18.0)\n\n---\nupdated-dependencies:\n- dependency-name: golang.org/x/sync\n  dependency-version: 0.18.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-10T14:18:08Z",
+    "message": "build(deps): bump go.etcd.io/etcd/raft/v3 from 3.5.23 to 3.5.24\n\nBumps [go.etcd.io/etcd/raft/v3](https://github.com/etcd-io/etcd) from 3.5.23 to 3.5.24.\n- [Release notes](https://github.com/etcd-io/etcd/releases)\n- [Commits](https://github.com/etcd-io/etcd/compare/v3.5.23...v3.5.24)\n\n---\nupdated-dependencies:\n- dependency-name: go.etcd.io/etcd/raft/v3\n  dependency-version: 3.5.24\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-11-10T13:08:15Z",
+    "message": "build(deps): bump golang.org/x/sys from 0.36.0 to 0.38.0\n\nBumps [golang.org/x/sys](https://github.com/golang/sys) from 0.36.0 to 0.38.0.\n- [Commits](https://github.com/golang/sys/compare/v0.36.0...v0.38.0)\n\n---\nupdated-dependencies:\n- dependency-name: golang.org/x/sys\n  dependency-version: 0.38.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-10-13T12:28:58Z",
+    "message": "build(deps): bump google.golang.org/grpc from 1.75.1 to 1.76.0\n\nBumps [google.golang.org/grpc](https://github.com/grpc/grpc-go) from 1.75.1 to 1.76.0.\n- [Release notes](https://github.com/grpc/grpc-go/releases)\n- [Commits](https://github.com/grpc/grpc-go/compare/v1.75.1...v1.76.0)\n\n---\nupdated-dependencies:\n- dependency-name: google.golang.org/grpc\n  dependency-version: 1.76.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-10-06T12:37:31Z",
+    "message": "build(deps): bump google.golang.org/protobuf from 1.36.9 to 1.36.10\n\nBumps google.golang.org/protobuf from 1.36.9 to 1.36.10.\n\n---\nupdated-dependencies:\n- dependency-name: google.golang.org/protobuf\n  dependency-version: 1.36.10\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-17T01:44:02Z",
+    "message": "refactor(storage): improve Pebble event listener and logger\n\nThis commit refactors the Pebble event listener initialization and switches to\nusing the structured logger.\n\nPreviously, the event listener was created using\n`pebble.MakeLoggingEventListener`, and then unwanted event handlers were set to\nnil. This approach is brittle, as future changes in the Pebble API could\nintroduce new events that would be logged unintentionally. The new\nimplementation explicitly initializes a `pebble.EventListener` struct, making it\nmore maintainable and robust against upstream changes.\n\nAdditionally, the new event listener now use the `zap.Logger` instead of\n`zap.SugaredLogger`. This improves performance by avoiding reflection and string\nformatting overhead.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-29T03:29:27Z",
+    "message": "build(deps): bump go.opentelemetry.io/contrib/instrumentation/host\n\nBumps [go.opentelemetry.io/contrib/instrumentation/host](https://github.com/open-telemetry/opentelemetry-go-contrib) from 0.61.0 to 0.63.0.\n- [Release notes](https://github.com/open-telemetry/opentelemetry-go-contrib/releases)\n- [Changelog](https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/open-telemetry/opentelemetry-go-contrib/compare/zpages/v0.61.0...zpages/v0.63.0)\n\n---\nupdated-dependencies:\n- dependency-name: go.opentelemetry.io/contrib/instrumentation/host\n  dependency-version: 0.63.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-29T01:52:34Z",
+    "message": "build(deps): bump go.opentelemetry.io/contrib/instrumentation/runtime\n\nBumps [go.opentelemetry.io/contrib/instrumentation/runtime](https://github.com/open-telemetry/opentelemetry-go-contrib) from 0.62.0 to 0.63.0.\n- [Release notes](https://github.com/open-telemetry/opentelemetry-go-contrib/releases)\n- [Changelog](https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/open-telemetry/opentelemetry-go-contrib/compare/zpages/v0.62.0...zpages/v0.63.0)\n\n---\nupdated-dependencies:\n- dependency-name: go.opentelemetry.io/contrib/instrumentation/runtime\n  dependency-version: 0.63.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-29T01:19:22Z",
+    "message": "build(deps): bump go.etcd.io/etcd/client/pkg/v3 from 3.6.4 to 3.6.5\n\nBumps [go.etcd.io/etcd/client/pkg/v3](https://github.com/etcd-io/etcd) from 3.6.4 to 3.6.5.\n- [Release notes](https://github.com/etcd-io/etcd/releases)\n- [Commits](https://github.com/etcd-io/etcd/compare/v3.6.4...v3.6.5)\n\n---\nupdated-dependencies:\n- dependency-name: go.etcd.io/etcd/client/pkg/v3\n  dependency-version: 3.6.5\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-29T00:49:28Z",
+    "message": "build(deps): bump go.etcd.io/etcd/raft/v3 from 3.5.22 to 3.5.23\n\nBumps [go.etcd.io/etcd/raft/v3](https://github.com/etcd-io/etcd) from 3.5.22 to 3.5.23.\n- [Release notes](https://github.com/etcd-io/etcd/releases)\n- [Commits](https://github.com/etcd-io/etcd/compare/v3.5.22...v3.5.23)\n\n---\nupdated-dependencies:\n- dependency-name: go.etcd.io/etcd/raft/v3\n  dependency-version: 3.5.23\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-22T12:03:37Z",
+    "message": "build(deps): bump google.golang.org/protobuf from 1.36.8 to 1.36.9\n\nBumps google.golang.org/protobuf from 1.36.8 to 1.36.9.\n\n---\nupdated-dependencies:\n- dependency-name: google.golang.org/protobuf\n  dependency-version: 1.36.9\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-15T17:30:00Z",
+    "message": "build(deps): bump golang.org/x/sys from 0.35.0 to 0.36.0\n\nBumps [golang.org/x/sys](https://github.com/golang/sys) from 0.35.0 to 0.36.0.\n- [Commits](https://github.com/golang/sys/compare/v0.35.0...v0.36.0)\n\n---\nupdated-dependencies:\n- dependency-name: golang.org/x/sys\n  dependency-version: 0.36.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-15T15:56:41Z",
+    "message": "build(deps): bump golang.org/x/sync from 0.16.0 to 0.17.0\n\nBumps [golang.org/x/sync](https://github.com/golang/sync) from 0.16.0 to 0.17.0.\n- [Commits](https://github.com/golang/sync/compare/v0.16.0...v0.17.0)\n\n---\nupdated-dependencies:\n- dependency-name: golang.org/x/sync\n  dependency-version: 0.17.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-15T14:49:16Z",
+    "message": "build(deps): bump k8s.io/client-go from 0.33.2 to 0.34.1\n\nBumps [k8s.io/client-go](https://github.com/kubernetes/client-go) from 0.33.2 to 0.34.1.\n- [Changelog](https://github.com/kubernetes/client-go/blob/master/CHANGELOG.md)\n- [Commits](https://github.com/kubernetes/client-go/compare/v0.33.2...v0.34.1)\n\n---\nupdated-dependencies:\n- dependency-name: k8s.io/client-go\n  dependency-version: 0.34.1\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-15T13:56:07Z",
+    "message": "build(deps): bump go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc\n\nBumps [go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc](https://github.com/open-telemetry/opentelemetry-go) from 1.37.0 to 1.38.0.\n- [Release notes](https://github.com/open-telemetry/opentelemetry-go/releases)\n- [Changelog](https://github.com/open-telemetry/opentelemetry-go/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/open-telemetry/opentelemetry-go/compare/v1.37.0...v1.38.0)\n\n---\nupdated-dependencies:\n- dependency-name: go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc\n  dependency-version: 1.38.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-15T13:08:16Z",
+    "message": "build(deps): bump google.golang.org/grpc from 1.75.0 to 1.75.1\n\nBumps [google.golang.org/grpc](https://github.com/grpc/grpc-go) from 1.75.0 to 1.75.1.\n- [Release notes](https://github.com/grpc/grpc-go/releases)\n- [Commits](https://github.com/grpc/grpc-go/compare/v1.75.0...v1.75.1)\n\n---\nupdated-dependencies:\n- dependency-name: google.golang.org/grpc\n  dependency-version: 1.75.1\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-12T03:47:20Z",
+    "message": "chore(main): release 0.30.0",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-11T09:20:22Z",
+    "message": "ci(lint): bump golangci-lint from v2.1.6 to v2.4.0",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-12T02:19:59Z",
+    "message": "test(storagenode): fix TestStorageNode_AppendAndSeal test sequencing\n\nThis commit adds explicit commit verification before seal operation to ensure\nproper test ordering. Previously the test attempted seal validation without\nconfirming commit completion, leading to unreliable test results. This issue\nbecame more apparent after testify v1.11.0 due to changes in Eventually function\ntiming behavior.\n\nFailed case log:\n\n```txt\n=== RUN   TestStorageNode_AppendAndSeal\n    storagenode_test.go:2561:\n                Error Trace:    /Users/ijsong/workspace/varlog/internal/storagenode/storagenode_test.go:2564\n                                                        /opt/homebrew/Cellar/go/1.25.1/libexec/src/runtime/asm_arm64.s:1268\n                Error:          Not equal:\n                                expected: 0x3\n                                actual  : 0x0\n    storagenode_test.go:2561:\n                Error Trace:    /Users/ijsong/workspace/varlog/internal/storagenode/storagenode_test.go:2561\n                                                        /opt/homebrew/Cellar/go/1.25.1/libexec/src/runtime/asm_arm64.s:1268\n                Error:          Condition never satisfied\n                Test:           TestStorageNode_AppendAndSeal\n--- FAIL: TestStorageNode_AppendAndSeal (1.59s)\n```",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-11T09:00:01Z",
+    "message": "build(deps): bump go.opentelemetry.io/otel/exporters/stdout/stdoutmetric\n\nBumps [go.opentelemetry.io/otel/exporters/stdout/stdoutmetric](https://github.com/open-telemetry/opentelemetry-go) from 1.37.0 to 1.38.0.\n- [Release notes](https://github.com/open-telemetry/opentelemetry-go/releases)\n- [Changelog](https://github.com/open-telemetry/opentelemetry-go/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/open-telemetry/opentelemetry-go/compare/v1.37.0...v1.38.0)\n\n---\nupdated-dependencies:\n- dependency-name: go.opentelemetry.io/otel/exporters/stdout/stdoutmetric\n  dependency-version: 1.38.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-11T08:42:56Z",
+    "message": "build(deps): bump go.opentelemetry.io/otel/sdk/metric\n\nBumps [go.opentelemetry.io/otel/sdk/metric](https://github.com/open-telemetry/opentelemetry-go) from 1.37.0 to 1.38.0.\n- [Release notes](https://github.com/open-telemetry/opentelemetry-go/releases)\n- [Changelog](https://github.com/open-telemetry/opentelemetry-go/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/open-telemetry/opentelemetry-go/compare/v1.37.0...v1.38.0)\n\n---\nupdated-dependencies:\n- dependency-name: go.opentelemetry.io/otel/sdk/metric\n  dependency-version: 1.38.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-11T07:21:26Z",
+    "message": "build(deps): bump go.opentelemetry.io/otel from 1.37.0 to 1.38.0\n\nBumps [go.opentelemetry.io/otel](https://github.com/open-telemetry/opentelemetry-go) from 1.37.0 to 1.38.0.\n- [Release notes](https://github.com/open-telemetry/opentelemetry-go/releases)\n- [Changelog](https://github.com/open-telemetry/opentelemetry-go/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/open-telemetry/opentelemetry-go/compare/v1.37.0...v1.38.0)\n\n---\nupdated-dependencies:\n- dependency-name: go.opentelemetry.io/otel\n  dependency-version: 1.38.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-11T06:17:31Z",
+    "message": "test(it): fix flaky TestSyncLogStreamWithAutoUnseal\n\nThis test was flaky due to the incorrect use of `assert` within an\n`assert.Eventually` condition.\n\nAn `assert` call, by design, immediately marks a test as failed. This caused the\ntest to be marked as failed on the first unsuccessful check, even if the\ncondition would have been met on a later retry.\n\nBy switching to `assert.EventuallyWithT`, the condition's assertions are\nevaluated in a local `*assert.CollectT` context. This isolates failures from the\nmain test runner, allowing `Eventually` to retry correctly. The test now fails\nonly if the condition is never satisfied within the timeout.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-11T05:22:29Z",
+    "message": "test(metarepos): resolve data race exposed by testify v1.11.0\n\nThis change replaces assert.Nil() with require.Eventually() to avoid race\ncondition caused by testify reflection accessing DummyStorageNodeClient fields\nconcurrently. The race was exposed after upgrading testify from v1.10.0 to\nv1.11.0 due to immediate condition checking in Eventually functions.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-09T05:59:35Z",
+    "message": "fix(storagenode): fix deadlock in Serve method\n\nThis commit fixes a deadlock in the `StorageNode.Serve` method.\n\nIf the method was called on an already-closed StorageNode, it would acquire a\nlock and then return without releasing it. This would cause any subsequent\nattempt to lock the same mutex to block forever.\n\nThe fix adds the missing unlock call to the early return path, ensuring the\nmutex is always released correctly.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-09T04:28:38Z",
+    "message": "feat(storage): set logger for pebble storage engine\n\nThis change sets a logger for the store's underlying Pebble. Pebble's own logs\nwere not being captured by Varlog's logging. We can now capture and route\npebble's logs, which is useful for debugging and monitoring storage-level\nevents.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-03T00:27:51Z",
+    "message": "feat(storage): set Pebble format to FormatVirtualSSTables\n\nThis commit updates the Pebble storage format major version to\n`FormatVirtualSSTables`.\n\nThe previous default, `FormatMostCompatible`, is a legacy format for RocksDB\n6.2.1 compatibility that prevents the use of modern and future Pebble features.\nAdopting `FormatVirtualSSTables` is necessary to leverage these newer\ncapabilities.\n\nThis change was previously introduced in #1112 and reverted in #1175 to\ninvestigate potential performance impacts. Benchmarking has shown no significant\nperformance regression, resolving the initial concerns.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-20T22:16:26Z",
+    "message": "test(metarepos): refactor polling logic in raft_metadata_repository_test\n\nThis commit refactors asynchronous tests in `raft_metadata_repository_test.go`\nby replacing the custom polling utility `testutil.CompareWaitN` with the more\nrobust `testify.EventuallyWithT`.\n\nThe `testutil.CompareWaitN` utility had two main drawbacks:\n\n1. Poor Diagnostics: It returned only a boolean, making it difficult to\n   determine which specific assertion failed within the polling loop.\n2. Complex Timeout Logic: It calculated the polling timeout by multiplying a\n   base unit with a factor, which was further adjusted by the number of CPUs.\n   This complex logic, intended to create adaptive timeouts for different\n   environments, made the code difficult to understand. Since the polling\n   function exits as soon as the condition is met, a simple and explicit timeout\n   is more practical and readable.\n\nUsing `testify.EventuallyWithT` resolves these issues by providing clear\ntimeouts and integrating with `testify/assert` to offer detailed failure\nmessages, which significantly speeds up debugging.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-19T09:53:28Z",
+    "message": "refactor(metarepos): simplify and improve test timeouts and contexts\n\nThis commit refactors how timeouts and contexts are handled in raft metadata\nrepository test to improve readability and robustness.\n\nKey changes include:\n\n- Replacing dynamic timeout calculations (`vtesting.TimeoutUnitTimesFactor`)\n  with a consistent, explicit timeout. This value is now defined in a\n  `testContextTimeout` constant for easy future adjustments.\n- Using `t.Context()` as the parent for timed contexts instead of\n  `context.Background()`. This links the context's lifecycle to the test itself,\n  ensuring cancellation if the test is stopped or times out.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-19T05:59:22Z",
+    "message": "refactor(metarepos): rename testMetadataRepoCluster helper methods for clarity\n\nThis commit renames several methods in the `testMetadataRepoCluster`\nhelper to make their purpose more explicit. The new names distinguish\nbetween operations that target a single node within the cluster and\nthose that affect the cluster as a whole.\n\nThe primary changes include:\n\n- Appending a `...Node` suffix to methods that operate on a specific node index\n  (e.g., `start` -> `startNode`).\n- Renaming other methods to be more descriptive (e.g., `appendMetadataRepo` ->\n  `appendNewNode`).\n\nThis consistent naming convention improves code readability and makes the test\nlogic easier to follow.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-19T04:22:42Z",
+    "message": "refactor(metarepos): improve error handling in testMetadataRepoCluster helper\n\nThis commit refactors the methods of the `testMetadataRepoCluster` helper struct\nto improve error handling and test stability.\n\nKey changes include:\n\n- Modifying method signatures to accept a `*testing.T` argument.\n- Replacing `error` return values with testify assertions for explicit error and\n  precondition checking.\n- Removing `//nolint:errcheck` comments and ensuring all potential errors are\n  now handled within the helper methods.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-19T01:41:47Z",
+    "message": "refactor(metarepos): rename metadataRepoCluster to testMetadataRepoCluster\n\nThis commit renames the `metadataRepoCluster` struct in\n`internal/metarepos/raft_metadata_repository_test.go` to\n`testMetadataRepoCluster`.\n\nThis change makes the purpose as a test-only helper explicit. It is the first\nstep in a larger effort to refactor and improve the test code.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-13T11:23:45Z",
+    "message": "refactor: remove unused packages\n\nThis change removes unused packages:\n\n- pkg/util/jobqueue\n- pkg/util/timeutil\n- pkg/vflag\n\nThis change cleans up the codebase and improves maintainability.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-13T10:31:27Z",
+    "message": "refactor: replace error handling dependencies with standard library\n\nThis commit refactors the entire codebase to remove dependencies on third-party\nerror handling libraries (`github.com/pkg/errors` and `go.uber.org/multierr`) in\nfavor of the Go standard library.\n\nThe primary motivations for this change are:\n\n- To reduce external dependencies, simplifying the project.\n- To adopt modern, idiomatic Go error handling practices.\n\nCare was taken to handle a key difference in behavior: `pkg/errors` functions\nreturn `nil` when wrapping a `nil` error, whereas `fmt.Errorf` with `%w` does\nnot. The code has been explicitly updated with `if err != nil` checks where\nnecessary to preserve the original semantics and prevent new bugs.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-14T07:47:22Z",
+    "message": "refactor(stats/opentelemetry): simplify runtime instrumentation logic\n\nThe initialization logic for OpenTelemetry runtime instrumentation unnecessarily\nset the `OTEL_GO_X_DEPRECATED_RUNTIME_METRICS` environment variable. This was a\nworkaround for older versions of the library to collect both new and deprecated\nmetrics.\n\nThe latest version of the `go.opentelemetry.io/contrib/instrumentation/runtime`\nlibrary now produces both sets of metrics when this environment variable is set\nto `true`, making the in-code manipulation redundant.\n\nThis commit removes the workaround, simplifying the code. To additionally\ncollect deprecated metrics, users should now set the\n`OTEL_GO_X_DEPRECATED_RUNTIME_METRICS=true` environment variable.",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-08T14:19:34Z",
+    "message": "build(deps): bump codecov/codecov-action from 5.5.0 to 5.5.1\n\nBumps [codecov/codecov-action](https://github.com/codecov/codecov-action) from 5.5.0 to 5.5.1.\n- [Release notes](https://github.com/codecov/codecov-action/releases)\n- [Changelog](https://github.com/codecov/codecov-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/codecov/codecov-action/compare/v5.5.0...v5.5.1)\n\n---\nupdated-dependencies:\n- dependency-name: codecov/codecov-action\n  dependency-version: 5.5.1\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-08T13:48:19Z",
+    "message": "build(deps): bump actions/setup-python from 5 to 6\n\nBumps [actions/setup-python](https://github.com/actions/setup-python) from 5 to 6.\n- [Release notes](https://github.com/actions/setup-python/releases)\n- [Commits](https://github.com/actions/setup-python/compare/v5...v6)\n\n---\nupdated-dependencies:\n- dependency-name: actions/setup-python\n  dependency-version: '6'\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-09-08T12:18:34Z",
+    "message": "build(deps): bump actions/setup-go from 5 to 6\n\nBumps [actions/setup-go](https://github.com/actions/setup-go) from 5 to 6.\n- [Release notes](https://github.com/actions/setup-go/releases)\n- [Commits](https://github.com/actions/setup-go/compare/v5...v6)\n\n---\nupdated-dependencies:\n- dependency-name: actions/setup-go\n  dependency-version: '6'\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-28T05:23:34Z",
+    "message": "build(deps): bump go.uber.org/mock from 0.5.2 to 0.6.0\n\nBumps [go.uber.org/mock](https://github.com/uber/mock) from 0.5.2 to 0.6.0.\n- [Release notes](https://github.com/uber/mock/releases)\n- [Changelog](https://github.com/uber-go/mock/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/uber/mock/compare/v0.5.2...v0.6.0)\n\n---\nupdated-dependencies:\n- dependency-name: go.uber.org/mock\n  dependency-version: 0.6.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-28T04:28:18Z",
+    "message": "build(deps): bump go.etcd.io/etcd/client/pkg/v3 from 3.6.1 to 3.6.4\n\nBumps [go.etcd.io/etcd/client/pkg/v3](https://github.com/etcd-io/etcd) from 3.6.1 to 3.6.4.\n- [Release notes](https://github.com/etcd-io/etcd/releases)\n- [Commits](https://github.com/etcd-io/etcd/compare/v3.6.1...v3.6.4)\n\n---\nupdated-dependencies:\n- dependency-name: go.etcd.io/etcd/client/pkg/v3\n  dependency-version: 3.6.4\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-27T23:45:38Z",
+    "message": "build(deps): bump codecov/codecov-action from 5.4.3 to 5.5.0\n\nBumps [codecov/codecov-action](https://github.com/codecov/codecov-action) from 5.4.3 to 5.5.0.\n- [Release notes](https://github.com/codecov/codecov-action/releases)\n- [Changelog](https://github.com/codecov/codecov-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/codecov/codecov-action/compare/v5.4.3...v5.5.0)\n\n---\nupdated-dependencies:\n- dependency-name: codecov/codecov-action\n  dependency-version: 5.5.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  },
+  {
+    "date": "2025-08-27T15:48:26Z",
+    "message": "build(deps): bump googleapis/release-please-action from 4.2.0 to 4.3.0\n\nBumps [googleapis/release-please-action](https://github.com/googleapis/release-please-action) from 4.2.0 to 4.3.0.\n- [Release notes](https://github.com/googleapis/release-please-action/releases)\n- [Changelog](https://github.com/googleapis/release-please-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/googleapis/release-please-action/compare/v4.2.0...v4.3.0)\n\n---\nupdated-dependencies:\n- dependency-name: googleapis/release-please-action\n  dependency-version: 4.3.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    "repo": "kakao/varlog"
+  }
+]
