@@ -51,7 +51,7 @@ Synaptic Memory의 검색도 동일하게 작동한다:
   → 다음에 "테스트 스킵"을 검색하면 실패 경험이 먼저 뜬다
 ```
 
-에이전트가 명시적으로 "이건 나쁜 패턴이야"라고 태깅할 필요 없다. **사용하고 결과를 기록하면 그래프가 스스로 학습**한다.
+에이전트가 명시적으로 "이건 나쁜 패턴이야"라고 태깅할 필요 없다. **사용하고 결과를 기록하면 그래프가 스스로 학습**한다. Adaptive learning rate로 초기에는 빠르게, 성숙하면 안정적으로 학습한다.
 
 ### 3. Memory Consolidation — 중요한 기억만 남기기
 
@@ -65,6 +65,8 @@ L1 (Sprint, 90d)    ← 반복 참조된 지식. 90일간 유지.
 L2 (Monthly, 365d)  ← 검증된 지식. 1년간 유지.
   ↓ 성공률 80%+
 L3 (Permanent)      ← 조직의 핵심 지식. 영구 보존.
+  ↓ 성공률 60% 미만
+L2 (강등)           ← 더 이상 유효하지 않은 지식은 강등.
 ```
 
 이걸 안 하면? 에이전트가 만들어내는 데이터가 무한히 쌓여서 검색 품질이 떨어진다. **쓰이는 지식만 살아남는 자연선택**.
@@ -114,6 +116,7 @@ Decision --[resulted_in]--> Outcome --[learned_from]<-- Lesson
    → 72시간 동안 안 쓴 L0 노드 삭제
    → 자주 참조된 노드 L1→L2 승격
    → 성공률 80%+ 노드 L3 (영구) 승격
+   → 성공률 60% 미만 L3 노드 → L2 강등
    → edge weight < 0.1인 약한 연결 정리
 ```
 
@@ -131,8 +134,9 @@ SynapticGraph (Facade)
   ├── AgentSearch ──────── 6가지 intent 기반 검색 전략
   ├── HybridSearch ─────── FTS + fuzzy + vector → synonym → LLM rewrite
   ├── ResonanceScorer ──── 5축 (relevance × importance × recency × vitality × context)
-  ├── HebbianEngine ────── co-activation 강화/약화
-  ├── ConsolidationCascade  L0→L3 생명주기
+  ├── HebbianEngine ────── co-activation 강화/약화 (adaptive rate)
+  ├── ConsolidationCascade  L0→L3 생명주기 + L3 강등
+  ├── EmbeddingProvider ── 자동 벡터 생성 (vLLM/llama.cpp/Ollama)
   ├── NodeCache (LRU)
   └── Exporters (Markdown, JSON)
        │
@@ -140,15 +144,16 @@ SynapticGraph (Facade)
        │
   ┌────┼──────────┬───────────────┬──────────────┐
   │    │          │               │              │
-Memory SQLite  PostgreSQL     Neo4j        CompositeBackend
-(dev)  (FTS5)  (pgvector)   (Cypher)       (future)
+Memory SQLite  PostgreSQL     Neo4j       CompositeBackend
+(dev)  (FTS5)  (pgvector)   (Cypher)    (Neo4j+Qdrant+MinIO)
 ```
 
 **핵심 설계 결정:**
 
 - **Protocol-based** — 코어가 백엔드를 모른다. SQLite든 Neo4j든 같은 API. 백엔드 교체 시 코드 변경 0.
 - **Zero core deps** — 코어는 순수 Python. `pip install synaptic-memory`에 외부 의존성 없음.
-- **Additive evolution** — v0.1의 Node/Edge 모델이 v0.5까지 변경 없이 확장됨. properties dict 하나로 온톨로지 속성을 지원.
+- **CompositeBackend** — Neo4j(그래프+FTS) + Qdrant(벡터 ANN) + MinIO(blob)를 하나의 StorageBackend로 통합. 용도별 라우팅.
+- **Auto-embedding** — EmbeddingProvider를 주입하면 `add()`/`search()` 시 자동으로 벡터 생성. vLLM, llama.cpp, Ollama, TEI 등 OpenAI-compatible 엔드포인트 호환.
 
 ---
 
@@ -164,40 +169,20 @@ Score = 0.35 × relevance     검색 매칭 점수 [0,1]
       + 0.20 × context       현재 세션 태그와의 Jaccard 유사도 [0,1]
 ```
 
-Intent별로 가중치가 다르다. `past_failures`는 importance(성공률)에 0.35를 주고, `context_explore`는 context(태그 친화도)에 0.40을 준다. 에이전트가 "왜 이걸 찾고 있는지"에 따라 **같은 쿼리라도 다른 결과**가 나온다.
-
----
-
-## Intent-based Search — 왜 필요한가
-
-일반 검색은 "배포"를 치면 "배포"가 들어간 모든 문서를 반환한다. 하지만 에이전트가 원하는 건 상황에 따라 다르다:
-
-| 상황 | Intent | 검색 전략 |
-|------|--------|----------|
-| "비슷한 결정을 한 적 있나?" | `similar_decisions` | DECISION 노드 → RESULTED_IN → Outcome 확장 |
-| "이게 실패한 적 있나?" | `past_failures` | failure_count > 0 필터 → 원인 Decision 역추적 → Lesson |
-| "이것에 관한 규칙이 있나?" | `related_rules` | RULE/LESSON 필터 + 그래프 이웃 확장 |
-| "이 결정의 결과는?" | `reasoning_chain` | Decision → Outcome → Lesson multi-hop |
-| "관련된 것들을 보여줘" | `context_explore` | BFS N-hop 확장 |
-
-```python
-# 같은 쿼리, 다른 intent → 다른 결과
-await graph.agent_search("배포", intent="past_failures")    # 실패 사례 중심
-await graph.agent_search("배포", intent="related_rules")    # 규칙/정책 중심
-await graph.agent_search("배포", intent="reasoning_chain")  # 결정→결과 체인
-```
+Intent별로 가중치가 다르다. `past_failures`는 importance(성공률)에 0.35를, `context_explore`는 context(태그 친화도)에 0.40을 준다. 에이전트가 "왜 이걸 찾고 있는지"에 따라 **같은 쿼리라도 다른 결과**가 나온다.
 
 ---
 
 ## Install
 
 ```bash
-pip install synaptic-memory                   # Core (MemoryBackend)
-pip install synaptic-memory[sqlite]           # + SQLite
-pip install synaptic-memory[postgresql]       # + PostgreSQL (pgvector)
-pip install synaptic-memory[neo4j]            # + Neo4j
-pip install synaptic-memory[mcp]              # + MCP server
-pip install synaptic-memory[all]              # Everything
+pip install synaptic-memory                      # 코어 (zero deps)
+pip install synaptic-memory[sqlite]              # + SQLite
+pip install synaptic-memory[neo4j]               # + Neo4j
+pip install synaptic-memory[neo4j,embedding]     # + Neo4j + auto-embedding
+pip install synaptic-memory[scale]               # Neo4j + Qdrant + MinIO + embedding
+pip install synaptic-memory[mcp]                 # + MCP server
+pip install synaptic-memory[all]                 # 전부
 ```
 
 ## Quick Start
@@ -216,8 +201,9 @@ async def main():
     # 세션 시작
     session = await tracker.start_session(agent_id="my-agent")
 
-    # 과거 경험 검색
-    result = await graph.agent_search("DB 선택", intent="similar_decisions")
+    # 과거 경험 검색 (intent 자동 추론)
+    result = await graph.agent_search("DB 마이그레이션 실패")
+    # → intent="past_failures" 자동 선택
 
     # 결정 기록
     decision = await tracker.record_decision(
@@ -236,6 +222,54 @@ async def main():
     )
 
     await backend.close()
+```
+
+## Auto-Embedding (vLLM / llama.cpp / Ollama)
+
+EmbeddingProvider를 주입하면 모든 노드가 자동 임베딩 + 벡터 검색 활성화:
+
+```python
+from synaptic import SynapticGraph, OpenAIEmbeddingProvider
+
+# vLLM, llama.cpp, Ollama, TEI — 어디든 동일한 인터페이스
+embedder = OpenAIEmbeddingProvider(
+    "http://gpu-server:8080/v1",   # OpenAI-compatible 엔드포인트
+    model="BAAI/bge-m3",
+)
+
+graph = SynapticGraph(backend, embedder=embedder)
+
+# 자동: title+content → 벡터 생성 → Qdrant 저장
+await graph.add("배포 전략", "Blue-green 배포로 zero downtime 달성")
+
+# 자동: 쿼리 → 벡터 생성 → FTS + fuzzy + vector 동시 검색
+result = await graph.search("배포 방식")
+```
+
+## Scale: CompositeBackend
+
+Neo4j(그래프) + Qdrant(벡터) + MinIO(blob)를 하나의 StorageBackend로:
+
+```python
+from synaptic.backends.composite import CompositeBackend
+from synaptic.backends.neo4j import Neo4jBackend
+from synaptic.backends.qdrant import QdrantBackend
+from synaptic.backends.minio_store import MinIOBackend
+
+composite = CompositeBackend(
+    graph=Neo4jBackend("bolt://localhost:7687"),
+    vector=QdrantBackend("http://localhost:6333"),
+    blob=MinIOBackend("localhost:9000", access_key="minio", secret_key="secret"),
+)
+await composite.connect()
+graph = SynapticGraph(composite, embedder=embedder)
+
+# 내부 라우팅:
+# - embedding → Qdrant에 자동 저장
+# - content > 100KB → MinIO에 자동 offload
+# - 나머지 → Neo4j (그래프 + FTS)
+# - search_vector → Qdrant ANN → Neo4j batch get
+# - graph traversal → Neo4j Cypher native
 ```
 
 ## Ontology
@@ -261,6 +295,9 @@ ontology.is_a("incident", "agent_activity")              # True
 ontology.infer_properties("incident")                     # parent 속성 포함
 ontology.validate_node("incident", {})                    # ["Missing 'severity'"]
 ontology.validate_edge("resulted_in", "concept", "outcome")  # ["source not in domains"]
+
+graph = SynapticGraph(backend, ontology=ontology)
+# → graph.add(), graph.link() 시 자동 검증
 ```
 
 ### 기본 온톨로지
@@ -279,25 +316,21 @@ knowledge                          agent_activity
 
 | Backend | 그래프 순회 | 벡터 검색 | 스케일 | 용도 |
 |---------|-----------|----------|-------|------|
-| `MemoryBackend` | Python BFS | cosine | ~10K 노드 | 테스트, 프로토타이핑 |
-| `SQLiteBackend` | CTE 재귀 | ✗ | ~100K 노드 | 임베디드, 단일 프로세스 |
-| `PostgreSQLBackend` | CTE 재귀 | pgvector HNSW | ~1M 노드 | 프로덕션, 벡터 검색 |
-| `Neo4jBackend` | Cypher native | ✗ (Qdrant 위임) | ~10B 노드 | 대규모 그래프, multi-hop |
-
-Neo4j는 `GraphTraversal` 확장 프로토콜을 추가 구현:
-
-```python
-await backend.shortest_path(node_a, node_b, max_depth=5)
-await backend.pattern_match("(:Decision)-[:RESULTED_IN]->(:Outcome)")
-await backend.find_by_type_hierarchy("agent_activity")
-```
+| `MemoryBackend` | Python BFS | cosine | ~10K | 테스트, 프로토타이핑 |
+| `SQLiteBackend` | CTE 재귀 | ✗ | ~100K | 임베디드, 단일 프로세스 |
+| `PostgreSQLBackend` | CTE 재귀 | pgvector HNSW | ~1M | 프로덕션, 벡터 검색 |
+| `Neo4jBackend` | Cypher native | ✗ (Qdrant 위임) | ~10B | 대규모 그래프 |
+| `QdrantBackend` | ✗ | HNSW + 양자화 | ~10B | 벡터 전용 (ANN) |
+| `MinIOBackend` | ✗ | ✗ | ~10TB | blob 저장 (S3 호환) |
+| `CompositeBackend` | Neo4j | Qdrant | ∞ | **통합 라우터** |
 
 ## MCP Server — 16 Tools
 
 ```bash
-synaptic-mcp                          # stdio (Claude Code)
-synaptic-mcp --db ./knowledge.db      # SQLite
-synaptic-mcp --dsn postgresql://...   # PostgreSQL
+synaptic-mcp                                              # stdio (Claude Code)
+synaptic-mcp --db ./knowledge.db                         # SQLite
+synaptic-mcp --embed-url http://localhost:8080/v1        # + auto-embedding
+synaptic-mcp --embed-url http://localhost:8080/v1 --embed-model BAAI/bge-m3
 ```
 
 **Knowledge** (7) — `knowledge_search`, `knowledge_add`, `knowledge_link`, `knowledge_reinforce`, `knowledge_stats`, `knowledge_export`, `knowledge_consolidate`
@@ -326,21 +359,30 @@ synaptic-mcp --dsn postgresql://...   # PostgreSQL
 
 ### Consolidation Levels
 
-| Level | TTL | Promotion |
-|-------|-----|-----------|
-| L0 Raw | 72h | 3+ accesses → L1 |
-| L1 Sprint | 90d | 10+ accesses → L2 |
-| L2 Monthly | 365d | 10+ successes + 80%+ rate → L3 |
-| L3 Permanent | ∞ | 영구 보존 |
+| Level | TTL | Promotion | Demotion |
+|-------|-----|-----------|----------|
+| L0 Raw | 72h | 3+ accesses → L1 | |
+| L1 Sprint | 90d | 10+ accesses → L2 | |
+| L2 Monthly | 365d | 10+ successes + 80%+ rate → L3 | |
+| L3 Permanent | ∞ | 영구 보존 | 성공률 60% 미만 → L2 |
 
 ## Dev
 
 ```bash
-uv sync --extra dev --extra sqlite --extra neo4j
-uv run pytest -v                              # 171+ unit tests
+uv sync --extra dev --extra sqlite --extra neo4j --extra qdrant --extra minio
+uv run pytest -v                              # 185+ unit tests
 uv run pytest -m neo4j                        # Neo4j integration (docker compose up neo4j)
+uv run pytest -m qdrant                       # Qdrant integration (docker start qdrant)
+uv run pytest -m composite                    # Full stack (Neo4j + Qdrant + MinIO)
 uv run ruff check --fix && uv run ruff format
 uv run pyright                                # strict mode
+```
+
+```bash
+# 개발 인프라
+docker compose up neo4j        # Neo4j (bolt://localhost:7687)
+docker start qdrant            # Qdrant (http://localhost:6333)
+# MinIO는 서버에서 직접 실행 (localhost:9000)
 ```
 
 ## License
