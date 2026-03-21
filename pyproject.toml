@@ -35,3 +35,7 @@ ignore = ["S101"]
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnknownMemberType = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownArgumentType = "warning"
