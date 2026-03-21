@@ -5,12 +5,22 @@ build-backend = "hatchling.build"
 [project]
 name = "synaptic-memory"
 version = "0.5.0"
-description = "Brain-inspired knowledge graph: spreading activation, Hebbian learning, memory consolidation."
+description = "Brain-inspired knowledge graph for LLM agents — ontology, Hebbian learning, memory consolidation, intent-based search."
 license = "MIT"
 requires-python = ">=3.12"
 readme = "README.md"
 authors = [{ name = "Son Seongjun" }]
-keywords = ["knowledge-graph", "hebbian-learning", "spreading-activation", "memory-consolidation"]
+keywords = [
+    "knowledge-graph",
+    "agent-memory",
+    "hebbian-learning",
+    "spreading-activation",
+    "memory-consolidation",
+    "ontology",
+    "mcp",
+    "neo4j",
+    "qdrant",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -18,6 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database :: Database Engines/Servers",
     "Framework :: AsyncIO",
     "Typing :: Typed",
 ]
@@ -26,21 +37,42 @@ dependencies = []
 [project.urls]
 Homepage = "https://github.com/PlateerLab/synaptic-memory"
 Repository = "https://github.com/PlateerLab/synaptic-memory"
+Documentation = "https://github.com/PlateerLab/synaptic-memory/blob/main/README.md"
 Changelog = "https://github.com/PlateerLab/synaptic-memory/blob/main/CHANGELOG.md"
 
 [project.scripts]
 synaptic-mcp = "synaptic.mcp.server:main"
 
 [project.optional-dependencies]
-postgresql = ["asyncpg>=0.30", "pgvector>=0.3"]
 sqlite = ["aiosqlite>=0.20"]
+postgresql = ["asyncpg>=0.30", "pgvector>=0.3"]
 neo4j = ["neo4j>=5.25"]
 qdrant = ["qdrant-client>=1.12"]
 minio = ["miniopy-async>=1.21"]
+embedding = ["aiohttp>=3.9"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
-scale = ["neo4j>=5.25", "qdrant-client>=1.12", "miniopy-async>=1.21"]
-all = ["asyncpg>=0.30", "pgvector>=0.3", "aiosqlite>=0.20", "neo4j>=5.25", "qdrant-client>=1.12", "miniopy-async>=1.21", "mcp[cli]>=1.5"]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.8", "pyright>=1.1"]
+scale = [
+    "neo4j>=5.25",
+    "qdrant-client>=1.12",
+    "miniopy-async>=1.21",
+    "aiohttp>=3.9",
+]
+all = [
+    "aiosqlite>=0.20",
+    "asyncpg>=0.30",
+    "pgvector>=0.3",
+    "neo4j>=5.25",
+    "qdrant-client>=1.12",
+    "miniopy-async>=1.21",
+    "aiohttp>=3.9",
+    "mcp[cli]>=1.5",
+]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "pyright>=1.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/synaptic"]
