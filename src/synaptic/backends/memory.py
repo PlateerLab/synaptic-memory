@@ -108,12 +108,34 @@ class MemoryBackend:
     async def search_fuzzy(
         self, query: str, *, limit: int = 20, threshold: float = 0.3
     ) -> list[Node]:
+        query_lower = query.lower()
+        # Deduplicate and cap query terms to avoid O(n*m) explosion on long queries
+        query_terms = list(dict.fromkeys(query_lower.split()))[:10]
         scored: list[tuple[Node, float]] = []
         for node in self._nodes.values():
-            text = f"{node.title} {node.content}"
-            ratio = SequenceMatcher(None, query.lower(), text.lower()).ratio()
-            if ratio >= threshold:
-                scored.append((node, ratio))
+            # Compare against title (short text → fair ratio) and individual words
+            title_ratio = SequenceMatcher(None, query_lower[:200], node.title.lower()).ratio()
+            best = title_ratio
+
+            # Per-term fuzzy: match each query term against title words (fast) + content sample
+            if query_terms:
+                title_words = node.title.lower().split()
+                # Sample content words (first 50 words) to keep fuzzy fast
+                content_words = node.content.lower().split()[:50]
+                text_words = title_words + content_words
+                term_scores: list[float] = []
+                for qt in query_terms:
+                    term_best = 0.0
+                    for tw in text_words:
+                        r = SequenceMatcher(None, qt, tw).ratio()
+                        if r > term_best:
+                            term_best = r
+                    term_scores.append(term_best)
+                avg_term = sum(term_scores) / len(term_scores)
+                best = max(best, avg_term)
+
+            if best >= threshold:
+                scored.append((node, best))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [n for n, _ in scored[:limit]]
 
