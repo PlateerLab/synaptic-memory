@@ -47,34 +47,27 @@ class ClassificationResult:
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
-너는 지식 그래프 온톨로지 엔지니어다. 주어진 텍스트를 분석하여 지식 노드의 메타데이터를 생성한다.
+지식 노드의 메타데이터를 JSON으로 생성하라. /no_think
 
-이 지식은 LLM 에이전트가 나중에 검색해서 사용할 것이다.
-"이 지식을 나중에 언제, 어떤 상황에서 찾게 될까?"를 예측하여 메타데이터를 설계하라.
+kind 분류 (가장 적합한 하나만):
+- rule: "~해야 한다", "~금지", 정책, 규정, 가이드라인, 약관, 제한 조건
+- lesson: 장애/실패/성공 사후 분석, 교훈, "원인은~", "다음에는~", postmortem
+- decision: "~를 선택", "~를 채택", 대안 비교, trade-off, 의사결정 기록
+- artifact: API 명세, 엔드포인트, 스키마, 코드, 시스템 컴포넌트, 도구
+- entity: 회사명, 제품명, 인물, 도시, 고유 대상
+- concept: 위에 해당 안 되면 concept
 
-반드시 아래 JSON 형식으로 응답하라:
-{
-  "kind": "concept|entity|lesson|decision|rule|artifact",
-  "confidence": 0.0~1.0,
-  "tags": ["태그1", "태그2"],
-  "search_keywords": ["이 지식을 찾을 때 사용할 검색어들"],
-  "search_scenarios": ["이 지식이 필요한 상황 묘사"],
-  "summary": "1줄 요약"
-}
+예시:
+입력: "주문 후 7일 이내 환불 가능. 개봉 제품은 환불 불가."
+출력: {"kind":"rule","confidence":0.95,"tags":["환불","refund","정책","주문"],"search_keywords":["환불 가능한 기간","환불 규정","개봉 제품 환불"],"search_scenarios":["고객이 환불을 요청했을 때 규정 확인"],"summary":"7일 이내 환불 가능, 개봉 제품 불가"}
 
-kind 분류 기준:
-- concept: 일반적인 개념, 정의, 설명
-- entity: 회사, 제품, 인물, 시스템 등 고유 대상
-- lesson: 경험에서 배운 교훈, 장애 사례, 실패/성공 패턴
-- decision: 의사결정과 근거, 대안 비교
-- rule: 정책, 규정, 가이드라인, 제약 조건
-- artifact: API, 문서, 코드, 시스템 컴포넌트
+입력: "PG사 API 타임아웃으로 결제 실패. 원인은 트래픽 급증. 교훈: 서킷브레이커 필요."
+출력: {"kind":"lesson","confidence":0.95,"tags":["결제","PG","장애","서킷브레이커","circuit breaker"],"search_keywords":["결제 실패 원인","API 타임아웃 대응","PG사 장애 사례"],"search_scenarios":["결제 시스템 장애 발생 시 과거 사례 검색"],"summary":"PG사 타임아웃으로 결제 실패, 서킷브레이커 도입 필요"}
 
-tags: 도메인/기술 키워드 3~7개, 한글+영어 포함
-search_keywords: 이 지식을 찾을 에이전트가 입력할 검색 쿼리 3~5개, "~하려면", "~할 때" 같은 실용적 질문형 포함
-search_scenarios: 이 지식이 필요한 구체적 상황 1~2개
+입력: "카나리 배포 채택. 대안 블루그린은 비용 문제로 기각."
+출력: {"kind":"decision","confidence":0.9,"tags":["배포","카나리","canary","블루그린","deploy"],"search_keywords":["배포 방식 선택","카나리 vs 블루그린","배포 전략 결정"],"search_scenarios":["새 서비스 배포 전략을 결정할 때"],"summary":"카나리 배포 채택, 블루그린은 비용 문제로 기각"}
 
-JSON만 출력하라. 설명이나 사고 과정을 쓰지 마라. /no_think"""
+반드시 JSON만 출력. tags 3~7개, search_keywords 3~5개."""
 
 # content 최대 길이 (토큰 절약)
 _MAX_CONTENT_LEN = 2000
