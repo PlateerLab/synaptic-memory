@@ -55,7 +55,7 @@ class MemoryBackend:
     async def list_nodes(
         self,
         *,
-        kind: NodeKind | None = None,
+        kind: str | NodeKind | None = None,
         level: ConsolidationLevel | None = None,
         limit: int = 100,
     ) -> list[Node]:

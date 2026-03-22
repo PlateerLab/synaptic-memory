@@ -60,6 +60,7 @@ from synaptic.models import (
     EdgeKind,
     EvidenceChain,
     EvidenceStep,
+    MaintenanceResult,
     Node,
     NodeKind,
     SearchResult,
@@ -82,7 +83,7 @@ from synaptic.protocols import (
 )
 from synaptic.resonance import ResonanceWeights
 
-__version__ = "0.6.0"
+__version__ = "0.8.0"
 
 __all__ = [
     "ActivatedNode",
@@ -100,6 +101,7 @@ __all__ = [
     "EmbeddingRelationDetector",
     "GraphTraversal",
     "KindClassifier",
+    "MaintenanceResult",
     "MockEmbeddingProvider",
     "Node",
     "NodeKind",

@@ -21,6 +21,7 @@ from synaptic.models import (
     Edge,
     EdgeKind,
     EvidenceChain,
+    MaintenanceResult,
     Node,
     NodeKind,
     SearchResult,
@@ -229,7 +230,7 @@ class SynapticGraph:
         title: str,
         content: str,
         *,
-        kind: NodeKind | None = None,
+        kind: str | NodeKind | None = None,
         tags: list[str] | None = None,
         source: str = "",
         embedding: list[float] | None = None,
@@ -363,6 +364,16 @@ class SynapticGraph:
             depth=depth,
         )
 
+    async def list(
+        self,
+        *,
+        kind: str | NodeKind | None = None,
+        level: ConsolidationLevel | None = None,
+        limit: int = 100,
+    ) -> list[Node]:
+        """List all nodes with optional kind/level filtering."""
+        return await self._backend.list_nodes(kind=kind, level=level, limit=limit)
+
     async def get(self, node_id: str) -> Node | None:
         cached = self._cache.get(node_id)
         if cached is not None:
@@ -374,6 +385,39 @@ class SynapticGraph:
         node = await self._store.get_node(node_id)
         if node is not None:
             self._cache.put(node)
+        return node
+
+    async def update(
+        self,
+        node_id: str,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        kind: str | NodeKind | None = None,
+        tags: list[str] | None = None,
+        properties: dict[str, str] | None = None,
+        embedding: list[float] | None = None,
+    ) -> Node | None:
+        """Update a node's fields by ID. Returns updated node, or None if not found."""
+        node = await self._backend.get_node(node_id)
+        if node is None:
+            return None
+        if title is not None:
+            node.title = title
+        if content is not None:
+            node.content = content
+        if kind is not None:
+            node.kind = kind
+        if tags is not None:
+            node.tags = tags
+        if properties is not None:
+            node.properties = properties
+        if embedding is not None:
+            node.embedding = embedding
+        node.updated_at = time()
+        await self._backend.update_node(node)
+        self._cache.invalidate(node_id)
+        self._cache.put(node)
         return node
 
     async def remove(self, node_id: str) -> bool:
@@ -407,6 +451,20 @@ class SynapticGraph:
     async def decay(self) -> int:
         self._cache.clear()  # Vitality changed globally
         return await self._backend.decay_vitality(factor=0.95)
+
+    async def maintain(
+        self,
+        digester: Digester | None = None,
+        *,
+        context: dict[str, object] | None = None,
+    ) -> MaintenanceResult:
+        """Run consolidate + decay + prune in one call with a unified result."""
+        consolidated = await self._consolidation.consolidate(
+            self._backend, digester, context=context,
+        )
+        decayed = await self.decay()
+        pruned = await self.prune()
+        return MaintenanceResult(consolidated=consolidated, decayed=decayed, pruned=pruned)
 
     async def export_markdown(self, *, node_ids: list[str] | None = None) -> str:
         return await self._md_exporter.export(self._backend, node_ids=node_ids)
@@ -536,6 +594,79 @@ class SynapticGraph:
         return await assembler.assemble(
             self._backend, query, search_result, max_steps=max_steps,
         )
+
+    # --- Conversation helpers ---
+
+    async def add_turn(
+        self,
+        user_msg: str,
+        assistant_msg: str,
+        *,
+        session_id: str | None = None,
+        tags: list[str] | None = None,
+    ) -> tuple[Node, Node, Node]:
+        """Add a conversation turn (user + assistant) linked to a session.
+
+        Creates a SESSION node on first call for a given session_id.
+        Returns (session_node, user_node, assistant_node).
+        """
+        from synaptic.models import _new_id  # noqa: PLC0415
+
+        if session_id is None:
+            session_id = f"session_{_new_id()}"
+
+        # Get or create session node
+        session_node = await self._backend.get_node(session_id)
+        if session_node is None:
+            session_node = await self._store.add_node(
+                f"Session {session_id[:8]}",
+                "",
+                kind=NodeKind.SESSION,
+                tags=["_session"],
+                source=session_id,
+            )
+            # Override the auto-generated ID with session_id
+            await self._backend.delete_node(session_node.id)
+            session_node.id = session_id
+            await self._backend.save_node(session_node)
+
+        turn_tags = [*tags] if tags else []
+
+        # Create user message node
+        user_node = await self._store.add_node(
+            "user", user_msg, kind=NodeKind.OBSERVATION, tags=[*turn_tags, "_turn_user"],
+        )
+
+        # Create assistant message node
+        assistant_node = await self._store.add_node(
+            "assistant", assistant_msg, kind=NodeKind.OBSERVATION, tags=[*turn_tags, "_turn_assistant"],
+        )
+
+        # Link: user → assistant (FOLLOWED_BY)
+        await self._store.add_edge(
+            user_node.id, assistant_node.id, kind=EdgeKind.FOLLOWED_BY,
+        )
+
+        # Link: session → user (CONTAINS)
+        await self._store.add_edge(
+            session_id, user_node.id, kind=EdgeKind.CONTAINS,
+        )
+
+        # Link last turn to this one (FOLLOWED_BY)
+        session_edges = await self._backend.get_edges(session_id, direction="outgoing")
+        contained = [e for e in session_edges if e.kind == EdgeKind.CONTAINS and e.target_id != user_node.id]
+        if contained:
+            # Find the most recent contained user node
+            last_user_id = contained[-1].target_id
+            # Get the assistant node linked from last user
+            last_edges = await self._backend.get_edges(last_user_id, direction="outgoing")
+            last_assistant = [e for e in last_edges if e.kind == EdgeKind.FOLLOWED_BY]
+            if last_assistant:
+                await self._store.add_edge(
+                    last_assistant[-1].target_id, user_node.id, kind=EdgeKind.FOLLOWED_BY,
+                )
+
+        return session_node, user_node, assistant_node
 
     # --- Ontology persistence ---
 

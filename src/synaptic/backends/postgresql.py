@@ -213,7 +213,7 @@ class PostgreSQLBackend:
     async def list_nodes(
         self,
         *,
-        kind: NodeKind | None = None,
+        kind: str | NodeKind | None = None,
         level: ConsolidationLevel | None = None,
         limit: int = 100,
     ) -> list[Node]:
@@ -441,12 +441,20 @@ class PostgreSQLBackend:
         return int(result.split()[-1]) if result else 0
 
 
+def _safe_node_kind(value: str) -> str | NodeKind:
+    """Convert to NodeKind if known, otherwise keep as raw string."""
+    try:
+        return NodeKind(value)
+    except ValueError:
+        return value
+
+
 def _row_to_node(row: asyncpg.Record) -> Node:
     tags = list(row["tags"]) if row["tags"] else []
     props_raw = row.get("properties_json", "{}")
     return Node(
         id=row["id"],
-        kind=NodeKind(row["kind"]),
+        kind=_safe_node_kind(row["kind"]),
         title=row["title"],
         content=row["content"],
         tags=tags,

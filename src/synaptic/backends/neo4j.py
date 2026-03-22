@@ -143,7 +143,7 @@ class Neo4jBackend:
     async def list_nodes(
         self,
         *,
-        kind: NodeKind | None = None,
+        kind: str | NodeKind | None = None,
         level: ConsolidationLevel | None = None,
         limit: int = 100,
     ) -> list[Node]:
@@ -481,6 +481,14 @@ def _node_to_props(node: Node) -> dict[str, object]:
     }
 
 
+def _safe_node_kind(value: str) -> str | NodeKind:
+    """Convert to NodeKind if known, otherwise keep as raw string."""
+    try:
+        return NodeKind(value)
+    except ValueError:
+        return value
+
+
 def _record_to_node(data: object) -> Node:
     """Convert Neo4j node record to Node dataclass."""
     # neo4j driver returns dict-like objects
@@ -488,7 +496,7 @@ def _record_to_node(data: object) -> Node:
     props_raw = d.get("properties_json", "{}")
     return Node(
         id=str(d.get("id", "")),
-        kind=NodeKind(str(d.get("kind", "concept"))),
+        kind=_safe_node_kind(str(d.get("kind", "concept"))),
         title=str(d.get("title", "")),
         content=str(d.get("content", "")),
         tags=json.loads(str(d.get("tags_json", "[]"))),

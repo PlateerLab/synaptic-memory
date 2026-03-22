@@ -68,7 +68,7 @@ class EdgeKind(StrEnum):
 @dataclass(slots=True)
 class Node:
     id: str = field(default_factory=_new_id)
-    kind: NodeKind = NodeKind.CONCEPT
+    kind: str = NodeKind.CONCEPT
     title: str = ""
     content: str = ""
     tags: list[str] = field(default_factory=_str_list)
@@ -129,6 +129,21 @@ class DigestResult:
     edges_created: list[Edge] = field(default_factory=_edge_list)
     nodes_updated: list[str] = field(default_factory=_str_list)
     tokens_used: int = 0
+
+
+@dataclass(slots=True)
+class MaintenanceResult:
+    """Unified result for maintenance operations (consolidate + decay + prune)."""
+    consolidated: DigestResult | None = None
+    decayed: int = 0
+    pruned: int = 0
+
+    @property
+    def total_affected(self) -> int:
+        count = self.decayed + self.pruned
+        if self.consolidated:
+            count += len(self.consolidated.nodes_created) + len(self.consolidated.nodes_updated)
+        return count
 
 
 def _evidence_step_list() -> list["EvidenceStep"]:

@@ -35,7 +35,7 @@ class Store:
         title: str,
         content: str,
         *,
-        kind: NodeKind = NodeKind.CONCEPT,
+        kind: str | NodeKind = NodeKind.CONCEPT,
         tags: list[str] | None = None,
         source: str = "",
         level: ConsolidationLevel = ConsolidationLevel.L0_RAW,
@@ -76,7 +76,7 @@ class Store:
     async def list_nodes(
         self,
         *,
-        kind: NodeKind | None = None,
+        kind: str | NodeKind | None = None,
         level: ConsolidationLevel | None = None,
         limit: int = 100,
     ) -> list[Node]:
