@@ -75,6 +75,10 @@ dev = [
     "ruff>=0.8",
     "pyright>=1.1",
 ]
+eval = [
+    "deepeval>=2.0",
+    "openai>=1.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/synaptic"]
