@@ -1,9 +1,9 @@
-"""LLM 기반 관계 탐지기.
+"""LLM-based relation detector.
 
-규칙 기반 후보 추출(InvertedIndex + vector search) 후
-LLM이 의미적 관계를 판단하여 EdgeKind와 weight를 결정한다.
+After rule-based candidate extraction (InvertedIndex + vector search),
+the LLM judges semantic relations and determines EdgeKind and weight.
 
-LLM 호출 실패 시 fallback(RuleBasedRelationDetector)으로 자동 전환.
+Automatically falls back to RuleBasedRelationDetector on LLM call failure.
 """
 
 from __future__ import annotations
@@ -54,10 +54,10 @@ _SYSTEM_PROMPT = """\
 
 
 class LLMRelationDetector:
-    """LLM 기반 관계 탐지기.
+    """LLM-based relation detector.
 
-    후보 추출은 InvertedIndex(title mention) + vector search로 수행하고,
-    관계 판단은 LLM에게 위임한다. LLM 호출 실패 시 fallback detector를 사용.
+    Candidate extraction uses InvertedIndex (title mention) + vector search,
+    and relation judgment is delegated to the LLM. Falls back to fallback detector on LLM failure.
 
     Example::
 
@@ -81,51 +81,51 @@ class LLMRelationDetector:
         max_candidates: int = 10,
         max_edges_per_node: int = 5,
     ) -> None:
-        """LLMRelationDetector를 초기화한다.
+        """Initialize LLMRelationDetector.
 
         Args:
-            llm: LLM 텍스트 생성 프로바이더.
-            fallback: LLM 실패 시 사용할 규칙 기반 탐지기.
-                      None이면 LLM 실패 시 빈 리스트 반환.
-            max_candidates: LLM에게 보낼 최대 후보 노드 수.
-            max_edges_per_node: 최종 반환할 최대 관계 수.
+            llm: LLM text generation provider.
+            fallback: Rule-based detector to use on LLM failure.
+                      None = return empty list on LLM failure.
+            max_candidates: Maximum candidate nodes to send to LLM.
+            max_edges_per_node: Maximum relations to return.
         """
         self._llm = llm
         self._fallback = fallback
         self._max_candidates = max_candidates
         self._max_edges = max_edges_per_node
-        # fallback이 있으면 index를 공유하여 이중 인덱스 방지
+        # Share index with fallback to prevent duplicate indexing
         self._index = fallback.index if fallback is not None else InvertedIndex()
 
     @property
     def index(self) -> InvertedIndex:
-        """내부 역인덱스. graph.py에서 add/remove 시 인덱스 갱신에 사용."""
+        """Internal inverted index. Used by graph.py to update the index on add/remove."""
         return self._index
 
     async def detect(
         self, node: Node, backend: StorageBackend
     ) -> list[tuple[str, EdgeKind, float]]:
-        """새 노드와 기존 노드 사이의 관계를 LLM으로 탐지한다.
+        """Detect relations between a new node and existing nodes via LLM.
 
-        1. InvertedIndex + vector search로 후보 추출
-        2. LLM에게 관계 판단 요청
-        3. JSON 파싱 → EdgeKind 매핑
+        1. Extract candidates via InvertedIndex + vector search
+        2. Request relation judgment from LLM
+        3. Parse JSON → EdgeKind mapping
 
-        LLM 호출/파싱 실패 시 fallback detector를 사용한다.
+        Uses fallback detector on LLM call/parsing failure.
 
         Args:
-            node: 관계를 탐지할 새 노드.
-            backend: 후보 조회용 StorageBackend.
+            node: New node to detect relations for.
+            backend: StorageBackend for candidate lookup.
 
         Returns:
-            [(target_node_id, edge_kind, weight), ...] 최대 max_edges_per_node개.
+            [(target_node_id, edge_kind, weight), ...] up to max_edges_per_node.
         """
-        # 1. 후보 추출
+        # 1. Extract candidates
         candidates = await self._gather_candidates(node, backend)
         if not candidates:
             return []
 
-        # 2. LLM 관계 판단
+        # 2. LLM relation judgment
         try:
             prompt = self._build_prompt(node, candidates)
             raw = await self._llm.generate(
@@ -150,14 +150,14 @@ class LLMRelationDetector:
     async def _gather_candidates(
         self, node: Node, backend: StorageBackend
     ) -> list[Node]:
-        """InvertedIndex + vector search로 후보 노드를 수집한다.
+        """Collect candidate nodes via InvertedIndex + vector search.
 
         Args:
-            node: 새로 추가된 노드.
-            backend: 후보 조회용 StorageBackend.
+            node: Newly added node.
+            backend: StorageBackend for candidate lookup.
 
         Returns:
-            중복 제거된 후보 노드 목록 (최대 max_candidates개).
+            Deduplicated list of candidate nodes (up to max_candidates).
         """
         seen: set[str] = {node.id}
         candidates: list[Node] = []
@@ -192,14 +192,14 @@ class LLMRelationDetector:
         return candidates[: self._max_candidates]
 
     def _build_prompt(self, node: Node, candidates: list[Node]) -> str:
-        """LLM에게 보낼 user 프롬프트를 구성한다.
+        """Build user prompt to send to the LLM.
 
         Args:
-            node: 새로 추가된 노드.
-            candidates: 관계 판단 대상 후보 노드들.
+            node: Newly added node.
+            candidates: Candidate nodes for relation judgment.
 
         Returns:
-            포맷팅된 프롬프트 문자열.
+            Formatted prompt string.
         """
         lines = [
             "새 노드:",
@@ -216,19 +216,19 @@ class LLMRelationDetector:
     def _parse_response(
         self, raw: str, candidates: list[Node]
     ) -> list[tuple[str, EdgeKind, float]]:
-        """LLM JSON 응답을 파싱하여 관계 목록을 반환한다.
+        """Parse LLM JSON response and return a list of relations.
 
         Args:
-            raw: LLM이 반환한 JSON 문자열.
-            candidates: 후보 노드 목록 (인덱스 매핑용).
+            raw: JSON string returned by the LLM.
+            candidates: Candidate node list (for index mapping).
 
         Returns:
-            [(target_node_id, edge_kind, weight), ...] 유효한 항목만.
+            [(target_node_id, edge_kind, weight), ...] valid entries only.
 
         Raises:
-            ValueError: JSON 파싱 실패 또는 배열이 아닌 경우.
+            ValueError: JSON parsing failure or non-array response.
         """
-        # JSON 배열 추출 — LLM이 감싼 텍스트가 있을 수 있으므로 [ ] 사이를 탐색
+        # Extract JSON array — search between [ ] as LLM may wrap the output in text
         text = raw.strip()
         start = text.find("[")
         end = text.rfind("]")
@@ -246,20 +246,20 @@ class LLMRelationDetector:
             if not isinstance(item, dict):
                 continue
 
-            # target 인덱스 검증
+            # Validate target index
             target_idx = item.get("target")
             if not isinstance(target_idx, int) or target_idx < 0 or target_idx >= len(candidates):
                 logger.debug("Invalid target index: %s", target_idx)
                 continue
 
-            # relation → EdgeKind 매핑
+            # Map relation → EdgeKind
             relation_str = str(item.get("relation", "")).lower().strip()
             edge_kind = _RELATION_MAP.get(relation_str)
             if edge_kind is None:
                 logger.debug("Unknown relation type: %s", relation_str)
                 continue
 
-            # weight 검증 (0.0~1.0)
+            # Validate weight (0.0~1.0)
             weight = item.get("weight", 0.5)
             if not isinstance(weight, (int, float)):
                 weight = 0.5

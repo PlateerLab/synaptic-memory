@@ -1,4 +1,4 @@
-"""EvidenceAssembler — SearchResult를 LLM-optimized evidence chain으로 변환."""
+"""EvidenceAssembler — converts SearchResult into an LLM-optimized evidence chain."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from synaptic.models import (
 )
 
 
-# 위상 정렬에 사용할 방향성 edge kinds
+# Directed edge kinds used for topological sorting
 _DIRECTED_KINDS = frozenset({
     EdgeKind.CAUSED,
     EdgeKind.RESULTED_IN,
@@ -29,27 +29,27 @@ _DIRECTED_KINDS = frozenset({
     EdgeKind.LEARNED_FROM,
 })
 
-# 불용어 (term overlap 계산에서 제외)
+# Stop words (excluded from term overlap calculation)
 _STOPWORDS = frozenset({
-    # 영어
+    # English
     "the", "a", "an", "is", "are", "was", "were", "in", "on", "at",
     "to", "for", "of", "and", "or", "but", "not", "with", "by", "from",
     "that", "this", "it", "its", "be", "been", "being", "have", "has",
     "had", "do", "does", "did", "will", "would", "could", "should",
     "what", "which", "who", "when", "where", "how", "why",
-    # 한국어
+    # Korean
     "은", "는", "이", "가", "을", "를", "에", "의", "와", "과", "도",
     "에서", "로", "으로", "하는", "있는", "하고", "하면", "에게",
 })
 
-# Fact 추출 패턴
+# Fact extraction patterns
 _FACT_PATTERNS = [
-    # 숫자 + 단위
+    # Numbers + units
     re.compile(
         r'\d[\d,.]*\s*(%|만|억|원|달러|km|kg|GB|MB|TB|명|건|개|년|월|일|시간|분|초|percent|million|billion|thousand)',
         re.IGNORECASE,
     ),
-    # 날짜 (2024-01-01, 2024년, January 2024, 15 March 1990)
+    # Dates (2024-01-01, 2024년, January 2024, 15 March 1990)
     re.compile(r'\b\d{4}[-/년.]\d{1,2}[-/월.]?\d{0,2}일?\b'),
     re.compile(
         r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)'
@@ -62,13 +62,13 @@ _FACT_PATTERNS = [
         r'\s+\d{4}\b',
         re.IGNORECASE,
     ),
-    # 숫자만 (연도, 인구 등) - 4자리 이상
+    # Numbers only (years, population, etc.) - 4+ digits
     re.compile(r'\b\d{4,}\b'),
 ]
 
 
 class EvidenceAssembler:
-    """SearchResult를 LLM-optimized evidence chain으로 변환."""
+    """Converts SearchResult into an LLM-optimized evidence chain."""
 
     __slots__ = ("_max_sentences", "_relevance_threshold", "_max_tokens")
 
@@ -91,21 +91,21 @@ class EvidenceAssembler:
         *,
         max_steps: int = 8,
     ) -> EvidenceChain:
-        """Search 결과를 evidence chain으로 조립."""
+        """Assemble search results into an evidence chain."""
         t0 = time()
 
         if not search_result.nodes:
             return EvidenceChain(query=query, assembly_time_ms=(time() - t0) * 1000)
 
-        # 1. Seed 노드 추출 (상위 max_steps개)
+        # 1. Extract seed nodes (top max_steps)
         seed_nodes = search_result.nodes[:max_steps]
         seed_ids = [a.node.id for a in seed_nodes]
         seed_map: dict[str, Node] = {a.node.id: a.node for a in seed_nodes}
 
-        # 2. BFS로 bridge 노드 탐색
+        # 2. BFS to find bridge nodes
         bridge_paths = await self._find_bridge_paths(backend, seed_ids)
 
-        # bridge에서 발견된 새 노드 수집
+        # Collect new nodes discovered via bridge paths
         all_ids: list[str] = list(seed_ids)
         for path in bridge_paths:
             for nid in path:
@@ -116,7 +116,7 @@ class EvidenceAssembler:
                         if nid not in all_ids:
                             all_ids.append(nid)
 
-        # 3. 엣지 수집 (위상 정렬용)
+        # 3. Collect edges (for topological sorting)
         all_edges: list[Edge] = []
         id_set = set(all_ids)
         for nid in all_ids:
@@ -126,10 +126,10 @@ class EvidenceAssembler:
                 if other in id_set:
                     all_edges.append(e)
 
-        # 4. 위상 정렬
+        # 4. Topological sort
         sorted_ids = self._topological_sort(all_ids, all_edges, seed_ids)
 
-        # 5. Step 생성
+        # 5. Generate steps
         steps: list[EvidenceStep] = []
         all_facts: list[str] = []
         seed_id_set = set(seed_ids)
@@ -144,7 +144,7 @@ class EvidenceAssembler:
             facts = self._extract_facts(node.content)
             all_facts.extend(facts)
 
-            # 다음 step으로의 연결 설명
+            # Connection description to the next step
             conn = ""
             if i < len(sorted_ids) - 1:
                 next_id = sorted_ids[i + 1]
@@ -162,17 +162,17 @@ class EvidenceAssembler:
                 facts=facts,
             ))
 
-        # 6. 최종 context 포맷팅
+        # 6. Final context formatting
         context = self._format_context(steps)
 
-        # 토큰 근사
+        # Approximate token count
         tokens = len(context.split())
 
         return EvidenceChain(
             query=query,
             steps=steps,
             compressed_context=context,
-            facts=list(dict.fromkeys(all_facts)),  # 중복 제거, 순서 유지
+            facts=list(dict.fromkeys(all_facts)),  # deduplicate, preserve order
             total_tokens_approx=tokens,
             assembly_time_ms=(time() - t0) * 1000,
         )
@@ -182,17 +182,17 @@ class EvidenceAssembler:
         backend: StorageBackend,
         seed_ids: list[str],
     ) -> list[list[str]]:
-        """Seed 노드 간 BFS shortest path 탐색."""
+        """BFS shortest path search between seed nodes."""
         paths: list[list[str]] = []
         max_depth = 3
 
-        # 상위 5개 seed만 (O(N²) 방지)
+        # Only top 5 seeds (to avoid O(N^2))
         seeds = seed_ids[:5]
 
         for i in range(len(seeds) - 1):
             src, dst = seeds[i], seeds[i + 1]
             path = await self._bfs_shortest(backend, src, dst, max_depth)
-            if path and len(path) > 2:  # bridge가 있는 경우만
+            if path and len(path) > 2:  # only when bridge nodes exist
                 paths.append(path)
 
         return paths
@@ -204,7 +204,7 @@ class EvidenceAssembler:
         dst: str,
         max_depth: int,
     ) -> list[str] | None:
-        """BFS로 src → dst 최단 경로."""
+        """BFS shortest path from src to dst."""
         if src == dst:
             return [src]
 
@@ -233,10 +233,10 @@ class EvidenceAssembler:
         edges: list[Edge],
         seed_ids: list[str],
     ) -> list[str]:
-        """위상 정렬. 방향성 edge만 사용, 실패 시 원래 순서 폴백."""
+        """Topological sort. Uses directed edges only; falls back to original order on failure."""
         id_set = set(node_ids)
 
-        # 방향성 edge 필터
+        # Filter to directed edges only
         directed = [
             e for e in edges
             if e.kind in _DIRECTED_KINDS
@@ -245,7 +245,7 @@ class EvidenceAssembler:
         ]
 
         if not directed:
-            return list(node_ids)  # 원래 순서 (activation 순)
+            return list(node_ids)  # original order (by activation)
 
         # Kahn's algorithm
         in_degree: dict[str, int] = {nid: 0 for nid in node_ids}
@@ -266,33 +266,33 @@ class EvidenceAssembler:
                 if in_degree[neighbor] == 0:
                     queue.append(neighbor)
 
-        # 순환 등으로 누락된 노드 추가 (원래 순서)
+        # Append nodes missed due to cycles, etc. (in original order)
         remaining = [nid for nid in node_ids if nid not in set(result)]
         result.extend(remaining)
 
         return result
 
     def _compress_content(self, content: str, query: str) -> str:
-        """Query 관련 문장만 선택하여 압축."""
+        """Select and compress only query-relevant sentences."""
         if not content:
             return ""
 
-        # 문장 분리 — 마침표/물음표/느낌표 뒤 공백 + 다음 문자
+        # Sentence splitting — after period/question mark/exclamation mark + whitespace
         sentences = re.split(r'(?<=[.!?。])\s+', content.strip())
         if not sentences:
             return content[:500]
 
-        # query term 추출
+        # Extract query terms
         query_terms = {
             t.lower() for t in re.split(r'[\s,;:!?()\[\]]+', query)
             if t.lower() not in _STOPWORDS and len(t) >= 2
         }
 
         if not query_terms:
-            # query에서 term을 못 뽑으면 처음 N문장 반환
+            # No terms extracted from query — return first N sentences
             return " ".join(sentences[:self._max_sentences])
 
-        # 각 문장의 relevance
+        # Score each sentence by relevance
         scored: list[tuple[int, str, float]] = []
         for i, sent in enumerate(sentences):
             sent_lower = sent.lower()
@@ -301,24 +301,24 @@ class EvidenceAssembler:
             relevance = overlap / len(query_terms)
             scored.append((i, sent, relevance))
 
-        # threshold 이상 선택
+        # Select sentences above threshold
         selected = [(i, s) for i, s, r in scored if r >= self._relevance_threshold]
 
-        # 없으면 상위 N개 폴백
+        # Fall back to top N if none selected
         if not selected:
             scored.sort(key=lambda x: x[2], reverse=True)
             selected = [(i, s) for i, s, _ in scored[:self._max_sentences]]
 
-        # 원래 순서 유지
+        # Preserve original order
         selected.sort(key=lambda x: x[0])
 
-        # 개수 제한
+        # Limit count
         selected = selected[:self._max_sentences]
 
         return " ".join(s for _, s in selected)
 
     def _extract_facts(self, content: str) -> list[str]:
-        """정규식으로 핵심 사실(숫자, 날짜, 고유명사) 포함 문장 추출."""
+        """Extract sentences containing key facts (numbers, dates, proper nouns) via regex."""
         if not content:
             return []
 
@@ -338,32 +338,32 @@ class EvidenceAssembler:
         return facts
 
     def _format_context(self, steps: list[EvidenceStep]) -> str:
-        """Steps를 LLM에게 전달할 최종 context 문자열로 조립."""
+        """Assemble steps into a final context string for LLM consumption."""
         parts: list[str] = []
 
         for i, step in enumerate(steps):
-            # 역할 + 제목
+            # Role + title
             title = step.node.title or "Untitled"
             parts.append(f"[{step.role.upper()}] {title}")
 
-            # 압축된 content
+            # Compressed content
             if step.compressed_content:
                 parts.append(step.compressed_content)
 
-            # 핵심 facts (최대 3개)
+            # Key facts (max 3)
             if step.facts:
                 facts_text = " | ".join(step.facts[:3])
                 parts.append(f"Key facts: {facts_text}")
 
-            # 다음 step 연결
+            # Connection to next step
             if step.connection_to_next and i < len(steps) - 1:
                 parts.append(f"→ {step.connection_to_next}")
 
-            parts.append("")  # 구분
+            parts.append("")  # separator
 
         context = "\n".join(parts).strip()
 
-        # 토큰 제한
+        # Token limit
         words = context.split()
         if len(words) > self._max_tokens:
             context = " ".join(words[:self._max_tokens])

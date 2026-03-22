@@ -1,123 +1,124 @@
 # Synaptic Memory
 
-LLM/멀티에이전트를 위한 뇌 기반 지식 그래프.
+Brain-inspired knowledge graph for LLM agents and multi-agent systems.
 
-에이전트가 운영 중에 만들어내는 모든 데이터 — tool call, 의사결정, 결과, 학습 — 를 **자동으로 온톨로지에 구축**하고, 나중에 에이전트가 스스로 검색·추론할 수 있게 하는 라이브러리 + MCP 서버.
+Agents automatically structure their operational data — tool calls, decisions, outcomes, lessons — into an **auto-constructed ontology**, enabling self-retrieval and reasoning over past experiences. Library + MCP server.
 
+[![CI](https://github.com/PlateerLab/synaptic-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/PlateerLab/synaptic-memory/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![Python](https://img.shields.io/pypi/pyversions/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
-## Why — 이 프로젝트가 풀려는 문제
+## Why
 
-LLM 에이전트는 **기억하지 못한다.** 매번 같은 실수를 반복하고, 과거의 성공 패턴을 활용하지 못하고, 팀의 축적된 지식에 접근하지 못한다.
+LLM agents **don't remember.** They repeat the same mistakes, fail to leverage past successes, and can't access accumulated team knowledge.
 
-기존 RAG는 "문서를 잘게 잘라서 벡터로 검색"하는 데 그친다. 하지만 에이전트에게 필요한 건 문서 검색이 아니라 **경험의 구조화**다:
+Traditional RAG stops at "chunk documents and search by vector." But agents need more than document retrieval — they need **structured experience**:
 
-- "지난번 이런 상황에서 어떤 결정을 했고, 결과가 어땠지?"
-- "이 패턴이 실패했던 적이 있나? 왜?"
-- "이 도구를 쓸 때 지켜야 할 규칙이 뭐지?"
+- "What decision did I make last time in this situation, and what was the outcome?"
+- "Has this pattern failed before? Why?"
+- "What rules should I follow when using this tool?"
 
-Synaptic Memory는 이 문제를 **뇌의 작동 방식**에서 답을 가져온다.
+Synaptic Memory borrows the answer from **how the brain works.**
 
 ---
 
-## Differentiators — 왜 Synaptic Memory인가
+## Differentiators
 
 | | Synaptic Memory | Cognee | Mem0 | LightRAG |
 |---|---|---|---|---|
-| **에이전트 경험 학습** | ✅ Hebbian co-activation | ❌ | ❌ | ❌ |
-| **메모리 정리 (4단계)** | ✅ L0→L1→L2→L3 | ❌ | △ | ❌ |
-| **온톨로지 자동 구축** | ✅ 규칙 + LLM + 임베딩 | △ LLM만 | ❌ | △ LLM만 |
-| **다축 랭킹** | ✅ relevance×importance×recency×vitality×context | ❌ | ❌ | ❌ |
-| **Zero-dep 코어** | ✅ 순수 Python | ❌ | ❌ | ❌ |
-| **MCP 서버** | ✅ 16 tools | ❌ | ❌ | ❌ |
-| **한국어 최적화** | ✅ FTS + synonym 튜닝 | ❌ | ❌ | ❌ |
+| **Agent experience learning** | Hebbian co-activation | - | - | - |
+| **Memory consolidation (4-tier)** | L0 → L1 → L2 → L3 | - | Partial | - |
+| **Auto-ontology construction** | Rules + LLM + Embedding | LLM only | - | LLM only |
+| **Multi-axis ranking** | relevance x importance x recency x vitality x context | - | - | - |
+| **Zero-dep core** | Pure Python | - | - | - |
+| **MCP server** | 16 tools | - | - | - |
+| **Korean optimization** | FTS + synonym tuning | - | - | - |
 
-### 벤치마크 (FTS only, embedding 없이)
+### Benchmarks (FTS only, no embedding)
 
-| 데이터셋 | Corpus | MRR | nDCG@10 | R@10 |
+| Dataset | Corpus | MRR | nDCG@10 | R@10 |
 |----------|--------|-----|---------|------|
-| Allganize RAG-Eval (금융/의료/법률) | 300 | **0.793** | 0.810 | 0.870 |
-| HotPotQA-24 (multi-hop, Cognee 비교) | 226 | **0.754** | 0.636 | 0.729 |
-| AutoRAGRetrieval (엔터프라이즈) | 720 | **0.639** | 0.677 | 0.800 |
-| KLUE-MRC (한국어 QA) | 500 | **0.607** | 0.643 | 0.760 |
+| Allganize RAG-Eval (Finance/Medical/Legal) | 300 | **0.793** | 0.810 | 0.870 |
+| HotPotQA-24 (multi-hop, Cognee comparison) | 226 | **0.754** | 0.636 | 0.729 |
+| AutoRAGRetrieval (enterprise) | 720 | **0.639** | 0.677 | 0.800 |
+| KLUE-MRC (Korean QA) | 500 | **0.607** | 0.643 | 0.760 |
 
 ---
 
-## Design Philosophy — 뇌에서 빌려온 네 가지 원리
+## Design Philosophy — Four Principles from the Brain
 
-### 1. Spreading Activation — 연상 검색
+### 1. Spreading Activation — Associative Search
 
-뇌는 "deploy"라는 단어를 들으면 CI/CD, rollback, 장애, 모니터링이 함께 활성화된다.
-
-```
-"배포" 검색
-  → FTS 매칭: [CI/CD 파이프라인, 배포 자동화]
-  → 이웃 활성화: [롤백 전략, 카나리 배포, 장애 대응 규칙]
-  → Resonance 정렬: relevance × importance × recency × vitality × context
-```
-
-### 2. Hebbian Learning — "함께 성공한 것은 더 강하게 연결된다"
+When the brain hears "deploy," it co-activates CI/CD, rollback, incidents, and monitoring.
 
 ```
-에이전트가 [PostgreSQL 선택] + [벡터 검색 구현]을 함께 사용 → 성공
-  → edge weight += 0.1 → 다음 검색 시 함께 활성화
-
-에이전트가 [테스트 스킵] + [프로덕션 배포]를 함께 사용 → 실패
-  → edge weight -= 0.15 → 실패 경험이 먼저 뜬다
+Search: "deployment"
+  → FTS match: [CI/CD pipeline, deployment automation]
+  → Neighbor activation: [rollback strategy, canary deployment, incident response rules]
+  → Resonance ranking: relevance × importance × recency × vitality × context
 ```
 
-### 3. Memory Consolidation — 중요한 기억만 남기기
+### 2. Hebbian Learning — "What fires together, wires together"
 
 ```
-L0 (Raw, 72h)    ← 모든 기록. 72시간 후 미접근 시 삭제.
-L1 (Sprint, 90d)  ← 3회+ 접근. 90일 유지.
-L2 (Monthly, 365d) ← 10회+ 접근. 1년 유지.
-L3 (Permanent)    ← 성공률 80%+. 영구 보존. (60% 미만 시 강등)
+Agent uses [PostgreSQL selection] + [vector search implementation] together → success
+  → edge weight += 0.1 → co-activated in future searches
+
+Agent uses [skip tests] + [production deploy] together → failure
+  → edge weight -= 0.15 → failure experience surfaces first
 ```
 
-### 4. Auto-Ontology — LLM이 잘 찾을 수 있는 구조로 자동 적재
+### 3. Memory Consolidation — Keep only what matters
 
-**"나중에 이 지식을 언제 찾게 될까?"** 를 예측하여 메타데이터를 자동 생성한다:
+```
+L0 (Raw, 72h)      ← All records. Deleted after 72h if not accessed.
+L1 (Sprint, 90d)   ← 3+ accesses. Retained for 90 days.
+L2 (Monthly, 365d) ← 10+ accesses. Retained for 1 year.
+L3 (Permanent)     ← 80%+ success rate. Permanently preserved. (Demoted below 60%)
+```
+
+### 4. Auto-Ontology — Structure knowledge for future retrieval
+
+**"When will an agent search for this knowledge?"** — metadata is auto-generated based on predicted future queries:
 
 ```python
-await graph.add("결제 장애 사후 분석", "PG사 API 타임아웃...")
+await graph.add("Payment Outage Postmortem", "PG API timeout caused...")
 
-# LLM이 자동 생성:
+# LLM auto-generates:
 # kind: LESSON
-# tags: ["결제", "PG사", "타임아웃", "서킷브레이커"]
-# search_keywords: ["결제 실패 원인", "PG사 장애 대응", "API 타임아웃 해결"]
-# search_scenarios: ["결제 시스템 장애 발생 시 과거 사례 검색"]
-# 기존 노드와 관계: --[LEARNED_FROM]--> "배포 결정"
+# tags: ["payment", "PG", "timeout", "circuit-breaker"]
+# search_keywords: ["payment failure cause", "PG outage response", "API timeout fix"]
+# search_scenarios: ["searching past cases when payment system fails"]
+# relations to existing nodes: --[LEARNED_FROM]--> "deployment decision"
 ```
 
-3단계 자동 구축:
+Three-tier auto-construction:
 
-| 모드 | 설정 | 비용 | 특징 |
-|------|------|------|------|
-| **규칙 기반** | `RuleBasedClassifier()` | 무료 | 키워드 매칭, zero-dep |
-| **+ 임베딩** | `+ RuleBasedRelationDetector()` + embedder | 로컬 무료 | cosine similarity 자동 연결 |
-| **+ LLM** | `LLMClassifier()` + `LLMRelationDetector()` | 로컬/API | 검색 키워드 예측, 의미적 관계 추출 |
+| Mode | Configuration | Cost | Details |
+|------|--------------|------|---------|
+| **Rule-based** | `RuleBasedClassifier()` | Free | Keyword matching, zero-dep |
+| **+ Embedding** | `+ RuleBasedRelationDetector()` + embedder | Free (local) | Cosine similarity auto-linking |
+| **+ LLM** | `LLMClassifier()` + `LLMRelationDetector()` | Local/API | Search keyword prediction, semantic relation extraction |
 
 ---
 
 ## Install
 
 ```bash
-pip install synaptic-memory                      # 코어 (zero deps)
+pip install synaptic-memory                      # Core (zero deps)
 pip install synaptic-memory[embedding]           # + auto-embedding (Ollama/vLLM)
 pip install synaptic-memory[sqlite]              # + SQLite FTS5
 pip install synaptic-memory[scale]               # Neo4j + Qdrant + MinIO + embedding
 pip install synaptic-memory[mcp]                 # + MCP server
-pip install synaptic-memory[all]                 # 전부
+pip install synaptic-memory[all]                 # Everything
 ```
 
 ## Quick Start
 
-### 1. In-memory — zero-dep, 바로 시작
+### 1. In-memory — zero-dep, instant start
 
 ```python
 from synaptic import SynapticGraph, ActivityTracker
@@ -126,28 +127,28 @@ async def main():
     graph = SynapticGraph.memory()
     tracker = ActivityTracker(graph)
 
-    # 과거 경험 검색 (intent 자동 추론)
-    result = await graph.agent_search("DB 마이그레이션 실패")
+    # Search past experiences (intent auto-inferred)
+    result = await graph.agent_search("DB migration failure")
 
-    # 결정 기록
+    # Record a decision
     session = await tracker.start_session(agent_id="my-agent")
     decision = await tracker.record_decision(
         session.id,
-        title="PostgreSQL 선택",
-        rationale="벡터 검색 + ACID 필요",
+        title="Choose PostgreSQL",
+        rationale="Need vector search + ACID",
         alternatives=["MongoDB", "SQLite"],
     )
 
-    # 결과 기록 → 자동 Hebbian learning
+    # Record outcome → auto Hebbian learning
     await tracker.record_outcome(
         decision.id,
-        title="마이그레이션 성공",
-        content="Zero downtime 달성",
+        title="Migration succeeded",
+        content="Achieved zero downtime",
         success=True,
     )
 ```
 
-### 2. SQLite — 경량 프로덕션
+### 2. SQLite — lightweight production
 
 ```python
 from synaptic import SynapticGraph
@@ -155,12 +156,12 @@ from synaptic import SynapticGraph
 graph = SynapticGraph.sqlite("knowledge.db")
 await graph.backend.connect()
 
-# RuleBasedClassifier + RelationDetector + Ontology 자동 포함
-# kind, tags 지정 없이 넣기만 하면 자동 분류 + 자동 관계
-await graph.add("환불 정책", "7일 이내 환불 가능...")  # → kind=RULE 자동
+# RuleBasedClassifier + RelationDetector + Ontology included automatically.
+# Just add content — kind and relations are auto-classified.
+await graph.add("Refund Policy", "Refunds available within 7 days...")  # → kind=RULE (auto)
 ```
 
-### 3. Full — LLM 분류 + 임베딩 + 관계 탐지
+### 3. Full — LLM classification + embedding + relation detection
 
 ```python
 from synaptic import SynapticGraph
@@ -175,15 +176,15 @@ graph = SynapticGraph.full(
 )
 await graph.backend.connect()
 
-# LLM이 kind 분류 + tags + 검색 키워드 + 검색 시나리오 자동 생성
-# embedding에 search_keywords 포함 → 벡터 검색 정확도 향상
-# 기존 노드와 의미적 관계 자동 탐지 (DEPENDS_ON, LEARNED_FROM 등)
-node = await graph.add("결제 장애 사후 분석", "PG사 API 타임아웃...")
+# LLM auto-generates: kind classification + tags + search keywords + search scenarios
+# Embeddings include search_keywords → improved vector search accuracy
+# Semantic relations auto-detected against existing nodes (DEPENDS_ON, LEARNED_FROM, etc.)
+node = await graph.add("Payment Outage Postmortem", "PG API timeout caused...")
 ```
 
-### 4. Custom — 직접 조합
+### 4. Custom — manual composition
 
-팩토리 함수 대신 각 컴포넌트를 직접 선택할 수도 있다:
+Instead of factory methods, compose each component directly:
 
 ```python
 from synaptic import SynapticGraph, OpenAIEmbeddingProvider
@@ -195,10 +196,10 @@ graph = SynapticGraph(
 )
 await graph.backend.connect()
 
-# 자동: title+content → 벡터 생성 → 저장
-await graph.add("배포 전략", "Blue-green 배포로 zero downtime 달성")
-# 자동: 쿼리 → 벡터 생성 → FTS + vector 동시 검색
-result = await graph.search("배포 방식")
+# Auto: title + content → vector generation → stored
+await graph.add("Deployment Strategy", "Blue-green deployment for zero downtime")
+# Auto: query → vector generation → FTS + vector hybrid search
+result = await graph.search("deployment approach")
 ```
 
 ### 5. Scale — CompositeBackend
@@ -219,8 +220,8 @@ await composite.connect()
 
 graph = SynapticGraph.full(composite, embed_api_base="http://gpu-server:8080/v1")
 
-# 내부 라우팅:
-# - embedding → Qdrant, content > 100KB → MinIO, 나머지 → Neo4j
+# Internal routing:
+# - embedding → Qdrant, content > 100KB → MinIO, everything else → Neo4j
 ```
 
 ---
@@ -232,15 +233,15 @@ SynapticGraph (Facade)
   │
   ├── Auto-Ontology ───── RuleBasedClassifier / LLMClassifier
   │                       RuleBasedRelationDetector / LLMRelationDetector
-  ├── OntologyRegistry ── 타입 계층 + 속성 상속 + 제약 검증
-  ├── ActivityTracker ─── 세션/tool call/decision/outcome 캡처
-  ├── AgentSearch ──────── 6가지 intent 기반 검색 전략
+  ├── OntologyRegistry ── Type hierarchy + property inheritance + constraint validation
+  ├── ActivityTracker ─── Session / tool call / decision / outcome capture
+  ├── AgentSearch ──────── 6 intent-based search strategies
   ├── HybridSearch ─────── FTS + vector → synonym → LLM rewrite
-  ├── ResonanceScorer ──── 5축 공명 (relevance × importance × recency × vitality × context)
-  ├── HebbianEngine ────── co-activation 강화/약화
-  ├── ConsolidationCascade  L0→L3 생명주기
-  ├── EmbeddingProvider ── 자동 벡터 생성 (Ollama/vLLM/OpenAI)
-  ├── LLMProvider ──────── 온톨로지 구축용 LLM (Ollama/OpenAI)
+  ├── ResonanceScorer ──── 5-axis resonance (relevance × importance × recency × vitality × context)
+  ├── HebbianEngine ────── Co-activation reinforcement / weakening
+  ├── ConsolidationCascade  L0→L3 lifecycle
+  ├── EmbeddingProvider ── Auto vector generation (Ollama/vLLM/OpenAI)
+  ├── LLMProvider ──────── LLM for ontology construction (Ollama/OpenAI)
   └── Exporters ─────────── Markdown, JSON
        │
   StorageBackend (Protocol)
@@ -256,14 +257,14 @@ Memory SQLite  PostgreSQL     Neo4j       CompositeBackend
 ## 5-axis Resonance Scoring
 
 ```
-Score = 0.55 × relevance     검색 매칭 점수 [0,1]
+Score = 0.55 × relevance     Search match score [0,1]
       + 0.15 × importance    (success - failure) / access_count [0,1]
       + 0.20 × recency       exp(-0.05 × days_since_update) [0,1]
-      + 0.10 × vitality      주기적 decay ×0.95 [0,1]
-      + (context weight) × context  세션 태그 Jaccard 유사도 [0,1]
+      + 0.10 × vitality      Periodic decay ×0.95 [0,1]
+      + (context weight) × context  Session tag Jaccard similarity [0,1]
 ```
 
-Intent별로 가중치가 다르다. `past_failures`는 importance에 높은 비중, `context_explore`는 context에 높은 비중. **같은 쿼리라도 의도에 따라 다른 결과**.
+Weights vary by intent. `past_failures` emphasizes importance; `context_explore` emphasizes context. **Same query, different intent, different results.**
 
 ---
 
@@ -274,7 +275,7 @@ from synaptic import OntologyRegistry, TypeDef, PropertyDef, build_agent_ontolog
 
 ontology = build_agent_ontology()
 
-# 커스텀 타입 추가
+# Add custom type
 ontology.register_type(TypeDef(
     name="incident",
     parent="agent_activity",
@@ -285,10 +286,10 @@ ontology.register_type(TypeDef(
 ))
 
 graph = SynapticGraph(backend, ontology=ontology)
-# → graph.add(), graph.link() 시 자동 검증
+# → Auto-validated on graph.add() and graph.link()
 ```
 
-### 기본 온톨로지
+### Default Ontology
 
 ```
 knowledge                          agent_activity
@@ -302,15 +303,15 @@ knowledge                          agent_activity
 
 ## Backends
 
-| Backend | 그래프 순회 | 벡터 검색 | 스케일 | 용도 |
-|---------|-----------|----------|-------|------|
-| `MemoryBackend` | Python BFS | cosine | ~10K | 테스트 |
-| `SQLiteBackend` | CTE 재귀 | ✗ | ~100K | 임베디드 |
-| `PostgreSQLBackend` | CTE 재귀 | pgvector HNSW | ~1M | 프로덕션 |
-| `Neo4jBackend` | Cypher native | ✗ | ~10B | 대규모 그래프 |
-| `QdrantBackend` | ✗ | HNSW + 양자화 | ~10B | 벡터 전용 |
-| `MinIOBackend` | ✗ | ✗ | ~10TB | blob (S3 호환) |
-| `CompositeBackend` | Neo4j | Qdrant | ∞ | **통합 라우터** |
+| Backend | Graph Traversal | Vector Search | Scale | Use Case |
+|---------|----------------|--------------|-------|----------|
+| `MemoryBackend` | Python BFS | cosine | ~10K | Testing |
+| `SQLiteBackend` | CTE recursive | - | ~100K | Embedded |
+| `PostgreSQLBackend` | CTE recursive | pgvector HNSW | ~1M | Production |
+| `Neo4jBackend` | Cypher native | - | ~10B | Large-scale graph |
+| `QdrantBackend` | - | HNSW + quantization | ~10B | Vector-only |
+| `MinIOBackend` | - | - | ~10TB | Blob (S3-compatible) |
+| `CompositeBackend` | Neo4j | Qdrant | Unlimited | **Unified router** |
 
 ## MCP Server — 16 Tools
 
@@ -333,7 +334,7 @@ synaptic-mcp --embed-url http://localhost:8080/v1        # + auto-embedding
 ```bash
 uv sync --extra dev --extra sqlite --extra neo4j --extra qdrant --extra minio
 uv run pytest -v                              # 266+ tests
-uv run pytest tests/benchmark/ -v -s          # 벤치마크 (8개 데이터셋 + ablation)
+uv run pytest tests/benchmark/ -v -s          # Benchmarks (8 datasets + ablation)
 uv run ruff check --fix && uv run ruff format
 ```
 

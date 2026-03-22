@@ -51,12 +51,12 @@ _INTENT_WEIGHTS: dict[SearchIntent, ResonanceWeights] = {
 
 # PPR damping factor per intent (lower = more focused on seeds)
 _INTENT_DAMPING: dict[SearchIntent, float] = {
-    SearchIntent.CONTEXT_EXPLORE: 0.75,   # 탐색적, 넓게
-    SearchIntent.GENERAL: 0.85,           # 기본
-    SearchIntent.SIMILAR_DECISIONS: 0.85, # 기본
-    SearchIntent.PAST_FAILURES: 0.50,     # 집중적, 좁게
-    SearchIntent.REASONING_CHAIN: 0.60,   # 체인 추적
-    SearchIntent.RELATED_RULES: 0.85,     # 기본
+    SearchIntent.CONTEXT_EXPLORE: 0.75,   # exploratory, wide spread
+    SearchIntent.GENERAL: 0.85,           # default
+    SearchIntent.SIMILAR_DECISIONS: 0.85, # default
+    SearchIntent.PAST_FAILURES: 0.50,     # focused, narrow
+    SearchIntent.REASONING_CHAIN: 0.60,   # chain following
+    SearchIntent.RELATED_RULES: 0.85,     # default
 }
 
 
@@ -218,7 +218,7 @@ class AgentSearch:
         expanded: dict[str, tuple[Node, float]] = {}
         for an in result.nodes:
             node = an.node
-            # LESSON 노드는 장애 교훈이므로 직접 포함
+            # LESSON nodes contain incident lessons, include directly
             if node.kind == NodeKind.LESSON:
                 expanded[node.id] = (node, an.activation)
             elif node.kind == NodeKind.OUTCOME and node.failure_count > 0:

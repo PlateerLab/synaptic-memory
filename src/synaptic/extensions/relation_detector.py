@@ -1,12 +1,12 @@
-"""규칙 기반 + 임베딩 유사도 관계 자동 탐지.
+"""Rule-based + embedding similarity automatic relation detection.
 
-새 노드 추가 시 기존 노드와의 관계를 자동 탐지한다.
-- title 언급 탐지: 새 노드 content에 기존 노드 title이 등장하면 RELATED
-- tag overlap 탐지: 공통 tag가 임계값 이상이면 RELATED
-- embedding 유사도: cosine similarity가 threshold 이상이면 RELATED
-- NodeKind 쌍 규칙: RULE→CONCEPT은 DEPENDS_ON, LESSON→* 은 LEARNED_FROM
+Automatically detects relations with existing nodes when a new node is added.
+- Title mention detection: RELATED if an existing node's title appears in the new node's content
+- Tag overlap detection: RELATED if shared tags exceed a threshold
+- Embedding similarity: RELATED if cosine similarity is above threshold
+- NodeKind pair rules: RULE→CONCEPT = DEPENDS_ON, LESSON→* = LEARNED_FROM
 
-InvertedIndex를 유지하여 전체 노드 순회 없이 후보를 빠르게 찾는다.
+Maintains an InvertedIndex for fast candidate lookup without full node traversal.
 """
 
 from __future__ import annotations
@@ -25,27 +25,27 @@ logger = logging.getLogger(__name__)
 
 
 class InvertedIndex:
-    """tag와 title 토큰의 역인덱스. 관계 탐지 시 O(1) 조회.
+    """Inverted index for tag and title tokens. O(1) lookup during relation detection.
 
-    asyncio 단일 이벤트 루프에서 사용하므로 thread-safe가 아님.
-    SynapticGraph가 add/remove 시 이 인덱스를 함께 갱신해야 한다.
+    Not thread-safe as it is used within a single asyncio event loop.
+    SynapticGraph must update this index on add/remove operations.
     """
 
     __slots__ = ("_tag_index", "_title_index", "_node_tags", "_node_title")
 
     def __init__(self) -> None:
         self._tag_index: dict[str, set[str]] = {}  # tag → {node_id}
-        self._title_index: dict[str, str] = {}  # title_lower → node_id (4글자 이상)
-        self._node_tags: dict[str, list[str]] = {}  # node_id → tags (remove 시 정리용)
+        self._title_index: dict[str, str] = {}  # title_lower → node_id (4+ chars only)
+        self._node_tags: dict[str, list[str]] = {}  # node_id → tags (for cleanup on remove)
         self._node_title: dict[str, str] = {}  # node_id → title_lower
 
     def add(self, node: Node) -> None:
-        """노드의 tags와 title을 역인덱스에 등록한다.
+        """Register a node's tags and title in the inverted index.
 
         Args:
-            node: 등록할 노드. tags와 title을 인덱싱한다.
+            node: Node to register. Its tags and title are indexed.
         """
-        # tag 인덱스 등록
+        # Register in tag index
         self._node_tags[node.id] = list(node.tags)
         for tag in node.tags:
             tag_lower = tag.lower()
@@ -53,19 +53,19 @@ class InvertedIndex:
                 self._tag_index[tag_lower] = set()
             self._tag_index[tag_lower].add(node.id)
 
-        # title 인덱스 등록 (4글자 이상만 — 짧은 title은 false positive 유발)
+        # Register in title index (4+ chars only — short titles cause false positives)
         title_lower = node.title.strip().lower()
         if len(title_lower) >= 4:
             self._title_index[title_lower] = node.id
             self._node_title[node.id] = title_lower
 
     def remove(self, node_id: str) -> None:
-        """노드를 역인덱스에서 제거한다.
+        """Remove a node from the inverted index.
 
         Args:
-            node_id: 제거할 노드 ID.
+            node_id: ID of the node to remove.
         """
-        # tag 인덱스에서 제거
+        # Remove from tag index
         tags = self._node_tags.pop(node_id, [])
         for tag in tags:
             tag_lower = tag.lower()
@@ -75,24 +75,24 @@ class InvertedIndex:
                 if not node_set:
                     del self._tag_index[tag_lower]
 
-        # title 인덱스에서 제거
+        # Remove from title index
         title_lower = self._node_title.pop(node_id, "")
         if title_lower and title_lower in self._title_index:
-            # 동일 title로 다른 노드가 등록된 경우 삭제하지 않음
+            # Don't delete if another node is registered with the same title
             if self._title_index[title_lower] == node_id:
                 del self._title_index[title_lower]
 
     def find_by_tag_overlap(
         self, tags: list[str], exclude_id: str = ""
     ) -> dict[str, int]:
-        """주어진 tags와 겹치는 노드들을 찾는다.
+        """Find nodes with overlapping tags.
 
         Args:
-            tags: 비교할 tag 목록.
-            exclude_id: 결과에서 제외할 노드 ID (보통 자기 자신).
+            tags: List of tags to compare.
+            exclude_id: Node ID to exclude from results (usually self).
 
         Returns:
-            {node_id: overlap_count} — 겹치는 tag 수가 1 이상인 노드들.
+            {node_id: overlap_count} — nodes with 1+ overlapping tags.
         """
         overlap: dict[str, int] = {}
         for tag in tags:
@@ -107,16 +107,16 @@ class InvertedIndex:
         return overlap
 
     def find_title_mentions(self, text: str) -> list[str]:
-        """text에 언급된 기존 노드의 title에 해당하는 node_id를 반환한다.
+        """Return node_ids whose titles are mentioned in the given text.
 
-        대소문자 무시 매칭. title이 4글자 이상인 것만 인덱스에 등록되어 있으므로
-        짧은 title에 의한 false positive는 발생하지 않는다.
+        Case-insensitive matching. Only titles with 4+ characters are indexed,
+        so false positives from short titles do not occur.
 
         Args:
-            text: 검색할 텍스트 (보통 새 노드의 content).
+            text: Text to search (typically the new node's content).
 
         Returns:
-            언급된 title에 해당하는 node_id 목록 (중복 없음).
+            List of node_ids whose titles are mentioned (no duplicates).
         """
         if not text:
             return []
@@ -130,7 +130,7 @@ class InvertedIndex:
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """두 벡터의 코사인 유사도를 계산한다."""
+    """Compute cosine similarity between two vectors."""
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
@@ -140,10 +140,10 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 class RuleBasedRelationDetector:
-    """규칙 기반 + 임베딩 유사도 관계 자동 탐지.
+    """Rule-based + embedding similarity automatic relation detection.
 
-    새 노드가 추가될 때 ``detect()``를 호출하면 기존 노드와의
-    관계 후보를 반환한다. 4가지 규칙을 순서대로 적용한다:
+    Call ``detect()`` when a new node is added to get candidate relations
+    with existing nodes. Applies 4 rules in order:
 
     1. **Title 언급**: 새 노드 content에 기존 노드 title이 등장 → RELATED
     2. **Tag overlap**: 공통 tag가 ``tag_overlap_min``개 이상 → RELATED
@@ -181,15 +181,15 @@ class RuleBasedRelationDetector:
         embedding_threshold: float = 0.75,
         embedding_weight_scale: float = 0.7,
     ) -> None:
-        """RuleBasedRelationDetector를 초기화한다.
+        """Initialize RuleBasedRelationDetector.
 
         Args:
-            max_edges_per_node: 한 노드에서 탐지할 최대 관계 수.
-            tag_overlap_min: tag overlap 관계로 인정할 최소 공통 tag 수.
-            title_mention_weight: title 언급 관계의 기본 weight.
-            tag_overlap_weight: tag overlap 관계의 기본 weight.
-            embedding_threshold: 임베딩 유사도 관계 임계값 (0.0~1.0).
-            embedding_weight_scale: 유사도를 edge weight로 변환할 스케일 팩터.
+            max_edges_per_node: Maximum number of relations to detect per node.
+            tag_overlap_min: Minimum shared tags required for a tag overlap relation.
+            title_mention_weight: Default weight for title mention relations.
+            tag_overlap_weight: Default weight for tag overlap relations.
+            embedding_threshold: Embedding similarity threshold (0.0~1.0).
+            embedding_weight_scale: Scale factor to convert similarity to edge weight.
         """
         self._index = InvertedIndex()
         self._max_edges = max_edges_per_node
@@ -201,28 +201,28 @@ class RuleBasedRelationDetector:
 
     @property
     def index(self) -> InvertedIndex:
-        """내부 역인덱스. graph.py에서 add/remove 시 인덱스 갱신에 사용."""
+        """Internal inverted index. Used by graph.py to update the index on add/remove."""
         return self._index
 
     async def detect(
         self, node: Node, backend: StorageBackend
     ) -> list[tuple[str, EdgeKind, float]]:
-        """새 노드와 기존 노드 사이의 관계를 탐지한다.
+        """Detect relations between a new node and existing nodes.
 
-        detect() 호출 전에 ``self.index.add(node)``가 완료되어 있어야 한다.
-        (자기 자신은 결과에서 자동 제외됨)
+        ``self.index.add(node)`` must be completed before calling detect().
+        (The node itself is automatically excluded from results)
 
         Args:
-            node: 관계를 탐지할 새 노드.
-            backend: 노드 kind 조회용 StorageBackend.
+            node: New node to detect relations for.
+            backend: StorageBackend for kind lookup.
 
         Returns:
-            [(target_node_id, edge_kind, weight), ...] 최대 max_edges_per_node개.
+            [(target_node_id, edge_kind, weight), ...] up to max_edges_per_node.
         """
         relations: list[tuple[str, EdgeKind, float]] = []
         seen_targets: set[str] = set()
 
-        # 1. 새 노드 content에 기존 노드 title 언급 → RELATED (기본)
+        # 1. Existing node title mentioned in new node content → RELATED (default)
         mentioned_ids = self._index.find_title_mentions(node.content)
         for target_id in mentioned_ids:
             if target_id == node.id or target_id in seen_targets:
@@ -235,7 +235,7 @@ class RuleBasedRelationDetector:
             )
             relations.append((target_id, edge_kind, weight))
 
-        # 2. 공통 tag overlap_min개 이상 → RELATED
+        # 2. Shared tags >= overlap_min → RELATED
         if node.tags:
             overlaps = self._index.find_by_tag_overlap(
                 node.tags, exclude_id=node.id
@@ -250,7 +250,7 @@ class RuleBasedRelationDetector:
                     (target_id, EdgeKind.RELATED, self._tag_overlap_weight)
                 )
 
-        # 3. Embedding 유사도 → RELATED
+        # 3. Embedding similarity → RELATED
         if node.embedding:
             try:
                 candidates = await backend.search_vector(
@@ -278,14 +278,14 @@ class RuleBasedRelationDetector:
     async def detect_batch(
         self, nodes: list[Node], backend: StorageBackend
     ) -> dict[str, list[tuple[str, EdgeKind, float]]]:
-        """여러 노드의 관계를 일괄 탐지한다.
+        """Detect relations for multiple nodes in batch.
 
         Args:
-            nodes: 관계를 탐지할 노드 목록.
-            backend: 노드 kind 조회용 StorageBackend.
+            nodes: List of nodes to detect relations for.
+            backend: StorageBackend for kind lookup.
 
         Returns:
-            {node_id: [(target_node_id, edge_kind, weight), ...]} 매핑.
+            {node_id: [(target_node_id, edge_kind, weight), ...]} mapping.
         """
         result: dict[str, list[tuple[str, EdgeKind, float]]] = {}
         for node in nodes:
@@ -298,21 +298,21 @@ class RuleBasedRelationDetector:
         target_id: str,
         backend: StorageBackend,
     ) -> tuple[EdgeKind, float]:
-        """NodeKind 쌍 규칙에 따라 edge kind와 weight를 결정한다.
+        """Determine edge kind and weight based on NodeKind pair rules.
 
         - RULE → CONCEPT: DEPENDS_ON (0.6)
         - LESSON → *: LEARNED_FROM (0.7)
-        - 그 외: RELATED (title_mention_weight)
+        - Otherwise: RELATED (title_mention_weight)
 
         Args:
-            source: 소스 노드 (새로 추가된 노드).
-            target_id: 타겟 노드 ID.
-            backend: 타겟 노드 kind 조회용.
+            source: Source node (newly added node).
+            target_id: Target node ID.
+            backend: StorageBackend for target kind lookup.
 
         Returns:
-            (EdgeKind, weight) 튜플.
+            (EdgeKind, weight) tuple.
         """
-        # LESSON → 어떤 노드든 → LEARNED_FROM
+        # LESSON → any node → LEARNED_FROM
         if source.kind == NodeKind.LESSON:
             return EdgeKind.LEARNED_FROM, 0.7
 
@@ -322,11 +322,11 @@ class RuleBasedRelationDetector:
             if target_node is not None and target_node.kind == NodeKind.CONCEPT:
                 return EdgeKind.DEPENDS_ON, 0.6
 
-        # 기본: RELATED
+        # Default: RELATED
         return EdgeKind.RELATED, self._title_mention_weight
 
 
-# --- NodeKind 쌍 → EdgeKind 매핑 (EmbeddingRelationDetector에서도 재사용) ---
+# --- NodeKind pair → EdgeKind mapping (reused by EmbeddingRelationDetector) ---
 
 _KIND_PAIR_RULES: dict[tuple[NodeKind, NodeKind | None], EdgeKind] = {
     (NodeKind.LESSON, None): EdgeKind.LEARNED_FROM,
@@ -338,11 +338,11 @@ def _resolve_edge_kind(
     source_kind: NodeKind,
     target_kind: NodeKind,
 ) -> EdgeKind:
-    """NodeKind 쌍에 따라 EdgeKind를 결정한다.
+    """Determine EdgeKind based on NodeKind pair.
 
     - LESSON → * : LEARNED_FROM
     - RULE → CONCEPT : DEPENDS_ON
-    - 그 외: RELATED
+    - Otherwise: RELATED
     """
     if source_kind == NodeKind.LESSON:
         return EdgeKind.LEARNED_FROM
@@ -351,15 +351,15 @@ def _resolve_edge_kind(
 
 
 class EmbeddingRelationDetector:
-    """Embedding cosine similarity 기반 관계 자동 생성.
+    """Embedding cosine similarity-based automatic relation creation.
 
-    노드 추가 시 embedding vector가 있으면, 기존 노드와의
-    cosine similarity를 계산하여 유사한 노드끼리 자동 연결.
-    LLM 호출 없이 순수 벡터 연산만 사용.
+    When a node with an embedding vector is added, computes cosine similarity
+    with existing nodes and automatically connects similar ones.
+    Uses pure vector operations without LLM calls.
 
-    ``fallback``\ 이 설정되어 있으면 title/tag 기반 관계도 함께 탐지한다.
-    graph.py는 ``relation_detector.index``\ 를 호출하므로,
-    fallback이 있으면 fallback의 index를 반환한다.
+    If ``fallback`` is configured, title/tag-based relations are also detected.
+    Since graph.py calls ``relation_detector.index``,
+    fallback's index is returned when fallback is set.
 
     Example::
 
@@ -381,18 +381,18 @@ class EmbeddingRelationDetector:
         max_edges_per_node: int = 5,
         fallback: RuleBasedRelationDetector | None = None,
     ) -> None:
-        """EmbeddingRelationDetector를 초기화한다.
+        """Initialize EmbeddingRelationDetector.
 
         Args:
-            similarity_threshold: 관계로 인정할 최소 cosine similarity (0.0~1.0).
-            max_edges_per_node: 한 노드에서 탐지할 최대 관계 수.
-            fallback: title/tag 기반 관계 탐지기. None이면 embedding만 사용.
+            similarity_threshold: Minimum cosine similarity for a relation (0.0~1.0).
+            max_edges_per_node: Maximum number of relations to detect per node.
+            fallback: Title/tag-based relation detector. None = embedding only.
         """
         self._threshold = similarity_threshold
         self._max_edges = max_edges_per_node
         self._fallback = fallback
-        # graph.py가 relation_detector.index.add(node) 호출하므로
-        # fallback이 있으면 fallback의 index를, 없으면 빈 InvertedIndex를 제공
+        # graph.py calls relation_detector.index.add(node), so provide
+        # fallback's index if available, otherwise an empty InvertedIndex
         self.index = fallback.index if fallback is not None else InvertedIndex()
 
     async def detect(
@@ -400,25 +400,25 @@ class EmbeddingRelationDetector:
         node: Node,
         backend: StorageBackend,
     ) -> list[tuple[str, EdgeKind, float]]:
-        """새 노드와 기존 노드 사이의 관계를 탐지한다.
+        """Detect relations between a new node and existing nodes.
 
-        1. node의 embedding이 있으면 backend.search_vector()로 유사 노드 검색
-        2. similarity_threshold 이상인 노드와 RELATED 엣지 생성
-        3. NodeKind 쌍에 따라 EdgeKind 조정 (LESSON→* = LEARNED_FROM 등)
-        4. fallback이 있으면 title/tag 기반 관계도 추가
-        5. 중복 제거 후 상위 max_edges_per_node개 반환
+        1. If node has an embedding, search for similar nodes via backend.search_vector()
+        2. Create RELATED edges for nodes above similarity_threshold
+        3. Adjust EdgeKind based on NodeKind pair rules (LESSON→* = LEARNED_FROM, etc.)
+        4. Add title/tag-based relations if fallback is available
+        5. Deduplicate and return top max_edges_per_node results
 
         Args:
-            node: 관계를 탐지할 새 노드.
-            backend: 유사 노드 검색 및 kind 조회용 StorageBackend.
+            node: New node to detect relations for.
+            backend: StorageBackend for similar node search and kind lookup.
 
         Returns:
-            [(target_node_id, edge_kind, weight), ...] 최대 max_edges_per_node개.
+            [(target_node_id, edge_kind, weight), ...] up to max_edges_per_node.
         """
         relations: list[tuple[str, EdgeKind, float]] = []
         seen_targets: set[str] = set()
 
-        # 1. Embedding 기반 유사도 탐지
+        # 1. Embedding-based similarity detection
         if node.embedding:
             try:
                 candidates = await backend.search_vector(
@@ -440,7 +440,7 @@ class EmbeddingRelationDetector:
                     exc_info=True,
                 )
 
-        # 2. Fallback: title/tag 기반 관계 추가 (중복 제거)
+        # 2. Fallback: add title/tag-based relations (deduplicated)
         if self._fallback is not None:
             fallback_relations = await self._fallback.detect(node, backend)
             for target_id, edge_kind, weight in fallback_relations:

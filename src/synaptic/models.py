@@ -137,20 +137,20 @@ def _evidence_step_list() -> list["EvidenceStep"]:
 
 @dataclass(slots=True)
 class EvidenceStep:
-    """Evidence chain의 한 단계."""
+    """A single step in an evidence chain."""
     node: Node
     role: str = ""  # "seed", "bridge", "supporting"
-    connection_to_next: str = ""  # edge kind 기반 연결 설명
-    compressed_content: str = ""  # context compression 적용된 content
+    connection_to_next: str = ""  # connection description based on edge kind
+    compressed_content: str = ""  # content after context compression
     facts: list[str] = field(default_factory=_str_list)
 
 
 @dataclass(slots=True)
 class EvidenceChain:
-    """검색 결과를 LLM-friendly context로 조립한 결과."""
+    """Search results assembled into an LLM-friendly context."""
     query: str = ""
     steps: list[EvidenceStep] = field(default_factory=_evidence_step_list)
-    compressed_context: str = ""  # 최종 조립된 context 문자열
+    compressed_context: str = ""  # final assembled context string
     facts: list[str] = field(default_factory=_str_list)
-    total_tokens_approx: int = 0  # 대략적 토큰 수
+    total_tokens_approx: int = 0  # approximate token count
     assembly_time_ms: float = 0.0

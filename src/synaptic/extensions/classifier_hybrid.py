@@ -1,7 +1,7 @@
-"""HybridClassifier — 2단계 분류: 규칙 기반 → LLM fallback.
+"""HybridClassifier — two-stage classification: rule-based → LLM fallback.
 
-RuleBasedClassifier로 먼저 분류하고, confidence가 낮으면
-LLMClassifier로 위임하여 정확도와 비용 효율을 모두 확보한다.
+Classifies with RuleBasedClassifier first; if confidence is low,
+delegates to LLMClassifier for both accuracy and cost efficiency.
 """
 
 from __future__ import annotations
@@ -19,17 +19,17 @@ logger = logging.getLogger(__name__)
 
 
 class HybridClassifier:
-    """2단계 분류: 규칙 기반 → LLM fallback.
+    """Two-stage classification: rule-based → LLM fallback.
 
     Parameters
     ----------
     rule_classifier:
-        RuleBasedClassifier 인스턴스 (classify_with_confidence 필요).
+        RuleBasedClassifier instance (requires classify_with_confidence).
     llm_classifier:
-        LLMClassifier 인스턴스 (classify_async 사용).
+        LLMClassifier instance (uses classify_async).
     confidence_threshold:
-        이 값 이상이면 규칙 기반 결과를 확정.
-        미만이면 LLM에 위임.
+        If confidence is at or above this value, the rule-based result is accepted.
+        Below this threshold, classification is delegated to the LLM.
     """
 
     __slots__ = ("rule_classifier", "llm_classifier", "confidence_threshold")
@@ -46,24 +46,24 @@ class HybridClassifier:
         self.confidence_threshold = confidence_threshold
 
     def classify(self, title: str, content: str) -> NodeKind:
-        """KindClassifier 프로토콜 준수 — 동기 분류.
+        """KindClassifier protocol compliance — synchronous classification.
 
-        LLM은 async이므로 동기 classify에서는 규칙 기반 결과를 반환한다.
-        비동기 환경에서는 classify_async()를 사용할 것.
+        Since LLM is async, synchronous classify returns the rule-based result.
+        Use classify_async() in async environments.
         """
         kind, confidence = self.rule_classifier.classify_with_confidence(title, content)
         if confidence >= self.confidence_threshold:
             return kind
-        # LLM fallback은 async → 동기 호출에서는 rule 결과 반환
+        # LLM fallback is async → return rule result in sync call
         return kind
 
     async def classify_async(self, title: str, content: str) -> ClassificationResult:
-        """비동기 2단계 분류 — confidence 부족 시 LLM 위임.
+        """Async two-stage classification — delegates to LLM when confidence is low.
 
         Returns
         -------
         ClassificationResult
-            규칙 기반 확정 시 최소 메타데이터, LLM 위임 시 풍부한 메타데이터.
+            Minimal metadata when rule-based is accepted; rich metadata when delegated to LLM.
         """
         from synaptic.extensions.classifier_llm import ClassificationResult
 

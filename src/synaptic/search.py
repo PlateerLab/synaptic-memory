@@ -11,7 +11,7 @@ from synaptic.protocols import QueryRewriter, StorageBackend
 from synaptic.resonance import ResonanceScorer
 from synaptic.synonyms import expand_synonyms
 
-# Kind-query 키워드 매핑 (쿼리에 이런 단어가 있으면 해당 kind 부스트)
+# Kind-query keyword mapping (boost the matching kind when these words appear in query)
 _KIND_QUERY_HINTS: dict[NodeKind, list[str]] = {
     NodeKind.LESSON: [
         "실패", "에러", "오류", "장애", "교훈", "배운", "주의",
@@ -34,16 +34,16 @@ _KIND_QUERY_HINTS: dict[NodeKind, list[str]] = {
         "company", "organization", "product", "service",
     ],
 }
-_KIND_BOOST = 0.05  # kind 매칭 시 search_score 부스트량 (보수적)
+_KIND_BOOST = 0.05  # search_score boost amount on kind match (conservative)
 
 
 def _rank_to_score(rank: int, *, top: float = 0.95, step: float = 0.05, floor: float = 0.3) -> float:
-    """순위 기반 점수 변환: 1위=top, 순위마다 step 감소, floor 이하 방지."""
+    """Rank-based score conversion: rank 1 = top, decreasing by step per rank, clamped at floor."""
     return max(floor, top - rank * step)
 
 
 def _cosine_sim(a: list[float], b: list[float]) -> float:
-    """두 벡터의 코사인 유사도."""
+    """Cosine similarity between two vectors."""
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
@@ -97,28 +97,28 @@ class HybridSearch:
             vec_nodes = await backend.search_vector(embedding, limit=limit * 2)
             stages_used.append("vector")
             for rank, node in enumerate(vec_nodes):
-                # Vector 순위 기반 점수 + 실제 cosine similarity 반영
+                # Vector rank-based score + actual cosine similarity
                 rank_score = _rank_to_score(rank)
-                # cosine similarity 직접 계산 (가능한 경우)
+                # Directly compute cosine similarity (when possible)
                 if node.embedding and embedding:
                     sim = _cosine_sim(embedding, node.embedding)
-                    vec_score = sim * 0.7 + rank_score * 0.3  # sim 우선
+                    vec_score = sim * 0.7 + rank_score * 0.3  # prioritize similarity
                 else:
                     vec_score = rank_score
                 vec_scores[node.id] = vec_score
 
-            # FTS + vector 하이브리드 점수 합산
-            alpha = 0.5  # FTS vs vector 가중치 (0.5 = 동등)
+            # FTS + vector hybrid score aggregation
+            alpha = 0.5  # FTS vs vector weight (0.5 = equal)
             for nid, node in {n.id: n for n in vec_nodes}.items():
                 fts_s = fts_scores.get(nid, 0.0)
                 vec_s = vec_scores.get(nid, 0.0)
                 if nid in all_nodes:
-                    # 양쪽 다 있으면 하이브리드 점수
-                    hybrid = alpha * fts_s + (1 - alpha) * vec_s + 0.1  # 양쪽 매칭 보너스
+                    # Both FTS and vector matched — hybrid score
+                    hybrid = alpha * fts_s + (1 - alpha) * vec_s + 0.1  # dual-match bonus
                     all_nodes[nid] = (all_nodes[nid][0], min(1.0, hybrid))
                 else:
                     # vector only
-                    all_nodes[nid] = (node, vec_s * 0.9)  # FTS 매칭 없으면 약간 감쇠
+                    all_nodes[nid] = (node, vec_s * 0.9)  # slight decay when no FTS match
 
         # Stage 2: Synonym expansion (if insufficient results)
         if len(all_nodes) < limit:
@@ -153,12 +153,12 @@ class HybridSearch:
             )
             for node_id, ppr_score in ppr_results:
                 if node_id not in all_nodes:
-                    # PPR이 새로 발견한 노드 — 그래프 경로로만 도달 가능
+                    # Node discovered by PPR — reachable only through graph paths
                     node = await backend.get_node(node_id)
                     if node:
                         all_nodes[node_id] = (node, ppr_score * 0.8)
                 else:
-                    # 기존 FTS 결과 — PPR로 미세 부스트만 (FTS 랭킹 보존)
+                    # Existing FTS result — only mild PPR boost (preserve FTS ranking)
                     existing = all_nodes[node_id]
                     boosted = min(1.0, existing[1] + ppr_score * 0.1)
                     if boosted > existing[1]:
@@ -173,24 +173,24 @@ class HybridSearch:
                 if node.kind in kind_set
             }
 
-        # Kind-intent boost: 쿼리 키워드와 매칭되는 kind에 부스트
+        # Kind-intent boost: boost kinds matching query keywords
         preferred_kinds: set[NodeKind] = set()
         q_lower = query.lower()
         for kind, hints in _KIND_QUERY_HINTS.items():
             if any(h in q_lower for h in hints):
                 preferred_kinds.add(kind)
 
-        # Tag-query boost: 쿼리 키워드가 노드 태그에 있으면 부스트
+        # Tag-query boost: boost when query keywords appear in node tags
         query_terms_set = set(query.lower().split())
 
         # Score with resonance
         now = time()
         activated: list[ActivatedNode] = []
         for _nid, (node, search_score) in all_nodes.items():
-            # kind 부스트
+            # kind boost
             if preferred_kinds and node.kind in preferred_kinds:
                 search_score = min(1.0, search_score + _KIND_BOOST)
-            # tag 부스트 (정확 매칭만 — 2글자 이상 태그만)
+            # tag boost (exact match only — tags with 2+ characters)
             if node.tags and query_terms_set:
                 tag_set = {t.lower() for t in node.tags if len(t) >= 2}
                 tag_overlap = len(query_terms_set & tag_set)

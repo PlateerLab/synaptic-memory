@@ -46,10 +46,10 @@ class SynapticGraph:
 
     Quick Start::
 
-        # 1. In-memory (zero-dep, 테스트/프로토타이핑)
+        # 1. In-memory (zero-dep, testing/prototyping)
         graph = SynapticGraph.memory()
 
-        # 2. SQLite (경량 프로덕션)
+        # 2. SQLite (lightweight production)
         graph = SynapticGraph.sqlite("knowledge.db")
 
         # 3. Full preset with custom backend
@@ -105,7 +105,7 @@ class SynapticGraph:
 
     @classmethod
     def memory(cls, *, cache_size: int = 256) -> SynapticGraph:
-        """In-memory backend — zero dependencies, 테스트/프로토타이핑용.
+        """In-memory backend — zero dependencies, for testing/prototyping.
 
         Example::
 
@@ -128,7 +128,7 @@ class SynapticGraph:
         *,
         cache_size: int = 256,
     ) -> SynapticGraph:
-        """SQLite backend — 경량 프로덕션, FTS5 검색 지원.
+        """SQLite backend — lightweight production, FTS5 search support.
 
         Example::
 
@@ -159,7 +159,7 @@ class SynapticGraph:
         embed_api_key: str = "",
         cache_size: int = 512,
     ) -> SynapticGraph:
-        """Full-featured setup — LLM 분류, 임베딩, 관계 탐지, 온톨로지.
+        """Full-featured setup — LLM classification, embedding, relation detection, ontology.
 
         Example::
 
@@ -238,7 +238,7 @@ class SynapticGraph:
         # Auto-classify kind if not specified
         if kind is None:
             if self._classifier is not None:
-                # LLM classifier: classify_async로 풍부한 메타데이터 생성
+                # LLM classifier: generate rich metadata via classify_async
                 if hasattr(self._classifier, "classify_async"):
                     result = await self._classifier.classify_async(title, content)
                     kind = result.kind
@@ -266,7 +266,7 @@ class SynapticGraph:
 
         # Auto-embed if embedder is available and no embedding provided
         if embedding is None and self._embedder is not None:
-            # LLM classifier가 생성한 메타데이터를 embedding에 포함
+            # Include LLM classifier-generated metadata in the embedding text
             embed_text = f"{title} {content}".strip()
             if properties:
                 search_kw = properties.get("_search_keywords", "")
@@ -291,7 +291,7 @@ class SynapticGraph:
                     node.id, target_id, kind=edge_kind, weight=weight,
                 )
 
-        # Phrase 추출 및 링크 (HippoRAG2 dual-node KG)
+        # Phrase extraction and linking (HippoRAG2 dual-node KG)
         if self._phrase_extractor is not None:
             await self._phrase_extractor.extract_and_link(
                 self, node.id, title, content,
@@ -522,7 +522,7 @@ class SynapticGraph:
         relevance_threshold: float = 0.2,
         embedding: list[float] | None = None,
     ) -> EvidenceChain:
-        """Search 결과를 Small LLM에 최적화된 evidence chain으로 변환."""
+        """Convert search results into an evidence chain optimized for small LLMs."""
         if search_result is None:
             if embedding is None and self._embedder is not None:
                 embedding = await self._embedder.embed(query)

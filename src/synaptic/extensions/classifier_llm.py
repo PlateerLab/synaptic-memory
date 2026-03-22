@@ -1,11 +1,12 @@
-"""LLM-based NodeKind classifier — 풍부한 메타데이터 자동 생성.
+"""LLM-based NodeKind classifier — automatic rich metadata generation.
 
-LLM이 나중에 꺼내 쓸 지식을, LLM이 잘 찾을 수 있는 구조로 적재한다.
-적재 시점에 "이 지식을 나중에 언제 찾게 될지"까지 예측하여 메타데이터 생성.
+Stores knowledge in a structure that LLMs can easily retrieve later.
+At ingestion time, predicts "when will this knowledge be searched for"
+and generates metadata accordingly.
 
-classify()는 동기 프로토콜 호환 — 캐시 히트면 반환, 아니면 fallback.
-classify_async()가 LLM 호출로 ClassificationResult를 생성하며,
-결과는 content 해시 기반 LRU 캐시에 보관된다.
+classify() is sync-protocol-compatible — returns cached result or fallback.
+classify_async() calls the LLM to produce a ClassificationResult;
+results are stored in a content-hash-based LRU cache.
 """
 
 from __future__ import annotations
@@ -27,12 +28,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# 분류 결과
+# Classification result
 # ---------------------------------------------------------------------------
 
 @dataclass(slots=True)
 class ClassificationResult:
-    """LLM 분류 결과 — 검색 최적화 메타데이터 포함."""
+    """LLM classification result — includes search-optimized metadata."""
 
     kind: NodeKind
     tags: list[str]
@@ -43,7 +44,7 @@ class ClassificationResult:
 
 
 # ---------------------------------------------------------------------------
-# 시스템 프롬프트
+# System prompt
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
@@ -70,7 +71,7 @@ kind 분류 (가장 적합한 하나만):
 반드시 JSON만 출력. tags 3~7개, search_keywords 3~5개."""
 
 # ---------------------------------------------------------------------------
-# 배치 분류 시스템 프롬프트
+# Batch classification system prompt
 # ---------------------------------------------------------------------------
 
 _BATCH_SYSTEM_PROMPT = """\
@@ -89,15 +90,15 @@ search_keywords(3~5개), search_scenarios, summary 포함.
 [{"index": 0, "kind": "...", "confidence": 0.9, "tags": [...], \
 "search_keywords": [...], "search_scenarios": [...], "summary": "..."}, ...]"""
 
-# content 최대 길이 (토큰 절약)
+# Maximum content length (to save tokens)
 _MAX_CONTENT_LEN = 2000
 
-# NodeKind로 변환 가능한 값
+# Valid values convertible to NodeKind
 _VALID_KINDS = {k.value for k in NodeKind}
 
 
 # ---------------------------------------------------------------------------
-# LLM 캐시 (content 해시 기반 LRU)
+# LLM cache (content-hash-based LRU)
 # ---------------------------------------------------------------------------
 
 class _LRUCache:
@@ -128,16 +129,16 @@ class _LRUCache:
 # ---------------------------------------------------------------------------
 
 class LLMClassifier:
-    """LLM 기반 NodeKind 분류기 — 검색 최적화 메타데이터 자동 생성.
+    """LLM-based NodeKind classifier — automatic search-optimized metadata generation.
 
     Parameters
     ----------
     llm:
-        LLMProvider 프로토콜 구현체 (OllamaLLMProvider, OpenAILLMProvider 등).
+        LLMProvider protocol implementation (OllamaLLMProvider, OpenAILLMProvider, etc.).
     fallback:
-        LLM 실패 시 사용할 KindClassifier. 기본값 None이면 CONCEPT 반환.
+        KindClassifier to use on LLM failure. Defaults to None (returns CONCEPT).
     cache_maxsize:
-        content 해시 기반 LRU 캐시 크기.
+        Content-hash-based LRU cache size.
     """
 
     __slots__ = ("_llm", "_fallback", "_cache")
@@ -153,13 +154,13 @@ class LLMClassifier:
         self._fallback = fallback
         self._cache = _LRUCache(maxsize=cache_maxsize)
 
-    # -- 동기 프로토콜 호환 (KindClassifier) --
+    # -- Sync protocol compliance (KindClassifier) --
 
     def classify(self, title: str, content: str) -> NodeKind:
-        """동기 분류 — 캐시 히트면 반환, 아니면 fallback.
+        """Synchronous classification — returns cached result or fallback.
 
-        asyncio.run()은 사용하지 않는다. 비동기 결과가 필요하면
-        classify_async()를 사용하고, 이후 get_cached_result()로 조회.
+        Does not use asyncio.run(). For async results, use classify_async()
+        and then get_cached_result() to retrieve synchronously.
         """
         cached = self.get_cached_result(title, content)
         if cached is not None:
@@ -170,13 +171,13 @@ class LLMClassifier:
 
         return NodeKind.CONCEPT
 
-    # -- 비동기 LLM 분류 --
+    # -- Async LLM classification --
 
     async def classify_async(self, title: str, content: str) -> ClassificationResult:
-        """LLM 호출로 풍부한 분류 메타데이터 생성.
+        """Generate rich classification metadata via LLM call.
 
-        결과는 캐시에 저장되며, 이후 classify()나 get_cached_result()로
-        동기적으로 조회할 수 있다.
+        Results are stored in cache and can be retrieved synchronously
+        via classify() or get_cached_result().
         """
         cache_key = self._make_cache_key(title, content)
 
@@ -193,19 +194,19 @@ class LLMClassifier:
         self._cache.put(cache_key, result)
         return result
 
-    # -- 캐시 조회 --
+    # -- Cache lookup --
 
     def get_cached_result(self, title: str, content: str) -> ClassificationResult | None:
-        """캐시에서 분류 결과 조회. graph.py 등에서 classify_async 이후 사용."""
+        """Look up classification result from cache. Used after classify_async in graph.py, etc."""
         cache_key = self._make_cache_key(title, content)
         return self._cache.get(cache_key)
 
-    # -- 내부 메서드 --
+    # -- Internal methods --
 
     async def _call_llm(self, title: str, content: str) -> ClassificationResult:
-        """LLM에 분류 요청 후 응답 파싱."""
+        """Send classification request to LLM and parse the response."""
         truncated = content[:_MAX_CONTENT_LEN]
-        user_msg = f"제목: {title}\n내용: {truncated}"
+        user_msg = f"Title: {title}\nContent: {truncated}"
 
         raw = await self._llm.generate(
             system=_SYSTEM_PROMPT,
@@ -216,7 +217,7 @@ class LLMClassifier:
         return self._parse_response(raw)
 
     def _parse_response(self, raw: str) -> ClassificationResult:
-        """LLM 응답 JSON 파싱. 실패 시 정규식 추출 시도."""
+        """Parse LLM response JSON. Falls back to regex extraction on failure."""
         data = self._extract_json(raw)
 
         kind_str = data.get("kind", "concept")
@@ -234,14 +235,14 @@ class LLMClassifier:
 
     @staticmethod
     def _extract_json(raw: str) -> dict[str, object]:
-        """JSON 파싱 — 직접 시도 후 코드블록 추출 fallback."""
-        # 1차: 직접 파싱
+        """JSON parsing — direct attempt, then code block extraction fallback."""
+        # 1st: Direct parsing
         try:
             return json.loads(raw)  # type: ignore[return-value]
         except (json.JSONDecodeError, ValueError):
             pass
 
-        # 2차: ```json ... ``` 블록 추출
+        # 2nd: Extract ```json ... ``` block
         match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
         if match:
             try:
@@ -249,7 +250,7 @@ class LLMClassifier:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        # 3차: 첫 번째 { ... } 블록 추출
+        # 3rd: Extract first { ... } block
         match = re.search(r"\{[^{}]*\}", raw, re.DOTALL)
         if match:
             try:
@@ -261,7 +262,7 @@ class LLMClassifier:
         return {}
 
     def _make_fallback_result(self, title: str, content: str) -> ClassificationResult:
-        """LLM 실패 시 fallback 기반 결과 생성."""
+        """Generate fallback-based result on LLM failure."""
         if self._fallback is not None:
             kind = self._fallback.classify(title, content)
         else:
@@ -276,7 +277,7 @@ class LLMClassifier:
             confidence=0.3,
         )
 
-    # -- 배치 분류 --
+    # -- Batch classification --
 
     async def classify_batch_async(
         self,
@@ -284,27 +285,27 @@ class LLMClassifier:
         *,
         content_limit: int = 500,
     ) -> list[ClassificationResult]:
-        """한 번의 LLM 호출로 여러 문서를 분류한다.
+        """Classify multiple documents in a single LLM call.
 
         Parameters
         ----------
         items:
-            ``[(title, content), ...]`` 리스트 (최대 16개).
+            ``[(title, content), ...]`` list (max 16 items).
         content_limit:
-            각 문서의 content를 이 길이로 절삭하여 토큰 비용 절감.
+            Truncate each document's content to this length to reduce token cost.
 
         Returns
         -------
         list[ClassificationResult]
-            입력 순서대로 분류 결과 리스트.
+            Classification results in input order.
         """
         if not items:
             return []
 
-        # 최대 16개 제한
+        # Limit to max 16 items
         items = items[:16]
 
-        # 캐시 히트 확인
+        # Check cache hits
         results: list[ClassificationResult | None] = []
         uncached_indices: list[int] = []
         for i, (title, content) in enumerate(items):
@@ -318,14 +319,14 @@ class LLMClassifier:
         if not uncached_indices:
             return results  # type: ignore[return-value]
 
-        # 배치 LLM 호출
+        # Batch LLM call
         try:
             batch_results = await self._call_llm_batch(
                 [(items[i][0], items[i][1]) for i in uncached_indices],
                 content_limit=content_limit,
             )
 
-            # 결과 매핑
+            # Map results
             for idx, result in zip(uncached_indices, batch_results):
                 results[idx] = result
                 title, content = items[idx]
@@ -336,7 +337,7 @@ class LLMClassifier:
             logger.exception("Batch LLM classification failed, falling back to individual calls")
             batch_results = []
 
-        # 누락분 개별 호출 fallback
+        # Individual call fallback for missing items
         missing = [i for i in uncached_indices if results[i] is None]
         for i in missing:
             title, content = items[i]
@@ -350,7 +351,7 @@ class LLMClassifier:
         *,
         content_limit: int = 500,
     ) -> list[ClassificationResult]:
-        """배치 LLM 호출 — 여러 문서를 한 번에 분류."""
+        """Batch LLM call — classify multiple documents at once."""
         doc_parts: list[str] = []
         for i, (title, content) in enumerate(items):
             truncated = content[:content_limit]
@@ -368,7 +369,7 @@ class LLMClassifier:
         return self._parse_batch_response(raw, len(items))
 
     def _parse_batch_response(self, raw: str, expected_count: int) -> list[ClassificationResult]:
-        """배치 LLM 응답 파싱. JSON 배열 기대."""
+        """Parse batch LLM response. Expects a JSON array."""
         data_list = self._extract_json_array(raw)
 
         results: list[ClassificationResult] = []
@@ -391,8 +392,8 @@ class LLMClassifier:
 
     @staticmethod
     def _extract_json_array(raw: str) -> list[dict[str, object]]:
-        """JSON 배열 파싱 — 직접 시도 후 코드블록 추출 fallback."""
-        # 1차: 직접 파싱
+        """JSON array parsing — direct attempt, then code block extraction fallback."""
+        # 1st: Direct parsing
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, list):
@@ -400,7 +401,7 @@ class LLMClassifier:
         except (json.JSONDecodeError, ValueError):
             pass
 
-        # 2차: ```json ... ``` 블록 추출
+        # 2nd: Extract ```json ... ``` block
         match = re.search(r"```(?:json)?\s*(\[.*?\])\s*```", raw, re.DOTALL)
         if match:
             try:
@@ -410,7 +411,7 @@ class LLMClassifier:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        # 3차: 첫 번째 [ ... ] 블록 추출
+        # 3rd: Extract first [ ... ] block
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         if match:
             try:
@@ -425,7 +426,7 @@ class LLMClassifier:
 
     @staticmethod
     def _make_cache_key(title: str, content: str) -> str:
-        """title + content 해시로 캐시 키 생성."""
+        """Generate cache key from title + content hash."""
         h = hashlib.sha256()
         h.update(title.encode())
         h.update(content[:_MAX_CONTENT_LEN].encode())
@@ -433,7 +434,7 @@ class LLMClassifier:
 
     @staticmethod
     def _ensure_str_list(val: object) -> list[str]:
-        """값이 list[str]인지 확인하고 변환."""
+        """Verify and convert value to list[str]."""
         if isinstance(val, list):
             return [str(v) for v in val]
         return []

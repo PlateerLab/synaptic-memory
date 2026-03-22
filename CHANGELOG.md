@@ -1,87 +1,112 @@
 # Changelog
 
-## v0.5.0 (2026-03-21)
+All notable changes to this project will be documented in this file.
 
-### Added
-- **Ontology Engine** — 동적 타입 계층, 속성 상속, 관계 제약 검증 (`OntologyRegistry`, `TypeDef`, `PropertyDef`, `RelationConstraint`)
-- **Agent Activity Tracking** — 세션/tool call/decision/outcome 캡처 (`ActivityTracker`)
-- **Intent-based Agent Search** — 6가지 검색 전략: similar_decisions, past_failures, related_rules, reasoning_chain, context_explore, general (`AgentSearch`, `SearchIntent`)
-- **Intent 자동 추론** — 쿼리 키워드에서 intent 자동 판별 (`suggest_intent()`, `intent="auto"` 기본값)
-- **Neo4j Backend** — native Cypher 그래프 순회, dual label, typed relationship, fulltext index
-- **GraphTraversal Protocol** — `shortest_path()`, `pattern_match()`, `find_by_type_hierarchy()`
-- **5축 Resonance Scoring** — context axis 추가 (세션 태그 Jaccard 유사도)
-- **Node.properties** — 온톨로지 확장 속성 (dict[str, str]), 전 백엔드 지원
-- **Ontology 영속화** — `save_ontology()` / `load_ontology()`로 그래프에 저장/복원
-- **L3 강등 메커니즘** — 성공률 60% 미만 시 L3 → L2 강등
-- **Consolidation 페이지네이션** — limit=1000 제한 제거, 전체 노드 배치 처리
-- **link() 온톨로지 검증** — 관계 제약 위반 시 ValueError 발생
-- **Hebbian adaptive learning rate** — `delta / (1 + 0.02 × maturity)`로 초기 빠른 학습, 이후 안정화
-- **HybridSearch node_kinds 필터** — 검색 시 노드 타입 필터링
-- **기본 에이전트 온톨로지** — `build_agent_ontology()`로 knowledge/agent_activity 타입 트리 제공
-- **MCP 9개 tool 추가** (총 16개): agent_start_session, agent_log_action, agent_record_decision, agent_record_outcome, agent_find_similar, agent_get_reasoning_chain, agent_explore_context, ontology_define_type, ontology_query_schema
-- **NodeKind 6개 추가**: tool_call, observation, reasoning, outcome, session, type_def
-- **EdgeKind 5개 추가**: is_a, invoked, resulted_in, part_of, followed_by
-- `docker-compose.yml` — Neo4j 개발 환경
-- `docs/COMPARISON.md` — 기존 Agent Memory 시스템 비교 분석
-- 185+ unit tests, 22 Neo4j integration tests
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
 
 ### Changed
-- `graph.agent_search()` 기본 intent가 `"auto"` (키워드 기반 자동 추론)
-- `ResonanceWeights`에 `context` 필드 추가 (기본값 0.0, 하위호환)
-- SQLite/PostgreSQL backend에 `properties_json` 컬럼 자동 마이그레이션 (v0.4 → v0.5)
-- pyproject.toml: `neo4j`, `scale` extras 추가, version 0.5.0
+- Refactored README Quick Start to use factory functions.
+- Refactored public API: factory functions, type stubs, reduced code duplication.
 
-## v0.4.0 (2026-03-21)
+## [0.7.0] - 2026-03-22
 
 ### Added
-- **MCP Server** — 7개 tool (knowledge_search/add/link/reinforce/stats/export/consolidate)
-- **SQLite Backend** — FTS5, recursive CTE, WAL mode
-- **QA Test Suite** — Wikipedia 169건 + GitHub 368건 실제 데이터 검증
-- `synaptic-mcp` CLI entry point
+- **Evidence Chain Assembly** — small LLM augmentation for multi-hop reasoning, HotPotQA Correctness 0.856 (+9.2%).
+- **Personalized PageRank (PPR) engine** — replaced spreading activation, multi-hop retrieval +28%.
+- **End-to-end QA benchmark** — HotPotQA 24-question suite for Cognee comparison (Correctness 0.784).
+- **Auto-ontology optimization** — HybridClassifier, batch LLM processing, EmbeddingRelation, PhraseExtractor.
 
-## v0.3.0 (2026-03-21)
-
-### Added
-- **Protocol 구현체** — LLM QueryRewriter, RegexTagExtractor, EmbeddingProvider
-- **LRU Cache** — NodeCache with hit rate tracking
-- **JSON Exporter** — 구조화된 JSON export
-- **Node Merge** — 중복 노드 병합 + 엣지 재연결
-- **Find Duplicates** — 제목 유사도 기반 중복 탐지
-
-## v0.2.0 (2026-03-21)
-
-### Added
-- **PostgreSQL backend** — asyncpg + pgvector HNSW + pg_trgm + recursive CTE
-- Vector search with cosine distance (pgvector)
-- Trigram fuzzy matching with graceful ILIKE fallback
-- Hybrid search method: FTS + fuzzy + vector merged results
-- Connection pooling (asyncpg Pool, min=2, max=10)
-- Configurable `embedding_dim` parameter
-- `execute_raw()` for admin/testing SQL
-- `ResonanceWeights` added to public exports
-- Configurable consolidation thresholds (TTL, promotion access counts)
-- Edge direction type safety: `Literal["both", "incoming", "outgoing"]`
-- SQLite batch operations with rollback on error
-- README.md, ARCHITECTURE.md, ROADMAP.md documentation
-- GitHub Actions CI (Python 3.12/3.13)
-- Integration test suite for PostgreSQL (13 tests)
+### Fixed
+- PhraseExtractor search noise — phrase filtering and optimization.
 
 ### Changed
-- Consolidation constants now accept `__init__` parameters instead of module globals
+- Removed `__pycache__` from repo and updated `.gitignore`.
 
-## v0.1.0 (2026-03-21)
+## [0.6.0] - 2026-03-21
 
 ### Added
-- Core models: Node, Edge, ActivatedNode, SearchResult, DigestResult
-- Enums: NodeKind (9), EdgeKind (7), ConsolidationLevel (4)
-- Protocols: StorageBackend, Digester, QueryRewriter, TagExtractor
-- SynapticGraph facade: add, link, search, reinforce, consolidate, prune, decay
-- Hybrid 3-stage search: FTS + fuzzy → synonym expansion → query rewrite
-- Hebbian learning engine: co-activation reinforcement with anti-resonance
-- 4-axis resonance scoring: relevance × importance × recency × vitality
-- Memory consolidation cascade: L0→L1→L2→L3 with TTL and promotion
-- Korean/English synonym map (38 groups)
-- Markdown exporter
-- MemoryBackend (dict-based, zero deps)
-- SQLiteBackend (FTS5, recursive CTE, WAL mode)
-- 93 unit tests, pyright strict, ruff clean
+- **Auto-ontology construction** — LLM-based ontology building with search-optimized metadata generation.
+- **LLM classifier prompt optimization** — few-shot examples improved accuracy from 50% to 86%.
+- **FTS + embedding hybrid scoring** — S7 Auto+Embed achieved MRR 0.83.
+- **Kind/tag/search_keywords utilization** in search — FTS and ranking boost.
+- **Ontology auto-construction + benchmark framework + search engine improvements** (combined release).
+
+### Changed
+- Updated README with auto-ontology, benchmark results, and differentiation points.
+
+## [0.5.0] - 2026-03-21
+
+### Added
+- **Ontology Engine** — dynamic type hierarchy, property inheritance, relation constraint validation (`OntologyRegistry`).
+- **Agent Activity Tracking** — session/tool call/decision/outcome capture (`ActivityTracker`).
+- **Intent-based Agent Search** — 6 search strategies: similar_decisions, past_failures, related_rules, reasoning_chain, context_explore, general (`AgentSearch`).
+- **Neo4j Backend** — native Cypher graph traversal, dual label, typed relationships, fulltext index.
+- **Auto-embedding** — automatic vector generation on `add()` / `search()`.
+- **Qdrant + MinIO + CompositeBackend** — storage separation by purpose.
+- **5-axis Resonance Scoring** — added context axis (session tag Jaccard similarity).
+- **GraphTraversal Protocol** — `shortest_path()`, `pattern_match()`, `find_by_type_hierarchy()`.
+- **Node.properties** — ontology extension attributes, supported across all backends.
+- **MCP 9 new tools** (total 16): agent session/action/decision/outcome tracking, ontology tools.
+- 6 new `NodeKind` values: tool_call, observation, reasoning, outcome, session, type_def.
+- 5 new `EdgeKind` values: is_a, invoked, resulted_in, part_of, followed_by.
+- `docker-compose.yml` for Neo4j dev environment.
+- `docs/COMPARISON.md` — comparison with existing agent memory systems.
+- 185+ unit tests, 22 Neo4j integration tests.
+
+### Fixed
+- MemoryBackend fuzzy search ineffectiveness bug + 12 edge case QA tests added.
+- Library distribution quality: `__version__`, `py.typed`, lazy imports, embedding extra.
+
+## [0.4.0] - 2026-03-21
+
+### Added
+- **MCP Server** — 7 tools (knowledge search/add/link/reinforce/stats/export/consolidate).
+- **SQLite Backend** — FTS5, recursive CTE, WAL mode.
+- **QA Test Suite** — 169 Wikipedia + 368 GitHub real-data verification cases.
+- `synaptic-mcp` CLI entry point.
+
+## [0.3.0] - 2026-03-21
+
+### Added
+- **Protocol implementations** — LLM QueryRewriter, RegexTagExtractor, EmbeddingProvider.
+- **LRU Cache** — NodeCache with hit rate tracking.
+- **JSON Exporter** — structured JSON export.
+- **Node Merge** — duplicate node merging with edge reconnection.
+- **Find Duplicates** — title similarity-based duplicate detection.
+
+## [0.2.0] - 2026-03-21
+
+### Added
+- **PostgreSQL backend** — asyncpg + pgvector HNSW + pg_trgm + recursive CTE.
+- Vector search with cosine distance (pgvector).
+- Trigram fuzzy matching with graceful ILIKE fallback.
+- Hybrid search: FTS + fuzzy + vector merged results.
+- Connection pooling (asyncpg Pool, min=2, max=10).
+- Configurable `embedding_dim` parameter.
+- `ResonanceWeights` added to public exports.
+- Configurable consolidation thresholds (TTL, promotion access counts).
+- README.md, ARCHITECTURE.md, ROADMAP.md documentation.
+- GitHub Actions CI (Python 3.12/3.13).
+- Integration test suite for PostgreSQL (13 tests).
+
+### Changed
+- Consolidation constants now accept `__init__` parameters instead of module globals.
+
+## [0.1.0] - 2026-03-21
+
+### Added
+- Core models: Node, Edge, ActivatedNode, SearchResult, DigestResult.
+- Enums: NodeKind (9), EdgeKind (7), ConsolidationLevel (4).
+- Protocols: StorageBackend, Digester, QueryRewriter, TagExtractor.
+- SynapticGraph facade: add, link, search, reinforce, consolidate, prune, decay.
+- Hybrid 3-stage search: FTS + fuzzy, synonym expansion, query rewrite.
+- Hebbian learning engine: co-activation reinforcement with anti-resonance.
+- 4-axis resonance scoring: relevance x importance x recency x vitality.
+- Memory consolidation cascade: L0 -> L1 -> L2 -> L3 with TTL and promotion.
+- Korean/English synonym map (38 groups).
+- Markdown exporter.
+- MemoryBackend (dict-based, zero dependencies).
+- SQLiteBackend (FTS5, recursive CTE, WAL mode).
+- 93 unit tests, pyright strict, ruff clean.

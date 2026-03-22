@@ -24,7 +24,7 @@ class EmbeddingProvider(Protocol):
 
 
 class _EmbedFromBatchMixin:
-    """embed()를 embed_batch() 위임으로 기본 구현하는 mixin."""
+    """Mixin that provides a default embed() implementation by delegating to embed_batch()."""
 
     async def embed(self, text: str) -> list[float]:
         results = await self.embed_batch([text])  # type: ignore[attr-defined]

@@ -8,16 +8,16 @@ Quick Start
     from synaptic import SynapticGraph
 
     graph = SynapticGraph.memory()
-    await graph.add("API 장애 대응", "서버 재시작 후 복구", kind=NodeKind.LESSON)
-    result = await graph.search("장애 대응")
+    await graph.add("API Incident Response", "Recovered after server restart", kind=NodeKind.LESSON)
+    result = await graph.search("incident response")
 
-2. SQLite (경량 프로덕션)::
+2. SQLite (lightweight production)::
 
     graph = SynapticGraph.sqlite("knowledge.db")
     await graph.backend.connect()
-    await graph.add("배포 정책", "PR 머지 후 자동 배포", kind=NodeKind.RULE)
+    await graph.add("Deploy Policy", "Auto-deploy after PR merge", kind=NodeKind.RULE)
 
-3. Full-featured (LLM 분류 + 임베딩 + 관계 탐지)::
+3. Full-featured (LLM classification + embedding + relation detection)::
 
     from synaptic.backends.sqlite import SQLiteBackend
     from synaptic.extensions.llm_provider import OllamaLLMProvider
@@ -31,11 +31,11 @@ Quick Start
 
 Backends
 --------
-- ``MemoryBackend`` — 테스트/개발 (zero-dep)
-- ``SQLiteBackend`` — 경량 프로덕션 (``pip install synaptic-memory[sqlite]``)
-- ``PostgreSQLBackend`` — 프로덕션 (``pip install synaptic-memory[postgresql]``)
-- ``Neo4jBackend`` — 그래프 탐색 (``pip install synaptic-memory[neo4j]``)
-- ``CompositeBackend`` — Neo4j + Qdrant + MinIO 조합 (``pip install synaptic-memory[scale]``)
+- ``MemoryBackend`` — testing/development (zero-dep)
+- ``SQLiteBackend`` — lightweight production (``pip install synaptic-memory[sqlite]``)
+- ``PostgreSQLBackend`` — production (``pip install synaptic-memory[postgresql]``)
+- ``Neo4jBackend`` — graph traversal (``pip install synaptic-memory[neo4j]``)
+- ``CompositeBackend`` — Neo4j + Qdrant + MinIO combined (``pip install synaptic-memory[scale]``)
 """
 
 from __future__ import annotations

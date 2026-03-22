@@ -96,7 +96,7 @@ class MemoryBackend:
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         query_lower = query.lower()
         terms = query_lower.split()
-        # 2-gram 서브스트링 생성 (한글 복합어 매칭용)
+        # Generate 2-gram substrings (for Korean compound word matching)
         bigrams: list[str] = []
         if len(terms) >= 2:
             for i in range(len(terms) - 1):
@@ -109,25 +109,25 @@ class MemoryBackend:
             full_text = f"{title_lower} {content_lower}"
             score = 0.0
 
-            # Title에 전체 쿼리가 포함되면 높은 보너스
+            # High bonus if full query is contained in title
             if query_lower in title_lower:
                 score += len(terms) * 3.0
             else:
-                # Title 개별 term 매칭 (가중치 2x)
+                # Individual term matching in title (weight 2x)
                 score += sum(2.0 for t in terms if t in title_lower)
 
-            # Content 개별 term 매칭
+            # Individual term matching in content
             score += sum(1.0 for t in terms if t in content_lower)
 
-            # Bigram 매칭 보너스 (연속된 2개 term이 함께 나타나면 관련성 높음)
+            # Bigram match bonus (higher relevance when 2 consecutive terms appear together)
             score += sum(1.5 for bg in bigrams if bg in full_text)
 
-            # Tag 매칭 보너스
+            # Tag match bonus
             if node.tags:
                 tag_text = " ".join(node.tags).lower()
                 score += sum(1.0 for t in terms if t in tag_text)
 
-            # _search_keywords 매칭 (LLM이 생성한 검색 최적화 키워드)
+            # _search_keywords matching (LLM-generated search-optimized keywords)
             if node.properties:
                 search_kw = node.properties.get("_search_keywords", "").lower()
                 if search_kw:
@@ -173,7 +173,7 @@ class MemoryBackend:
                     term_scores.append(term_best)
                 avg_term = sum(term_scores) / len(term_scores)
 
-                # Title term 매칭 보너스: title에 term이 정확히 있으면 boost
+                # Title term match bonus: boost when term is exactly in title
                 title_boost = sum(0.1 for qt in query_terms if qt in title_lower)
                 best = max(best, avg_term) + title_boost
 
