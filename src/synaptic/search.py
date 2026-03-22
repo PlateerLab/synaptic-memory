@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from time import time
 
 from synaptic.models import ActivatedNode, Node, NodeKind, SearchResult
@@ -35,6 +36,16 @@ _KIND_QUERY_HINTS: dict[NodeKind, list[str]] = {
 _KIND_BOOST = 0.05  # kind 매칭 시 search_score 부스트량 (보수적)
 
 
+def _cosine_sim(a: list[float], b: list[float]) -> float:
+    """두 벡터의 코사인 유사도."""
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(x * x for x in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+
 class HybridSearch:
     """3-stage fallback search: FTS+vector → synonym expansion → query rewrite."""
 
@@ -66,24 +77,43 @@ class HybridSearch:
         stages_used: list[str] = []
         all_nodes: dict[str, tuple[Node, float]] = {}
 
-        # Stage 1: FTS + vector
+        # Stage 1: FTS + vector hybrid scoring
+        fts_scores: dict[str, float] = {}
         fts_nodes = await backend.search_fts(query, limit=limit * 2)
         stages_used.append("fts")
         for rank, node in enumerate(fts_nodes):
-            # FTS 순위 기반 점수: 1위=0.95, 2위=0.90, ...
-            score = max(0.5, 0.95 - rank * 0.05)
-            if node.id not in all_nodes:
-                all_nodes[node.id] = (node, score)
+            # FTS 순위 기반 점수: 1위=0.95, 감소율 0.05
+            score = max(0.3, 0.95 - rank * 0.05)
+            fts_scores[node.id] = score
+            all_nodes[node.id] = (node, score)
 
+        vec_scores: dict[str, float] = {}
         if embedding:
             vec_nodes = await backend.search_vector(embedding, limit=limit * 2)
             stages_used.append("vector")
-            for node in vec_nodes:
-                if node.id not in all_nodes:
-                    all_nodes[node.id] = (node, 0.7)
+            for rank, node in enumerate(vec_nodes):
+                # Vector 순위 기반 점수 + 실제 cosine similarity 반영
+                rank_score = max(0.3, 0.95 - rank * 0.05)
+                # cosine similarity 직접 계산 (가능한 경우)
+                if node.embedding and embedding:
+                    sim = _cosine_sim(embedding, node.embedding)
+                    vec_score = sim * 0.7 + rank_score * 0.3  # sim 우선
                 else:
-                    existing = all_nodes[node.id]
-                    all_nodes[node.id] = (existing[0], min(1.0, existing[1] + 0.2))
+                    vec_score = rank_score
+                vec_scores[node.id] = vec_score
+
+            # FTS + vector 하이브리드 점수 합산
+            alpha = 0.5  # FTS vs vector 가중치 (0.5 = 동등)
+            for nid, node in {n.id: n for n in vec_nodes}.items():
+                fts_s = fts_scores.get(nid, 0.0)
+                vec_s = vec_scores.get(nid, 0.0)
+                if nid in all_nodes:
+                    # 양쪽 다 있으면 하이브리드 점수
+                    hybrid = alpha * fts_s + (1 - alpha) * vec_s + 0.1  # 양쪽 매칭 보너스
+                    all_nodes[nid] = (all_nodes[nid][0], min(1.0, hybrid))
+                else:
+                    # vector only
+                    all_nodes[nid] = (node, vec_s * 0.9)  # FTS 매칭 없으면 약간 감쇠
 
         # Stage 2: Synonym expansion (if insufficient results)
         if len(all_nodes) < limit:
