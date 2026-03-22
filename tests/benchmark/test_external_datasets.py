@@ -1,9 +1,9 @@
 """외부 데이터셋 벤치마크 — HuggingFace IR/QA 데이터셋으로 검색 품질 평가.
 
-데이터셋:
-  - Ko-StrategyQA: corpus 9,251 / queries 592 / qrels 1,145
-  - AutoRAGRetrieval: corpus 720 / queries 114 / qrels 114
-  - KLUE-MRC: corpus 5,841 / queries 5,841 (QA→IR 변환, 샘플링)
+데이터셋 (14종):
+  한국어: Ko-StrategyQA, AutoRAGRetrieval, KLUE-MRC, Allganize (2종),
+          PublicHealthQA, MIRACLRetrieval, MultiLongDocRetrieval, XPQARetrieval
+  영어: HotPotQA (24/200), NFCorpus, SciFact, FiQA
 
 각 데이터셋별:
   1. corpus를 SynapticGraph에 인덱싱
@@ -84,7 +84,8 @@ async def _run_benchmark(
     """쿼리 실행 + 평가 지표 계산."""
     bench = BenchmarkResult()
 
-    query_items = list(queries.items())
+    # qrels가 있는 쿼리만 대상으로 샘플링
+    query_items = [(qid, qt) for qid, qt in queries.items() if qid in qrels]
     if max_queries > 0 and len(query_items) > max_queries:
         random.seed(42)
         query_items = random.sample(query_items, max_queries)
@@ -382,6 +383,180 @@ class TestPublicHealthQA:
         s = bench.summary()
         assert s["total_queries"] > 0
         print(f"\n[PublicHealthQA-ko] MRR={s['mrr']:.3f}, nDCG@{K}={s['mean_ndcg@k']:.3f}, "
+              f"P@{K}={s['mean_precision@k']:.3f}, R@{K}={s['mean_recall@k']:.3f}")
+
+        await graph.backend.close()
+
+
+# ── BeIR 영문 데이터셋 ──
+
+
+class TestNFCorpus:
+    """NFCorpus — 의료/영양 도메인 (BeIR, 영어)."""
+
+    @pytest.mark.asyncio
+    async def test_benchmark(self) -> None:
+        data = _load_dataset("nfcorpus.json")
+        if not data:
+            pytest.skip("nfcorpus.json not found. Run: uv run python tests/benchmark/download_datasets.py")
+
+        graph, id_map = await _build_graph(data["corpus"])
+
+        bench = await _run_benchmark(
+            "NFCorpus",
+            graph, id_map,
+            data["queries"], data["qrels"],
+            max_queries=100,
+        )
+
+        print(f"\n{bench.report(k=K)}")
+
+        s = bench.summary()
+        assert s["total_queries"] > 0
+        print(f"\n[NFCorpus] MRR={s['mrr']:.3f}, nDCG@{K}={s['mean_ndcg@k']:.3f}, "
+              f"P@{K}={s['mean_precision@k']:.3f}, R@{K}={s['mean_recall@k']:.3f}")
+
+        await graph.backend.close()
+
+
+class TestSciFact:
+    """SciFact — 과학적 주장 검증 (BeIR, 영어)."""
+
+    @pytest.mark.asyncio
+    async def test_benchmark(self) -> None:
+        data = _load_dataset("scifact.json")
+        if not data:
+            pytest.skip("scifact.json not found. Run: uv run python tests/benchmark/download_datasets.py")
+
+        graph, id_map = await _build_graph(data["corpus"])
+
+        bench = await _run_benchmark(
+            "SciFact",
+            graph, id_map,
+            data["queries"], data["qrels"],
+            max_queries=100,
+        )
+
+        print(f"\n{bench.report(k=K)}")
+
+        s = bench.summary()
+        assert s["total_queries"] > 0
+        print(f"\n[SciFact] MRR={s['mrr']:.3f}, nDCG@{K}={s['mean_ndcg@k']:.3f}, "
+              f"P@{K}={s['mean_precision@k']:.3f}, R@{K}={s['mean_recall@k']:.3f}")
+
+        await graph.backend.close()
+
+
+class TestFiQA:
+    """FiQA — 금융 QA (BeIR, 영어, 57K corpus)."""
+
+    @pytest.mark.asyncio
+    async def test_benchmark(self) -> None:
+        data = _load_dataset("fiqa.json")
+        if not data:
+            pytest.skip("fiqa.json not found. Run: uv run python tests/benchmark/download_datasets.py")
+
+        # 57K corpus — 전체 인덱싱 (FTS 스케일 테스트)
+        graph, id_map = await _build_graph(data["corpus"])
+
+        bench = await _run_benchmark(
+            "FiQA",
+            graph, id_map,
+            data["queries"], data["qrels"],
+            max_queries=100,
+        )
+
+        print(f"\n{bench.report(k=K)}")
+
+        s = bench.summary()
+        assert s["total_queries"] > 0
+        print(f"\n[FiQA] MRR={s['mrr']:.3f}, nDCG@{K}={s['mean_ndcg@k']:.3f}, "
+              f"P@{K}={s['mean_precision@k']:.3f}, R@{K}={s['mean_recall@k']:.3f}")
+
+        await graph.backend.close()
+
+
+# ── MTEB 한국어 데이터셋 ──
+
+
+class TestMIRACLRetrieval:
+    """MIRACLRetrieval Korean — MTEB 핵심 한국어 검색 (샘플링된 corpus)."""
+
+    @pytest.mark.asyncio
+    async def test_benchmark(self) -> None:
+        data = _load_dataset("miracl_retrieval_ko.json")
+        if not data:
+            pytest.skip("miracl_retrieval_ko.json not found. Run: uv run python tests/benchmark/download_datasets.py")
+
+        graph, id_map = await _build_graph(data["corpus"])
+
+        bench = await _run_benchmark(
+            "MIRACLRetrieval-ko",
+            graph, id_map,
+            data["queries"], data["qrels"],
+            max_queries=100,
+        )
+
+        print(f"\n{bench.report(k=K)}")
+
+        s = bench.summary()
+        assert s["total_queries"] > 0
+        print(f"\n[MIRACLRetrieval-ko] MRR={s['mrr']:.3f}, nDCG@{K}={s['mean_ndcg@k']:.3f}, "
+              f"P@{K}={s['mean_precision@k']:.3f}, R@{K}={s['mean_recall@k']:.3f}")
+
+        await graph.backend.close()
+
+
+class TestMultiLongDocRetrieval:
+    """MultiLongDocRetrieval Korean — 장문서 검색."""
+
+    @pytest.mark.asyncio
+    async def test_benchmark(self) -> None:
+        data = _load_dataset("multilongdoc_ko.json")
+        if not data:
+            pytest.skip("multilongdoc_ko.json not found. Run: uv run python tests/benchmark/download_datasets.py")
+
+        graph, id_map = await _build_graph(data["corpus"])
+
+        bench = await _run_benchmark(
+            "MultiLongDocRetrieval-ko",
+            graph, id_map,
+            data["queries"], data["qrels"],
+            max_queries=100,
+        )
+
+        print(f"\n{bench.report(k=K)}")
+
+        s = bench.summary()
+        assert s["total_queries"] > 0
+        print(f"\n[MultiLongDocRetrieval-ko] MRR={s['mrr']:.3f}, nDCG@{K}={s['mean_ndcg@k']:.3f}, "
+              f"P@{K}={s['mean_precision@k']:.3f}, R@{K}={s['mean_recall@k']:.3f}")
+
+        await graph.backend.close()
+
+
+class TestXPQARetrieval:
+    """XPQARetrieval Korean — 다도메인 한국어 검색."""
+
+    @pytest.mark.asyncio
+    async def test_benchmark(self) -> None:
+        data = _load_dataset("xpqa_ko.json")
+        if not data:
+            pytest.skip("xpqa_ko.json not found. Run: uv run python tests/benchmark/download_datasets.py")
+
+        graph, id_map = await _build_graph(data["corpus"])
+
+        bench = await _run_benchmark(
+            "XPQARetrieval-ko",
+            graph, id_map,
+            data["queries"], data["qrels"],
+        )
+
+        print(f"\n{bench.report(k=K)}")
+
+        s = bench.summary()
+        assert s["total_queries"] > 0
+        print(f"\n[XPQARetrieval-ko] MRR={s['mrr']:.3f}, nDCG@{K}={s['mean_ndcg@k']:.3f}, "
               f"P@{K}={s['mean_precision@k']:.3f}, R@{K}={s['mean_recall@k']:.3f}")
 
         await graph.backend.close()

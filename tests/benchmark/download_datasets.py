@@ -379,6 +379,187 @@ def download_hotpotqa() -> None:
           f"qrels={sum(len(v) for v in qrels_24.values())})")
 
 
+def _load_multilingual_beir_dataset(
+    hf_path: str,
+    name: str,
+    out_file: str,
+    lang_prefix: str,
+    *,
+    max_corpus: int = 0,
+) -> None:
+    """다국어 BeIR 형식 데이터셋 로드 (ko-corpus, ko-queries, ko-qrels 등)."""
+    from datasets import get_dataset_split_names, load_dataset
+
+    print(f"Downloading {name}...")
+
+    corpus_config = f"{lang_prefix}-corpus"
+    queries_config = f"{lang_prefix}-queries"
+    qrels_config = f"{lang_prefix}-qrels"
+
+    # corpus
+    try:
+        corpus_split = get_dataset_split_names(hf_path, corpus_config)[0]
+    except Exception:
+        print(f"  SKIP: {name} — config '{corpus_config}' not available")
+        return
+    corpus_ds = load_dataset(hf_path, corpus_config, split=corpus_split)
+    corpus = {}
+    id_key = "_id" if "_id" in corpus_ds.column_names else "id"
+    for row in corpus_ds:
+        corpus[str(row[id_key])] = {"title": row.get("title", ""), "text": row.get("text", "")}
+
+    # queries
+    queries_split = get_dataset_split_names(hf_path, queries_config)[0]
+    queries_ds = load_dataset(hf_path, queries_config, split=queries_split)
+    queries = {}
+    q_id_key = "_id" if "_id" in queries_ds.column_names else "id"
+    for row in queries_ds:
+        queries[str(row[q_id_key])] = row.get("text", "")
+
+    # qrels
+    qrels_split = get_dataset_split_names(hf_path, qrels_config)[0]
+    qrels_ds = load_dataset(hf_path, qrels_config, split=qrels_split)
+    qrels: dict[str, dict[str, int]] = {}
+    for row in qrels_ds:
+        qid = str(row.get("query-id", ""))
+        cid = str(row.get("corpus-id", ""))
+        score = row.get("score", 1)
+        if qid and cid:
+            qrels.setdefault(qid, {})[cid] = score
+
+    # 대규모 corpus 샘플링: qrels 관련 문서 + 랜덤 negative
+    if max_corpus > 0 and len(corpus) > max_corpus:
+        import random
+        random.seed(42)
+        relevant_ids = set()
+        for rels in qrels.values():
+            relevant_ids.update(rels.keys())
+
+        sampled_corpus = {cid: corpus[cid] for cid in relevant_ids if cid in corpus}
+
+        remaining = [cid for cid in corpus if cid not in relevant_ids]
+        n_neg = max_corpus - len(sampled_corpus)
+        if n_neg > 0 and remaining:
+            neg_sample = random.sample(remaining, min(n_neg, len(remaining)))
+            for cid in neg_sample:
+                sampled_corpus[cid] = corpus[cid]
+
+        print(f"  Sampled corpus: {len(corpus)} → {len(sampled_corpus)} "
+              f"(relevant={len(relevant_ids & set(corpus.keys()))}, negative={len(sampled_corpus) - len(relevant_ids & set(sampled_corpus.keys()))})")
+        corpus = sampled_corpus
+
+    out = {
+        "name": name,
+        "source": hf_path,
+        "corpus_size": len(corpus),
+        "query_size": len(queries),
+        "qrels_size": sum(len(v) for v in qrels.values()),
+        "corpus": corpus,
+        "queries": queries,
+        "qrels": qrels,
+    }
+    path = DATA_DIR / out_file
+    with open(path, "w") as f:
+        json.dump(out, f, ensure_ascii=False)
+    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+
+
+# ── BeIR 영문 데이터셋 ──
+
+
+def _load_mteb_beir_dataset(hf_path: str, name: str, out_file: str, *, qrels_split: str = "test") -> None:
+    """MTEB BeIR 형식 데이터셋 — corpus/queries config + default config(=qrels)."""
+    from datasets import load_dataset
+
+    print(f"Downloading {name}...")
+
+    # corpus
+    corpus_ds = load_dataset(hf_path, "corpus", split="corpus")
+    corpus = {}
+    for row in corpus_ds:
+        corpus[str(row["_id"])] = {"title": row.get("title", ""), "text": row.get("text", "")}
+
+    # queries
+    queries_ds = load_dataset(hf_path, "queries", split="queries")
+    queries = {}
+    for row in queries_ds:
+        queries[str(row["_id"])] = row.get("text", "")
+
+    # qrels (default config, test split)
+    qrels_ds = load_dataset(hf_path, "default", split=qrels_split)
+    qrels: dict[str, dict[str, int]] = {}
+    for row in qrels_ds:
+        qid = str(row.get("query-id", ""))
+        cid = str(row.get("corpus-id", ""))
+        score = row.get("score", 1)
+        if qid and cid:
+            qrels.setdefault(qid, {})[cid] = int(score)
+
+    out = {
+        "name": name,
+        "source": hf_path,
+        "corpus_size": len(corpus),
+        "query_size": len(queries),
+        "qrels_size": sum(len(v) for v in qrels.values()),
+        "corpus": corpus,
+        "queries": queries,
+        "qrels": qrels,
+    }
+    path = DATA_DIR / out_file
+    with open(path, "w") as f:
+        json.dump(out, f, ensure_ascii=False)
+    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+
+
+def download_nfcorpus() -> None:
+    """NFCorpus — 의료/영양 도메인 (MTEB BeIR)."""
+    _load_mteb_beir_dataset("mteb/NFCorpus", "NFCorpus", "nfcorpus.json")
+
+
+def download_scifact() -> None:
+    """SciFact — 과학적 주장 검증 (MTEB BeIR)."""
+    _load_mteb_beir_dataset("mteb/SciFact", "SciFact", "scifact.json")
+
+
+def download_fiqa() -> None:
+    """FiQA — 금융 QA (MTEB BeIR, 57K corpus)."""
+    _load_mteb_beir_dataset("mteb/FiQA", "FiQA", "fiqa.json")
+
+
+# ── MTEB 한국어 데이터셋 ──
+
+
+def download_miracl_retrieval_ko() -> None:
+    """MIRACLRetrieval Korean — MTEB 핵심 한국어 검색 벤치마크 (1.49M corpus → 샘플링)."""
+    _load_multilingual_beir_dataset(
+        "mteb/MIRACLRetrieval",
+        "MIRACLRetrieval-ko",
+        "miracl_retrieval_ko.json",
+        "ko",
+        max_corpus=10000,
+    )
+
+
+def download_multilongdoc_ko() -> None:
+    """MultiLongDocRetrieval Korean — 장문서 검색 벤치마크."""
+    _load_multilingual_beir_dataset(
+        "mteb/MultiLongDocRetrieval",
+        "MultiLongDocRetrieval-ko",
+        "multilongdoc_ko.json",
+        "ko",
+    )
+
+
+def download_xpqa_ko() -> None:
+    """XPQARetrieval Korean — 다도메인 한국어 검색."""
+    _load_multilingual_beir_dataset(
+        "mteb/XPQARetrieval",
+        "XPQARetrieval-ko",
+        "xpqa_ko.json",
+        "kor-kor",
+    )
+
+
 def download_publichealthqa_ko() -> None:
     """PublicHealthQA Korean — 의료/공중보건 도메인 (BeIR 형식, korean- prefix)."""
     from datasets import load_dataset
@@ -426,6 +607,7 @@ def main() -> None:
     print("Downloading benchmark datasets from HuggingFace")
     print("=" * 60)
 
+    # 기존 데이터셋
     download_ko_strategyqa()
     download_autorag_retrieval()
     download_miracl_ko()
@@ -435,6 +617,16 @@ def main() -> None:
     download_allganize_rag_ko()
     download_publichealthqa_ko()
     download_hotpotqa()
+
+    # 신규: BeIR 영문 3종
+    download_nfcorpus()
+    download_scifact()
+    download_fiqa()
+
+    # 신규: MTEB 한국어 3종
+    download_miracl_retrieval_ko()
+    download_multilongdoc_ko()
+    download_xpqa_ko()
 
     print("\n" + "=" * 60)
     print("All datasets downloaded!")

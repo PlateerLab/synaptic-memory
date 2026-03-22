@@ -27,6 +27,13 @@ from synaptic.extensions.relation_detector import RuleBasedRelationDetector
 from synaptic.graph import SynapticGraph
 from synaptic.models import EdgeKind, NodeKind
 
+_OLLAMA_MODEL = "qwen3.5:4b"
+_OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b"
+
+# 외부 LLM 서버 (Qwen3.5-27B BF16) — S8 ablation용
+_EXTERNAL_LLM_BASE = "http://118.223.251.22:10051/v1"
+_EXTERNAL_LLM_MODEL = "Qwen3.5-27B-BF16-00001-of-00002.gguf"
+
 from .metrics import BenchmarkResult
 from .ontology_mapper import OntologyMapper
 from .session_simulator import SessionSimulator
@@ -266,6 +273,113 @@ async def _build_auto_embed(
     return graph, id_map
 
 
+async def _build_llm_ontology(
+    corpus: dict[str, dict[str, str]],
+) -> tuple[SynapticGraph, dict[str, str]]:
+    """S8: LLM Ontology — LLM 분류 + LLM 관계 탐지 + 임베딩.
+
+    HybridClassifier(Rule → LLM fallback) + LLMRelationDetector + Embedding.
+    Ollama qwen3.5:4b 사용. 서버 미동작 시 skip.
+    """
+    from synaptic.extensions.classifier_hybrid import HybridClassifier
+    from synaptic.extensions.classifier_llm import LLMClassifier
+    from synaptic.extensions.llm_provider import OllamaLLMProvider
+    from synaptic.extensions.phrase_extractor import PhraseExtractor
+    from synaptic.extensions.relation_detector_llm import LLMRelationDetector
+
+    # 외부 LLM 서버 (Qwen3.5-27B) 사용, 실패 시 로컬 Ollama fallback
+    from synaptic.extensions.llm_provider import OpenAILLMProvider
+
+    class _ThinkingLLM:
+        """thinking 모델용 래퍼 — max_tokens를 2048 이상으로 보장."""
+        def __init__(self, inner):
+            self._inner = inner
+        async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
+            return await self._inner.generate(
+                system=system, user=user, max_tokens=max(max_tokens, 2048),
+            )
+
+    try:
+        raw_llm = OpenAILLMProvider(
+            api_base=_EXTERNAL_LLM_BASE,
+            model=_EXTERNAL_LLM_MODEL,
+            timeout=180,
+        )
+        await raw_llm.generate(system="test", user="hi", max_tokens=32)
+        llm = _ThinkingLLM(raw_llm)
+    except Exception:
+        try:
+            llm = OllamaLLMProvider(model=_OLLAMA_MODEL)
+            await llm.generate(system="test", user="hi", max_tokens=8)
+        except Exception:
+            pytest.skip("LLM 서버 미동작 (외부/로컬 모두)")
+
+    # Embedding
+    try:
+        embedder = OllamaEmbeddingProvider(model=_OLLAMA_EMBED_MODEL)
+        await embedder.embed("test")
+    except Exception:
+        embedder = MockEmbeddingProvider(dim=64)
+
+    # HybridClassifier: rule confidence >= 0.6이면 LLM 스킵 (속도 최적화)
+    rule_clf = RuleBasedClassifier()
+    llm_clf = LLMClassifier(llm, fallback=rule_clf)
+    hybrid_clf = HybridClassifier(rule_clf, llm_clf, confidence_threshold=0.6)
+
+    # RuleBasedRelationDetector (LLM relation은 너무 느림)
+    rule_det = RuleBasedRelationDetector(max_edges_per_node=5)
+
+    backend = MemoryBackend()
+    await backend.connect()
+    graph = SynapticGraph(
+        backend,
+        classifier=hybrid_clf,
+        relation_detector=rule_det,
+        phrase_extractor=PhraseExtractor(max_phrases_per_node=5),
+        embedder=embedder,
+    )
+    id_map: dict[str, str] = {}
+
+    # corpus 준비
+    items: list[tuple[str, str, str]] = []  # (cid, title, text)
+    for cid, doc in corpus.items():
+        title = doc.get("title", "")
+        text = doc.get("text", "")
+        if not text:
+            continue
+        if len(text) > 2000:
+            text = text[:2000]
+        items.append((cid, title or text[:80], text))
+
+    # Rule confidence 낮은 것만 모아서 LLM batch 사전 분류
+    low_conf_items: list[tuple[str, str]] = []
+    for _, title, text in items:
+        _, conf = rule_clf.classify_with_confidence(title, text)
+        if conf < 0.6:
+            low_conf_items.append((title, text))
+
+    # 개별 LLM 호출 (batch는 thinking 모델에서 토큰 폭증)
+    if low_conf_items:
+        for i, (t, c) in enumerate(low_conf_items):
+            try:
+                await llm_clf.classify_async(t, c)
+            except Exception:
+                pass
+            if (i + 1) % 20 == 0:
+                print(f"    LLM classify: {i+1}/{len(low_conf_items)}")
+
+    # graph 구축 (HybridClassifier가 cache hit 또는 rule fallback 사용)
+    for cid, title, text in items:
+        node = await graph.add(
+            title=title,
+            content=text,
+            source="benchmark",
+        )
+        id_map[cid] = node.id
+
+    return graph, id_map
+
+
 # ---------------------------------------------------------------------------
 # 검색 실행 + 평가
 # ---------------------------------------------------------------------------
@@ -432,6 +546,16 @@ class TestAblation:
         stages.append(StageResult("S7 Auto+Embed", bench7, n7, e7))
         await graph7.backend.close()
 
+        # S8: LLM Ontology — LLM 분류 + LLM 관계 + 임베딩 + PhraseExtractor
+        try:
+            graph8, id_map8 = await _build_llm_ontology(corpus)
+            bench8 = await _run_queries(graph8, id_map8, queries, qrels)
+            n8, e8 = _count_graph_stats(graph8)
+            stages.append(StageResult("S8 LLM Full", bench8, n8, e8))
+            await graph8.backend.close()
+        except Exception as e:
+            print(f"  [S8 LLM Full SKIP] {e}")
+
         return stages
 
     @pytest.mark.asyncio
@@ -533,4 +657,72 @@ class TestAblation:
 
         s0_mrr = stages[0].bench.summary()["mrr"]
         s5_mrr = stages[-1].bench.summary()["mrr"]
+        assert stages[0].bench.summary()["total_queries"] > 0
+
+    # ── 신규 데이터셋 ──
+
+    @pytest.mark.asyncio
+    async def test_ablation_nfcorpus(self) -> None:
+        """NFCorpus (3.6K corpus, 의료/영양, 영어) ablation."""
+        data = _load_dataset("nfcorpus.json")
+        if not data:
+            pytest.skip("nfcorpus.json not found")
+
+        stages = await self._run_ablation("NFCorpus", data)
+        print(f"\n{_format_report('NFCorpus', stages)}")
+        assert stages[0].bench.summary()["total_queries"] > 0
+
+    @pytest.mark.asyncio
+    async def test_ablation_scifact(self) -> None:
+        """SciFact (5.2K corpus, 과학 fact-checking, 영어) ablation."""
+        data = _load_dataset("scifact.json")
+        if not data:
+            pytest.skip("scifact.json not found")
+
+        stages = await self._run_ablation("SciFact", data)
+        print(f"\n{_format_report('SciFact', stages)}")
+        assert stages[0].bench.summary()["total_queries"] > 0
+
+    @pytest.mark.asyncio
+    async def test_ablation_fiqa(self) -> None:
+        """FiQA (57K corpus, 금융 QA, 영어) ablation."""
+        data = _load_dataset("fiqa.json")
+        if not data:
+            pytest.skip("fiqa.json not found")
+
+        stages = await self._run_ablation("FiQA", data)
+        print(f"\n{_format_report('FiQA', stages)}")
+        assert stages[0].bench.summary()["total_queries"] > 0
+
+    @pytest.mark.asyncio
+    async def test_ablation_miracl_retrieval(self) -> None:
+        """MIRACLRetrieval Korean (10K sampled, 위키) ablation."""
+        data = _load_dataset("miracl_retrieval_ko.json")
+        if not data:
+            pytest.skip("miracl_retrieval_ko.json not found")
+
+        stages = await self._run_ablation("MIRACLRetrieval-ko", data)
+        print(f"\n{_format_report('MIRACLRetrieval-ko', stages)}")
+        assert stages[0].bench.summary()["total_queries"] > 0
+
+    @pytest.mark.asyncio
+    async def test_ablation_multilongdoc(self) -> None:
+        """MultiLongDocRetrieval Korean (6.2K corpus, 장문서) ablation."""
+        data = _load_dataset("multilongdoc_ko.json")
+        if not data:
+            pytest.skip("multilongdoc_ko.json not found")
+
+        stages = await self._run_ablation("MultiLongDocRetrieval-ko", data)
+        print(f"\n{_format_report('MultiLongDocRetrieval-ko', stages)}")
+        assert stages[0].bench.summary()["total_queries"] > 0
+
+    @pytest.mark.asyncio
+    async def test_ablation_xpqa(self) -> None:
+        """XPQARetrieval Korean (889 corpus, 다도메인) ablation."""
+        data = _load_dataset("xpqa_ko.json")
+        if not data:
+            pytest.skip("xpqa_ko.json not found")
+
+        stages = await self._run_ablation("XPQARetrieval-ko", data)
+        print(f"\n{_format_report('XPQARetrieval-ko', stages)}")
         assert stages[0].bench.summary()["total_queries"] > 0

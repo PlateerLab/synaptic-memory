@@ -80,26 +80,39 @@ tests/benchmark/
     ├── enterprise_scenario.json   # 자체 시나리오 v1 (12 지식 + 4 세션 + 15 쿼리)
     ├── ko_strategyqa.json         # MTEB Ko-StrategyQA (9.2K corpus, 592 queries)
     ├── autorag_retrieval.json     # MTEB AutoRAGRetrieval (720 corpus, 114 queries)
-    └── klue_mrc.json              # KLUE-MRC (5.8K corpus, 5.8K queries)
+    ├── klue_mrc.json              # KLUE-MRC (5.8K corpus, 5.8K queries)
+    ├── nfcorpus.json              # BeIR NFCorpus (3.6K corpus, 의료/영양)
+    ├── scifact.json               # BeIR SciFact (5.2K corpus, 과학 fact-checking)
+    ├── fiqa.json                  # BeIR FiQA (57.6K corpus, 금융 QA)
+    ├── miracl_retrieval_ko.json   # MTEB MIRACLRetrieval-ko (10K sampled, 위키)
+    ├── multilongdoc_ko.json       # MTEB MultiLongDocRetrieval-ko (6.2K, 장문서)
+    └── xpqa_ko.json               # MTEB XPQARetrieval-ko (889 corpus, 다도메인)
 ```
 
 ### 외부 데이터셋 다운로드
 ```bash
 uv run python tests/benchmark/download_datasets.py
 ```
-- MIRACL, Mr. TyDi는 HuggingFace datasets 호환 이슈로 현재 skip
+- MIRACL (레거시 형식), Mr. TyDi는 HuggingFace datasets 호환 이슈로 skip
+- MIRACLRetrieval (mteb 형식)은 정상 동작 (1.49M → 10K 샘플링)
 
-### 외부 데이터셋 벤치마크 결과 (FTS only, MemoryBackend)
-| 데이터셋 | Corpus | Queries | MRR | nDCG@10 | R@10 |
-|----------|--------|---------|-----|---------|------|
-| Allganize RAG-Eval | 300 | 300 | 0.796 | 0.811 | 0.863 |
-| Allganize rag-ko | 200 | 200 | 0.780 | 0.797 | 0.855 |
-| HotPotQA-24 | 226 | 24 | 0.754 | 0.636 | 0.729 |
-| HotPotQA-200 | 1990 | 200 | 0.742 | 0.599 | 0.652 |
-| AutoRAGRetrieval | 720 | 114 | 0.646 | 0.681 | 0.798 |
-| KLUE-MRC | 500 | 100 | 0.607 | 0.643 | 0.760 |
-| PublicHealthQA | 77 | 77 | 0.342 | 0.390 | 0.558 |
-| Ko-StrategyQA | 9,251 | 100 | 0.315 | 0.261 | 0.293 |
+### 외부 데이터셋 벤치마크 결과 (FTS only, MemoryBackend, 14종)
+| 데이터셋 | 언어 | Corpus | Queries | MRR | nDCG@10 | R@10 |
+|----------|------|--------|---------|-----|---------|------|
+| Allganize RAG-Eval | KO | 300 | 300 | 0.796 | 0.808 | 0.853 |
+| MIRACLRetrieval | KO | 10,000 | 100 | 0.792 | 0.480 | 0.291 |
+| Allganize rag-ko | KO | 200 | 200 | 0.782 | 0.800 | 0.865 |
+| HotPotQA-24 | EN | 226 | 24 | 0.752 | 0.636 | 0.729 |
+| HotPotQA-200 | EN | 1,990 | 200 | 0.742 | 0.604 | 0.665 |
+| AutoRAGRetrieval | KO | 720 | 114 | 0.647 | 0.681 | 0.798 |
+| KLUE-MRC | KO | 500 | 100 | 0.607 | 0.643 | 0.760 |
+| NFCorpus | EN | 3,633 | 100 | 0.443 | 0.223 | 0.119 |
+| SciFact | EN | 5,183 | 100 | 0.415 | 0.430 | 0.513 |
+| PublicHealthQA | KO | 77 | 77 | 0.346 | 0.394 | 0.571 |
+| Ko-StrategyQA | KO | 9,251 | 100 | 0.317 | 0.260 | 0.292 |
+| XPQARetrieval | KO | 889 | 654 | 0.167 | 0.161 | 0.199 |
+| FiQA | EN | 57,638 | 100 | 0.132 | 0.103 | 0.154 |
+| MultiLongDocRetrieval | KO | 6,176 | 100 | 0.070 | 0.098 | 0.200 |
 
 ### 자체 시나리오 벤치마크 결과 (v0.5.0 + 검색 개선)
 | 지표 | Baseline | 개선 후 |

@@ -1,3 +1,5 @@
 .env
 __pycache__/
 *.pyc
+tests/benchmark/data/*.json
+.claude/
