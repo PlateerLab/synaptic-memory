@@ -9,12 +9,15 @@ from synaptic.extensions.classifier_rules import RuleBasedClassifier
 from synaptic.extensions.embedder import EmbeddingProvider, MockEmbeddingProvider
 from synaptic.extensions.relation_detector import RuleBasedRelationDetector
 from synaptic.graph import SynapticGraph
+from synaptic.evidence import EvidenceAssembler
 from synaptic.models import (
     ActivatedNode,
     ConsolidationLevel,
     DigestResult,
     Edge,
     EdgeKind,
+    EvidenceChain,
+    EvidenceStep,
     Node,
     NodeKind,
     SearchResult,
@@ -48,6 +51,9 @@ __all__ = [
     "Digester",
     "Edge",
     "EdgeKind",
+    "EvidenceAssembler",
+    "EvidenceChain",
+    "EvidenceStep",
     "EmbeddingProvider",
     "GraphTraversal",
     "KindClassifier",

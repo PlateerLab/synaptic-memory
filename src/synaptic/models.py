@@ -128,3 +128,28 @@ class DigestResult:
     edges_created: list[Edge] = field(default_factory=_edge_list)
     nodes_updated: list[str] = field(default_factory=_str_list)
     tokens_used: int = 0
+
+
+def _evidence_step_list() -> list["EvidenceStep"]:
+    return []
+
+
+@dataclass(slots=True)
+class EvidenceStep:
+    """Evidence chain의 한 단계."""
+    node: Node
+    role: str = ""  # "seed", "bridge", "supporting"
+    connection_to_next: str = ""  # edge kind 기반 연결 설명
+    compressed_content: str = ""  # context compression 적용된 content
+    facts: list[str] = field(default_factory=_str_list)
+
+
+@dataclass(slots=True)
+class EvidenceChain:
+    """검색 결과를 LLM-friendly context로 조립한 결과."""
+    query: str = ""
+    steps: list[EvidenceStep] = field(default_factory=_evidence_step_list)
+    compressed_context: str = ""  # 최종 조립된 context 문자열
+    facts: list[str] = field(default_factory=_str_list)
+    total_tokens_approx: int = 0  # 대략적 토큰 수
+    assembly_time_ms: float = 0.0

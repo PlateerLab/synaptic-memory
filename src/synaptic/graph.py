@@ -9,6 +9,7 @@ from time import time
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
 from synaptic.consolidation import ConsolidationCascade
+from synaptic.evidence import EvidenceAssembler
 from synaptic.exporter import JSONExporter, MarkdownExporter
 from synaptic.extensions.embedder import EmbeddingProvider
 from synaptic.hebbian import HebbianEngine
@@ -17,6 +18,7 @@ from synaptic.models import (
     DigestResult,
     Edge,
     EdgeKind,
+    EvidenceChain,
     Node,
     NodeKind,
     SearchResult,
@@ -370,6 +372,33 @@ class SynapticGraph:
         result["cache_hit_rate"] = cache_stats["hit_rate"]
         result["cache_size"] = cache_stats["size"]
         return result
+
+    async def build_evidence(
+        self,
+        query: str,
+        *,
+        search_result: SearchResult | None = None,
+        limit: int = 10,
+        max_steps: int = 8,
+        max_tokens: int = 2048,
+        max_sentences_per_node: int = 5,
+        relevance_threshold: float = 0.2,
+        embedding: list[float] | None = None,
+    ) -> EvidenceChain:
+        """Search 결과를 Small LLM에 최적화된 evidence chain으로 변환."""
+        if search_result is None:
+            if embedding is None and self._embedder is not None:
+                embedding = await self._embedder.embed(query)
+            search_result = await self.search(query, limit=limit, embedding=embedding)
+
+        assembler = EvidenceAssembler(
+            max_sentences_per_node=max_sentences_per_node,
+            relevance_threshold=relevance_threshold,
+            max_tokens=max_tokens,
+        )
+        return await assembler.assemble(
+            self._backend, query, search_result, max_steps=max_steps,
+        )
 
     # --- Ontology persistence ---
 

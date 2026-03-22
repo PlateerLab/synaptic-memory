@@ -353,12 +353,15 @@ class TestE2EHotPotQA:
                 gt_texts = [corpus[gid].get("text", "")[:200] for gid in gt_ids if gid in corpus]
                 ground_truth = " ".join(gt_texts)[:500]
 
-            # Retrieval
+            # Retrieval + Evidence Chain Assembly
             t0 = time()
-            search_result = await graph.search(question, limit=10)
+            evidence = await graph.build_evidence(
+                question, limit=10, max_steps=8, max_tokens=2048,
+            )
             retrieval_ms = (time() - t0) * 1000
 
-            contexts = [a.node.content for a in search_result.nodes if a.node.content]
+            # Evidence chain context를 LLM에 전달
+            contexts = [evidence.compressed_context] if evidence.compressed_context else []
 
             # Generation
             t0 = time()
@@ -372,7 +375,7 @@ class TestE2EHotPotQA:
                 question=question,
                 ground_truth=ground_truth,
                 answer=answer,
-                contexts=contexts[:5],
+                contexts=contexts,
                 retrieval_time_ms=retrieval_ms,
                 generation_time_ms=gen_ms,
             )
