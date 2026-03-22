@@ -82,6 +82,9 @@ eval = [
     "python-dotenv>=1.2.2",
 ]
 
+[tool.hatch.build.targets.sdist]
+exclude = [".claude/", "tests/benchmark/data/", "tests/qa/data/", "dist/"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/synaptic"]
 
