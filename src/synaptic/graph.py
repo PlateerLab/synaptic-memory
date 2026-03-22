@@ -105,7 +105,22 @@ class SynapticGraph:
         # Auto-classify kind if not specified
         if kind is None:
             if self._classifier is not None:
-                kind = self._classifier.classify(title, content)
+                # LLM classifier: classify_async로 풍부한 메타데이터 생성
+                if hasattr(self._classifier, "classify_async"):
+                    result = await self._classifier.classify_async(title, content)
+                    kind = result.kind
+                    if tags is None:
+                        tags = result.tags
+                    if properties is None:
+                        properties = {}
+                    if result.search_keywords:
+                        properties["_search_keywords"] = ",".join(result.search_keywords)
+                    if result.search_scenarios:
+                        properties["_search_scenarios"] = "|".join(result.search_scenarios)
+                    if result.summary:
+                        properties["_summary"] = result.summary
+                else:
+                    kind = self._classifier.classify(title, content)
             else:
                 kind = NodeKind.CONCEPT
 
@@ -118,9 +133,15 @@ class SynapticGraph:
 
         # Auto-embed if embedder is available and no embedding provided
         if embedding is None and self._embedder is not None:
-            text = f"{title} {content}".strip()
-            if text:
-                embedding = await self._embedder.embed(text)
+            # LLM classifier가 생성한 메타데이터를 embedding에 포함
+            embed_text = f"{title} {content}".strip()
+            if properties:
+                search_kw = properties.get("_search_keywords", "")
+                summary = properties.get("_summary", "")
+                if search_kw or summary:
+                    embed_text = f"{title} {summary} {search_kw} {content}".strip()
+            if embed_text:
+                embedding = await self._embedder.embed(embed_text)
 
         node = await self._store.add_node(
             title, content, kind=kind, tags=tags, source=source,

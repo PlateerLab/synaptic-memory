@@ -59,6 +59,11 @@ __all__ = [
     "RelationDetector",
     "RelationConstraint",
     "ResonanceWeights",
+    "ClassificationResult",
+    "LLMClassifier",
+    "LLMRelationDetector",
+    "OllamaLLMProvider",
+    "OpenAILLMProvider",
     "RuleBasedClassifier",
     "RuleBasedRelationDetector",
     "SearchIntent",
@@ -82,5 +87,25 @@ def __getattr__(name: str) -> object:
         from synaptic.extensions.embedder import OllamaEmbeddingProvider  # noqa: PLC0415
 
         return OllamaEmbeddingProvider
+    if name == "LLMClassifier":
+        from synaptic.extensions.classifier_llm import LLMClassifier  # noqa: PLC0415
+
+        return LLMClassifier
+    if name == "ClassificationResult":
+        from synaptic.extensions.classifier_llm import ClassificationResult  # noqa: PLC0415
+
+        return ClassificationResult
+    if name == "LLMRelationDetector":
+        from synaptic.extensions.relation_detector_llm import LLMRelationDetector  # noqa: PLC0415
+
+        return LLMRelationDetector
+    if name == "OllamaLLMProvider":
+        from synaptic.extensions.llm_provider import OllamaLLMProvider  # noqa: PLC0415
+
+        return OllamaLLMProvider
+    if name == "OpenAILLMProvider":
+        from synaptic.extensions.llm_provider import OpenAILLMProvider  # noqa: PLC0415
+
+        return OpenAILLMProvider
     msg = f"module 'synaptic' has no attribute {name!r}"
     raise AttributeError(msg)
