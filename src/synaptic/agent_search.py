@@ -12,6 +12,7 @@ from synaptic.models import (
     NodeKind,
     SearchResult,
 )
+from synaptic.ppr import personalized_pagerank
 from synaptic.protocols import StorageBackend
 from synaptic.resonance import ResonanceScorer, ResonanceWeights
 from synaptic.search import HybridSearch
@@ -45,6 +46,17 @@ _INTENT_WEIGHTS: dict[SearchIntent, ResonanceWeights] = {
     SearchIntent.CONTEXT_EXPLORE: ResonanceWeights(
         relevance=0.30, importance=0.15, recency=0.15, vitality=0.10, context=0.30,
     ),
+}
+
+
+# PPR damping factor per intent (lower = more focused on seeds)
+_INTENT_DAMPING: dict[SearchIntent, float] = {
+    SearchIntent.CONTEXT_EXPLORE: 0.75,   # 탐색적, 넓게
+    SearchIntent.GENERAL: 0.85,           # 기본
+    SearchIntent.SIMILAR_DECISIONS: 0.85, # 기본
+    SearchIntent.PAST_FAILURES: 0.50,     # 집중적, 좁게
+    SearchIntent.REASONING_CHAIN: 0.60,   # 체인 추적
+    SearchIntent.RELATED_RULES: 0.85,     # 기본
 }
 
 
@@ -349,9 +361,10 @@ class AgentSearch:
         context_tags: list[str] | None,
         depth: int,
     ) -> SearchResult:
-        """BFS expansion from seed nodes."""
+        """PPR-based context exploration from seed nodes."""
         start = time()
         weights = _INTENT_WEIGHTS[SearchIntent.CONTEXT_EXPLORE]
+        damping = _INTENT_DAMPING[SearchIntent.CONTEXT_EXPLORE]
 
         # Find seed nodes
         result = await self._hybrid.search(
@@ -362,14 +375,21 @@ class AgentSearch:
         for an in result.nodes:
             expanded[an.node.id] = (an.node, an.activation)
 
-        # BFS expand
-        for an in result.nodes:
-            neighbors = await backend.get_neighbors(an.node.id, depth=depth)
-            for neighbor, edge in neighbors:
-                if neighbor.id not in expanded:
-                    decay = 0.5 ** (1)  # distance-based decay
-                    score = an.activation * edge.weight * decay
-                    expanded[neighbor.id] = (neighbor, max(0.0, min(1.0, score)))
+        # PPR expansion (low damping → wider exploration)
+        if expanded:
+            seed_scores = {nid: score for nid, (_node, score) in expanded.items()}
+            ppr_results = await personalized_pagerank(
+                backend, seed_scores, damping=damping, top_k=limit * 2,
+            )
+            for node_id, ppr_score in ppr_results:
+                if node_id not in expanded:
+                    node = await backend.get_node(node_id)
+                    if node:
+                        expanded[node_id] = (node, ppr_score)
+                else:
+                    existing = expanded[node_id]
+                    blended = 0.6 * existing[1] + 0.4 * ppr_score
+                    expanded[node_id] = (existing[0], min(1.0, blended))
 
         activated = self._score_candidates(expanded, weights, context_tags)
         return SearchResult(

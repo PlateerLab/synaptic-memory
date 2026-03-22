@@ -1,4 +1,4 @@
-"""Hybrid 3-stage search with spreading activation."""
+"""Hybrid 3-stage search with Personalized PageRank."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import math
 from time import time
 
 from synaptic.models import ActivatedNode, Node, NodeKind, SearchResult
+from synaptic.ppr import personalized_pagerank
 from synaptic.protocols import QueryRewriter, StorageBackend
 from synaptic.resonance import ResonanceScorer
 from synaptic.synonyms import expand_synonyms
@@ -49,20 +50,20 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
 class HybridSearch:
     """3-stage fallback search: FTS+vector → synonym expansion → query rewrite."""
 
-    __slots__ = ("_query_rewriter", "_scorer", "_spread_decay", "_spread_depth")
+    __slots__ = ("_ppr_damping", "_query_rewriter", "_scorer")
 
     def __init__(
         self,
         *,
         scorer: ResonanceScorer | None = None,
         query_rewriter: QueryRewriter | None = None,
-        spread_decay: float = 0.25,
-        spread_depth: int = 1,
+        spread_decay: float = 0.25,  # deprecated, kept for compat
+        spread_depth: int = 1,  # deprecated, kept for compat
+        ppr_damping: float = 0.85,
     ) -> None:
         self._scorer = scorer or ResonanceScorer()
         self._query_rewriter = query_rewriter
-        self._spread_decay = spread_decay
-        self._spread_depth = spread_depth
+        self._ppr_damping = ppr_damping
 
     async def search(
         self,
@@ -136,22 +137,28 @@ class HybridSearch:
                         all_nodes[node.id] = (node, 0.4)
             stages_used.append("rewriter")
 
-        # Spreading activation: expand from top candidates
+        # PPR: graph-aware discovery + mild re-ranking
         total_candidates = len(all_nodes)
-        top_ids = sorted(all_nodes, key=lambda nid: all_nodes[nid][1], reverse=True)[:5]
-        for nid in top_ids:
-            parent_score = all_nodes[nid][1]
-            neighbors = await backend.get_neighbors(nid, depth=self._spread_depth)
-            for neighbor_node, edge in neighbors:
-                activation = parent_score * edge.weight * self._spread_decay
-                if neighbor_node.id not in all_nodes:
-                    all_nodes[neighbor_node.id] = (neighbor_node, max(0.0, min(1.0, activation)))
+        if all_nodes:
+            seed_scores = {nid: score for nid, (_node, score) in all_nodes.items()}
+            ppr_results = await personalized_pagerank(
+                backend,
+                seed_scores,
+                damping=self._ppr_damping,
+                top_k=limit * 2,
+            )
+            for node_id, ppr_score in ppr_results:
+                if node_id not in all_nodes:
+                    # PPR이 새로 발견한 노드 — 그래프 경로로만 도달 가능
+                    node = await backend.get_node(node_id)
+                    if node:
+                        all_nodes[node_id] = (node, ppr_score * 0.8)
                 else:
-                    # 이미 있으면 미세 부스트만 (FTS 직접 매칭 랭킹 보존)
-                    existing = all_nodes[neighbor_node.id]
-                    boosted = min(1.0, existing[1] + activation * 0.1)
+                    # 기존 FTS 결과 — PPR로 미세 부스트만 (FTS 랭킹 보존)
+                    existing = all_nodes[node_id]
+                    boosted = min(1.0, existing[1] + ppr_score * 0.1)
                     if boosted > existing[1]:
-                        all_nodes[neighbor_node.id] = (existing[0], boosted)
+                        all_nodes[node_id] = (existing[0], boosted)
 
         # Filter by node_kinds if specified
         if node_kinds:

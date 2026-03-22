@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from synaptic.activity import ActivityTracker
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
+from synaptic.ppr import personalized_pagerank
 from synaptic.extensions.classifier_rules import RuleBasedClassifier
 from synaptic.extensions.embedder import EmbeddingProvider, MockEmbeddingProvider
 from synaptic.extensions.relation_detector import RuleBasedRelationDetector
@@ -54,6 +55,7 @@ __all__ = [
     "Node",
     "NodeKind",
     "OntologyRegistry",
+    "personalized_pagerank",
     "PropertyDef",
     "QueryRewriter",
     "RelationDetector",
