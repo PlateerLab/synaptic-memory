@@ -117,17 +117,13 @@ pip install synaptic-memory[all]                 # 전부
 
 ## Quick Start
 
-### 기본 — zero-dep
+### 1. In-memory — zero-dep, 바로 시작
 
 ```python
-from synaptic.backends.memory import MemoryBackend
-from synaptic import SynapticGraph, ActivityTracker, build_agent_ontology
+from synaptic import SynapticGraph, ActivityTracker
 
 async def main():
-    backend = MemoryBackend()
-    await backend.connect()
-
-    graph = SynapticGraph(backend, ontology=build_agent_ontology())
+    graph = SynapticGraph.memory()
     tracker = ActivityTracker(graph)
 
     # 과거 경험 검색 (intent 자동 추론)
@@ -149,41 +145,35 @@ async def main():
         content="Zero downtime 달성",
         success=True,
     )
-    await backend.close()
 ```
 
-### 자동 온톨로지 — 규칙 기반 (무료)
+### 2. SQLite — 경량 프로덕션
 
 ```python
-from synaptic import SynapticGraph, RuleBasedClassifier, RuleBasedRelationDetector
+from synaptic import SynapticGraph
 
-graph = SynapticGraph(
-    backend,
-    classifier=RuleBasedClassifier(),
-    relation_detector=RuleBasedRelationDetector(),
-)
+graph = SynapticGraph.sqlite("knowledge.db")
+await graph.backend.connect()
 
+# RuleBasedClassifier + RelationDetector + Ontology 자동 포함
 # kind, tags 지정 없이 넣기만 하면 자동 분류 + 자동 관계
 await graph.add("환불 정책", "7일 이내 환불 가능...")  # → kind=RULE 자동
 ```
 
-### 자동 온톨로지 — LLM 기반 (최고 품질)
+### 3. Full — LLM 분류 + 임베딩 + 관계 탐지
 
 ```python
-from synaptic import (
-    SynapticGraph, OllamaLLMProvider, OllamaEmbeddingProvider,
-    LLMClassifier, LLMRelationDetector,
-    RuleBasedClassifier, RuleBasedRelationDetector,
-)
+from synaptic import SynapticGraph
+from synaptic.backends.sqlite import SQLiteBackend
+from synaptic.extensions.llm_provider import OllamaLLMProvider
 
-llm = OllamaLLMProvider(model="qwen3:0.6b")
-
-graph = SynapticGraph(
-    backend,
-    classifier=LLMClassifier(llm, fallback=RuleBasedClassifier()),
-    relation_detector=LLMRelationDetector(llm, fallback=RuleBasedRelationDetector()),
-    embedder=OllamaEmbeddingProvider(model="qwen3-embedding:0.6b"),
+graph = SynapticGraph.full(
+    SQLiteBackend("knowledge.db"),
+    llm=OllamaLLMProvider(model="qwen3:0.6b"),
+    embed_api_base="http://localhost:8080/v1",
+    embed_model="BAAI/bge-m3",
 )
+await graph.backend.connect()
 
 # LLM이 kind 분류 + tags + 검색 키워드 + 검색 시나리오 자동 생성
 # embedding에 search_keywords 포함 → 벡터 검색 정확도 향상
@@ -191,16 +181,19 @@ graph = SynapticGraph(
 node = await graph.add("결제 장애 사후 분석", "PG사 API 타임아웃...")
 ```
 
-### Auto-Embedding (vLLM / llama.cpp / Ollama)
+### 4. Custom — 직접 조합
+
+팩토리 함수 대신 각 컴포넌트를 직접 선택할 수도 있다:
 
 ```python
 from synaptic import SynapticGraph, OpenAIEmbeddingProvider
+from synaptic.backends.sqlite import SQLiteBackend
 
-embedder = OpenAIEmbeddingProvider(
-    "http://gpu-server:8080/v1",
-    model="BAAI/bge-m3",
+graph = SynapticGraph(
+    SQLiteBackend("knowledge.db"),
+    embedder=OpenAIEmbeddingProvider("http://gpu-server:8080/v1", model="BAAI/bge-m3"),
 )
-graph = SynapticGraph(backend, embedder=embedder)
+await graph.backend.connect()
 
 # 자동: title+content → 벡터 생성 → 저장
 await graph.add("배포 전략", "Blue-green 배포로 zero downtime 달성")
@@ -208,9 +201,10 @@ await graph.add("배포 전략", "Blue-green 배포로 zero downtime 달성")
 result = await graph.search("배포 방식")
 ```
 
-### Scale: CompositeBackend
+### 5. Scale — CompositeBackend
 
 ```python
+from synaptic import SynapticGraph
 from synaptic.backends.composite import CompositeBackend
 from synaptic.backends.neo4j import Neo4jBackend
 from synaptic.backends.qdrant import QdrantBackend
@@ -222,7 +216,8 @@ composite = CompositeBackend(
     blob=MinIOBackend("localhost:9000", access_key="minio", secret_key="secret"),
 )
 await composite.connect()
-graph = SynapticGraph(composite, embedder=embedder)
+
+graph = SynapticGraph.full(composite, embed_api_base="http://gpu-server:8080/v1")
 
 # 내부 라우팅:
 # - embedding → Qdrant, content > 100KB → MinIO, 나머지 → Neo4j
