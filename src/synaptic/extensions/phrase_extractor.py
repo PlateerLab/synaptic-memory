@@ -77,8 +77,17 @@ def _normalize_phrase(phrase: str) -> str:
 def _is_meaningful(phrase: str) -> bool:
     """Phrase가 의미 있는지 검사한다.
 
-    stop word만으로 구성된 구문은 제외.
+    제외 조건:
+    - stop word만으로 구성된 구문
+    - 숫자만으로 구성된 구문 (연도 제외 — 연도는 별도 regex에서 처리)
+    - 1글자 phrase
     """
+    stripped = phrase.strip()
+    if len(stripped) < 2:
+        return False
+    # 숫자만으로 구성 (연도는 _RE_YEAR에서 이미 처리하므로 여기선 제외 가능)
+    if stripped.isdigit():
+        return False
     words = phrase.lower().split()
     non_stop = [w for w in words if w not in _STOP_WORDS]
     return len(non_stop) > 0
@@ -108,7 +117,7 @@ class PhraseExtractor:
         self,
         *,
         min_phrase_length: int = 2,
-        max_phrases_per_node: int = 10,
+        max_phrases_per_node: int = 5,
     ) -> None:
         """PhraseExtractor를 초기화한다.
 
@@ -174,7 +183,7 @@ class PhraseExtractor:
             # graph.add가 아닌 store를 직접 사용)
             phrase_node = await graph._store.add_node(
                 title=phrase,
-                content=f"Phrase extracted from: {title}",
+                content="",  # minimal content to avoid FTS noise
                 kind=NodeKind.ENTITY,
                 tags=["_phrase"],
             )

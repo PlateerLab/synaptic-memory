@@ -312,9 +312,10 @@ class TestE2EHotPotQA:
         if len(query_ids) > 24:
             query_ids = random.sample(query_ids, 24)
 
-        # 1. 그래프 구축 (Auto-Ontology)
-        print("\n[Phase 1] 그래프 구축...")
+        # 1. 그래프 구축 (Auto-Ontology + PhraseExtractor)
+        print("\n[Phase 1] 그래프 구축 (PhraseExtractor 활성화)...")
         from synaptic.extensions.classifier_rules import RuleBasedClassifier
+        from synaptic.extensions.phrase_extractor import PhraseExtractor
         from synaptic.extensions.relation_detector import RuleBasedRelationDetector
 
         backend = MemoryBackend()
@@ -324,6 +325,7 @@ class TestE2EHotPotQA:
             backend,
             classifier=RuleBasedClassifier(),
             relation_detector=detector,
+            phrase_extractor=PhraseExtractor(max_phrases_per_node=5),
         )
 
         id_map: dict[str, str] = {}

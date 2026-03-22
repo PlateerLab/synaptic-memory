@@ -206,10 +206,24 @@ class HybridSearch:
         # Sort by resonance descending
         activated.sort(key=lambda a: a.resonance, reverse=True)
 
+        # Filter out internal phrase nodes (_phrase tag) from final results.
+        # Phrase nodes serve as PPR bridge nodes but should not appear in
+        # user-facing search results — they carry no passage content.
+        final: list[ActivatedNode] = []
+        fallback: list[ActivatedNode] = []
+        for a in activated:
+            if "_phrase" in (a.node.tags or []):
+                fallback.append(a)  # keep as last resort
+            else:
+                final.append(a)
+        # If filtering removed too many, pad back with phrase nodes
+        if len(final) < limit and fallback:
+            final.extend(fallback[: limit - len(final)])
+
         elapsed_ms = (time() - start) * 1000
         return SearchResult(
             query=query,
-            nodes=activated[:limit],
+            nodes=final[:limit],
             total_candidates=total_candidates,
             search_time_ms=elapsed_ms,
             stages_used=stages_used,
