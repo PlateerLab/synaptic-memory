@@ -23,6 +23,14 @@ class EmbeddingProvider(Protocol):
     async def embed_batch(self, texts: list[str]) -> list[list[float]]: ...
 
 
+class _EmbedFromBatchMixin:
+    """embed()를 embed_batch() 위임으로 기본 구현하는 mixin."""
+
+    async def embed(self, text: str) -> list[float]:
+        results = await self.embed_batch([text])  # type: ignore[attr-defined]
+        return results[0]
+
+
 class MockEmbeddingProvider:
     """Mock embedding provider for testing. Returns deterministic vectors."""
 
@@ -39,7 +47,7 @@ class MockEmbeddingProvider:
         return [await self.embed(t) for t in texts]
 
 
-class OpenAIEmbeddingProvider:
+class OpenAIEmbeddingProvider(_EmbedFromBatchMixin):
     """OpenAI-compatible embedding provider.
 
     Works with any server implementing the /v1/embeddings endpoint:
@@ -67,10 +75,6 @@ class OpenAIEmbeddingProvider:
         self._model = model
         self._timeout = timeout
 
-    async def embed(self, text: str) -> list[float]:
-        results = await self.embed_batch([text])
-        return results[0]
-
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         import aiohttp  # noqa: PLC0415
 
@@ -96,7 +100,7 @@ class OpenAIEmbeddingProvider:
         return embeddings
 
 
-class OllamaEmbeddingProvider:
+class OllamaEmbeddingProvider(_EmbedFromBatchMixin):
     """Ollama native embedding endpoint (/api/embed).
 
     For Ollama servers that don't expose /v1/embeddings.
@@ -120,10 +124,6 @@ class OllamaEmbeddingProvider:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout = timeout
-
-    async def embed(self, text: str) -> list[float]:
-        results = await self.embed_batch([text])
-        return results[0]
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         import aiohttp  # noqa: PLC0415

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from difflib import SequenceMatcher
 from time import time
+from typing import TYPE_CHECKING, Literal
 
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
@@ -24,7 +25,7 @@ from synaptic.models import (
     NodeKind,
     SearchResult,
 )
-from synaptic.ontology import OntologyRegistry
+from synaptic.ontology import OntologyRegistry, build_agent_ontology
 from synaptic.protocols import (
     Digester,
     KindClassifier,
@@ -36,9 +37,24 @@ from synaptic.protocols import (
 from synaptic.search import HybridSearch
 from synaptic.store import Store
 
+if TYPE_CHECKING:
+    from synaptic.extensions.llm_provider import LLMProvider
+
 
 class SynapticGraph:
-    """Facade over the synaptic memory system."""
+    """Facade over the synaptic memory system.
+
+    Quick Start::
+
+        # 1. In-memory (zero-dep, 테스트/프로토타이핑)
+        graph = SynapticGraph.memory()
+
+        # 2. SQLite (경량 프로덕션)
+        graph = SynapticGraph.sqlite("knowledge.db")
+
+        # 3. Full preset with custom backend
+        graph = SynapticGraph(backend, classifier=..., embedder=...)
+    """
 
     __slots__ = (
         "_agent_search",
@@ -84,6 +100,117 @@ class SynapticGraph:
         self._relation_detector = relation_detector
         self._phrase_extractor = phrase_extractor
         self._agent_search = AgentSearch(hybrid=self._search)
+
+    # --- Factory methods ---
+
+    @classmethod
+    def memory(cls, *, cache_size: int = 256) -> SynapticGraph:
+        """In-memory backend — zero dependencies, 테스트/프로토타이핑용.
+
+        Example::
+
+            graph = SynapticGraph.memory()
+            await graph.add("Hello", "World")
+        """
+        from synaptic.backends.memory import MemoryBackend  # noqa: PLC0415
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier  # noqa: PLC0415
+
+        return cls(
+            MemoryBackend(),
+            classifier=RuleBasedClassifier(),
+            cache_size=cache_size,
+        )
+
+    @classmethod
+    def sqlite(
+        cls,
+        db_path: str = "synaptic.db",
+        *,
+        cache_size: int = 256,
+    ) -> SynapticGraph:
+        """SQLite backend — 경량 프로덕션, FTS5 검색 지원.
+
+        Example::
+
+            graph = SynapticGraph.sqlite("knowledge.db")
+            await graph.backend.connect()
+            await graph.add("Hello", "World")
+        """
+        from synaptic.backends.sqlite import SQLiteBackend  # noqa: PLC0415
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier  # noqa: PLC0415
+        from synaptic.extensions.relation_detector import RuleBasedRelationDetector  # noqa: PLC0415
+
+        return cls(
+            SQLiteBackend(db_path),
+            classifier=RuleBasedClassifier(),
+            relation_detector=RuleBasedRelationDetector(),
+            ontology=build_agent_ontology(),
+            cache_size=cache_size,
+        )
+
+    @classmethod
+    def full(
+        cls,
+        backend: StorageBackend,
+        *,
+        llm: LLMProvider | None = None,
+        embed_api_base: str = "",
+        embed_model: str = "default",
+        embed_api_key: str = "",
+        cache_size: int = 512,
+    ) -> SynapticGraph:
+        """Full-featured setup — LLM 분류, 임베딩, 관계 탐지, 온톨로지.
+
+        Example::
+
+            from synaptic.backends.sqlite import SQLiteBackend
+            from synaptic.extensions.llm_provider import OllamaLLMProvider
+
+            graph = SynapticGraph.full(
+                SQLiteBackend("knowledge.db"),
+                llm=OllamaLLMProvider(model="gemma3:4b"),
+                embed_api_base="http://localhost:8080/v1",
+            )
+        """
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier  # noqa: PLC0415
+        from synaptic.extensions.relation_detector import RuleBasedRelationDetector  # noqa: PLC0415
+
+        classifier: KindClassifier
+        relation_detector: RelationDetector
+        embedder: EmbeddingProvider | None = None
+
+        if llm is not None:
+            from synaptic.extensions.classifier_hybrid import HybridClassifier  # noqa: PLC0415
+            from synaptic.extensions.classifier_llm import LLMClassifier  # noqa: PLC0415
+            from synaptic.extensions.relation_detector_llm import LLMRelationDetector  # noqa: PLC0415
+
+            classifier = HybridClassifier(
+                llm=LLMClassifier(llm, fallback=RuleBasedClassifier()),
+                rule=RuleBasedClassifier(),
+            )
+            relation_detector = LLMRelationDetector(llm, fallback=RuleBasedRelationDetector())
+        else:
+            classifier = RuleBasedClassifier()
+            relation_detector = RuleBasedRelationDetector()
+
+        if embed_api_base:
+            from synaptic.extensions.embedder import OpenAIEmbeddingProvider  # noqa: PLC0415
+
+            embedder = OpenAIEmbeddingProvider(
+                api_base=embed_api_base,
+                model=embed_model,
+                api_key=embed_api_key,
+            )
+
+        return cls(
+            backend,
+            classifier=classifier,
+            relation_detector=relation_detector,
+            embedder=embedder,
+            ontology=build_agent_ontology(),
+            phrase_extractor=PhraseExtractor(),
+            cache_size=cache_size,
+        )
 
     @property
     def backend(self) -> StorageBackend:

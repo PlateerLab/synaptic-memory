@@ -37,6 +37,11 @@ _KIND_QUERY_HINTS: dict[NodeKind, list[str]] = {
 _KIND_BOOST = 0.05  # kind 매칭 시 search_score 부스트량 (보수적)
 
 
+def _rank_to_score(rank: int, *, top: float = 0.95, step: float = 0.05, floor: float = 0.3) -> float:
+    """순위 기반 점수 변환: 1위=top, 순위마다 step 감소, floor 이하 방지."""
+    return max(floor, top - rank * step)
+
+
 def _cosine_sim(a: list[float], b: list[float]) -> float:
     """두 벡터의 코사인 유사도."""
     dot = sum(x * y for x, y in zip(a, b))
@@ -83,8 +88,7 @@ class HybridSearch:
         fts_nodes = await backend.search_fts(query, limit=limit * 2)
         stages_used.append("fts")
         for rank, node in enumerate(fts_nodes):
-            # FTS 순위 기반 점수: 1위=0.95, 감소율 0.05
-            score = max(0.3, 0.95 - rank * 0.05)
+            score = _rank_to_score(rank)
             fts_scores[node.id] = score
             all_nodes[node.id] = (node, score)
 
@@ -94,7 +98,7 @@ class HybridSearch:
             stages_used.append("vector")
             for rank, node in enumerate(vec_nodes):
                 # Vector 순위 기반 점수 + 실제 cosine similarity 반영
-                rank_score = max(0.3, 0.95 - rank * 0.05)
+                rank_score = _rank_to_score(rank)
                 # cosine similarity 직접 계산 (가능한 경우)
                 if node.embedding and embedding:
                     sim = _cosine_sim(embedding, node.embedding)

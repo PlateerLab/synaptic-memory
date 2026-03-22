@@ -1,4 +1,42 @@
-"""Synaptic Memory — Brain-inspired knowledge graph for LLM agents."""
+"""Synaptic Memory — Brain-inspired knowledge graph for LLM agents.
+
+Quick Start
+-----------
+
+1. In-memory (zero dependencies)::
+
+    from synaptic import SynapticGraph
+
+    graph = SynapticGraph.memory()
+    await graph.add("API 장애 대응", "서버 재시작 후 복구", kind=NodeKind.LESSON)
+    result = await graph.search("장애 대응")
+
+2. SQLite (경량 프로덕션)::
+
+    graph = SynapticGraph.sqlite("knowledge.db")
+    await graph.backend.connect()
+    await graph.add("배포 정책", "PR 머지 후 자동 배포", kind=NodeKind.RULE)
+
+3. Full-featured (LLM 분류 + 임베딩 + 관계 탐지)::
+
+    from synaptic.backends.sqlite import SQLiteBackend
+    from synaptic.extensions.llm_provider import OllamaLLMProvider
+
+    graph = SynapticGraph.full(
+        SQLiteBackend("knowledge.db"),
+        llm=OllamaLLMProvider(model="gemma3:4b"),
+        embed_api_base="http://localhost:8080/v1",
+    )
+    await graph.backend.connect()
+
+Backends
+--------
+- ``MemoryBackend`` — 테스트/개발 (zero-dep)
+- ``SQLiteBackend`` — 경량 프로덕션 (``pip install synaptic-memory[sqlite]``)
+- ``PostgreSQLBackend`` — 프로덕션 (``pip install synaptic-memory[postgresql]``)
+- ``Neo4jBackend`` — 그래프 탐색 (``pip install synaptic-memory[neo4j]``)
+- ``CompositeBackend`` — Neo4j + Qdrant + MinIO 조합 (``pip install synaptic-memory[scale]``)
+"""
 
 from __future__ import annotations
 
