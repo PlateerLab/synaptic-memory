@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from difflib import SequenceMatcher
 
@@ -96,6 +97,9 @@ class MemoryBackend:
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         query_lower = query.lower()
         terms = query_lower.split()
+        # No word boundary patterns — substring matching is better for diverse corpora
+        # (medical terms like "APOE4", Korean compounds, morphological variants)
+        term_patterns: dict[str, re.Pattern[str]] = {}
         # Generate 2-gram substrings (for Korean compound word matching)
         bigrams: list[str] = []
         if len(terms) >= 2:
@@ -114,10 +118,23 @@ class MemoryBackend:
                 score += len(terms) * 3.0
             else:
                 # Individual term matching in title (weight 2x)
-                score += sum(2.0 for t in terms if t in title_lower)
+                for t in terms:
+                    pat = term_patterns.get(t)
+                    if pat is not None:
+                        if pat.search(title_lower):
+                            score += 2.0
+                    else:
+                        if t in title_lower:
+                            score += 2.0
 
             # Individual term matching in content
-            score += sum(1.0 for t in terms if t in content_lower)
+            for t in terms:
+                pat = term_patterns.get(t)
+                if pat is not None:
+                    score += len(pat.findall(content_lower)) * 1.0
+                else:
+                    if t in content_lower:
+                        score += 1.0
 
             # Bigram match bonus (higher relevance when 2 consecutive terms appear together)
             score += sum(1.5 for bg in bigrams if bg in full_text)

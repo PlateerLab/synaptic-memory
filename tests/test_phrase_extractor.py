@@ -90,14 +90,13 @@ class TestPhraseExtraction:
         assert any("플래티어" in p for p in lowered)
         assert any("한국재단" in p for p in lowered)
 
-    def test_year_extraction_filtered_by_meaningful(self) -> None:
-        """Years (digits only) are filtered out by _is_meaningful — this is intentional."""
+    def test_no_year_extraction(self) -> None:
+        """Years are not extracted — year regex was removed as dead code."""
         extractor = PhraseExtractor(max_phrases_per_node=20)
         phrases = extractor._extract_phrases(
             "History",
             "The university was established in 1755 and expanded in 2024.",
         )
-        # Pure digit years are excluded by _is_meaningful (digits-only check)
         assert "1755" not in phrases
         assert "2024" not in phrases
 

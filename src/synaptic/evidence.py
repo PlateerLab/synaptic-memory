@@ -76,7 +76,7 @@ class EvidenceAssembler:
         self,
         *,
         max_sentences_per_node: int = 5,
-        relevance_threshold: float = 0.2,
+        relevance_threshold: float = 0.3,
         max_tokens: int = 2048,
     ) -> None:
         self._max_sentences = max_sentences_per_node
@@ -292,13 +292,16 @@ class EvidenceAssembler:
             # No terms extracted from query — return first N sentences
             return " ".join(sentences[:self._max_sentences])
 
-        # Score each sentence by relevance
+        # Score each sentence by relevance (with position bias for first sentence)
         scored: list[tuple[int, str, float]] = []
         for i, sent in enumerate(sentences):
             sent_lower = sent.lower()
             sent_terms = set(re.split(r'[\s,;:!?()\[\]]+', sent_lower))
             overlap = len(query_terms & sent_terms)
             relevance = overlap / len(query_terms)
+            # Position bias: first sentence gets +0.1 bonus
+            if i == 0:
+                relevance += 0.1
             scored.append((i, sent, relevance))
 
         # Select sentences above threshold

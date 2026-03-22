@@ -164,14 +164,12 @@ class HybridSearch:
                     if boosted > existing[1]:
                         all_nodes[node_id] = (existing[0], boosted)
 
-        # Filter by node_kinds if specified
+        # Soft boost for preferred node_kinds (instead of hard filtering)
         if node_kinds:
             kind_set = set(node_kinds)
-            all_nodes = {
-                nid: (node, score)
-                for nid, (node, score) in all_nodes.items()
-                if node.kind in kind_set
-            }
+            for nid, (node, score) in all_nodes.items():
+                if node.kind in kind_set:
+                    all_nodes[nid] = (node, min(1.0, score * 1.5))
 
         # Kind-intent boost: boost kinds matching query keywords
         preferred_kinds: set[NodeKind] = set()
@@ -213,16 +211,9 @@ class HybridSearch:
         # Filter out internal phrase nodes (_phrase tag) from final results.
         # Phrase nodes serve as PPR bridge nodes but should not appear in
         # user-facing search results — they carry no passage content.
-        final: list[ActivatedNode] = []
-        fallback: list[ActivatedNode] = []
-        for a in activated:
-            if "_phrase" in (a.node.tags or []):
-                fallback.append(a)  # keep as last resort
-            else:
-                final.append(a)
-        # If filtering removed too many, pad back with phrase nodes
-        if len(final) < limit and fallback:
-            final.extend(fallback[: limit - len(final)])
+        final: list[ActivatedNode] = [
+            a for a in activated if "_phrase" not in (a.node.tags or [])
+        ]
 
         elapsed_ms = (time() - start) * 1000
         return SearchResult(

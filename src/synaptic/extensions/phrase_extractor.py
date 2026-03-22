@@ -48,11 +48,6 @@ _RE_KO_PARENS = re.compile(
     r"\((?:주|사|재|학|재단|사단)\)([\w]+)"
 )
 
-# Years: 4-digit numbers (1000~2999)
-_RE_YEAR = re.compile(
-    r"\b([12]\d{3})\b"
-)
-
 # Common English stop words (phrases containing only these are not recognized as phrases)
 _STOP_WORDS = frozenset({
     "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
@@ -79,13 +74,13 @@ def _is_meaningful(phrase: str) -> bool:
 
     Exclusion criteria:
     - Phrases composed only of stop words
-    - Phrases composed only of digits (years excluded — handled by separate regex)
+    - Phrases composed only of digits
     - Single-character phrases
     """
     stripped = phrase.strip()
     if len(stripped) < 2:
         return False
-    # Digits only (years are already handled by _RE_YEAR, so excluded here)
+    # Digits only
     if stripped.isdigit():
         return False
     words = phrase.lower().split()
@@ -260,10 +255,6 @@ class PhraseExtractor:
         for m in _RE_KO_QUOTED.finditer(text):
             _add(m.group(1))
         for m in _RE_KO_PARENS.finditer(text):
-            _add(m.group(1))
-
-        # 5. Years
-        for m in _RE_YEAR.finditer(text):
             _add(m.group(1))
 
         return phrases[: self._max_phrases]
