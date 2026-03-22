@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synaptic-memory"
-version = "0.6.0"
-description = "Brain-inspired knowledge graph for LLM agents — auto-ontology (rule/embedding/LLM), Hebbian learning, memory consolidation, hybrid search."
+version = "0.7.0"
+description = "Brain-inspired knowledge graph for LLM agents — PPR, evidence chain, auto-ontology (rule/embedding/LLM), Hebbian learning, memory consolidation."
 license = "MIT"
 requires-python = ">=3.12"
 readme = "README.md"
@@ -15,7 +15,8 @@ keywords = [
     "agent-memory",
     "auto-ontology",
     "hebbian-learning",
-    "spreading-activation",
+    "personalized-pagerank",
+    "evidence-chain",
     "memory-consolidation",
     "hybrid-search",
     "ontology",
