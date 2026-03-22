@@ -12,6 +12,7 @@ from synaptic.consolidation import ConsolidationCascade
 from synaptic.evidence import EvidenceAssembler
 from synaptic.exporter import JSONExporter, MarkdownExporter
 from synaptic.extensions.embedder import EmbeddingProvider
+from synaptic.extensions.phrase_extractor import PhraseExtractor
 from synaptic.hebbian import HebbianEngine
 from synaptic.models import (
     ConsolidationLevel,
@@ -50,6 +51,7 @@ class SynapticGraph:
         "_json_exporter",
         "_md_exporter",
         "_ontology",
+        "_phrase_extractor",
         "_relation_detector",
         "_search",
         "_store",
@@ -65,6 +67,7 @@ class SynapticGraph:
         embedder: EmbeddingProvider | None = None,
         classifier: KindClassifier | None = None,
         relation_detector: RelationDetector | None = None,
+        phrase_extractor: PhraseExtractor | None = None,
         cache_size: int = 256,
     ) -> None:
         self._backend = backend
@@ -79,6 +82,7 @@ class SynapticGraph:
         self._embedder = embedder
         self._classifier = classifier
         self._relation_detector = relation_detector
+        self._phrase_extractor = phrase_extractor
         self._agent_search = AgentSearch(hybrid=self._search)
 
     @property
@@ -159,6 +163,12 @@ class SynapticGraph:
                 await self._store.add_edge(
                     node.id, target_id, kind=edge_kind, weight=weight,
                 )
+
+        # Phrase 추출 및 링크 (HippoRAG2 dual-node KG)
+        if self._phrase_extractor is not None:
+            await self._phrase_extractor.extract_and_link(
+                self, node.id, title, content,
+            )
 
         return node
 

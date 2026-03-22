@@ -141,3 +141,56 @@ class OpenAILLMProvider:
                 data = await resp.json()
 
         return data["choices"][0]["message"]["content"]  # type: ignore[no-any-return]
+
+
+class AnthropicLLMProvider:
+    """Anthropic Messages API provider.
+
+    Usage:
+        provider = AnthropicLLMProvider(api_key="sk-ant-...")
+        result = await provider.generate(
+            system="You are a helpful assistant. Respond in JSON.",
+            user="Classify this document.",
+        )
+    """
+
+    __slots__ = ("_api_key", "_model", "_timeout")
+
+    def __init__(
+        self,
+        *,
+        api_key: str = "",
+        model: str = "claude-sonnet-4-20250514",
+        timeout: int = 120,
+    ) -> None:
+        self._api_key = api_key
+        self._model = model
+        self._timeout = timeout
+
+    async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
+        """Generate a completion via Anthropic Messages API."""
+        import aiohttp  # noqa: PLC0415
+
+        url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self._api_key,
+            "anthropic-version": "2023-06-01",
+        }
+        payload = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        }
+
+        timeout = aiohttp.ClientTimeout(total=self._timeout)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, headers=headers, json=payload) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    msg = f"Anthropic API error {resp.status}: {body[:200]}"
+                    raise RuntimeError(msg)
+                data = await resp.json()
+
+        return data["content"][0]["text"]  # type: ignore[no-any-return]

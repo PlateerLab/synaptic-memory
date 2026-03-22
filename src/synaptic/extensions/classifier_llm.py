@@ -69,6 +69,26 @@ kind 분류 (가장 적합한 하나만):
 
 반드시 JSON만 출력. tags 3~7개, search_keywords 3~5개."""
 
+# ---------------------------------------------------------------------------
+# 배치 분류 시스템 프롬프트
+# ---------------------------------------------------------------------------
+
+_BATCH_SYSTEM_PROMPT = """\
+여러 문서의 메타데이터를 JSON 배열로 생성하라. /no_think
+
+kind 분류 (가장 적합한 하나만):
+- rule: "~해야 한다", "~금지", 정책, 규정, 가이드라인, 약관, 제한 조건
+- lesson: 장애/실패/성공 사후 분석, 교훈, "원인은~", "다음에는~", postmortem
+- decision: "~를 선택", "~를 채택", 대안 비교, trade-off, 의사결정 기록
+- artifact: API 명세, 엔드포인트, 스키마, 코드, 시스템 컴포넌트, 도구
+- entity: 회사명, 제품명, 인물, 도시, 고유 대상
+- concept: 위에 해당 안 되면 concept
+
+반드시 JSON 배열만 출력. 각 객체에 kind, confidence, tags(3~7개), \
+search_keywords(3~5개), search_scenarios, summary 포함.
+[{"index": 0, "kind": "...", "confidence": 0.9, "tags": [...], \
+"search_keywords": [...], "search_scenarios": [...], "summary": "..."}, ...]"""
+
 # content 최대 길이 (토큰 절약)
 _MAX_CONTENT_LEN = 2000
 
@@ -255,6 +275,153 @@ class LLMClassifier:
             summary=title,
             confidence=0.3,
         )
+
+    # -- 배치 분류 --
+
+    async def classify_batch_async(
+        self,
+        items: list[tuple[str, str]],
+        *,
+        content_limit: int = 500,
+    ) -> list[ClassificationResult]:
+        """한 번의 LLM 호출로 여러 문서를 분류한다.
+
+        Parameters
+        ----------
+        items:
+            ``[(title, content), ...]`` 리스트 (최대 16개).
+        content_limit:
+            각 문서의 content를 이 길이로 절삭하여 토큰 비용 절감.
+
+        Returns
+        -------
+        list[ClassificationResult]
+            입력 순서대로 분류 결과 리스트.
+        """
+        if not items:
+            return []
+
+        # 최대 16개 제한
+        items = items[:16]
+
+        # 캐시 히트 확인
+        results: list[ClassificationResult | None] = []
+        uncached_indices: list[int] = []
+        for i, (title, content) in enumerate(items):
+            cached = self.get_cached_result(title, content)
+            if cached is not None:
+                results.append(cached)
+            else:
+                results.append(None)
+                uncached_indices.append(i)
+
+        if not uncached_indices:
+            return results  # type: ignore[return-value]
+
+        # 배치 LLM 호출
+        try:
+            batch_results = await self._call_llm_batch(
+                [(items[i][0], items[i][1]) for i in uncached_indices],
+                content_limit=content_limit,
+            )
+
+            # 결과 매핑
+            for idx, result in zip(uncached_indices, batch_results):
+                results[idx] = result
+                title, content = items[idx]
+                cache_key = self._make_cache_key(title, content)
+                self._cache.put(cache_key, result)
+
+        except Exception:
+            logger.exception("Batch LLM classification failed, falling back to individual calls")
+            batch_results = []
+
+        # 누락분 개별 호출 fallback
+        missing = [i for i in uncached_indices if results[i] is None]
+        for i in missing:
+            title, content = items[i]
+            results[i] = await self.classify_async(title, content)
+
+        return results  # type: ignore[return-value]
+
+    async def _call_llm_batch(
+        self,
+        items: list[tuple[str, str]],
+        *,
+        content_limit: int = 500,
+    ) -> list[ClassificationResult]:
+        """배치 LLM 호출 — 여러 문서를 한 번에 분류."""
+        doc_parts: list[str] = []
+        for i, (title, content) in enumerate(items):
+            truncated = content[:content_limit]
+            doc_parts.append(f"Document {i}:\nTitle: {title}\nContent: {truncated}")
+
+        user_msg = "\n\n".join(doc_parts)
+        user_msg += "\n\nReturn a JSON array with one object per document."
+
+        raw = await self._llm.generate(
+            system=_BATCH_SYSTEM_PROMPT,
+            user=user_msg,
+            max_tokens=512 * len(items),
+        )
+
+        return self._parse_batch_response(raw, len(items))
+
+    def _parse_batch_response(self, raw: str, expected_count: int) -> list[ClassificationResult]:
+        """배치 LLM 응답 파싱. JSON 배열 기대."""
+        data_list = self._extract_json_array(raw)
+
+        results: list[ClassificationResult] = []
+        for item in data_list[:expected_count]:
+            if not isinstance(item, dict):
+                continue
+            kind_str = item.get("kind", "concept")
+            if kind_str not in _VALID_KINDS:
+                kind_str = "concept"
+            results.append(ClassificationResult(
+                kind=NodeKind(kind_str),
+                tags=self._ensure_str_list(item.get("tags", [])),
+                search_keywords=self._ensure_str_list(item.get("search_keywords", [])),
+                search_scenarios=self._ensure_str_list(item.get("search_scenarios", [])),
+                summary=str(item.get("summary", "")),
+                confidence=self._clamp(float(item.get("confidence", 0.8)), 0.0, 1.0),
+            ))
+
+        return results
+
+    @staticmethod
+    def _extract_json_array(raw: str) -> list[dict[str, object]]:
+        """JSON 배열 파싱 — 직접 시도 후 코드블록 추출 fallback."""
+        # 1차: 직접 파싱
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return parsed  # type: ignore[return-value]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # 2차: ```json ... ``` 블록 추출
+        match = re.search(r"```(?:json)?\s*(\[.*?\])\s*```", raw, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group(1))
+                if isinstance(parsed, list):
+                    return parsed  # type: ignore[return-value]
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # 3차: 첫 번째 [ ... ] 블록 추출
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group(0))
+                if isinstance(parsed, list):
+                    return parsed  # type: ignore[return-value]
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        logger.warning("Failed to parse batch LLM response as JSON array: %s", raw[:200])
+        return []
 
     @staticmethod
     def _make_cache_key(title: str, content: str) -> str:

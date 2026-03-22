@@ -1998,6 +1998,7 @@ embedding = [
 eval = [
     { name = "deepeval" },
     { name = "openai" },
+    { name = "python-dotenv" },
 ]
 mcp = [
     { name = "aiosqlite" },
@@ -2051,6 +2052,7 @@ requires-dist = [
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "python-dotenv", marker = "extra == 'eval'", specifier = ">=1.2.2" },
     { name = "qdrant-client", marker = "extra == 'all'", specifier = ">=1.12" },
     { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.12" },
     { name = "qdrant-client", marker = "extra == 'scale'", specifier = ">=1.12" },

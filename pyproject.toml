@@ -78,6 +78,7 @@ dev = [
 eval = [
     "deepeval>=2.0",
     "openai>=1.0",
+    "python-dotenv>=1.2.2",
 ]
 
 [tool.hatch.build.targets.wheel]

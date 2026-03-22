@@ -62,6 +62,7 @@ class EdgeKind(StrEnum):
     RESULTED_IN = "resulted_in"
     PART_OF = "part_of"
     FOLLOWED_BY = "followed_by"
+    CONTAINS = "contains"
 
 
 @dataclass(slots=True)

@@ -1,0 +1,315 @@
+{
+  "description": "엔터프라이즈 AI 에이전트 벤치마크 — 다원천 지식 + 에이전트 활동 시나리오",
+  "knowledge_sources": [
+    {
+      "id": "doc_api_order",
+      "kind": "CONCEPT",
+      "title": "주문 API 명세",
+      "content": "POST /api/v2/orders — 주문 생성 API. 필수 파라미터: customer_id (string), items (array of {product_id, quantity, price}), shipping_address (object). 응답: 201 Created with order_id. 인증: Bearer token 필수. Rate limit: 100 req/min. 재고 부족 시 409 Conflict 반환. 결제 실패 시 402 Payment Required 반환.",
+      "tags": ["api", "order", "commerce"],
+      "source": "api-spec:commerce",
+      "properties": {"system": "commerce-api", "version": "v2"}
+    },
+    {
+      "id": "doc_api_inventory",
+      "kind": "CONCEPT",
+      "title": "재고 조회 API",
+      "content": "GET /api/v1/inventory/{product_id} — 실시간 재고 조회. 응답: {available: number, reserved: number, warehouse: string}. 캐시 TTL 30초. 여러 상품 동시 조회: POST /api/v1/inventory/batch (최대 50개). 재고 변동 webhook: inventory.updated 이벤트.",
+      "tags": ["api", "inventory", "commerce"],
+      "source": "api-spec:inventory",
+      "properties": {"system": "inventory-api", "version": "v1"}
+    },
+    {
+      "id": "doc_api_payment",
+      "kind": "CONCEPT",
+      "title": "결제 처리 API",
+      "content": "POST /api/v1/payments — 결제 요청. 파라미터: order_id, amount, method (card|bank|point), card_token (카드결제 시). 3D Secure 필요 시 redirect_url 반환. 부분 결제 지원. 취소: DELETE /api/v1/payments/{payment_id} (결제 후 24시간 이내). PG사 타임아웃 5초, 재시도 최대 3회.",
+      "tags": ["api", "payment", "commerce"],
+      "source": "api-spec:payment",
+      "properties": {"system": "payment-api", "version": "v1"}
+    },
+    {
+      "id": "doc_rule_refund",
+      "kind": "RULE",
+      "title": "환불 정책",
+      "content": "환불 규정: 주문 후 7일 이내 전액 환불 가능. 배송 시작 후에는 반품 접수 필요. 반품 배송비 고객 부담 (불량 제외). 포인트 결제분은 포인트로 환불. 부분 환불 시 결제 수단별 비례 환불. 프로모션 상품은 세트 전체 반품 시만 환불 가능.",
+      "tags": ["policy", "refund", "commerce"],
+      "source": "policy:commerce",
+      "properties": {"department": "CS", "effective_date": "2025-01-01"}
+    },
+    {
+      "id": "doc_rule_shipping",
+      "kind": "RULE",
+      "title": "배송 규정",
+      "content": "기본 배송: 주문 후 2-3 영업일. 도서산간 3-5 영업일, 추가 배송비 3,000원. 새벽배송: 서울/경기 일부, 23시 이전 주문 시 익일 07시 도착. 무료배송 기준: 30,000원 이상. 배송 상태 변경 시 SMS/푸시 알림. 배송 지연 시 자동 쿠폰 발급 (1,000원).",
+      "tags": ["policy", "shipping", "commerce"],
+      "source": "policy:logistics",
+      "properties": {"department": "logistics"}
+    },
+    {
+      "id": "doc_guide_deploy",
+      "kind": "CONCEPT",
+      "title": "배포 가이드",
+      "content": "프로덕션 배포 절차: 1) feature 브랜치에서 MR 생성 2) CI 파이프라인 통과 (lint, test, build) 3) 코드 리뷰 승인 2명 이상 4) staging 배포 후 QA 검증 5) 카나리 배포 10% → 50% → 100% 6) 모니터링 30분 후 이상 없으면 완료. 롤백: ArgoCD에서 이전 revision 선택. 긴급 핫픽스: main 직접 push 가능 (사후 MR).",
+      "tags": ["deploy", "devops", "ci/cd"],
+      "source": "wiki:devops",
+      "properties": {"team": "platform"}
+    },
+    {
+      "id": "doc_guide_monitoring",
+      "kind": "CONCEPT",
+      "title": "모니터링 가이드",
+      "content": "Grafana 대시보드: API 레이턴시 (P50/P95/P99), 에러율, 요청 수. 알림 규칙: P95 > 500ms 시 Slack 알림, 에러율 > 1% 시 PagerDuty 호출. 로그: Loki에서 조회, 보관 30일. 트레이싱: Jaeger로 분산 추적. 장애 대응: 1) 대시보드 확인 2) 로그 검색 3) 최근 배포 확인 4) 롤백 여부 판단.",
+      "tags": ["monitoring", "devops", "observability"],
+      "source": "wiki:devops",
+      "properties": {"team": "platform"}
+    },
+    {
+      "id": "doc_db_schema_order",
+      "kind": "ENTITY",
+      "title": "주문 테이블 스키마",
+      "content": "orders 테이블: id (UUID PK), customer_id (FK → customers), status (enum: pending/confirmed/shipped/delivered/cancelled), total_amount (decimal), shipping_address (jsonb), created_at (timestamptz), updated_at (timestamptz). 인덱스: customer_id, status, created_at. order_items 테이블: order_id (FK), product_id (FK), quantity (int), unit_price (decimal).",
+      "tags": ["database", "schema", "order"],
+      "source": "db:commerce",
+      "properties": {"database": "commerce_db"}
+    },
+    {
+      "id": "doc_db_schema_product",
+      "kind": "ENTITY",
+      "title": "상품 테이블 스키마",
+      "content": "products 테이블: id (UUID PK), name (varchar 200), description (text), price (decimal), category_id (FK), stock_quantity (int), is_active (boolean), created_at (timestamptz). categories 테이블: id, name, parent_id (self-ref). product_images: product_id (FK), url, sort_order. 풀텍스트 인덱스: name, description (tsvector).",
+      "tags": ["database", "schema", "product"],
+      "source": "db:commerce",
+      "properties": {"database": "commerce_db"}
+    },
+    {
+      "id": "doc_incident_20250301",
+      "kind": "LESSON",
+      "title": "2025-03-01 결제 장애 사후 분석",
+      "content": "장애 원인: PG사 API 타임아웃 증가 (5초→30초). 영향: 결제 성공률 40%까지 하락, 30분간 지속. 대응: 1) PG사 failover 전환 2) 타임아웃 3초로 단축 3) 재시도 로직 circuit breaker 추가. 교훈: PG사 의존도 분산 필요, 결제 모니터링 알림 기준 강화 (성공률 < 95% 시 즉시 알림). 재발 방지: dual-PG 구조 도입 예정.",
+      "tags": ["incident", "payment", "postmortem"],
+      "source": "wiki:incident",
+      "properties": {"severity": "critical", "duration_min": "30"}
+    },
+    {
+      "id": "doc_incident_20250215",
+      "kind": "LESSON",
+      "title": "2025-02-15 재고 동기화 오류",
+      "content": "장애 원인: 재고 캐시 TTL 설정 오류 (30초 → 300초로 잘못 배포). 영향: 품절 상품 주문 가능 상태 유지, 50건 오주문 발생. 대응: 캐시 설정 롤백, 오주문 건 수동 취소 및 고객 보상. 교훈: 캐시 TTL 변경은 반드시 staging에서 부하 테스트 후 배포. 설정값 변경도 코드 리뷰 필수.",
+      "tags": ["incident", "inventory", "cache"],
+      "source": "wiki:incident",
+      "properties": {"severity": "high", "duration_min": "45"}
+    },
+    {
+      "id": "doc_runbook_high_latency",
+      "kind": "RULE",
+      "title": "API 레이턴시 상승 대응 런북",
+      "content": "P95 레이턴시 500ms 초과 시: 1) Grafana에서 어느 엔드포인트인지 확인 2) 해당 서비스 pod 리소스 확인 (CPU/Memory) 3) DB 슬로우 쿼리 로그 확인 4) 최근 배포 내역 확인 — 있으면 롤백 고려 5) 외부 API 의존성 확인 (PG사, 배송 API 등) 6) pod 스케일아웃 또는 HPA 임계값 조정. 에스컬레이션: 15분 내 해결 안 되면 팀 리드 호출.",
+      "tags": ["runbook", "latency", "devops"],
+      "source": "wiki:runbook",
+      "properties": {"team": "platform", "priority": "P1"}
+    }
+  ],
+  "knowledge_links": [
+    {"source": "doc_api_order", "target": "doc_api_inventory", "kind": "DEPENDS_ON", "note": "주문 시 재고 확인 필요"},
+    {"source": "doc_api_order", "target": "doc_api_payment", "kind": "DEPENDS_ON", "note": "주문 후 결제 처리"},
+    {"source": "doc_api_order", "target": "doc_db_schema_order", "kind": "RELATED", "note": "API가 이 스키마 사용"},
+    {"source": "doc_api_inventory", "target": "doc_db_schema_product", "kind": "RELATED", "note": "재고는 상품 테이블 참조"},
+    {"source": "doc_rule_refund", "target": "doc_api_payment", "kind": "RELATED", "note": "환불 시 결제 취소 API 사용"},
+    {"source": "doc_rule_refund", "target": "doc_rule_shipping", "kind": "RELATED", "note": "반품 배송 규정 연관"},
+    {"source": "doc_guide_deploy", "target": "doc_guide_monitoring", "kind": "RELATED", "note": "배포 후 모니터링 필수"},
+    {"source": "doc_incident_20250301", "target": "doc_api_payment", "kind": "LEARNED_FROM", "note": "결제 API 장애에서 교훈"},
+    {"source": "doc_incident_20250301", "target": "doc_runbook_high_latency", "kind": "RELATED", "note": "레이턴시 대응 런북 관련"},
+    {"source": "doc_incident_20250215", "target": "doc_api_inventory", "kind": "LEARNED_FROM", "note": "재고 API 캐시 장애"},
+    {"source": "doc_guide_deploy", "target": "doc_incident_20250301", "kind": "RELATED", "note": "배포 절차와 장애 관련"},
+    {"source": "doc_runbook_high_latency", "target": "doc_guide_monitoring", "kind": "DEPENDS_ON", "note": "런북은 모니터링 도구 사용"}
+  ],
+  "agent_sessions": [
+    {
+      "id": "session_order_debug",
+      "agent_id": "commerce-agent",
+      "description": "고객 주문 실패 원인 조사",
+      "tool_calls": [
+        {"tool": "search_orders", "params": {"customer_id": "C-1234"}, "result": "최근 주문 3건 중 1건 결제 실패", "success": true, "duration_ms": 120},
+        {"tool": "check_payment", "params": {"order_id": "ORD-5678"}, "result": "PG사 응답 타임아웃 (30초 초과)", "success": true, "duration_ms": 85},
+        {"tool": "search_incidents", "params": {"keyword": "결제 타임아웃"}, "result": "2025-03-01 결제 장애와 유사 패턴", "success": true, "duration_ms": 200}
+      ],
+      "decisions": [
+        {
+          "title": "PG사 failover 전환 판단",
+          "rationale": "이전 장애(2025-03-01)와 동일 패턴: PG사 타임아웃 증가. circuit breaker 발동 확인 후 backup PG사로 전환.",
+          "alternatives": ["타임아웃 임계값 조정", "고객에게 재시도 안내"],
+          "outcome": {"title": "failover 전환 성공", "content": "backup PG사 전환 후 결제 성공률 99% 회복. 전환 소요시간 2분.", "success": true}
+        }
+      ],
+      "knowledge_accessed": ["doc_api_payment", "doc_incident_20250301"]
+    },
+    {
+      "id": "session_deploy_api",
+      "agent_id": "devops-agent",
+      "description": "주문 API v2.1 배포",
+      "tool_calls": [
+        {"tool": "run_ci", "params": {"branch": "feature/order-v2.1"}, "result": "CI 통과: lint OK, test 142/142 passed, build OK", "success": true, "duration_ms": 45000},
+        {"tool": "deploy_staging", "params": {"service": "commerce-api", "version": "2.1.0"}, "result": "staging 배포 완료, health check 통과", "success": true, "duration_ms": 30000},
+        {"tool": "deploy_canary", "params": {"percentage": 10}, "result": "카나리 10% 배포, 에러율 0.1%", "success": true, "duration_ms": 60000},
+        {"tool": "check_monitoring", "params": {"service": "commerce-api", "duration": "30m"}, "result": "P95 latency 120ms, 에러율 0.05%, 정상 범위", "success": true, "duration_ms": 500},
+        {"tool": "deploy_canary", "params": {"percentage": 100}, "result": "전체 배포 완료", "success": true, "duration_ms": 30000}
+      ],
+      "decisions": [
+        {
+          "title": "카나리 10% → 100% 확대 판단",
+          "rationale": "30분 모니터링 결과 P95 120ms (기준 500ms 이하), 에러율 0.05% (기준 1% 이하)로 정상 범위. 배포 가이드 절차 충족.",
+          "alternatives": ["50% 중간 단계 추가", "1시간 더 관찰"],
+          "outcome": {"title": "전체 배포 성공", "content": "v2.1.0 전체 배포 완료. 배포 후 1시간 모니터링 이상 없음.", "success": true}
+        }
+      ],
+      "knowledge_accessed": ["doc_guide_deploy", "doc_guide_monitoring"]
+    },
+    {
+      "id": "session_refund_process",
+      "agent_id": "cs-agent",
+      "description": "프로모션 상품 부분 환불 처리",
+      "tool_calls": [
+        {"tool": "search_orders", "params": {"order_id": "ORD-9012"}, "result": "프로모션 세트 상품 (3개 묶음), 1개 반품 요청", "success": true, "duration_ms": 90},
+        {"tool": "check_refund_policy", "params": {"order_type": "promotion_set"}, "result": "프로모션 상품은 세트 전체 반품 시만 환불 가능", "success": true, "duration_ms": 50},
+        {"tool": "send_message", "params": {"customer_id": "C-5678", "message": "프로모션 세트 상품은 부분 환불이 불가합니다"}, "result": "고객 불만 접수, 상위 에스컬레이션 요청", "success": true, "duration_ms": 200}
+      ],
+      "decisions": [
+        {
+          "title": "프로모션 세트 부분 환불 거절",
+          "rationale": "환불 정책에 따라 프로모션 상품은 세트 전체 반품 시만 환불 가능. 부분 반품은 정책 위반.",
+          "alternatives": ["예외 승인 요청", "상품권 보상 제안"],
+          "outcome": {"title": "고객 에스컬레이션", "content": "고객이 전체 반품으로 전환. 전액 환불 처리 완료.", "success": true}
+        }
+      ],
+      "knowledge_accessed": ["doc_rule_refund", "doc_rule_shipping"]
+    },
+    {
+      "id": "session_deploy_fail",
+      "agent_id": "devops-agent",
+      "description": "재고 서비스 배포 — 캐시 설정 오류로 롤백",
+      "tool_calls": [
+        {"tool": "deploy_staging", "params": {"service": "inventory-api", "version": "1.3.0"}, "result": "staging 배포 완료", "success": true, "duration_ms": 25000},
+        {"tool": "deploy_canary", "params": {"percentage": 10}, "result": "카나리 10% 배포", "success": true, "duration_ms": 30000},
+        {"tool": "check_monitoring", "params": {"service": "inventory-api", "duration": "15m"}, "result": "재고 불일치 알림 발생, 품절 상품 주문 건 감지", "success": false, "duration_ms": 500},
+        {"tool": "rollback", "params": {"service": "inventory-api", "to_version": "1.2.0"}, "result": "롤백 완료, 정상화 확인", "success": true, "duration_ms": 15000}
+      ],
+      "decisions": [
+        {
+          "title": "즉시 롤백 판단",
+          "rationale": "2025-02-15 재고 동기화 오류와 동일 패턴. 캐시 TTL 설정 변경이 원인으로 추정. 오주문 피해 확대 방지 위해 즉시 롤백.",
+          "alternatives": ["캐시 설정만 hotfix", "카나리 비율 축소 후 관찰"],
+          "outcome": {"title": "롤백 후 정상화", "content": "v1.2.0 롤백 완료. 오주문 5건 발생, 수동 취소 처리. 캐시 TTL 설정 코드 리뷰 누락이 원인.", "success": false}
+        }
+      ],
+      "knowledge_accessed": ["doc_incident_20250215", "doc_guide_deploy", "doc_api_inventory"]
+    }
+  ],
+  "evaluation_queries": [
+    {
+      "id": "q01_direct_keyword",
+      "query": "주문 API",
+      "intent": "auto",
+      "relevant_ids": ["doc_api_order"],
+      "description": "직접 키워드 매칭 — 가장 기본적인 검색"
+    },
+    {
+      "id": "q02_synonym",
+      "query": "결제 처리 방법",
+      "intent": "auto",
+      "relevant_ids": ["doc_api_payment"],
+      "description": "동의어/유사 표현으로 검색"
+    },
+    {
+      "id": "q03_cross_system",
+      "query": "주문할 때 재고 확인은 어떻게?",
+      "intent": "auto",
+      "relevant_ids": ["doc_api_order", "doc_api_inventory"],
+      "description": "서로 다른 시스템(주문 API + 재고 API) 교차 검색"
+    },
+    {
+      "id": "q04_policy_lookup",
+      "query": "환불 가능 기간",
+      "intent": "auto",
+      "relevant_ids": ["doc_rule_refund"],
+      "description": "정책/규정 검색"
+    },
+    {
+      "id": "q05_incident_recall",
+      "query": "결제 타임아웃 장애",
+      "intent": "past_failures",
+      "relevant_ids": ["doc_incident_20250301", "doc_api_payment"],
+      "description": "과거 장애 경험 회상"
+    },
+    {
+      "id": "q06_graph_traversal",
+      "query": "주문 API 장애 시 영향 범위",
+      "intent": "context_explore",
+      "relevant_ids": ["doc_api_order", "doc_api_inventory", "doc_api_payment", "doc_db_schema_order"],
+      "description": "그래프 탐색 — 주문 API와 연결된 모든 의존성 탐색"
+    },
+    {
+      "id": "q07_learned_pattern",
+      "query": "캐시 설정 변경 시 주의사항",
+      "intent": "past_failures",
+      "relevant_ids": ["doc_incident_20250215", "doc_api_inventory"],
+      "description": "학습된 교훈 검색 — Hebbian 강화된 실패 패턴"
+    },
+    {
+      "id": "q08_runbook",
+      "query": "API 느려졌을 때 어떻게 해야 하나",
+      "intent": "related_rules",
+      "relevant_ids": ["doc_runbook_high_latency", "doc_guide_monitoring"],
+      "description": "런북 검색 — 자연어 질의"
+    },
+    {
+      "id": "q09_deploy_procedure",
+      "query": "프로덕션 배포 절차",
+      "intent": "auto",
+      "relevant_ids": ["doc_guide_deploy"],
+      "description": "절차 문서 검색"
+    },
+    {
+      "id": "q10_decision_recall",
+      "query": "PG사 장애 시 어떤 결정을 했었나",
+      "intent": "similar_decisions",
+      "relevant_ids": ["doc_incident_20250301", "doc_api_payment"],
+      "description": "과거 의사결정 회상 — 에이전트 활동에서 학습된 패턴"
+    },
+    {
+      "id": "q11_schema_relation",
+      "query": "주문과 상품의 DB 관계",
+      "intent": "auto",
+      "relevant_ids": ["doc_db_schema_order", "doc_db_schema_product"],
+      "description": "스키마 간 관계 탐색"
+    },
+    {
+      "id": "q12_cross_domain",
+      "query": "배포 후 장애 발생하면",
+      "intent": "reasoning_chain",
+      "relevant_ids": ["doc_guide_deploy", "doc_runbook_high_latency", "doc_guide_monitoring", "doc_incident_20250301"],
+      "description": "크로스 도메인 — 배포 + 모니터링 + 장애 대응 연결"
+    },
+    {
+      "id": "q13_negative_pattern",
+      "query": "재고 서비스 배포 시 주의할 점",
+      "intent": "past_failures",
+      "relevant_ids": ["doc_incident_20250215", "doc_api_inventory"],
+      "description": "실패 패턴 학습 — 캐시 TTL 오류 경험이 활성화되어야 함"
+    },
+    {
+      "id": "q14_natural_language",
+      "query": "고객이 프로모션 상품 일부만 반품하고 싶다는데",
+      "intent": "related_rules",
+      "relevant_ids": ["doc_rule_refund"],
+      "description": "자연어 질의로 규정 검색"
+    },
+    {
+      "id": "q15_anticipatory",
+      "query": "결제 API 배포 준비 중",
+      "intent": "context_explore",
+      "relevant_ids": ["doc_api_payment", "doc_guide_deploy", "doc_incident_20250301", "doc_guide_monitoring"],
+      "description": "선제적 활성화 — 결제 API 배포 시 관련 장애 이력 + 배포 가이드 + 모니터링 함께 활성화"
+    }
+  ]
+}

@@ -7,7 +7,11 @@ from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.ppr import personalized_pagerank
 from synaptic.extensions.classifier_rules import RuleBasedClassifier
 from synaptic.extensions.embedder import EmbeddingProvider, MockEmbeddingProvider
-from synaptic.extensions.relation_detector import RuleBasedRelationDetector
+from synaptic.extensions.phrase_extractor import PhraseExtractor
+from synaptic.extensions.relation_detector import (
+    EmbeddingRelationDetector,
+    RuleBasedRelationDetector,
+)
 from synaptic.graph import SynapticGraph
 from synaptic.evidence import EvidenceAssembler
 from synaptic.models import (
@@ -55,12 +59,14 @@ __all__ = [
     "EvidenceChain",
     "EvidenceStep",
     "EmbeddingProvider",
+    "EmbeddingRelationDetector",
     "GraphTraversal",
     "KindClassifier",
     "MockEmbeddingProvider",
     "Node",
     "NodeKind",
     "OntologyRegistry",
+    "PhraseExtractor",
     "personalized_pagerank",
     "PropertyDef",
     "QueryRewriter",
@@ -72,6 +78,7 @@ __all__ = [
     "LLMRelationDetector",
     "OllamaLLMProvider",
     "OpenAILLMProvider",
+    "HybridClassifier",
     "RuleBasedClassifier",
     "RuleBasedRelationDetector",
     "SearchIntent",
@@ -95,6 +102,10 @@ def __getattr__(name: str) -> object:
         from synaptic.extensions.embedder import OllamaEmbeddingProvider  # noqa: PLC0415
 
         return OllamaEmbeddingProvider
+    if name == "HybridClassifier":
+        from synaptic.extensions.classifier_hybrid import HybridClassifier  # noqa: PLC0415
+
+        return HybridClassifier
     if name == "LLMClassifier":
         from synaptic.extensions.classifier_llm import LLMClassifier  # noqa: PLC0415
 

@@ -275,6 +275,23 @@ class RuleBasedRelationDetector:
         relations.sort(key=lambda r: r[2], reverse=True)
         return relations[: self._max_edges]
 
+    async def detect_batch(
+        self, nodes: list[Node], backend: StorageBackend
+    ) -> dict[str, list[tuple[str, EdgeKind, float]]]:
+        """여러 노드의 관계를 일괄 탐지한다.
+
+        Args:
+            nodes: 관계를 탐지할 노드 목록.
+            backend: 노드 kind 조회용 StorageBackend.
+
+        Returns:
+            {node_id: [(target_node_id, edge_kind, weight), ...]} 매핑.
+        """
+        result: dict[str, list[tuple[str, EdgeKind, float]]] = {}
+        for node in nodes:
+            result[node.id] = await self.detect(node, backend)
+        return result
+
     async def _resolve_kind_pair(
         self,
         source: Node,
@@ -307,3 +324,130 @@ class RuleBasedRelationDetector:
 
         # 기본: RELATED
         return EdgeKind.RELATED, self._title_mention_weight
+
+
+# --- NodeKind 쌍 → EdgeKind 매핑 (EmbeddingRelationDetector에서도 재사용) ---
+
+_KIND_PAIR_RULES: dict[tuple[NodeKind, NodeKind | None], EdgeKind] = {
+    (NodeKind.LESSON, None): EdgeKind.LEARNED_FROM,
+    (NodeKind.RULE, NodeKind.CONCEPT): EdgeKind.DEPENDS_ON,
+}
+
+
+def _resolve_edge_kind(
+    source_kind: NodeKind,
+    target_kind: NodeKind,
+) -> EdgeKind:
+    """NodeKind 쌍에 따라 EdgeKind를 결정한다.
+
+    - LESSON → * : LEARNED_FROM
+    - RULE → CONCEPT : DEPENDS_ON
+    - 그 외: RELATED
+    """
+    if source_kind == NodeKind.LESSON:
+        return EdgeKind.LEARNED_FROM
+    pair = (source_kind, target_kind)
+    return _KIND_PAIR_RULES.get(pair, EdgeKind.RELATED)
+
+
+class EmbeddingRelationDetector:
+    """Embedding cosine similarity 기반 관계 자동 생성.
+
+    노드 추가 시 embedding vector가 있으면, 기존 노드와의
+    cosine similarity를 계산하여 유사한 노드끼리 자동 연결.
+    LLM 호출 없이 순수 벡터 연산만 사용.
+
+    ``fallback``\ 이 설정되어 있으면 title/tag 기반 관계도 함께 탐지한다.
+    graph.py는 ``relation_detector.index``\ 를 호출하므로,
+    fallback이 있으면 fallback의 index를 반환한다.
+
+    Example::
+
+        rule_detector = RuleBasedRelationDetector()
+        detector = EmbeddingRelationDetector(
+            similarity_threshold=0.7,
+            fallback=rule_detector,
+        )
+        # graph.add() 시 detector.index.add(node) 호출 → fallback.index에 위임
+        edges = await detector.detect(new_node, backend)
+    """
+
+    __slots__ = ("_threshold", "_max_edges", "_fallback", "index")
+
+    def __init__(
+        self,
+        *,
+        similarity_threshold: float = 0.7,
+        max_edges_per_node: int = 5,
+        fallback: RuleBasedRelationDetector | None = None,
+    ) -> None:
+        """EmbeddingRelationDetector를 초기화한다.
+
+        Args:
+            similarity_threshold: 관계로 인정할 최소 cosine similarity (0.0~1.0).
+            max_edges_per_node: 한 노드에서 탐지할 최대 관계 수.
+            fallback: title/tag 기반 관계 탐지기. None이면 embedding만 사용.
+        """
+        self._threshold = similarity_threshold
+        self._max_edges = max_edges_per_node
+        self._fallback = fallback
+        # graph.py가 relation_detector.index.add(node) 호출하므로
+        # fallback이 있으면 fallback의 index를, 없으면 빈 InvertedIndex를 제공
+        self.index = fallback.index if fallback is not None else InvertedIndex()
+
+    async def detect(
+        self,
+        node: Node,
+        backend: StorageBackend,
+    ) -> list[tuple[str, EdgeKind, float]]:
+        """새 노드와 기존 노드 사이의 관계를 탐지한다.
+
+        1. node의 embedding이 있으면 backend.search_vector()로 유사 노드 검색
+        2. similarity_threshold 이상인 노드와 RELATED 엣지 생성
+        3. NodeKind 쌍에 따라 EdgeKind 조정 (LESSON→* = LEARNED_FROM 등)
+        4. fallback이 있으면 title/tag 기반 관계도 추가
+        5. 중복 제거 후 상위 max_edges_per_node개 반환
+
+        Args:
+            node: 관계를 탐지할 새 노드.
+            backend: 유사 노드 검색 및 kind 조회용 StorageBackend.
+
+        Returns:
+            [(target_node_id, edge_kind, weight), ...] 최대 max_edges_per_node개.
+        """
+        relations: list[tuple[str, EdgeKind, float]] = []
+        seen_targets: set[str] = set()
+
+        # 1. Embedding 기반 유사도 탐지
+        if node.embedding:
+            try:
+                candidates = await backend.search_vector(
+                    node.embedding, limit=self._max_edges * 2,
+                )
+                for candidate in candidates:
+                    if candidate.id == node.id or candidate.id in seen_targets:
+                        continue
+                    if not candidate.embedding:
+                        continue
+                    sim = _cosine_similarity(node.embedding, candidate.embedding)
+                    if sim >= self._threshold:
+                        seen_targets.add(candidate.id)
+                        edge_kind = _resolve_edge_kind(node.kind, candidate.kind)
+                        relations.append((candidate.id, edge_kind, sim))
+            except Exception:
+                logger.debug(
+                    "Embedding search failed in EmbeddingRelationDetector",
+                    exc_info=True,
+                )
+
+        # 2. Fallback: title/tag 기반 관계 추가 (중복 제거)
+        if self._fallback is not None:
+            fallback_relations = await self._fallback.detect(node, backend)
+            for target_id, edge_kind, weight in fallback_relations:
+                if target_id not in seen_targets:
+                    seen_targets.add(target_id)
+                    relations.append((target_id, edge_kind, weight))
+
+        # weight 내림차순 정렬 후 max_edges 제한
+        relations.sort(key=lambda r: r[2], reverse=True)
+        return relations[: self._max_edges]

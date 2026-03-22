@@ -91,6 +91,16 @@ class RuleBasedClassifier:
         title 매칭 시 가중치 2, content 매칭 시 가중치 1.
         매칭되는 키워드가 없으면 ``NodeKind.CONCEPT`` 반환.
         """
+        kind, _ = self.classify_with_confidence(title, content)
+        return kind
+
+    def classify_with_confidence(self, title: str, content: str) -> tuple[NodeKind, float]:
+        """title + content 키워드 매칭으로 NodeKind와 confidence 반환.
+
+        title 매칭 시 가중치 2, content 매칭 시 가중치 1.
+        confidence는 ``min(1.0, total_score / 6.0)`` 으로 정규화.
+        매칭되는 키워드가 없으면 ``(NodeKind.CONCEPT, 0.0)`` 반환.
+        """
         title_lower = title.lower()
         content_lower = content.lower()
 
@@ -109,4 +119,5 @@ class RuleBasedClassifier:
                 best_score = score
                 best_kind = kind
 
-        return best_kind
+        confidence = min(1.0, best_score / 6.0) if best_score > 0 else 0.0
+        return best_kind, confidence

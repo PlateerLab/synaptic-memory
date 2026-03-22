@@ -314,9 +314,17 @@ class TestE2EHotPotQA:
 
         # 1. 그래프 구축 (Auto-Ontology)
         print("\n[Phase 1] 그래프 구축...")
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier
+        from synaptic.extensions.relation_detector import RuleBasedRelationDetector
+
         backend = MemoryBackend()
         await backend.connect()
-        graph = SynapticGraph(backend)
+        detector = RuleBasedRelationDetector()
+        graph = SynapticGraph(
+            backend,
+            classifier=RuleBasedClassifier(),
+            relation_detector=detector,
+        )
 
         id_map: dict[str, str] = {}
         for cid, doc in corpus.items():
@@ -326,7 +334,9 @@ class TestE2EHotPotQA:
             )
             id_map[cid] = node_id
 
-        print(f"  노드: {len(id_map)}, 엣지: {len(await backend.get_edges('') if hasattr(backend, '_edges') else [])}")
+        # 엣지 수 확인
+        edge_count = len(backend._edges) if hasattr(backend, '_edges') else 0
+        print(f"  노드: {len(id_map)}, 엣지: {edge_count}")
 
         # LLM 설정
         model = os.environ.get("E2E_MODEL", "qwen3.5:4b")
@@ -413,3 +423,153 @@ class TestE2EHotPotQA:
         assert len(benchmark.results) > 0
 
         await graph.backend.close()
+
+    @pytest.mark.asyncio
+    async def test_hotpotqa_e2e_claude(self) -> None:
+        """Claude API로 답변 생성 — Cognee 공정 비교 (그래프는 RuleBased)."""
+        from dotenv import dotenv_values
+        env = dotenv_values()
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "") or env.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            pytest.skip("ANTHROPIC_API_KEY 없음. .env에 설정 필요")
+
+        data = _load_hotpotqa()
+        if not data:
+            pytest.skip("HotPotQA 데이터 없음")
+
+        corpus = data["corpus"]
+        queries = data["queries"]
+        answers = data.get("answers", {})
+
+        import random
+        random.seed(42)
+        query_ids = list(queries.keys())
+        if len(query_ids) > 24:
+            query_ids = random.sample(query_ids, 24)
+
+        # 1. 그래프 구축 (RuleBased — 빠름)
+        print("\n[Phase 1] 그래프 구축 (RuleBased)...")
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier
+        from synaptic.extensions.relation_detector import RuleBasedRelationDetector
+
+        backend = MemoryBackend()
+        await backend.connect()
+        graph = SynapticGraph(
+            backend,
+            classifier=RuleBasedClassifier(),
+            relation_detector=RuleBasedRelationDetector(),
+        )
+
+        for cid, doc in corpus.items():
+            await graph.add(
+                title=doc.get("title", ""),
+                content=doc.get("text", ""),
+            )
+
+        edge_count = len(backend._edges) if hasattr(backend, '_edges') else 0
+        print(f"  노드: {len(corpus)}, 엣지: {edge_count}")
+
+        # 2. Claude로 답변 생성
+        print(f"\n[Phase 2] Retrieval + Generation (Claude, {len(query_ids)}문항)...")
+        benchmark = E2EBenchmark(dataset_name="HotPotQA-Claude", model_name="claude-sonnet-4-20250514")
+        start_total = time()
+
+        for i, qid in enumerate(query_ids):
+            question = queries[qid]
+            ground_truth = answers.get(qid, "")
+
+            # Retrieval + Evidence Chain
+            t0 = time()
+            evidence = await graph.build_evidence(
+                question, limit=10, max_steps=8, max_tokens=2048,
+            )
+            retrieval_ms = (time() - t0) * 1000
+
+            contexts = [evidence.compressed_context] if evidence.compressed_context else []
+
+            # Claude로 답변 생성
+            t0 = time()
+            answer = await _generate_answer_claude(
+                question, contexts, api_key=api_key,
+            )
+            gen_ms = (time() - t0) * 1000
+
+            result = E2EResult(
+                question=question,
+                ground_truth=ground_truth,
+                answer=answer,
+                contexts=contexts,
+                retrieval_time_ms=retrieval_ms,
+                generation_time_ms=gen_ms,
+            )
+            benchmark.results.append(result)
+
+            print(f"  [{i+1}/{len(query_ids)}] Q: {question[:60]}...")
+            print(f"         A: {answer[:80]}...")
+
+        benchmark.total_time_s = time() - start_total
+
+        # 3. 평가
+        print(f"\n[Phase 3] 평가 (Correctness)...")
+        for r in benchmark.results:
+            r.correctness = _evaluate_correctness_simple(r.answer, r.ground_truth)
+
+        print(benchmark.report())
+
+        cognee_correctness = 0.925
+        our_correctness = benchmark.mean_correctness
+        print(f"\n  📊 Cognee Correctness (GPT-4o):  {cognee_correctness:.3f}")
+        print(f"  📊 Synaptic + Claude:            {our_correctness:.3f}")
+        if our_correctness >= cognee_correctness:
+            print("  ✅ Cognee 수준 달성/초과!")
+        else:
+            gap = cognee_correctness - our_correctness
+            print(f"  ⚠️  Gap: {gap:.3f} ({gap/cognee_correctness*100:.1f}%)")
+
+        assert len(benchmark.results) > 0
+        await graph.backend.close()
+
+
+async def _generate_answer_claude(
+    question: str,
+    contexts: list[str],
+    *,
+    api_key: str,
+    model: str = "claude-sonnet-4-20250514",
+) -> str:
+    """Claude API로 답변 생성."""
+    try:
+        import aiohttp
+    except ImportError:
+        return "[aiohttp 필요]"
+
+    context_text = "\n\n---\n\n".join(contexts[:5])
+    user_prompt = (
+        f"Context:\n{context_text}\n\n"
+        f"Question: {question}\n\n"
+        "Answer the question based ONLY on the provided context. "
+        "Keep the answer concise (1-2 sentences). Give the direct answer."
+    )
+
+    payload = {
+        "model": model,
+        "max_tokens": 256,
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            "https://api.anthropic.com/v1/messages",
+            json=payload, headers=headers,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                return f"[Claude ERROR: {resp.status}] {text[:200]}"
+            data = await resp.json()
+            return data["content"][0]["text"].strip()
