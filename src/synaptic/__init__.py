@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from synaptic.activity import ActivityTracker
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
+from synaptic.extensions.classifier_rules import RuleBasedClassifier
 from synaptic.extensions.embedder import EmbeddingProvider, MockEmbeddingProvider
+from synaptic.extensions.relation_detector import RuleBasedRelationDetector
 from synaptic.graph import SynapticGraph
 from synaptic.models import (
     ActivatedNode,
@@ -23,7 +25,15 @@ from synaptic.ontology import (
     TypeDef,
     build_agent_ontology,
 )
-from synaptic.protocols import Digester, GraphTraversal, QueryRewriter, StorageBackend, TagExtractor
+from synaptic.protocols import (
+    Digester,
+    GraphTraversal,
+    KindClassifier,
+    QueryRewriter,
+    RelationDetector,
+    StorageBackend,
+    TagExtractor,
+)
 from synaptic.resonance import ResonanceWeights
 
 __version__ = "0.5.0"
@@ -39,14 +49,18 @@ __all__ = [
     "EdgeKind",
     "EmbeddingProvider",
     "GraphTraversal",
+    "KindClassifier",
     "MockEmbeddingProvider",
     "Node",
     "NodeKind",
     "OntologyRegistry",
     "PropertyDef",
     "QueryRewriter",
+    "RelationDetector",
     "RelationConstraint",
     "ResonanceWeights",
+    "RuleBasedClassifier",
+    "RuleBasedRelationDetector",
     "SearchIntent",
     "SearchResult",
     "StorageBackend",

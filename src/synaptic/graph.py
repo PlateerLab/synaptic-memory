@@ -22,7 +22,14 @@ from synaptic.models import (
     SearchResult,
 )
 from synaptic.ontology import OntologyRegistry
-from synaptic.protocols import Digester, QueryRewriter, StorageBackend, TagExtractor
+from synaptic.protocols import (
+    Digester,
+    KindClassifier,
+    QueryRewriter,
+    RelationDetector,
+    StorageBackend,
+    TagExtractor,
+)
 from synaptic.search import HybridSearch
 from synaptic.store import Store
 
@@ -34,12 +41,14 @@ class SynapticGraph:
         "_agent_search",
         "_backend",
         "_cache",
+        "_classifier",
         "_consolidation",
         "_embedder",
         "_hebbian",
         "_json_exporter",
         "_md_exporter",
         "_ontology",
+        "_relation_detector",
         "_search",
         "_store",
     )
@@ -52,6 +61,8 @@ class SynapticGraph:
         tag_extractor: TagExtractor | None = None,
         ontology: OntologyRegistry | None = None,
         embedder: EmbeddingProvider | None = None,
+        classifier: KindClassifier | None = None,
+        relation_detector: RelationDetector | None = None,
         cache_size: int = 256,
     ) -> None:
         self._backend = backend
@@ -64,6 +75,8 @@ class SynapticGraph:
         self._cache = NodeCache(maxsize=cache_size)
         self._ontology = ontology
         self._embedder = embedder
+        self._classifier = classifier
+        self._relation_detector = relation_detector
         self._agent_search = AgentSearch(hybrid=self._search)
 
     @property
@@ -83,12 +96,19 @@ class SynapticGraph:
         title: str,
         content: str,
         *,
-        kind: NodeKind = NodeKind.CONCEPT,
+        kind: NodeKind | None = None,
         tags: list[str] | None = None,
         source: str = "",
         embedding: list[float] | None = None,
         properties: dict[str, str] | None = None,
     ) -> Node:
+        # Auto-classify kind if not specified
+        if kind is None:
+            if self._classifier is not None:
+                kind = self._classifier.classify(title, content)
+            else:
+                kind = NodeKind.CONCEPT
+
         # Validate against ontology if available
         if self._ontology and properties:
             errors = self._ontology.validate_node(str(kind), properties)
@@ -107,6 +127,16 @@ class SynapticGraph:
             embedding=embedding, properties=properties,
         )
         self._cache.put(node)
+
+        # Auto-detect relations with existing nodes
+        if self._relation_detector is not None:
+            self._relation_detector.index.add(node)
+            relations = await self._relation_detector.detect(node, self._backend)
+            for target_id, edge_kind, weight in relations:
+                await self._store.add_edge(
+                    node.id, target_id, kind=edge_kind, weight=weight,
+                )
+
         return node
 
     async def link(
@@ -190,6 +220,9 @@ class SynapticGraph:
         node = await self._backend.get_node(node_id)
         if node is None:
             return False
+        # Remove from relation detector index
+        if self._relation_detector is not None:
+            self._relation_detector.index.remove(node_id)
         await self._store.delete_node(node_id)
         self._cache.invalidate(node_id)
         return True

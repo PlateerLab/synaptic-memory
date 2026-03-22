@@ -11,10 +11,10 @@ from synaptic.models import Node
 
 @dataclass(slots=True)
 class ResonanceWeights:
-    relevance: float = 0.4
-    importance: float = 0.25
-    recency: float = 0.2
-    vitality: float = 0.15
+    relevance: float = 0.55
+    importance: float = 0.15
+    recency: float = 0.20
+    vitality: float = 0.10
     context: float = 0.0  # v0.5: context affinity axis (tag overlap with session)
 
 

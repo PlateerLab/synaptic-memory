@@ -31,19 +31,19 @@ class SearchIntent(StrEnum):
 # Weights tuned per intent
 _INTENT_WEIGHTS: dict[SearchIntent, ResonanceWeights] = {
     SearchIntent.SIMILAR_DECISIONS: ResonanceWeights(
-        relevance=0.30, importance=0.30, recency=0.15, vitality=0.05, context=0.20,
+        relevance=0.45, importance=0.20, recency=0.15, vitality=0.05, context=0.15,
     ),
     SearchIntent.PAST_FAILURES: ResonanceWeights(
-        relevance=0.25, importance=0.35, recency=0.20, vitality=0.05, context=0.15,
+        relevance=0.40, importance=0.25, recency=0.20, vitality=0.05, context=0.10,
     ),
     SearchIntent.RELATED_RULES: ResonanceWeights(
-        relevance=0.35, importance=0.25, recency=0.10, vitality=0.10, context=0.20,
+        relevance=0.45, importance=0.20, recency=0.10, vitality=0.10, context=0.15,
     ),
     SearchIntent.REASONING_CHAIN: ResonanceWeights(
-        relevance=0.30, importance=0.20, recency=0.25, vitality=0.05, context=0.20,
+        relevance=0.40, importance=0.20, recency=0.20, vitality=0.05, context=0.15,
     ),
     SearchIntent.CONTEXT_EXPLORE: ResonanceWeights(
-        relevance=0.20, importance=0.15, recency=0.15, vitality=0.10, context=0.40,
+        relevance=0.30, importance=0.15, recency=0.15, vitality=0.10, context=0.30,
     ),
 }
 
@@ -155,11 +155,15 @@ class AgentSearch:
         start = time()
         weights = _INTENT_WEIGHTS[SearchIntent.SIMILAR_DECISIONS]
 
-        # Search filtered to decision nodes
+        # Search filtered to decision nodes, fallback to unfiltered
         result = await self._hybrid.search(
             backend, query, limit=limit * 2, embedding=embedding,
             node_kinds=[NodeKind.DECISION],
         )
+        if len(result.nodes) < 2:
+            result = await self._hybrid.search(
+                backend, query, limit=limit * 2, embedding=embedding,
+            )
 
         # Expand: follow RESULTED_IN edges to include outcomes
         expanded: dict[str, tuple[Node, float]] = {}
@@ -189,21 +193,23 @@ class AgentSearch:
         limit: int,
         context_tags: list[str] | None,
     ) -> SearchResult:
-        """Find failed outcomes and their decision context."""
+        """Find failed outcomes, lessons, and their decision context."""
         start = time()
         weights = _INTENT_WEIGHTS[SearchIntent.PAST_FAILURES]
 
-        # Search OUTCOME nodes
+        # Search broadly — OUTCOME, DECISION, LESSON all relevant to failures
         result = await self._hybrid.search(
             backend, query, limit=limit * 3,
-            node_kinds=[NodeKind.OUTCOME, NodeKind.DECISION],
+            node_kinds=[NodeKind.OUTCOME, NodeKind.DECISION, NodeKind.LESSON],
         )
 
-        # Filter to failures and backtrack to decisions
         expanded: dict[str, tuple[Node, float]] = {}
         for an in result.nodes:
             node = an.node
-            if node.kind == NodeKind.OUTCOME and node.failure_count > 0:
+            # LESSON 노드는 장애 교훈이므로 직접 포함
+            if node.kind == NodeKind.LESSON:
+                expanded[node.id] = (node, an.activation)
+            elif node.kind == NodeKind.OUTCOME and node.failure_count > 0:
                 expanded[node.id] = (node, an.activation)
                 # Backtrack to decision
                 edges = await backend.get_edges(node.id, direction="incoming")
@@ -215,7 +221,7 @@ class AgentSearch:
             elif node.kind == NodeKind.DECISION and node.failure_count > 0:
                 expanded[node.id] = (node, an.activation)
 
-        # Also find lessons learned from failures
+        # Also find lessons learned from failures via graph edges
         for node_id in list(expanded.keys()):
             edges = await backend.get_edges(node_id, direction="incoming")
             for edge in edges:
@@ -223,6 +229,14 @@ class AgentSearch:
                     lesson = await backend.get_node(edge.source_id)
                     if lesson and lesson.id not in expanded:
                         expanded[lesson.id] = (lesson, 0.6)
+
+        # If still empty, fall back to general search (no kind filter)
+        if not expanded:
+            result = await self._hybrid.search(
+                backend, query, limit=limit * 2,
+            )
+            for an in result.nodes:
+                expanded[an.node.id] = (an.node, an.activation)
 
         activated = self._score_candidates(expanded, weights, context_tags)
         return SearchResult(
@@ -249,6 +263,10 @@ class AgentSearch:
             backend, query, limit=limit * 2, embedding=embedding,
             node_kinds=[NodeKind.RULE, NodeKind.LESSON],
         )
+        if len(result.nodes) < 2:
+            result = await self._hybrid.search(
+                backend, query, limit=limit * 2, embedding=embedding,
+            )
 
         # Expand via graph traversal
         expanded: dict[str, tuple[Node, float]] = {}
@@ -280,11 +298,15 @@ class AgentSearch:
         start = time()
         weights = _INTENT_WEIGHTS[SearchIntent.REASONING_CHAIN]
 
-        # Find seed decisions
+        # Find seed decisions, fallback to unfiltered
         result = await self._hybrid.search(
             backend, query, limit=limit,
             node_kinds=[NodeKind.DECISION],
         )
+        if len(result.nodes) < 2:
+            result = await self._hybrid.search(
+                backend, query, limit=limit,
+            )
 
         expanded: dict[str, tuple[Node, float]] = {}
         for an in result.nodes:

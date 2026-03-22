@@ -9,6 +9,7 @@ from synaptic.models import (
     ConsolidationLevel,
     DigestResult,
     Edge,
+    EdgeKind,
     Node,
     NodeKind,
 )
@@ -96,3 +97,19 @@ class TagExtractor(Protocol):
     """Extracts tags from text content."""
 
     def extract(self, text: str) -> list[str]: ...
+
+
+class KindClassifier(Protocol):
+    """Classifies text into a NodeKind."""
+
+    def classify(self, title: str, content: str) -> NodeKind: ...
+
+
+class RelationDetector(Protocol):
+    """Detects potential edges for a newly added node."""
+
+    async def detect(
+        self,
+        node: Node,
+        backend: StorageBackend,
+    ) -> list[tuple[str, EdgeKind, float]]: ...

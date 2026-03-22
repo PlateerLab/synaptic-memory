@@ -11,18 +11,22 @@ from synaptic.synonyms import expand_synonyms
 
 
 class HybridSearch:
-    """3-stage fallback search: FTS+fuzzy → synonym expansion → query rewrite."""
+    """3-stage fallback search: FTS+vector → synonym expansion → query rewrite."""
 
-    __slots__ = ("_query_rewriter", "_scorer")
+    __slots__ = ("_query_rewriter", "_scorer", "_spread_decay", "_spread_depth")
 
     def __init__(
         self,
         *,
         scorer: ResonanceScorer | None = None,
         query_rewriter: QueryRewriter | None = None,
+        spread_decay: float = 0.25,
+        spread_depth: int = 1,
     ) -> None:
         self._scorer = scorer or ResonanceScorer()
         self._query_rewriter = query_rewriter
+        self._spread_decay = spread_decay
+        self._spread_depth = spread_depth
 
     async def search(
         self,
@@ -37,22 +41,14 @@ class HybridSearch:
         stages_used: list[str] = []
         all_nodes: dict[str, tuple[Node, float]] = {}
 
-        # Stage 1: FTS + fuzzy + vector (parallel candidates)
+        # Stage 1: FTS + vector
         fts_nodes = await backend.search_fts(query, limit=limit * 2)
         stages_used.append("fts")
-        for node in fts_nodes:
+        for rank, node in enumerate(fts_nodes):
+            # FTS 순위 기반 점수: 1위=0.95, 2위=0.90, ...
+            score = max(0.5, 0.95 - rank * 0.05)
             if node.id not in all_nodes:
-                all_nodes[node.id] = (node, 0.8)
-
-        fuzzy_nodes = await backend.search_fuzzy(query, limit=limit * 2)
-        stages_used.append("fuzzy")
-        for node in fuzzy_nodes:
-            if node.id not in all_nodes:
-                all_nodes[node.id] = (node, 0.6)
-            else:
-                # Boost score if found in multiple stages
-                existing = all_nodes[node.id]
-                all_nodes[node.id] = (existing[0], min(1.0, existing[1] + 0.2))
+                all_nodes[node.id] = (node, score)
 
         if embedding:
             vec_nodes = await backend.search_vector(embedding, limit=limit * 2)
@@ -89,11 +85,18 @@ class HybridSearch:
         total_candidates = len(all_nodes)
         top_ids = sorted(all_nodes, key=lambda nid: all_nodes[nid][1], reverse=True)[:5]
         for nid in top_ids:
-            neighbors = await backend.get_neighbors(nid, depth=1)
+            parent_score = all_nodes[nid][1]
+            neighbors = await backend.get_neighbors(nid, depth=self._spread_depth)
             for neighbor_node, edge in neighbors:
+                activation = parent_score * edge.weight * self._spread_decay
                 if neighbor_node.id not in all_nodes:
-                    activation = all_nodes[nid][1] * edge.weight * 0.5
                     all_nodes[neighbor_node.id] = (neighbor_node, max(0.0, min(1.0, activation)))
+                else:
+                    # 이미 있으면 미세 부스트만 (FTS 직접 매칭 랭킹 보존)
+                    existing = all_nodes[neighbor_node.id]
+                    boosted = min(1.0, existing[1] + activation * 0.1)
+                    if boosted > existing[1]:
+                        all_nodes[neighbor_node.id] = (existing[0], boosted)
 
         # Filter by node_kinds if specified
         if node_kinds:

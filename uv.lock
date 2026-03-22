@@ -1485,6 +1485,7 @@ source = { editable = "." }
 
 [package.optional-dependencies]
 all = [
+    { name = "aiohttp" },
     { name = "aiosqlite" },
     { name = "asyncpg" },
     { name = "mcp", extra = ["cli"] },
@@ -1498,6 +1499,9 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
+]
+embedding = [
+    { name = "aiohttp" },
 ]
 mcp = [
     { name = "aiosqlite" },
@@ -1517,6 +1521,7 @@ qdrant = [
     { name = "qdrant-client" },
 ]
 scale = [
+    { name = "aiohttp" },
     { name = "miniopy-async" },
     { name = "neo4j" },
     { name = "qdrant-client" },
@@ -1527,6 +1532,9 @@ sqlite = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", marker = "extra == 'all'", specifier = ">=3.9" },
+    { name = "aiohttp", marker = "extra == 'embedding'", specifier = ">=3.9" },
+    { name = "aiohttp", marker = "extra == 'scale'", specifier = ">=3.9" },
     { name = "aiosqlite", marker = "extra == 'all'", specifier = ">=0.20" },
     { name = "aiosqlite", marker = "extra == 'mcp'", specifier = ">=0.20" },
     { name = "aiosqlite", marker = "extra == 'sqlite'", specifier = ">=0.20" },
@@ -1550,7 +1558,7 @@ requires-dist = [
     { name = "qdrant-client", marker = "extra == 'scale'", specifier = ">=1.12" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
 ]
-provides-extras = ["postgresql", "sqlite", "neo4j", "qdrant", "minio", "mcp", "scale", "all", "dev"]
+provides-extras = ["sqlite", "postgresql", "neo4j", "qdrant", "minio", "embedding", "mcp", "scale", "all", "dev"]
 
 [[package]]
 name = "typer"

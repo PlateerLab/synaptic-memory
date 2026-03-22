@@ -96,33 +96,64 @@ class MemoryBackend:
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         query_lower = query.lower()
         terms = query_lower.split()
-        scored: list[tuple[Node, int]] = []
+        # 2-gram 서브스트링 생성 (한글 복합어 매칭용)
+        bigrams: list[str] = []
+        if len(terms) >= 2:
+            for i in range(len(terms) - 1):
+                bigrams.append(f"{terms[i]} {terms[i + 1]}")
+
+        scored: list[tuple[Node, float]] = []
         for node in self._nodes.values():
-            text = f"{node.title} {node.content}".lower()
-            hits = sum(1 for t in terms if t in text)
-            if hits > 0:
-                scored.append((node, hits))
+            title_lower = node.title.lower()
+            content_lower = node.content.lower()
+            full_text = f"{title_lower} {content_lower}"
+            score = 0.0
+
+            # Title에 전체 쿼리가 포함되면 높은 보너스
+            if query_lower in title_lower:
+                score += len(terms) * 3.0
+            else:
+                # Title 개별 term 매칭 (가중치 2x)
+                score += sum(2.0 for t in terms if t in title_lower)
+
+            # Content 개별 term 매칭
+            score += sum(1.0 for t in terms if t in content_lower)
+
+            # Bigram 매칭 보너스 (연속된 2개 term이 함께 나타나면 관련성 높음)
+            score += sum(1.5 for bg in bigrams if bg in full_text)
+
+            # Tag 매칭 보너스
+            if node.tags:
+                tag_text = " ".join(node.tags).lower()
+                score += sum(0.5 for t in terms if t in tag_text)
+
+            if score > 0:
+                scored.append((node, score))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [n for n, _ in scored[:limit]]
 
     async def search_fuzzy(
-        self, query: str, *, limit: int = 20, threshold: float = 0.3
+        self, query: str, *, limit: int = 20, threshold: float = 0.4
     ) -> list[Node]:
         query_lower = query.lower()
         # Deduplicate and cap query terms to avoid O(n*m) explosion on long queries
         query_terms = list(dict.fromkeys(query_lower.split()))[:10]
         scored: list[tuple[Node, float]] = []
         for node in self._nodes.values():
-            # Compare against title (short text → fair ratio) and individual words
-            title_ratio = SequenceMatcher(None, query_lower[:200], node.title.lower()).ratio()
+            title_lower = node.title.lower()
+            # Compare against title (short text → fair ratio)
+            title_ratio = SequenceMatcher(None, query_lower[:200], title_lower).ratio()
             best = title_ratio
 
-            # Per-term fuzzy: match each query term against title words (fast) + content sample
+            # Per-term fuzzy: match each query term against title words + content sample
             if query_terms:
-                title_words = node.title.lower().split()
-                # Sample content words (first 50 words) to keep fuzzy fast
-                content_words = node.content.lower().split()[:50]
-                text_words = title_words + content_words
+                title_words = title_lower.split()
+                # Content: first 100 words for broader coverage
+                content_words = node.content.lower().split()[:100]
+                # Tag words too
+                tag_words = [t.lower() for t in (node.tags or [])]
+                text_words = title_words + content_words + tag_words
+
                 term_scores: list[float] = []
                 for qt in query_terms:
                     term_best = 0.0
@@ -132,7 +163,10 @@ class MemoryBackend:
                             term_best = r
                     term_scores.append(term_best)
                 avg_term = sum(term_scores) / len(term_scores)
-                best = max(best, avg_term)
+
+                # Title term 매칭 보너스: title에 term이 정확히 있으면 boost
+                title_boost = sum(0.1 for qt in query_terms if qt in title_lower)
+                best = max(best, avg_term) + title_boost
 
             if best >= threshold:
                 scored.append((node, best))

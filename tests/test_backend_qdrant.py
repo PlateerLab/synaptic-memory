@@ -22,6 +22,16 @@ TEST_DIM = 4  # Small dimension for testing
 
 @pytest.fixture
 async def backend():
+    # Clean slate: delete leftover collection before connect
+    from qdrant_client import AsyncQdrantClient as _AQC
+
+    _tmp = _AQC(url="http://localhost:6333")
+    try:
+        await _tmp.delete_collection("test_synaptic")
+    except Exception:
+        pass
+    await _tmp.close()
+
     b = QdrantBackend("http://localhost:6333", collection="test_synaptic", dimension=TEST_DIM)
     try:
         await b.connect()

@@ -124,10 +124,13 @@ class QdrantBackend:
         """Delete a vector by node ID."""
         client = self._get_client()
         point_id = _node_id_to_uuid(node_id)
-        await client.delete(
-            collection_name=self._collection,
-            points_selector=models.PointIdsList(points=[point_id]),
-        )
+        try:
+            await client.delete(
+                collection_name=self._collection,
+                points_selector=models.PointIdsList(points=[point_id]),
+            )
+        except Exception:
+            pass  # Idempotent: ignore if point doesn't exist or replica transient error
 
     async def delete_collection(self) -> None:
         """Delete the entire collection. For testing only."""
