@@ -125,7 +125,16 @@ class MemoryBackend:
             # Tag 매칭 보너스
             if node.tags:
                 tag_text = " ".join(node.tags).lower()
-                score += sum(0.5 for t in terms if t in tag_text)
+                score += sum(1.0 for t in terms if t in tag_text)
+
+            # _search_keywords 매칭 (LLM이 생성한 검색 최적화 키워드)
+            if node.properties:
+                search_kw = node.properties.get("_search_keywords", "").lower()
+                if search_kw:
+                    score += sum(1.5 for t in terms if t in search_kw)
+                summary = node.properties.get("_summary", "").lower()
+                if summary:
+                    score += sum(0.5 for t in terms if t in summary)
 
             if score > 0:
                 scored.append((node, score))

@@ -9,6 +9,31 @@ from synaptic.protocols import QueryRewriter, StorageBackend
 from synaptic.resonance import ResonanceScorer
 from synaptic.synonyms import expand_synonyms
 
+# Kind-query 키워드 매핑 (쿼리에 이런 단어가 있으면 해당 kind 부스트)
+_KIND_QUERY_HINTS: dict[NodeKind, list[str]] = {
+    NodeKind.LESSON: [
+        "실패", "에러", "오류", "장애", "교훈", "배운", "주의",
+        "failure", "error", "incident", "lesson", "postmortem",
+    ],
+    NodeKind.RULE: [
+        "규칙", "정책", "규정", "금지", "필수", "가이드",
+        "rule", "policy", "constraint", "must", "forbidden",
+    ],
+    NodeKind.DECISION: [
+        "결정", "선택", "판단", "채택", "어떻게",
+        "decision", "choice", "decided", "approach",
+    ],
+    NodeKind.ARTIFACT: [
+        "api", "엔드포인트", "스키마", "명세", "코드",
+        "endpoint", "schema", "spec", "interface",
+    ],
+    NodeKind.ENTITY: [
+        "회사", "조직", "제품", "서비스", "시스템",
+        "company", "organization", "product", "service",
+    ],
+}
+_KIND_BOOST = 0.05  # kind 매칭 시 search_score 부스트량 (보수적)
+
 
 class HybridSearch:
     """3-stage fallback search: FTS+vector → synonym expansion → query rewrite."""
@@ -107,10 +132,30 @@ class HybridSearch:
                 if node.kind in kind_set
             }
 
+        # Kind-intent boost: 쿼리 키워드와 매칭되는 kind에 부스트
+        preferred_kinds: set[NodeKind] = set()
+        q_lower = query.lower()
+        for kind, hints in _KIND_QUERY_HINTS.items():
+            if any(h in q_lower for h in hints):
+                preferred_kinds.add(kind)
+
+        # Tag-query boost: 쿼리 키워드가 노드 태그에 있으면 부스트
+        query_terms_set = set(query.lower().split())
+
         # Score with resonance
         now = time()
         activated: list[ActivatedNode] = []
         for _nid, (node, search_score) in all_nodes.items():
+            # kind 부스트
+            if preferred_kinds and node.kind in preferred_kinds:
+                search_score = min(1.0, search_score + _KIND_BOOST)
+            # tag 부스트 (정확 매칭만 — 2글자 이상 태그만)
+            if node.tags and query_terms_set:
+                tag_set = {t.lower() for t in node.tags if len(t) >= 2}
+                tag_overlap = len(query_terms_set & tag_set)
+                if tag_overlap > 0:
+                    search_score = min(1.0, search_score + tag_overlap * 0.03)
+
             resonance = self._scorer.score(node, search_score=search_score, now=now)
             activated.append(
                 ActivatedNode(
