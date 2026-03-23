@@ -57,4 +57,13 @@ jobs:
         run: uv sync --extra dev --extra sqlite
 
       - name: Run tests
-        run: uv run pytest tests/ --ignore=tests/test_backend_postgresql.py --ignore=tests/benchmark --ignore=tests/qa -x -q
+        run: |
+          uv run pytest tests/ \
+            --ignore=tests/test_backend_postgresql.py \
+            --ignore=tests/test_backend_neo4j.py \
+            --ignore=tests/test_backend_qdrant.py \
+            --ignore=tests/test_backend_minio.py \
+            --ignore=tests/test_backend_composite.py \
+            --ignore=tests/benchmark \
+            --ignore=tests/qa \
+            -x -q
