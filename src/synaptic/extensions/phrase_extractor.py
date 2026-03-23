@@ -24,19 +24,13 @@ if TYPE_CHECKING:
 # --- Phrase normalization ---
 
 # Proper nouns: consecutive words starting with uppercase (2+ words or single uppercase word)
-_RE_PROPER_NOUN = re.compile(
-    r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"
-)
+_RE_PROPER_NOUN = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b")
 
 # Single capitalized word (3+ chars, excluding common English words)
-_RE_SINGLE_PROPER = re.compile(
-    r"\b([A-Z][a-z]{2,})\b"
-)
+_RE_SINGLE_PROPER = re.compile(r"\b([A-Z][a-z]{2,})\b")
 
 # Abbreviations in parentheses: (MSU), (API), (LLM), etc.
-_RE_ABBREVIATION = re.compile(
-    r"\(([A-Z]{2,8})\)"
-)
+_RE_ABBREVIATION = re.compile(r"\(([A-Z]{2,8})\)")
 
 # Korean proper nouns: text within quotation marks/brackets
 _RE_KO_QUOTED = re.compile(
@@ -44,24 +38,110 @@ _RE_KO_QUOTED = re.compile(
 )
 
 # Korean proper nouns in parentheses: (주)플래티어, (재)한국재단, etc.
-_RE_KO_PARENS = re.compile(
-    r"\((?:주|사|재|학|재단|사단)\)([\w]+)"
-)
+_RE_KO_PARENS = re.compile(r"\((?:주|사|재|학|재단|사단)\)([\w]+)")
 
 # Common English stop words (phrases containing only these are not recognized as phrases)
-_STOP_WORDS = frozenset({
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "can", "shall", "it", "its", "this", "that",
-    "these", "those", "and", "or", "but", "if", "then", "else", "when",
-    "where", "how", "what", "which", "who", "whom", "whose", "there",
-    "here", "not", "no", "nor", "so", "for", "of", "in", "on", "at",
-    "to", "from", "by", "with", "as", "into", "through", "during",
-    "before", "after", "above", "below", "between", "out", "off", "over",
-    "under", "again", "further", "about", "up", "down", "very", "just",
-    "also", "than", "too", "only", "own", "same", "such", "both", "each",
-    "few", "more", "most", "other", "some", "all", "any", "every", "new",
-})
+_STOP_WORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "can",
+        "shall",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "else",
+        "when",
+        "where",
+        "how",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "there",
+        "here",
+        "not",
+        "no",
+        "nor",
+        "so",
+        "for",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "from",
+        "by",
+        "with",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "out",
+        "off",
+        "over",
+        "under",
+        "again",
+        "further",
+        "about",
+        "up",
+        "down",
+        "very",
+        "just",
+        "also",
+        "than",
+        "too",
+        "only",
+        "own",
+        "same",
+        "such",
+        "both",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "all",
+        "any",
+        "every",
+        "new",
+    }
+)
 
 
 def _normalize_phrase(phrase: str) -> str:
@@ -106,7 +186,7 @@ class PhraseExtractor:
     ``_phrase`` tag automatically assigned to distinguish them from regular nodes.
     """
 
-    __slots__ = ("_min_phrase_len", "_max_phrases", "_phrase_cache")
+    __slots__ = ("_max_phrases", "_min_phrase_len", "_phrase_cache")
 
     def __init__(
         self,
@@ -165,7 +245,8 @@ class PhraseExtractor:
                 if existing is not None:
                     # Just add CONTAINS edge to existing phrase node
                     await graph.link(
-                        node_id, phrase_node_id,
+                        node_id,
+                        phrase_node_id,
                         kind=EdgeKind.CONTAINS,
                         weight=0.8,
                     )
@@ -188,7 +269,8 @@ class PhraseExtractor:
 
             # passage → phrase CONTAINS edge
             await graph.link(
-                node_id, phrase_node.id,
+                node_id,
+                phrase_node.id,
                 kind=EdgeKind.CONTAINS,
                 weight=0.8,
             )

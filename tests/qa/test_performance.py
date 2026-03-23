@@ -51,7 +51,7 @@ class TestSearchPerformance:
 
     async def test_batch_ingestion_throughput(self, combined_graph: SynapticGraph) -> None:
         """Should ingest at least 50 nodes/second."""
-        from synaptic.models import Node, NodeKind  # noqa: PLC0415
+        from synaptic.models import Node, NodeKind
 
         nodes = [
             Node(

@@ -136,12 +136,12 @@ class CompositeBackend:
         if self._vector is not None:
             try:
                 await self._vector.delete(node_id)
-            except Exception:  # noqa: S110
+            except Exception:
                 pass  # Vector may not exist
         if self._blob is not None:
             try:
                 await self._blob.delete(node_id)
-            except Exception:  # noqa: S110
+            except Exception:
                 pass  # Blob may not exist
 
     async def list_nodes(
@@ -218,14 +218,10 @@ class CompositeBackend:
     ) -> list[tuple[Node, Edge]]:
         return await self._graph.shortest_path(from_id, to_id, max_depth=max_depth)
 
-    async def pattern_match(
-        self, pattern: str, *, limit: int = 20
-    ) -> list[dict[str, object]]:
+    async def pattern_match(self, pattern: str, *, limit: int = 20) -> list[dict[str, object]]:
         return await self._graph.pattern_match(pattern, limit=limit)
 
-    async def find_by_type_hierarchy(
-        self, type_name: str, *, limit: int = 50
-    ) -> list[Node]:
+    async def find_by_type_hierarchy(self, type_name: str, *, limit: int = 50) -> list[Node]:
         return await self._graph.find_by_type_hierarchy(type_name, limit=limit)
 
     # --- Admin ---
@@ -236,5 +232,5 @@ class CompositeBackend:
         if self._vector is not None:
             try:
                 await self._vector.delete_collection()
-            except Exception:  # noqa: S110
+            except Exception:
                 pass

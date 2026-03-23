@@ -11,7 +11,6 @@ from synaptic.models import (
     ActivatedNode,
     EdgeKind,
     EvidenceChain,
-    NodeKind,
     SearchResult,
 )
 
@@ -395,7 +394,8 @@ class TestFormatContext:
         n2 = Node(title="Effect", content="c2")
         steps = [
             EvidenceStep(
-                node=n1, role="seed",
+                node=n1,
+                role="seed",
                 compressed_content="c1",
                 connection_to_next="caused",
             ),

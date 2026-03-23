@@ -16,25 +16,40 @@ def registry() -> OntologyRegistry:
     """Build a small test ontology."""
     r = OntologyRegistry()
     r.register_type(TypeDef(name="knowledge", description="Base"))
-    r.register_type(TypeDef(
-        name="concept", parent="knowledge", description="Abstract concept",
-    ))
-    r.register_type(TypeDef(
-        name="lesson", parent="knowledge", description="Learned insight",
-        properties=[PropertyDef(name="source_event", value_type="str", required=True)],
-    ))
-    r.register_type(TypeDef(
-        name="decision", parent="knowledge", description="A choice",
-        properties=[
-            PropertyDef(name="rationale", value_type="str", required=True),
-            PropertyDef(name="confidence", value_type="float"),
-        ],
-    ))
-    r.register_type(TypeDef(
-        name="technical_decision", parent="decision",
-        description="A technical architecture choice",
-        properties=[PropertyDef(name="tech_stack", value_type="str")],
-    ))
+    r.register_type(
+        TypeDef(
+            name="concept",
+            parent="knowledge",
+            description="Abstract concept",
+        )
+    )
+    r.register_type(
+        TypeDef(
+            name="lesson",
+            parent="knowledge",
+            description="Learned insight",
+            properties=[PropertyDef(name="source_event", value_type="str", required=True)],
+        )
+    )
+    r.register_type(
+        TypeDef(
+            name="decision",
+            parent="knowledge",
+            description="A choice",
+            properties=[
+                PropertyDef(name="rationale", value_type="str", required=True),
+                PropertyDef(name="confidence", value_type="float"),
+            ],
+        )
+    )
+    r.register_type(
+        TypeDef(
+            name="technical_decision",
+            parent="decision",
+            description="A technical architecture choice",
+            properties=[PropertyDef(name="tech_stack", value_type="str")],
+        )
+    )
     return r
 
 
@@ -91,14 +106,19 @@ class TestPropertyInheritance:
 
     def test_child_overrides_parent_property(self) -> None:
         r = OntologyRegistry()
-        r.register_type(TypeDef(
-            name="base",
-            properties=[PropertyDef(name="x", value_type="str", required=False)],
-        ))
-        r.register_type(TypeDef(
-            name="child", parent="base",
-            properties=[PropertyDef(name="x", value_type="int", required=True)],
-        ))
+        r.register_type(
+            TypeDef(
+                name="base",
+                properties=[PropertyDef(name="x", value_type="str", required=False)],
+            )
+        )
+        r.register_type(
+            TypeDef(
+                name="child",
+                parent="base",
+                properties=[PropertyDef(name="x", value_type="int", required=True)],
+            )
+        )
         props = r.infer_properties("child")
         assert len(props) == 1
         assert props[0].value_type == "int"
@@ -115,10 +135,13 @@ class TestValidation:
         assert any("rationale" in e for e in errors)
 
     def test_validate_node_bad_type(self, registry: OntologyRegistry) -> None:
-        errors = registry.validate_node("decision", {
-            "rationale": "ok",
-            "confidence": "not-a-float",
-        })
+        errors = registry.validate_node(
+            "decision",
+            {
+                "rationale": "ok",
+                "confidence": "not-a-float",
+            },
+        )
         assert any("confidence" in e for e in errors)
 
     def test_validate_node_unknown_type(self, registry: OntologyRegistry) -> None:
@@ -133,29 +156,35 @@ class TestValidation:
 
 class TestRelationConstraints:
     def test_validate_edge_ok(self, registry: OntologyRegistry) -> None:
-        registry.register_constraint(RelationConstraint(
-            edge_kind="resulted_in",
-            domain_types=["decision"],
-            range_types=["concept", "lesson"],
-        ))
+        registry.register_constraint(
+            RelationConstraint(
+                edge_kind="resulted_in",
+                domain_types=["decision"],
+                range_types=["concept", "lesson"],
+            )
+        )
         errors = registry.validate_edge("resulted_in", "decision", "lesson")
         assert errors == []
 
     def test_validate_edge_bad_domain(self, registry: OntologyRegistry) -> None:
-        registry.register_constraint(RelationConstraint(
-            edge_kind="resulted_in",
-            domain_types=["decision"],
-            range_types=["concept"],
-        ))
+        registry.register_constraint(
+            RelationConstraint(
+                edge_kind="resulted_in",
+                domain_types=["decision"],
+                range_types=["concept"],
+            )
+        )
         errors = registry.validate_edge("resulted_in", "concept", "concept")
         assert any("domain" in e for e in errors)
 
     def test_validate_edge_subtype_ok(self, registry: OntologyRegistry) -> None:
-        registry.register_constraint(RelationConstraint(
-            edge_kind="resulted_in",
-            domain_types=["decision"],
-            range_types=["knowledge"],
-        ))
+        registry.register_constraint(
+            RelationConstraint(
+                edge_kind="resulted_in",
+                domain_types=["decision"],
+                range_types=["knowledge"],
+            )
+        )
         # technical_decision is_a decision, so it should pass
         errors = registry.validate_edge("resulted_in", "technical_decision", "lesson")
         assert errors == []

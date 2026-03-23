@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from difflib import SequenceMatcher
 from time import time
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
@@ -113,8 +113,8 @@ class SynapticGraph:
             graph = SynapticGraph.memory()
             await graph.add("Hello", "World")
         """
-        from synaptic.backends.memory import MemoryBackend  # noqa: PLC0415
-        from synaptic.extensions.classifier_rules import RuleBasedClassifier  # noqa: PLC0415
+        from synaptic.backends.memory import MemoryBackend
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier
 
         return cls(
             MemoryBackend(),
@@ -137,9 +137,9 @@ class SynapticGraph:
             await graph.backend.connect()
             await graph.add("Hello", "World")
         """
-        from synaptic.backends.sqlite import SQLiteBackend  # noqa: PLC0415
-        from synaptic.extensions.classifier_rules import RuleBasedClassifier  # noqa: PLC0415
-        from synaptic.extensions.relation_detector import RuleBasedRelationDetector  # noqa: PLC0415
+        from synaptic.backends.sqlite import SQLiteBackend
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier
+        from synaptic.extensions.relation_detector import RuleBasedRelationDetector
 
         return cls(
             SQLiteBackend(db_path),
@@ -173,17 +173,19 @@ class SynapticGraph:
                 embed_api_base="http://localhost:8080/v1",
             )
         """
-        from synaptic.extensions.classifier_rules import RuleBasedClassifier  # noqa: PLC0415
-        from synaptic.extensions.relation_detector import RuleBasedRelationDetector  # noqa: PLC0415
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier
+        from synaptic.extensions.relation_detector import RuleBasedRelationDetector
 
         classifier: KindClassifier
         relation_detector: RelationDetector
         embedder: EmbeddingProvider | None = None
 
         if llm is not None:
-            from synaptic.extensions.classifier_hybrid import HybridClassifier  # noqa: PLC0415
-            from synaptic.extensions.classifier_llm import LLMClassifier  # noqa: PLC0415
-            from synaptic.extensions.relation_detector_llm import LLMRelationDetector  # noqa: PLC0415
+            from synaptic.extensions.classifier_hybrid import HybridClassifier
+            from synaptic.extensions.classifier_llm import LLMClassifier
+            from synaptic.extensions.relation_detector_llm import (
+                LLMRelationDetector,
+            )
 
             classifier = HybridClassifier(
                 llm=LLMClassifier(llm, fallback=RuleBasedClassifier()),
@@ -195,7 +197,7 @@ class SynapticGraph:
             relation_detector = RuleBasedRelationDetector()
 
         if embed_api_base:
-            from synaptic.extensions.embedder import OpenAIEmbeddingProvider  # noqa: PLC0415
+            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
 
             embedder = OpenAIEmbeddingProvider(
                 api_base=embed_api_base,
@@ -278,8 +280,13 @@ class SynapticGraph:
                 embedding = await self._embedder.embed(embed_text)
 
         node = await self._store.add_node(
-            title, content, kind=kind, tags=tags, source=source,
-            embedding=embedding, properties=properties,
+            title,
+            content,
+            kind=kind,
+            tags=tags,
+            source=source,
+            embedding=embedding,
+            properties=properties,
         )
         self._cache.put(node)
 
@@ -289,13 +296,19 @@ class SynapticGraph:
             relations = await self._relation_detector.detect(node, self._backend)
             for target_id, edge_kind, weight in relations:
                 await self._store.add_edge(
-                    node.id, target_id, kind=edge_kind, weight=weight,
+                    node.id,
+                    target_id,
+                    kind=edge_kind,
+                    weight=weight,
                 )
 
         # Phrase extraction and linking (HippoRAG2 dual-node KG)
         if self._phrase_extractor is not None:
             await self._phrase_extractor.extract_and_link(
-                self, node.id, title, content,
+                self,
+                node.id,
+                title,
+                content,
             )
 
         return node
@@ -323,8 +336,12 @@ class SynapticGraph:
         # 짧은 문서는 그냥 add()
         if len(content) <= chunk_size:
             node = await self.add(
-                title=title, content=content, kind=kind,
-                tags=tags, source=source, properties=properties,
+                title=title,
+                content=content,
+                kind=kind,
+                tags=tags,
+                source=source,
+                properties=properties,
             )
             return [node]
 
@@ -332,15 +349,19 @@ class SynapticGraph:
         chunks = self._split_into_chunks(content, chunk_size, chunk_overlap)
         nodes: list[Node] = []
         for i, chunk in enumerate(chunks):
-            chunk_title = f"{title} [{i+1}/{len(chunks)}]" if len(chunks) > 1 else title
+            chunk_title = f"{title} [{i + 1}/{len(chunks)}]" if len(chunks) > 1 else title
             chunk_tags = list(tags) if tags else []
             chunk_tags.append(f"chunk:{i}")
             if len(chunks) > 1:
                 chunk_tags.append(f"chunks:{len(chunks)}")
 
             node = await self.add(
-                title=chunk_title, content=chunk, kind=kind,
-                tags=chunk_tags, source=source, properties=properties,
+                title=chunk_title,
+                content=chunk,
+                kind=kind,
+                tags=chunk_tags,
+                source=source,
+                properties=properties,
             )
             nodes.append(node)
 
@@ -348,8 +369,10 @@ class SynapticGraph:
         if len(nodes) > 1:
             for i in range(1, len(nodes)):
                 await self.link(
-                    nodes[i].id, nodes[0].id,
-                    kind=EdgeKind.PART_OF, weight=0.9,
+                    nodes[i].id,
+                    nodes[0].id,
+                    kind=EdgeKind.PART_OF,
+                    weight=0.9,
                 )
 
         return nodes
@@ -358,7 +381,8 @@ class SynapticGraph:
     def _split_into_chunks(text: str, chunk_size: int, overlap: int) -> list[str]:
         """문장 경계에서 텍스트 분할."""
         import re as _re
-        sentences = _re.split(r'(?<=[.!?。\n])\s+', text)
+
+        sentences = _re.split(r"(?<=[.!?。\n])\s+", text)
 
         chunks: list[str] = []
         current: list[str] = []
@@ -400,7 +424,9 @@ class SynapticGraph:
             tgt_node = await self._backend.get_node(target_id)
             if src_node is not None and tgt_node is not None:
                 errors = self._ontology.validate_edge(
-                    str(kind), str(src_node.kind), str(tgt_node.kind),
+                    str(kind),
+                    str(src_node.kind),
+                    str(tgt_node.kind),
                 )
                 if errors:
                     msg = f"Ontology validation failed: {'; '.join(errors)}"
@@ -546,7 +572,9 @@ class SynapticGraph:
     ) -> MaintenanceResult:
         """Run consolidate + decay + prune in one call with a unified result."""
         consolidated = await self._consolidation.consolidate(
-            self._backend, digester, context=context,
+            self._backend,
+            digester,
+            context=context,
         )
         decayed = await self.decay()
         pruned = await self.prune()
@@ -602,7 +630,7 @@ class SynapticGraph:
                 )
                 try:
                     await self._backend.save_edge(new_edge)
-                except Exception:  # noqa: S110
+                except Exception:
                     pass  # Duplicate edge — skip
 
         await self._backend.update_node(target)
@@ -678,7 +706,10 @@ class SynapticGraph:
             max_tokens=max_tokens,
         )
         return await assembler.assemble(
-            self._backend, query, search_result, max_steps=max_steps,
+            self._backend,
+            query,
+            search_result,
+            max_steps=max_steps,
         )
 
     # --- Conversation helpers ---
@@ -696,7 +727,7 @@ class SynapticGraph:
         Creates a SESSION node on first call for a given session_id.
         Returns (session_node, user_node, assistant_node).
         """
-        from synaptic.models import _new_id  # noqa: PLC0415
+        from synaptic.models import _new_id
 
         if session_id is None:
             session_id = f"session_{_new_id()}"
@@ -720,27 +751,39 @@ class SynapticGraph:
 
         # Create user message node
         user_node = await self._store.add_node(
-            "user", user_msg, kind=NodeKind.OBSERVATION, tags=[*turn_tags, "_turn_user"],
+            "user",
+            user_msg,
+            kind=NodeKind.OBSERVATION,
+            tags=[*turn_tags, "_turn_user"],
         )
 
         # Create assistant message node
         assistant_node = await self._store.add_node(
-            "assistant", assistant_msg, kind=NodeKind.OBSERVATION, tags=[*turn_tags, "_turn_assistant"],
+            "assistant",
+            assistant_msg,
+            kind=NodeKind.OBSERVATION,
+            tags=[*turn_tags, "_turn_assistant"],
         )
 
         # Link: user → assistant (FOLLOWED_BY)
         await self._store.add_edge(
-            user_node.id, assistant_node.id, kind=EdgeKind.FOLLOWED_BY,
+            user_node.id,
+            assistant_node.id,
+            kind=EdgeKind.FOLLOWED_BY,
         )
 
         # Link: session → user (CONTAINS)
         await self._store.add_edge(
-            session_id, user_node.id, kind=EdgeKind.CONTAINS,
+            session_id,
+            user_node.id,
+            kind=EdgeKind.CONTAINS,
         )
 
         # Link last turn to this one (FOLLOWED_BY)
         session_edges = await self._backend.get_edges(session_id, direction="outgoing")
-        contained = [e for e in session_edges if e.kind == EdgeKind.CONTAINS and e.target_id != user_node.id]
+        contained = [
+            e for e in session_edges if e.kind == EdgeKind.CONTAINS and e.target_id != user_node.id
+        ]
         if contained:
             # Find the most recent contained user node
             last_user_id = contained[-1].target_id
@@ -749,7 +792,9 @@ class SynapticGraph:
             last_assistant = [e for e in last_edges if e.kind == EdgeKind.FOLLOWED_BY]
             if last_assistant:
                 await self._store.add_edge(
-                    last_assistant[-1].target_id, user_node.id, kind=EdgeKind.FOLLOWED_BY,
+                    last_assistant[-1].target_id,
+                    user_node.id,
+                    kind=EdgeKind.FOLLOWED_BY,
                 )
 
         return session_node, user_node, assistant_node

@@ -69,15 +69,9 @@ class Neo4jBackend:
         await self._driver.verify_connectivity()
         async with self._driver.session(database=self._database) as session:
             # Create indexes
-            await session.run(
-                "CREATE INDEX node_id IF NOT EXISTS FOR (n:Node) ON (n.id)"
-            )
-            await session.run(
-                "CREATE INDEX node_kind IF NOT EXISTS FOR (n:Node) ON (n.kind)"
-            )
-            await session.run(
-                "CREATE INDEX node_level IF NOT EXISTS FOR (n:Node) ON (n.level)"
-            )
+            await session.run("CREATE INDEX node_id IF NOT EXISTS FOR (n:Node) ON (n.id)")
+            await session.run("CREATE INDEX node_kind IF NOT EXISTS FOR (n:Node) ON (n.kind)")
+            await session.run("CREATE INDEX node_level IF NOT EXISTS FOR (n:Node) ON (n.level)")
             # Fulltext index for FTS search
             try:
                 await session.run(
@@ -116,9 +110,7 @@ class Neo4jBackend:
     async def get_node(self, node_id: str) -> Node | None:
         driver = self._get_driver()
         async with driver.session(database=self._database) as session:
-            result = await session.run(
-                "MATCH (n:Node {id: $id}) RETURN n", id=node_id
-            )
+            result = await session.run("MATCH (n:Node {id: $id}) RETURN n", id=node_id)
             record = await result.single()
         if record is None:
             return None
@@ -136,9 +128,7 @@ class Neo4jBackend:
     async def delete_node(self, node_id: str) -> None:
         driver = self._get_driver()
         async with driver.session(database=self._database) as session:
-            await session.run(
-                "MATCH (n:Node {id: $id}) DETACH DELETE n", id=node_id
-            )
+            await session.run("MATCH (n:Node {id: $id}) DETACH DELETE n", id=node_id)
 
     async def list_nodes(
         self,
@@ -220,9 +210,7 @@ class Neo4jBackend:
     async def delete_edge(self, edge_id: str) -> None:
         driver = self._get_driver()
         async with driver.session(database=self._database) as session:
-            await session.run(
-                "MATCH ()-[r {id: $id}]->() DELETE r", id=edge_id
-            )
+            await session.run("MATCH ()-[r {id: $id}]->() DELETE r", id=edge_id)
 
     # --- Search ---
 
@@ -265,8 +253,7 @@ class Neo4jBackend:
         for i, t in enumerate(terms):
             params[f"t{i}"] = t
         query_str = (
-            f"MATCH (n:Node) WHERE {conditions} "
-            f"RETURN n ORDER BY n.updated_at DESC LIMIT $limit"
+            f"MATCH (n:Node) WHERE {conditions} RETURN n ORDER BY n.updated_at DESC LIMIT $limit"
         )
         async with driver.session(database=self._database) as session:
             result = await session.run(query_str, **params)
@@ -363,8 +350,7 @@ class Neo4jBackend:
         driver = self._get_driver()
         async with driver.session(database=self._database) as session:
             result = await session.run(
-                "MATCH (n:Node) SET n.vitality = n.vitality * $factor "
-                "RETURN count(n) AS cnt",
+                "MATCH (n:Node) SET n.vitality = n.vitality * $factor RETURN count(n) AS cnt",
                 factor=factor,
             )
             record = await result.single()
@@ -414,9 +400,7 @@ class Neo4jBackend:
             results.append((node, edge))
         return results
 
-    async def pattern_match(
-        self, pattern: str, *, limit: int = 20
-    ) -> list[dict[str, object]]:
+    async def pattern_match(self, pattern: str, *, limit: int = 20) -> list[dict[str, object]]:
         """Execute a Cypher pattern match query.
 
         Example pattern: "(:Decision)-[:RESULTED_IN]->(:Outcome {success: 'true'})"
@@ -427,9 +411,7 @@ class Neo4jBackend:
             result = await session.run(query, limit=limit)
             return await result.data()  # type: ignore[return-value]
 
-    async def find_by_type_hierarchy(
-        self, type_name: str, *, limit: int = 50
-    ) -> list[Node]:
+    async def find_by_type_hierarchy(self, type_name: str, *, limit: int = 50) -> list[Node]:
         """Find all nodes of a type, using IS_A edges for hierarchy traversal."""
         driver = self._get_driver()
         async with driver.session(database=self._database) as session:

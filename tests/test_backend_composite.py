@@ -5,7 +5,7 @@ Requires: Neo4j + Qdrant + MinIO all running.
 
 import pytest
 
-from synaptic.models import Edge, EdgeKind, Node, NodeKind
+from synaptic.models import Edge, EdgeKind, Node
 
 try:
     from synaptic.backends.composite import CompositeBackend
@@ -30,8 +30,11 @@ async def backend():
     graph = Neo4jBackend("bolt://localhost:7687", auth=("neo4j", "password"))
     vector = QdrantBackend("http://localhost:6333", collection="test_composite", dimension=TEST_DIM)
     blob = MinIOBackend(
-        "localhost:9000", bucket="test-composite",
-        access_key="minio", secret_key="minio123", secure=False,
+        "localhost:9000",
+        bucket="test-composite",
+        access_key="minio",
+        secret_key="minio123",
+        secure=False,
     )
     composite = CompositeBackend(graph, vector=vector, blob=blob, blob_threshold=50)
 
@@ -125,12 +128,18 @@ class TestCompositeSearch:
 
     @pytest.mark.asyncio
     async def test_vector_routes_to_qdrant(self, backend: CompositeBackend) -> None:
-        await backend.save_node(_make_node(
-            title="Node A", embedding=[1.0, 0.0, 0.0, 0.0],
-        ))
-        await backend.save_node(_make_node(
-            title="Node B", embedding=[0.0, 1.0, 0.0, 0.0],
-        ))
+        await backend.save_node(
+            _make_node(
+                title="Node A",
+                embedding=[1.0, 0.0, 0.0, 0.0],
+            )
+        )
+        await backend.save_node(
+            _make_node(
+                title="Node B",
+                embedding=[0.0, 1.0, 0.0, 0.0],
+            )
+        )
 
         results = await backend.search_vector([0.9, 0.1, 0.0, 0.0], limit=1)
         assert len(results) == 1

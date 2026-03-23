@@ -120,7 +120,7 @@ class BenchmarkResult:
         for q in self.queries:
             hit = "✓" if q["mrr"] > 0 else "✗"  # type: ignore[operator]
             lines.append(
-                f"  {hit} [{q['query_id']}] \"{q['query']}\"  "
+                f'  {hit} [{q["query_id"]}] "{q["query"]}"  '
                 f"P@{k}={q['precision@k']:.2f}  R@{k}={q['recall@k']:.2f}  "
                 f"MRR={q['mrr']:.2f}  nDCG={q['ndcg@k']:.2f}  "
                 f"{q['search_time_ms']:.1f}ms"

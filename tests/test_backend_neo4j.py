@@ -7,7 +7,6 @@ Run with: pytest tests/test_backend_neo4j.py -v -m neo4j
 import pytest
 
 from synaptic.models import (
-    ConsolidationLevel,
     Edge,
     EdgeKind,
     Node,

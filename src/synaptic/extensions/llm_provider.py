@@ -50,7 +50,7 @@ class OllamaLLMProvider:
 
     async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
         """Generate a JSON completion via Ollama /api/generate."""
-        import aiohttp  # noqa: PLC0415
+        import aiohttp
 
         url = f"{self._base_url}/api/generate"
         payload = {
@@ -114,7 +114,7 @@ class OpenAILLMProvider:
 
     async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
         """Generate a JSON completion via OpenAI-compatible chat API."""
-        import aiohttp  # noqa: PLC0415
+        import aiohttp
 
         url = f"{self._api_base}/chat/completions"
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -169,7 +169,7 @@ class AnthropicLLMProvider:
 
     async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
         """Generate a completion via Anthropic Messages API."""
-        import aiohttp  # noqa: PLC0415
+        import aiohttp
 
         url = "https://api.anthropic.com/v1/messages"
         headers = {

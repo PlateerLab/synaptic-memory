@@ -229,12 +229,14 @@ class OntologyRegistry:
             if isinstance(raw_props, list):
                 for p_raw in raw_props:
                     if isinstance(p_raw, dict):
-                        props.append(PropertyDef(
-                            name=str(p_raw.get("name", "")),
-                            value_type=str(p_raw.get("value_type", "str")),
-                            required=bool(p_raw.get("required", False)),
-                            default=str(p_raw.get("default", "")),
-                        ))
+                        props.append(
+                            PropertyDef(
+                                name=str(p_raw.get("name", "")),
+                                value_type=str(p_raw.get("value_type", "str")),
+                                required=bool(p_raw.get("required", False)),
+                                default=str(p_raw.get("default", "")),
+                            )
+                        )
             return TypeDef(
                 name=str(td_data.get("name", "")),
                 parent=str(td_data.get("parent", "")),
@@ -305,14 +307,18 @@ def build_agent_ontology() -> OntologyRegistry:
     registry = OntologyRegistry()
 
     # Base types
-    registry.register_type(TypeDef(
-        name="knowledge",
-        description="Base type for all knowledge nodes",
-    ))
-    registry.register_type(TypeDef(
-        name="agent_activity",
-        description="Base type for agent-generated activity records",
-    ))
+    registry.register_type(
+        TypeDef(
+            name="knowledge",
+            description="Base type for all knowledge nodes",
+        )
+    )
+    registry.register_type(
+        TypeDef(
+            name="agent_activity",
+            description="Base type for agent-generated activity records",
+        )
+    )
 
     # Knowledge subtypes
     for name, desc in [
@@ -326,80 +332,100 @@ def build_agent_ontology() -> OntologyRegistry:
         registry.register_type(TypeDef(name=name, parent="knowledge", description=desc))
 
     # Decision has structured properties
-    registry.register_type(TypeDef(
-        name="decision",
-        parent="knowledge",
-        description="A choice made with rationale",
-        properties=[
-            PropertyDef(name="rationale", value_type="str", required=True),
-            PropertyDef(name="alternatives", value_type="str"),
-        ],
-    ))
+    registry.register_type(
+        TypeDef(
+            name="decision",
+            parent="knowledge",
+            description="A choice made with rationale",
+            properties=[
+                PropertyDef(name="rationale", value_type="str", required=True),
+                PropertyDef(name="alternatives", value_type="str"),
+            ],
+        )
+    )
 
     # Activity subtypes
-    registry.register_type(TypeDef(
-        name="session",
-        parent="agent_activity",
-        description="An agent work session",
-        properties=[
-            PropertyDef(name="agent_id", value_type="str"),
-            PropertyDef(name="start_time", value_type="str"),
-            PropertyDef(name="end_time", value_type="str"),
-            PropertyDef(name="status", value_type="str", default="active"),
-        ],
-    ))
-    registry.register_type(TypeDef(
-        name="tool_call",
-        parent="agent_activity",
-        description="An agent tool invocation",
-        properties=[
-            PropertyDef(name="tool_name", value_type="str", required=True),
-            PropertyDef(name="parameters", value_type="str"),
-            PropertyDef(name="result_summary", value_type="str"),
-            PropertyDef(name="success", value_type="bool"),
-            PropertyDef(name="duration_ms", value_type="float"),
-        ],
-    ))
-    registry.register_type(TypeDef(
-        name="observation",
-        parent="agent_activity",
-        description="Something the agent observed from tool output or environment",
-    ))
-    registry.register_type(TypeDef(
-        name="reasoning",
-        parent="agent_activity",
-        description="An agent's reasoning step or chain of thought",
-    ))
-    registry.register_type(TypeDef(
-        name="outcome",
-        parent="agent_activity",
-        description="The result of a decision or action",
-        properties=[
-            PropertyDef(name="success", value_type="bool", required=True),
-            PropertyDef(name="impact", value_type="str"),
-        ],
-    ))
+    registry.register_type(
+        TypeDef(
+            name="session",
+            parent="agent_activity",
+            description="An agent work session",
+            properties=[
+                PropertyDef(name="agent_id", value_type="str"),
+                PropertyDef(name="start_time", value_type="str"),
+                PropertyDef(name="end_time", value_type="str"),
+                PropertyDef(name="status", value_type="str", default="active"),
+            ],
+        )
+    )
+    registry.register_type(
+        TypeDef(
+            name="tool_call",
+            parent="agent_activity",
+            description="An agent tool invocation",
+            properties=[
+                PropertyDef(name="tool_name", value_type="str", required=True),
+                PropertyDef(name="parameters", value_type="str"),
+                PropertyDef(name="result_summary", value_type="str"),
+                PropertyDef(name="success", value_type="bool"),
+                PropertyDef(name="duration_ms", value_type="float"),
+            ],
+        )
+    )
+    registry.register_type(
+        TypeDef(
+            name="observation",
+            parent="agent_activity",
+            description="Something the agent observed from tool output or environment",
+        )
+    )
+    registry.register_type(
+        TypeDef(
+            name="reasoning",
+            parent="agent_activity",
+            description="An agent's reasoning step or chain of thought",
+        )
+    )
+    registry.register_type(
+        TypeDef(
+            name="outcome",
+            parent="agent_activity",
+            description="The result of a decision or action",
+            properties=[
+                PropertyDef(name="success", value_type="bool", required=True),
+                PropertyDef(name="impact", value_type="str"),
+            ],
+        )
+    )
 
     # Relation constraints
-    registry.register_constraint(RelationConstraint(
-        edge_kind="resulted_in",
-        domain_types=["decision"],
-        range_types=["outcome"],
-    ))
-    registry.register_constraint(RelationConstraint(
-        edge_kind="invoked",
-        domain_types=["session", "agent_activity"],
-        range_types=["tool_call"],
-    ))
-    registry.register_constraint(RelationConstraint(
-        edge_kind="part_of",
-        domain_types=["agent_activity"],
-        range_types=["session"],
-    ))
-    registry.register_constraint(RelationConstraint(
-        edge_kind="learned_from",
-        domain_types=["lesson"],
-        range_types=["outcome", "decision", "agent_activity"],
-    ))
+    registry.register_constraint(
+        RelationConstraint(
+            edge_kind="resulted_in",
+            domain_types=["decision"],
+            range_types=["outcome"],
+        )
+    )
+    registry.register_constraint(
+        RelationConstraint(
+            edge_kind="invoked",
+            domain_types=["session", "agent_activity"],
+            range_types=["tool_call"],
+        )
+    )
+    registry.register_constraint(
+        RelationConstraint(
+            edge_kind="part_of",
+            domain_types=["agent_activity"],
+            range_types=["session"],
+        )
+    )
+    registry.register_constraint(
+        RelationConstraint(
+            edge_kind="learned_from",
+            domain_types=["lesson"],
+            range_types=["outcome", "decision", "agent_activity"],
+        )
+    )
 
     return registry

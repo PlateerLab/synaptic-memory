@@ -129,9 +129,24 @@ async def _index_sessions(
 
 # 시간 관련 키워드
 _TEMPORAL_KEYWORDS = {
-    "when", "date", "day", "days", "month", "months", "year", "years",
-    "before", "after", "between", "ago", "last", "first", "recent",
-    "how long", "how many days", "how many months",
+    "when",
+    "date",
+    "day",
+    "days",
+    "month",
+    "months",
+    "year",
+    "years",
+    "before",
+    "after",
+    "between",
+    "ago",
+    "last",
+    "first",
+    "recent",
+    "how long",
+    "how many days",
+    "how many months",
 }
 
 
@@ -150,15 +165,54 @@ def _extract_key_phrases(question: str) -> list[str]:
     # 따옴표 내 구절
     quoted = re.findall(r'"([^"]+)"', question)
     # 고유명사 (연속 대문자 단어)
-    proper = re.findall(r'(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', question)
+    proper = re.findall(r"(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", question)
     # stopword 제거한 핵심 단어
     stopwords = {
-        "i", "me", "my", "we", "you", "the", "a", "an", "is", "are", "was", "were",
-        "did", "do", "does", "have", "has", "had", "what", "which", "who", "how",
-        "many", "much", "when", "where", "that", "this", "for", "with", "from",
-        "about", "into", "during", "of", "in", "on", "at", "to", "and", "or",
+        "i",
+        "me",
+        "my",
+        "we",
+        "you",
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "did",
+        "do",
+        "does",
+        "have",
+        "has",
+        "had",
+        "what",
+        "which",
+        "who",
+        "how",
+        "many",
+        "much",
+        "when",
+        "where",
+        "that",
+        "this",
+        "for",
+        "with",
+        "from",
+        "about",
+        "into",
+        "during",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "and",
+        "or",
     }
-    words = [w for w in re.findall(r'\b\w+\b', question.lower()) if w not in stopwords and len(w) >= 3]
+    words = [
+        w for w in re.findall(r"\b\w+\b", question.lower()) if w not in stopwords and len(w) >= 3
+    ]
 
     # 핵심 구절 조합 (2-3 단어 조합)
     sub_queries = []
@@ -214,14 +268,18 @@ async def _multi_search(
     # 3차: temporal 질문이면 날짜 관련 재검색
     if _is_temporal_question(question):
         # 날짜/시간 관련 키워드 강조 쿼리
-        date_words = re.findall(r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December|\d{4}|\d{1,2}(?:st|nd|rd|th)?)\b', question, re.IGNORECASE)
+        date_words = re.findall(
+            r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December|\d{4}|\d{1,2}(?:st|nd|rd|th)?)\b",
+            question,
+            re.IGNORECASE,
+        )
         if date_words:
             await _collect(" ".join(date_words), boost=0.7)
 
     # 4차: counting 질문이면 관련 엔티티 재검색
     if _is_counting_question(question):
         # "How many X" → X로 검색
-        match = re.search(r'how many (\w+(?:\s+\w+)?)', question, re.IGNORECASE)
+        match = re.search(r"how many (\w+(?:\s+\w+)?)", question, re.IGNORECASE)
         if match:
             await _collect(match.group(1), boost=0.7)
 
@@ -284,7 +342,9 @@ _DEFAULT_SYSTEM = (
 )
 
 
-def _build_prompt(question: str, contexts: list[tuple[str, str, float]], question_type: str) -> tuple[str, str]:
+def _build_prompt(
+    question: str, contexts: list[tuple[str, str, float]], question_type: str
+) -> tuple[str, str]:
     """유형별 특화 프롬프트 생성."""
     system = _SYSTEM_PROMPTS.get(question_type, _DEFAULT_SYSTEM)
 
@@ -378,13 +438,19 @@ async def _generate_answer(
             "temperature": 0.0,
             "max_tokens": 4096,
         }
-        url = f"{base_url}/chat/completions" if "/v1" in base_url else f"{base_url}/v1/chat/completions"
+        url = (
+            f"{base_url}/chat/completions"
+            if "/v1" in base_url
+            else f"{base_url}/v1/chat/completions"
+        )
 
     headers = {"Content-Type": "application/json"}
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            url, json=payload, headers=headers,
+            url,
+            json=payload,
+            headers=headers,
             timeout=aiohttp.ClientTimeout(total=300),
         ) as resp:
             if resp.status != 200:
@@ -499,24 +565,24 @@ class LongMemBenchmark:
 
     def report(self) -> str:
         lines = [
-            f"\n{'='*70}",
-            f"LongMemEval Benchmark Results (Phase 1)",
-            f"{'='*70}",
+            f"\n{'=' * 70}",
+            "LongMemEval Benchmark Results (Phase 1)",
+            f"{'=' * 70}",
             f"  Total Questions:    {len(self.results)}",
             f"  Accuracy (≥0.5):    {self.accuracy:.3f}",
             f"  Mean Correctness:   {self.mean_correctness:.3f}",
             f"  Mean Session Recall:{self.mean_session_recall:.3f}",
-            f"{'='*70}",
+            f"{'=' * 70}",
             f"  {'Type':<30} {'Count':>5} {'Acc':>7} {'Correct':>8}",
-            f"  {'-'*55}",
+            f"  {'-' * 55}",
         ]
         for qtype, stats in self.by_type().items():
             lines.append(
                 f"  {qtype:<30} {stats['count']:>5} {stats['accuracy']:>7.3f} {stats['mean_correctness']:>8.3f}"
             )
-        lines.append(f"{'='*70}")
-        lines.append(f"\n  📊 Supermemory ASMR: 98.60% (8-variant ensemble)")
-        lines.append(f"  📊 GPT-4o (full context): ~64%")
+        lines.append(f"{'=' * 70}")
+        lines.append("\n  📊 Supermemory ASMR: 98.60% (8-variant ensemble)")
+        lines.append("  📊 GPT-4o (full context): ~64%")
         lines.append(f"  📊 Synaptic Memory: {self.accuracy:.1%}")
 
         return "\n".join(lines)
@@ -541,6 +607,7 @@ class TestLongMemEval:
             )
 
         import random
+
         random.seed(42)
 
         # 유형별 균등 샘플링
@@ -607,30 +674,35 @@ class TestLongMemEval:
             # 3. LLM 답변 생성 (유형별 특화 프롬프트)
             t0 = time()
             answer = await _generate_answer(
-                question, search_results, qtype,
-                model=LLM_MODEL, base_url=LLM_BASE,
+                question,
+                search_results,
+                qtype,
+                model=LLM_MODEL,
+                base_url=LLM_BASE,
             )
             gen_ms = (time() - t0) * 1000
 
             # 4. 평가
             correctness = _evaluate_correctness(answer, ground_truth)
 
-            benchmark.results.append(LongMemResult(
-                question_id=qid,
-                question_type=qtype,
-                question=question,
-                ground_truth=ground_truth,
-                answer=answer,
-                correctness=correctness,
-                retrieval_time_ms=retrieval_ms,
-                generation_time_ms=gen_ms,
-                retrieved_session_ids=retrieved_sids,
-                answer_session_ids=list(answer_sids),
-                session_recall=session_recall,
-            ))
+            benchmark.results.append(
+                LongMemResult(
+                    question_id=qid,
+                    question_type=qtype,
+                    question=question,
+                    ground_truth=ground_truth,
+                    answer=answer,
+                    correctness=correctness,
+                    retrieval_time_ms=retrieval_ms,
+                    generation_time_ms=gen_ms,
+                    retrieved_session_ids=retrieved_sids,
+                    answer_session_ids=list(answer_sids),
+                    session_recall=session_recall,
+                )
+            )
 
             status = "✓" if correctness >= 0.5 else "✗"
-            print(f"  [{i+1}/{len(sampled)}] {status} [{qtype[:15]}] {question[:50]}...")
+            print(f"  [{i + 1}/{len(sampled)}] {status} [{qtype[:15]}] {question[:50]}...")
             print(f"    GT: {ground_truth[:60]} | A: {answer[:60]}")
 
             await graph.backend.close()

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from time import time
 
@@ -47,6 +47,7 @@ MAX_QUERIES = 100
 # ---------------------------------------------------------------------------
 # 데이터 로딩
 # ---------------------------------------------------------------------------
+
 
 def _load_dataset(filename: str) -> dict | None:
     path = DATA_DIR / filename
@@ -90,6 +91,7 @@ def _sample_data(
 # ---------------------------------------------------------------------------
 # Stage별 그래프 구축
 # ---------------------------------------------------------------------------
+
 
 async def _build_stage0(
     corpus: dict[str, dict[str, str]],
@@ -283,20 +285,22 @@ async def _build_llm_ontology(
     """
     from synaptic.extensions.classifier_hybrid import HybridClassifier
     from synaptic.extensions.classifier_llm import LLMClassifier
-    from synaptic.extensions.llm_provider import OllamaLLMProvider
-    from synaptic.extensions.phrase_extractor import PhraseExtractor
-    from synaptic.extensions.relation_detector_llm import LLMRelationDetector
 
     # 외부 LLM 서버 (Qwen3.5-27B) 사용, 실패 시 로컬 Ollama fallback
-    from synaptic.extensions.llm_provider import OpenAILLMProvider
+    from synaptic.extensions.llm_provider import OllamaLLMProvider, OpenAILLMProvider
+    from synaptic.extensions.phrase_extractor import PhraseExtractor
 
     class _ThinkingLLM:
         """thinking 모델용 래퍼 — max_tokens를 2048 이상으로 보장."""
+
         def __init__(self, inner):
             self._inner = inner
+
         async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
             return await self._inner.generate(
-                system=system, user=user, max_tokens=max(max_tokens, 2048),
+                system=system,
+                user=user,
+                max_tokens=max(max_tokens, 2048),
             )
 
     try:
@@ -366,7 +370,7 @@ async def _build_llm_ontology(
             except Exception:
                 pass
             if (i + 1) % 20 == 0:
-                print(f"    LLM classify: {i+1}/{len(low_conf_items)}")
+                print(f"    LLM classify: {i + 1}/{len(low_conf_items)}")
 
     # graph 구축 (HybridClassifier가 cache hit 또는 rule fallback 사용)
     for cid, title, text in items:
@@ -383,6 +387,7 @@ async def _build_llm_ontology(
 # ---------------------------------------------------------------------------
 # 검색 실행 + 평가
 # ---------------------------------------------------------------------------
+
 
 async def _run_queries(
     graph: SynapticGraph,
@@ -428,6 +433,7 @@ async def _run_queries(
 # Ablation 리포트 출력
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class StageResult:
     name: str
@@ -462,7 +468,11 @@ def _format_report(dataset_name: str, stages: list[StageResult]) -> str:
         s = sr.bench.summary()
         mrr = s["mrr"]
         if prev_mrr > 0:
-            delta = f"+{((mrr - prev_mrr) / prev_mrr * 100):.1f}%" if mrr > prev_mrr else f"{((mrr - prev_mrr) / prev_mrr * 100):.1f}%"
+            delta = (
+                f"+{((mrr - prev_mrr) / prev_mrr * 100):.1f}%"
+                if mrr > prev_mrr
+                else f"{((mrr - prev_mrr) / prev_mrr * 100):.1f}%"
+            )
         else:
             delta = "—"
 
@@ -482,13 +492,16 @@ def _format_report(dataset_name: str, stages: list[StageResult]) -> str:
 # 테스트
 # ---------------------------------------------------------------------------
 
+
 class TestAblation:
     """5단계 ablation study — 각 기능의 검색 품질 기여도 측정."""
 
     @staticmethod
     async def _run_ablation(dataset_name: str, data: dict) -> list[StageResult]:
         corpus, queries, qrels = _sample_data(
-            data["corpus"], data["queries"], data["qrels"],
+            data["corpus"],
+            data["queries"],
+            data["qrels"],
         )
 
         stages: list[StageResult] = []

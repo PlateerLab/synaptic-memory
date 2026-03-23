@@ -31,7 +31,7 @@ class InvertedIndex:
     SynapticGraph must update this index on add/remove operations.
     """
 
-    __slots__ = ("_tag_index", "_title_index", "_node_tags", "_node_title")
+    __slots__ = ("_node_tags", "_node_title", "_tag_index", "_title_index")
 
     def __init__(self) -> None:
         self._tag_index: dict[str, set[str]] = {}  # tag → {node_id}
@@ -82,9 +82,7 @@ class InvertedIndex:
             if self._title_index[title_lower] == node_id:
                 del self._title_index[title_lower]
 
-    def find_by_tag_overlap(
-        self, tags: list[str], exclude_id: str = ""
-    ) -> dict[str, int]:
+    def find_by_tag_overlap(self, tags: list[str], exclude_id: str = "") -> dict[str, int]:
         """Find nodes with overlapping tags.
 
         Args:
@@ -167,8 +165,8 @@ class RuleBasedRelationDetector:
         "_index",
         "_max_edges",
         "_tag_overlap_min",
-        "_title_mention_weight",
         "_tag_overlap_weight",
+        "_title_mention_weight",
     )
 
     def __init__(
@@ -230,31 +228,26 @@ class RuleBasedRelationDetector:
             seen_targets.add(target_id)
 
             # NodeKind 쌍 규칙 (title mention이 있는 경우만 kind 체크)
-            edge_kind, weight = await self._resolve_kind_pair(
-                node, target_id, backend
-            )
+            edge_kind, weight = await self._resolve_kind_pair(node, target_id, backend)
             relations.append((target_id, edge_kind, weight))
 
         # 2. Shared tags >= overlap_min → RELATED
         if node.tags:
-            overlaps = self._index.find_by_tag_overlap(
-                node.tags, exclude_id=node.id
-            )
+            overlaps = self._index.find_by_tag_overlap(node.tags, exclude_id=node.id)
             for target_id, count in overlaps.items():
                 if count < self._tag_overlap_min:
                     continue
                 if target_id in seen_targets:
                     continue
                 seen_targets.add(target_id)
-                relations.append(
-                    (target_id, EdgeKind.RELATED, self._tag_overlap_weight)
-                )
+                relations.append((target_id, EdgeKind.RELATED, self._tag_overlap_weight))
 
         # 3. Embedding similarity → RELATED
         if node.embedding:
             try:
                 candidates = await backend.search_vector(
-                    node.embedding, limit=self._max_edges * 2,
+                    node.embedding,
+                    limit=self._max_edges * 2,
                 )
                 for candidate in candidates:
                     if candidate.id == node.id or candidate.id in seen_targets:
@@ -265,9 +258,7 @@ class RuleBasedRelationDetector:
                     if sim >= self._embedding_threshold:
                         seen_targets.add(candidate.id)
                         weight = sim * self._embedding_weight_scale
-                        relations.append(
-                            (candidate.id, EdgeKind.RELATED, weight)
-                        )
+                        relations.append((candidate.id, EdgeKind.RELATED, weight))
             except Exception:
                 logger.debug("Embedding search failed, skipping", exc_info=True)
 
@@ -372,7 +363,7 @@ class EmbeddingRelationDetector:
         edges = await detector.detect(new_node, backend)
     """
 
-    __slots__ = ("_threshold", "_max_edges", "_fallback", "index")
+    __slots__ = ("_fallback", "_max_edges", "_threshold", "index")
 
     def __init__(
         self,
@@ -422,7 +413,8 @@ class EmbeddingRelationDetector:
         if node.embedding:
             try:
                 candidates = await backend.search_vector(
-                    node.embedding, limit=self._max_edges * 2,
+                    node.embedding,
+                    limit=self._max_edges * 2,
                 )
                 for candidate in candidates:
                     if candidate.id == node.id or candidate.id in seen_targets:

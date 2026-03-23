@@ -95,7 +95,9 @@ class TestTypoFuzzyMatch:
         # 현재는 부분 매칭('데이')으로 일부 결과를 잡을 수 있음
         # 결과가 없어도 실패가 아닌 baseline으로 기록
         if not result_typo.nodes:
-            pytest.skip("Typo recovery requires embedding vector search (not available in MemoryBackend)")
+            pytest.skip(
+                "Typo recovery requires embedding vector search (not available in MemoryBackend)"
+            )
 
     async def test_english_typo(self, wiki_graph: SynapticGraph) -> None:
         """'Pytohn' (typo for Python) — substring matching or embedding should catch."""

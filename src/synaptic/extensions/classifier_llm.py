@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Classification result
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class ClassificationResult:
     """LLM classification result — includes search-optimized metadata."""
@@ -101,10 +102,11 @@ _VALID_KINDS = {k.value for k in NodeKind}
 # LLM cache (content-hash-based LRU)
 # ---------------------------------------------------------------------------
 
+
 class _LRUCache:
     """Thread-unsafe LRU cache backed by OrderedDict."""
 
-    __slots__ = ("_maxsize", "_data")
+    __slots__ = ("_data", "_maxsize")
 
     def __init__(self, maxsize: int = 512) -> None:
         self._maxsize = maxsize
@@ -128,6 +130,7 @@ class _LRUCache:
 # LLMClassifier
 # ---------------------------------------------------------------------------
 
+
 class LLMClassifier:
     """LLM-based NodeKind classifier — automatic search-optimized metadata generation.
 
@@ -141,7 +144,7 @@ class LLMClassifier:
         Content-hash-based LRU cache size.
     """
 
-    __slots__ = ("_llm", "_fallback", "_cache")
+    __slots__ = ("_cache", "_fallback", "_llm")
 
     def __init__(
         self,
@@ -379,14 +382,16 @@ class LLMClassifier:
             kind_str = item.get("kind", "concept")
             if kind_str not in _VALID_KINDS:
                 kind_str = "concept"
-            results.append(ClassificationResult(
-                kind=NodeKind(kind_str),
-                tags=self._ensure_str_list(item.get("tags", [])),
-                search_keywords=self._ensure_str_list(item.get("search_keywords", [])),
-                search_scenarios=self._ensure_str_list(item.get("search_scenarios", [])),
-                summary=str(item.get("summary", "")),
-                confidence=self._clamp(float(item.get("confidence", 0.8)), 0.0, 1.0),
-            ))
+            results.append(
+                ClassificationResult(
+                    kind=NodeKind(kind_str),
+                    tags=self._ensure_str_list(item.get("tags", [])),
+                    search_keywords=self._ensure_str_list(item.get("search_keywords", [])),
+                    search_scenarios=self._ensure_str_list(item.get("search_scenarios", [])),
+                    summary=str(item.get("summary", "")),
+                    confidence=self._clamp(float(item.get("confidence", 0.8)), 0.0, 1.0),
+                )
+            )
 
         return results
 

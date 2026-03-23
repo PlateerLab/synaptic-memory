@@ -7,12 +7,8 @@ import pytest
 from synaptic.agent_search import SearchIntent, suggest_intent
 from synaptic.backends.memory import MemoryBackend
 from synaptic.graph import SynapticGraph
-from synaptic.models import ConsolidationLevel, DigestResult, EdgeKind, MaintenanceResult, NodeKind
+from synaptic.models import DigestResult, EdgeKind, MaintenanceResult, NodeKind
 from synaptic.ontology import (
-    OntologyRegistry,
-    PropertyDef,
-    RelationConstraint,
-    TypeDef,
     build_agent_ontology,
 )
 
@@ -216,8 +212,10 @@ class TestSuggestIntent:
     def test_agent_search_auto_intent(self) -> None:
         """agent_search with intent='auto' should infer from query."""
         # Just verify the default is "auto" — actual search tested elsewhere
-        from synaptic.graph import SynapticGraph
         import inspect
+
+        from synaptic.graph import SynapticGraph
+
         sig = inspect.signature(SynapticGraph.agent_search)
         assert sig.parameters["intent"].default == "auto"
 
@@ -258,7 +256,10 @@ class TestGraphUpdate:
     async def test_update_multiple_fields(self, graph: SynapticGraph) -> None:
         node = await graph.add("T", "C", kind=NodeKind.CONCEPT, tags=["old"])
         updated = await graph.update(
-            node.id, title="New T", content="New C", tags=["new1", "new2"],
+            node.id,
+            title="New T",
+            content="New C",
+            tags=["new1", "new2"],
         )
         assert updated is not None
         assert updated.title == "New T"
@@ -295,7 +296,8 @@ class TestMaintain:
 class TestAddTurn:
     async def test_add_turn_creates_session(self, graph: SynapticGraph) -> None:
         session, user_n, asst_n = await graph.add_turn(
-            "안녕하세요", "안녕하세요! 무엇을 도와드릴까요?",
+            "안녕하세요",
+            "안녕하세요! 무엇을 도와드릴까요?",
             session_id="test_session_1",
         )
         assert session.kind == NodeKind.SESSION

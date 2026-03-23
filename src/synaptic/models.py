@@ -134,6 +134,7 @@ class DigestResult:
 @dataclass(slots=True)
 class MaintenanceResult:
     """Unified result for maintenance operations (consolidate + decay + prune)."""
+
     consolidated: DigestResult | None = None
     decayed: int = 0
     pruned: int = 0
@@ -153,6 +154,7 @@ def _evidence_step_list() -> list["EvidenceStep"]:
 @dataclass(slots=True)
 class EvidenceStep:
     """A single step in an evidence chain."""
+
     node: Node
     role: str = ""  # "seed", "bridge", "supporting"
     connection_to_next: str = ""  # connection description based on edge kind
@@ -163,6 +165,7 @@ class EvidenceStep:
 @dataclass(slots=True)
 class EvidenceChain:
     """Search results assembled into an LLM-friendly context."""
+
     query: str = ""
     steps: list[EvidenceStep] = field(default_factory=_evidence_step_list)
     compressed_context: str = ""  # final assembled context string

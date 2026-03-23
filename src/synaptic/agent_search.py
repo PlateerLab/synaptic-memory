@@ -32,54 +32,137 @@ class SearchIntent(StrEnum):
 # Weights tuned per intent
 _INTENT_WEIGHTS: dict[SearchIntent, ResonanceWeights] = {
     SearchIntent.SIMILAR_DECISIONS: ResonanceWeights(
-        relevance=0.45, importance=0.20, recency=0.15, vitality=0.05, context=0.15,
+        relevance=0.45,
+        importance=0.20,
+        recency=0.15,
+        vitality=0.05,
+        context=0.15,
     ),
     SearchIntent.PAST_FAILURES: ResonanceWeights(
-        relevance=0.40, importance=0.25, recency=0.20, vitality=0.05, context=0.10,
+        relevance=0.40,
+        importance=0.25,
+        recency=0.20,
+        vitality=0.05,
+        context=0.10,
     ),
     SearchIntent.RELATED_RULES: ResonanceWeights(
-        relevance=0.45, importance=0.20, recency=0.10, vitality=0.10, context=0.15,
+        relevance=0.45,
+        importance=0.20,
+        recency=0.10,
+        vitality=0.10,
+        context=0.15,
     ),
     SearchIntent.REASONING_CHAIN: ResonanceWeights(
-        relevance=0.40, importance=0.20, recency=0.20, vitality=0.05, context=0.15,
+        relevance=0.40,
+        importance=0.20,
+        recency=0.20,
+        vitality=0.05,
+        context=0.15,
     ),
     SearchIntent.CONTEXT_EXPLORE: ResonanceWeights(
-        relevance=0.30, importance=0.15, recency=0.15, vitality=0.10, context=0.30,
+        relevance=0.30,
+        importance=0.15,
+        recency=0.15,
+        vitality=0.10,
+        context=0.30,
     ),
 }
 
 
 # PPR damping factor per intent (lower = more focused on seeds)
 _INTENT_DAMPING: dict[SearchIntent, float] = {
-    SearchIntent.CONTEXT_EXPLORE: 0.75,   # exploratory, wide spread
-    SearchIntent.GENERAL: 0.85,           # default
-    SearchIntent.SIMILAR_DECISIONS: 0.85, # default
-    SearchIntent.PAST_FAILURES: 0.50,     # focused, narrow
-    SearchIntent.REASONING_CHAIN: 0.60,   # chain following
-    SearchIntent.RELATED_RULES: 0.85,     # default
+    SearchIntent.CONTEXT_EXPLORE: 0.75,  # exploratory, wide spread
+    SearchIntent.GENERAL: 0.85,  # default
+    SearchIntent.SIMILAR_DECISIONS: 0.85,  # default
+    SearchIntent.PAST_FAILURES: 0.50,  # focused, narrow
+    SearchIntent.REASONING_CHAIN: 0.60,  # chain following
+    SearchIntent.RELATED_RULES: 0.85,  # default
 }
 
 
 _INTENT_HINTS: dict[SearchIntent, list[str]] = {
     SearchIntent.PAST_FAILURES: [
-        "실패", "에러", "오류", "버그", "장애", "incident", "fail", "error", "bug",
-        "crash", "broke", "broken", "problem", "issue", "wrong", "잘못",
+        "실패",
+        "에러",
+        "오류",
+        "버그",
+        "장애",
+        "incident",
+        "fail",
+        "error",
+        "bug",
+        "crash",
+        "broke",
+        "broken",
+        "problem",
+        "issue",
+        "wrong",
+        "잘못",
     ],
     SearchIntent.SIMILAR_DECISIONS: [
-        "결정", "선택", "판단", "채택", "decide", "decision", "choose", "chose",
-        "선택지", "대안", "alternative", "approach", "어떻게", "how to", "should",
+        "결정",
+        "선택",
+        "판단",
+        "채택",
+        "decide",
+        "decision",
+        "choose",
+        "chose",
+        "선택지",
+        "대안",
+        "alternative",
+        "approach",
+        "어떻게",
+        "how to",
+        "should",
     ],
     SearchIntent.RELATED_RULES: [
-        "규칙", "정책", "규정", "제약", "금지", "필수", "rule", "policy", "constraint",
-        "must", "should not", "required", "mandatory", "forbidden", "하면 안",
+        "규칙",
+        "정책",
+        "규정",
+        "제약",
+        "금지",
+        "필수",
+        "rule",
+        "policy",
+        "constraint",
+        "must",
+        "should not",
+        "required",
+        "mandatory",
+        "forbidden",
+        "하면 안",
     ],
     SearchIntent.REASONING_CHAIN: [
-        "결과", "원인", "왜", "이유", "교훈", "배운", "outcome", "result", "why",
-        "because", "lesson", "learned", "led to", "caused", "이어", "때문",
+        "결과",
+        "원인",
+        "왜",
+        "이유",
+        "교훈",
+        "배운",
+        "outcome",
+        "result",
+        "why",
+        "because",
+        "lesson",
+        "learned",
+        "led to",
+        "caused",
+        "이어",
+        "때문",
     ],
     SearchIntent.CONTEXT_EXPLORE: [
-        "관련", "주변", "연관", "비슷한", "explore", "related", "around", "context",
-        "neighborhood", "연결", "linked",
+        "관련",
+        "주변",
+        "연관",
+        "비슷한",
+        "explore",
+        "related",
+        "around",
+        "context",
+        "neighborhood",
+        "연결",
+        "linked",
     ],
 }
 
@@ -131,27 +214,49 @@ class AgentSearch:
         match intent:
             case SearchIntent.SIMILAR_DECISIONS:
                 return await self._search_similar_decisions(
-                    backend, query, limit, embedding, context_tags,
+                    backend,
+                    query,
+                    limit,
+                    embedding,
+                    context_tags,
                 )
             case SearchIntent.PAST_FAILURES:
                 return await self._search_past_failures(
-                    backend, query, limit, context_tags,
+                    backend,
+                    query,
+                    limit,
+                    context_tags,
                 )
             case SearchIntent.RELATED_RULES:
                 return await self._search_related_rules(
-                    backend, query, limit, embedding, context_tags,
+                    backend,
+                    query,
+                    limit,
+                    embedding,
+                    context_tags,
                 )
             case SearchIntent.REASONING_CHAIN:
                 return await self._search_reasoning_chain(
-                    backend, query, limit, context_tags,
+                    backend,
+                    query,
+                    limit,
+                    context_tags,
                 )
             case SearchIntent.CONTEXT_EXPLORE:
                 return await self._explore_context(
-                    backend, query, limit, embedding, context_tags, depth,
+                    backend,
+                    query,
+                    limit,
+                    embedding,
+                    context_tags,
+                    depth,
                 )
             case _:
                 return await self._hybrid.search(
-                    backend, query, limit=limit, embedding=embedding,
+                    backend,
+                    query,
+                    limit=limit,
+                    embedding=embedding,
                     node_kinds=node_kinds,
                 )
 
@@ -169,12 +274,18 @@ class AgentSearch:
 
         # Search filtered to decision nodes, fallback to unfiltered
         result = await self._hybrid.search(
-            backend, query, limit=limit * 2, embedding=embedding,
+            backend,
+            query,
+            limit=limit * 2,
+            embedding=embedding,
             node_kinds=[NodeKind.DECISION],
         )
         if len(result.nodes) < 2:
             result = await self._hybrid.search(
-                backend, query, limit=limit * 2, embedding=embedding,
+                backend,
+                query,
+                limit=limit * 2,
+                embedding=embedding,
             )
 
         # Expand: follow RESULTED_IN edges to include outcomes
@@ -211,7 +322,9 @@ class AgentSearch:
 
         # Search broadly — OUTCOME, DECISION, LESSON all relevant to failures
         result = await self._hybrid.search(
-            backend, query, limit=limit * 3,
+            backend,
+            query,
+            limit=limit * 3,
             node_kinds=[NodeKind.OUTCOME, NodeKind.DECISION, NodeKind.LESSON],
         )
 
@@ -245,7 +358,9 @@ class AgentSearch:
         # If still empty, fall back to general search (no kind filter)
         if not expanded:
             result = await self._hybrid.search(
-                backend, query, limit=limit * 2,
+                backend,
+                query,
+                limit=limit * 2,
             )
             for an in result.nodes:
                 expanded[an.node.id] = (an.node, an.activation)
@@ -272,12 +387,18 @@ class AgentSearch:
         weights = _INTENT_WEIGHTS[SearchIntent.RELATED_RULES]
 
         result = await self._hybrid.search(
-            backend, query, limit=limit * 2, embedding=embedding,
+            backend,
+            query,
+            limit=limit * 2,
+            embedding=embedding,
             node_kinds=[NodeKind.RULE, NodeKind.LESSON],
         )
         if len(result.nodes) < 2:
             result = await self._hybrid.search(
-                backend, query, limit=limit * 2, embedding=embedding,
+                backend,
+                query,
+                limit=limit * 2,
+                embedding=embedding,
             )
 
         # Expand via graph traversal
@@ -312,12 +433,16 @@ class AgentSearch:
 
         # Find seed decisions, fallback to unfiltered
         result = await self._hybrid.search(
-            backend, query, limit=limit,
+            backend,
+            query,
+            limit=limit,
             node_kinds=[NodeKind.DECISION],
         )
         if len(result.nodes) < 2:
             result = await self._hybrid.search(
-                backend, query, limit=limit,
+                backend,
+                query,
+                limit=limit,
             )
 
         expanded: dict[str, tuple[Node, float]] = {}
@@ -368,7 +493,10 @@ class AgentSearch:
 
         # Find seed nodes
         result = await self._hybrid.search(
-            backend, query, limit=5, embedding=embedding,
+            backend,
+            query,
+            limit=5,
+            embedding=embedding,
         )
 
         expanded: dict[str, tuple[Node, float]] = {}
@@ -379,7 +507,10 @@ class AgentSearch:
         if expanded:
             seed_scores = {nid: score for nid, (_node, score) in expanded.items()}
             ppr_results = await personalized_pagerank(
-                backend, seed_scores, damping=damping, top_k=limit * 2,
+                backend,
+                seed_scores,
+                damping=damping,
+                top_k=limit * 2,
             )
             for node_id, ppr_score in ppr_results:
                 if node_id not in expanded:
@@ -417,11 +548,13 @@ class AgentSearch:
                 weights=weights,
                 context_tags=context_tags,
             )
-            activated.append(ActivatedNode(
-                node=node,
-                activation=search_score,
-                resonance=resonance,
-                path=[],
-            ))
+            activated.append(
+                ActivatedNode(
+                    node=node,
+                    activation=search_score,
+                    resonance=resonance,
+                    path=[],
+                )
+            )
         activated.sort(key=lambda a: a.resonance, reverse=True)
         return activated

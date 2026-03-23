@@ -6,7 +6,7 @@ import pytest
 
 from synaptic.backends.memory import MemoryBackend
 from synaptic.graph import SynapticGraph
-from synaptic.models import EdgeKind, NodeKind
+from synaptic.models import EdgeKind
 from synaptic.ppr import personalized_pagerank
 
 
@@ -60,9 +60,7 @@ class TestPPRBasic:
         await graph.link(a.id, bridge.id, kind=EdgeKind.RELATED)
         await graph.link(bridge.id, b.id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 1.0, b.id: 1.0}
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 1.0, b.id: 1.0})
         result_ids = {nid for nid, _ in result}
         assert a.id in result_ids
         assert b.id in result_ids
@@ -76,9 +74,7 @@ class TestPPRBasic:
         await graph.link(a.id, c.id, kind=EdgeKind.RELATED)
         await graph.link(b.id, c.id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 10.0, b.id: 1.0}
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 10.0, b.id: 1.0})
         result_dict = dict(result)
         # A should score higher than B due to heavier seed weight
         assert result_dict[a.id] > result_dict[b.id]
@@ -93,12 +89,8 @@ class TestPPRDamping:
         b = await graph.add("Neighbor", "I am a neighbor")
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
 
-        result_low = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}, damping=0.1
-        )
-        result_high = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}, damping=0.95
-        )
+        result_low = await personalized_pagerank(graph.backend, {a.id: 1.0}, damping=0.1)
+        result_high = await personalized_pagerank(graph.backend, {a.id: 1.0}, damping=0.95)
 
         low_dict = dict(result_low)
         high_dict = dict(result_high)
@@ -116,9 +108,7 @@ class TestPPRDamping:
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
         await graph.link(b.id, c.id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}, damping=0.95
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 1.0}, damping=0.95)
         result_dict = dict(result)
         # Hop2 should have non-trivial score with high damping
         assert result_dict.get(c.id, 0.0) > 0.01
@@ -133,9 +123,7 @@ class TestPPRConvergence:
         b = await graph.add("B", "B")
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}, max_iter=5
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 1.0}, max_iter=5)
         assert len(result) >= 2
         # Scores should be positive
         for _, score in result:
@@ -147,9 +135,7 @@ class TestPPRConvergence:
         b = await graph.add("B", "B")
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}, tol=1e-12, max_iter=200
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 1.0}, tol=1e-12, max_iter=200)
         assert len(result) >= 2
 
 
@@ -162,9 +148,7 @@ class TestPPRGraph:
         b = await graph.add("B", "B")
         # No edges between them
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 1.0})
         result_dict = dict(result)
         # Only seed is returned (b is unreachable)
         assert a.id in result_dict
@@ -180,9 +164,7 @@ class TestPPRGraph:
         for i in range(4):
             await graph.link(nodes[i].id, nodes[i + 1].id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {nodes[0].id: 1.0}
-        )
+        result = await personalized_pagerank(graph.backend, {nodes[0].id: 1.0})
         result_ids = {nid for nid, _ in result}
 
         # N0 and N1 are within depth 1, N2 within depth 2
@@ -199,9 +181,7 @@ class TestPPRGraph:
         await graph.link(b.id, c.id, kind=EdgeKind.RELATED)
         await graph.link(c.id, a.id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 1.0})
         assert len(result) == 3
         for _, score in result:
             assert score > 0.0
@@ -220,9 +200,7 @@ class TestPPRTopK:
         for i in range(1, 6):
             await graph.link(nodes[0].id, nodes[i].id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {nodes[0].id: 1.0}, top_k=3
-        )
+        result = await personalized_pagerank(graph.backend, {nodes[0].id: 1.0}, top_k=3)
         assert len(result) <= 3
 
     async def test_top_k_returns_highest_scores(self, graph: SynapticGraph) -> None:
@@ -233,9 +211,7 @@ class TestPPRTopK:
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
         await graph.link(b.id, c.id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {a.id: 1.0}, top_k=2
-        )
+        result = await personalized_pagerank(graph.backend, {a.id: 1.0}, top_k=2)
         assert len(result) == 2
         # Results should be sorted descending
         assert result[0][1] >= result[1][1]
@@ -254,9 +230,7 @@ class TestPPREdgeWeights:
         await graph.link(seed.id, heavy.id, kind=EdgeKind.RELATED, weight=5.0)
         await graph.link(seed.id, light.id, kind=EdgeKind.RELATED, weight=1.0)
 
-        result = await personalized_pagerank(
-            graph.backend, {seed.id: 1.0}
-        )
+        result = await personalized_pagerank(graph.backend, {seed.id: 1.0})
         result_dict = dict(result)
 
         # Heavy neighbor should receive more rank
@@ -264,9 +238,7 @@ class TestPPREdgeWeights:
 
     async def test_zero_seed_scores(self, backend: MemoryBackend) -> None:
         """All-zero seed scores returns zero scores for all nodes."""
-        result = await personalized_pagerank(
-            backend, {"a": 0.0, "b": 0.0}
-        )
+        result = await personalized_pagerank(backend, {"a": 0.0, "b": 0.0})
         # Zero seeds → all scores are zero
         for _, score in result:
             assert score == 0.0
@@ -280,8 +252,6 @@ class TestPPREdgeWeights:
         for i in range(3):
             await graph.link(nodes[i].id, nodes[i + 1].id, kind=EdgeKind.RELATED)
 
-        result = await personalized_pagerank(
-            graph.backend, {nodes[0].id: 1.0}
-        )
+        result = await personalized_pagerank(graph.backend, {nodes[0].id: 1.0})
         scores = [s for _, s in result]
         assert scores == sorted(scores, reverse=True)

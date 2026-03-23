@@ -48,7 +48,9 @@ class TestSearchQuality:
             start = time()
             if q.get("intent", "auto") != "auto":
                 result = await graph.agent_search(
-                    q["query"], intent=q["intent"], limit=K * 2,
+                    q["query"],
+                    intent=q["intent"],
+                    limit=K * 2,
                 )
             else:
                 result = await graph.search(q["query"], limit=K * 2)
@@ -84,7 +86,9 @@ class TestSearchQuality:
         """직접 키워드 매칭 쿼리 — 최소 1개는 hit해야 함."""
         graph, id_map = enterprise_graph
         queries = _load_queries()
-        direct_queries = [q for q in queries if q["id"] in ("q01_direct_keyword", "q09_deploy_procedure")]
+        direct_queries = [
+            q for q in queries if q["id"] in ("q01_direct_keyword", "q09_deploy_procedure")
+        ]
 
         hits = 0
         for q in direct_queries:
@@ -107,7 +111,9 @@ class TestSearchQuality:
         """교차 시스템 쿼리는 여러 원천에서 결과를 가져와야 함."""
         graph, id_map = enterprise_graph
         queries = _load_queries()
-        cross_queries = [q for q in queries if q["id"] in ("q03_cross_system", "q06_graph_traversal")]
+        cross_queries = [
+            q for q in queries if q["id"] in ("q03_cross_system", "q06_graph_traversal")
+        ]
 
         for q in cross_queries:
             relevant_ids = {id_map[rid] for rid in q["relevant_ids"] if rid in id_map}
@@ -145,7 +151,9 @@ class TestHebbianEffect:
         graph, id_map = enterprise_graph
 
         result = await graph.agent_search(
-            "재고 캐시 오류", intent="past_failures", limit=K,
+            "재고 캐시 오류",
+            intent="past_failures",
+            limit=K,
         )
         retrieved = [n.node.id for n in result.nodes]
 
@@ -196,9 +204,16 @@ class TestConsolidationEffect:
         """consolidation 후에도 핵심 검색 품질이 유지되는지."""
         graph, id_map = enterprise_graph
         queries = _load_queries()
-        key_queries = [q for q in queries if q["id"] in (
-            "q01_direct_keyword", "q05_incident_recall", "q08_runbook",
-        )]
+        key_queries = [
+            q
+            for q in queries
+            if q["id"]
+            in (
+                "q01_direct_keyword",
+                "q05_incident_recall",
+                "q08_runbook",
+            )
+        ]
 
         # Before consolidation
         before_mrrs: list[float] = []

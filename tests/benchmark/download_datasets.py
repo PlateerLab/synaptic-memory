@@ -56,7 +56,9 @@ def _load_beir_dataset(hf_path: str, name: str, out_file: str) -> None:
     path = DATA_DIR / out_file
     with open(path, "w") as f:
         json.dump(out, f, ensure_ascii=False)
-    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+    print(
+        f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})"
+    )
 
 
 def download_ko_strategyqa() -> None:
@@ -112,7 +114,9 @@ def download_miracl_ko() -> None:
     path = DATA_DIR / "miracl_ko.json"
     with open(path, "w") as f:
         json.dump(out, f, ensure_ascii=False)
-    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+    print(
+        f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})"
+    )
 
 
 def download_mrtydi_ko() -> None:
@@ -158,7 +162,9 @@ def download_mrtydi_ko() -> None:
     path = DATA_DIR / "mrtydi_ko.json"
     with open(path, "w") as f:
         json.dump(out, f, ensure_ascii=False)
-    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+    print(
+        f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})"
+    )
 
 
 def download_klue_mrc() -> None:
@@ -192,7 +198,9 @@ def download_klue_mrc() -> None:
     path = DATA_DIR / "klue_mrc.json"
     with open(path, "w") as f:
         json.dump(out, f, ensure_ascii=False)
-    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+    print(
+        f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})"
+    )
 
 
 def download_allganize_rag_ko_eval() -> None:
@@ -307,13 +315,15 @@ def download_hotpotqa() -> None:
             if title in sf_titles:
                 rels[cid] = 1
 
-        all_questions.append({
-            "qid": qid,
-            "question": row["question"],
-            "type": row["type"],
-            "docs": docs,
-            "qrels": rels,
-        })
+        all_questions.append(
+            {
+                "qid": qid,
+                "question": row["question"],
+                "type": row["type"],
+                "docs": docs,
+                "qrels": rels,
+            }
+        )
 
     def _build_subset(selected: list[dict]) -> tuple[dict, dict, dict]:
         """선택된 question들의 context 문서만 모아서 corpus/queries/qrels 생성."""
@@ -344,8 +354,10 @@ def download_hotpotqa() -> None:
     path_200 = DATA_DIR / "hotpotqa.json"
     with open(path_200, "w") as f:
         json.dump(out_200, f, ensure_ascii=False)
-    print(f"  Saved: {path_200} (corpus={len(corpus_200)}, queries={len(queries_200)}, "
-          f"qrels={sum(len(v) for v in qrels_200.values())})")
+    print(
+        f"  Saved: {path_200} (corpus={len(corpus_200)}, queries={len(queries_200)}, "
+        f"qrels={sum(len(v) for v in qrels_200.values())})"
+    )
 
     # ── 24 queries 셋 (Cognee 비교용) ──
     # multi-hop 특성 다양성을 위해 bridge 16 + comparison 8
@@ -375,8 +387,10 @@ def download_hotpotqa() -> None:
     path_24 = DATA_DIR / "hotpotqa_24.json"
     with open(path_24, "w") as f:
         json.dump(out_24, f, ensure_ascii=False)
-    print(f"  Saved: {path_24} (corpus={len(corpus_24)}, queries={len(queries_24)}, "
-          f"qrels={sum(len(v) for v in qrels_24.values())})")
+    print(
+        f"  Saved: {path_24} (corpus={len(corpus_24)}, queries={len(queries_24)}, "
+        f"qrels={sum(len(v) for v in qrels_24.values())})"
+    )
 
 
 def _load_multilingual_beir_dataset(
@@ -430,6 +444,7 @@ def _load_multilingual_beir_dataset(
     # 대규모 corpus 샘플링: qrels 관련 문서 + 랜덤 negative
     if max_corpus > 0 and len(corpus) > max_corpus:
         import random
+
         random.seed(42)
         relevant_ids = set()
         for rels in qrels.values():
@@ -444,8 +459,10 @@ def _load_multilingual_beir_dataset(
             for cid in neg_sample:
                 sampled_corpus[cid] = corpus[cid]
 
-        print(f"  Sampled corpus: {len(corpus)} → {len(sampled_corpus)} "
-              f"(relevant={len(relevant_ids & set(corpus.keys()))}, negative={len(sampled_corpus) - len(relevant_ids & set(sampled_corpus.keys()))})")
+        print(
+            f"  Sampled corpus: {len(corpus)} → {len(sampled_corpus)} "
+            f"(relevant={len(relevant_ids & set(corpus.keys()))}, negative={len(sampled_corpus) - len(relevant_ids & set(sampled_corpus.keys()))})"
+        )
         corpus = sampled_corpus
 
     out = {
@@ -461,13 +478,17 @@ def _load_multilingual_beir_dataset(
     path = DATA_DIR / out_file
     with open(path, "w") as f:
         json.dump(out, f, ensure_ascii=False)
-    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+    print(
+        f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})"
+    )
 
 
 # ── BeIR 영문 데이터셋 ──
 
 
-def _load_mteb_beir_dataset(hf_path: str, name: str, out_file: str, *, qrels_split: str = "test") -> None:
+def _load_mteb_beir_dataset(
+    hf_path: str, name: str, out_file: str, *, qrels_split: str = "test"
+) -> None:
     """MTEB BeIR 형식 데이터셋 — corpus/queries config + default config(=qrels)."""
     from datasets import load_dataset
 
@@ -508,7 +529,9 @@ def _load_mteb_beir_dataset(hf_path: str, name: str, out_file: str, *, qrels_spl
     path = DATA_DIR / out_file
     with open(path, "w") as f:
         json.dump(out, f, ensure_ascii=False)
-    print(f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})")
+    print(
+        f"  Saved: {path} (corpus={len(corpus)}, queries={len(queries)}, qrels={sum(len(v) for v in qrels.values())})"
+    )
 
 
 def download_nfcorpus() -> None:
@@ -633,8 +656,13 @@ def main() -> None:
     print("=" * 60)
 
     for f in sorted(DATA_DIR.glob("*.json")):
-        if f.name in ("enterprise_scenario.json", "enterprise_scenario_v2.json",
-                       "wikipedia_ko_tech.json", "github_commits.json", "github_issues.json"):
+        if f.name in (
+            "enterprise_scenario.json",
+            "enterprise_scenario_v2.json",
+            "wikipedia_ko_tech.json",
+            "github_commits.json",
+            "github_issues.json",
+        ):
             continue
         size_mb = f.stat().st_size / 1024 / 1024
         print(f"  {f.name}: {size_mb:.1f} MB")

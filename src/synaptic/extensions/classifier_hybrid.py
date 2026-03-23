@@ -32,7 +32,7 @@ class HybridClassifier:
         Below this threshold, classification is delegated to the LLM.
     """
 
-    __slots__ = ("rule_classifier", "llm_classifier", "confidence_threshold")
+    __slots__ = ("confidence_threshold", "llm_classifier", "rule_classifier")
 
     def __init__(
         self,

@@ -31,7 +31,6 @@ import pytest
 
 from synaptic.backends.memory import MemoryBackend
 from synaptic.graph import SynapticGraph
-from synaptic.models import NodeKind
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -108,7 +107,9 @@ async def _generate_answer(
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            url, json=payload, headers=headers,
+            url,
+            json=payload,
+            headers=headers,
             timeout=aiohttp.ClientTimeout(total=120),
         ) as resp:
             if resp.status != 200:
@@ -168,16 +169,16 @@ class E2EBenchmark:
 
     def report(self) -> str:
         lines = [
-            f"\n{'='*60}",
+            f"\n{'=' * 60}",
             f"End-to-End QA Benchmark: {self.dataset_name}",
             f"Model: {self.model_name}",
             f"Questions: {len(self.results)}",
-            f"{'='*60}",
+            f"{'=' * 60}",
             f"  Mean Correctness:   {self.mean_correctness:.3f}",
             f"  Mean Faithfulness:  {self.mean_faithfulness:.3f}",
             f"  Mean Retrieval:     {self.mean_retrieval_ms:.1f}ms",
             f"  Total Time:         {self.total_time_s:.1f}s",
-            f"{'='*60}",
+            f"{'=' * 60}",
         ]
 
         # 개별 결과
@@ -246,8 +247,8 @@ def _evaluate_correctness_simple(answer: str, ground_truth: str) -> float:
 async def _evaluate_with_deepeval(results: list[E2EResult], model: str) -> None:
     """DeepEval GEval로 correctness/faithfulness 평가."""
     try:
-        from deepeval import evaluate as deepeval_evaluate
-        from deepeval.metrics import GEval, FaithfulnessMetric
+        from deepeval import evaluate as deepeval_evaluate  # noqa: F401
+        from deepeval.metrics import FaithfulnessMetric, GEval  # noqa: F401
         from deepeval.test_case import LLMTestCase, LLMTestCaseParams
     except ImportError:
         print("  [WARN] DeepEval 미설치 — F1 기반 simple correctness 사용")
@@ -258,6 +259,7 @@ async def _evaluate_with_deepeval(results: list[E2EResult], model: str) -> None:
     # Ollama 모델 설정
     try:
         from deepeval.models import OllamaModel
+
         judge_model = OllamaModel(model="gemma3:4b", base_url="http://localhost:11434")
     except Exception:
         judge_model = None
@@ -298,7 +300,9 @@ class TestE2EHotPotQA:
     async def test_hotpotqa_e2e(self) -> None:
         data = _load_hotpotqa()
         if not data:
-            pytest.skip("HotPotQA 데이터 없음. Run: uv run python tests/benchmark/download_datasets.py")
+            pytest.skip(
+                "HotPotQA 데이터 없음. Run: uv run python tests/benchmark/download_datasets.py"
+            )
 
         corpus = data["corpus"]
         queries = data["queries"]
@@ -307,6 +311,7 @@ class TestE2EHotPotQA:
 
         # 24문항 샘플링 (Cognee와 동일)
         import random
+
         random.seed(42)
         query_ids = list(queries.keys())
         if len(query_ids) > 24:
@@ -337,7 +342,7 @@ class TestE2EHotPotQA:
             id_map[cid] = node_id
 
         # 엣지 수 확인
-        edge_count = len(backend._edges) if hasattr(backend, '_edges') else 0
+        edge_count = len(backend._edges) if hasattr(backend, "_edges") else 0
         print(f"  노드: {len(id_map)}, 엣지: {edge_count}")
 
         # LLM 설정
@@ -368,7 +373,10 @@ class TestE2EHotPotQA:
             # Retrieval + Evidence Chain Assembly
             t0 = time()
             evidence = await graph.build_evidence(
-                question, limit=10, max_steps=8, max_tokens=2048,
+                question,
+                limit=10,
+                max_steps=8,
+                max_tokens=2048,
             )
             retrieval_ms = (time() - t0) * 1000
 
@@ -378,8 +386,11 @@ class TestE2EHotPotQA:
             # Generation
             t0 = time()
             answer = await _generate_answer(
-                question, contexts,
-                model=model, base_url=base_url, api_key=api_key,
+                question,
+                contexts,
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
             )
             gen_ms = (time() - t0) * 1000
 
@@ -393,14 +404,14 @@ class TestE2EHotPotQA:
             )
             benchmark.results.append(result)
 
-            progress = f"[{i+1}/{len(query_ids)}]"
+            progress = f"[{i + 1}/{len(query_ids)}]"
             print(f"  {progress} Q: {question[:60]}...")
             print(f"         A: {answer[:80]}...")
 
         benchmark.total_time_s = time() - start_total
 
         # 3. 평가
-        print(f"\n[Phase 3] 평가 (Correctness)...")
+        print("\n[Phase 3] 평가 (Correctness)...")
 
         # F1 기반 simple correctness (항상 실행)
         for r in benchmark.results:
@@ -420,7 +431,7 @@ class TestE2EHotPotQA:
             print("  ✅ Cognee 수준 달성!")
         else:
             gap = cognee_correctness - our_correctness
-            print(f"  ⚠️  Gap: {gap:.3f} ({gap/cognee_correctness*100:.1f}%)")
+            print(f"  ⚠️  Gap: {gap:.3f} ({gap / cognee_correctness * 100:.1f}%)")
 
         assert len(benchmark.results) > 0
 
@@ -430,6 +441,7 @@ class TestE2EHotPotQA:
     async def test_hotpotqa_e2e_claude(self) -> None:
         """Claude API로 답변 생성 — Cognee 공정 비교 (그래프는 RuleBased)."""
         from dotenv import dotenv_values
+
         env = dotenv_values()
         api_key = os.environ.get("ANTHROPIC_API_KEY", "") or env.get("ANTHROPIC_API_KEY", "")
         if not api_key:
@@ -444,6 +456,7 @@ class TestE2EHotPotQA:
         answers = data.get("answers", {})
 
         import random
+
         random.seed(42)
         query_ids = list(queries.keys())
         if len(query_ids) > 24:
@@ -468,12 +481,14 @@ class TestE2EHotPotQA:
                 content=doc.get("text", ""),
             )
 
-        edge_count = len(backend._edges) if hasattr(backend, '_edges') else 0
+        edge_count = len(backend._edges) if hasattr(backend, "_edges") else 0
         print(f"  노드: {len(corpus)}, 엣지: {edge_count}")
 
         # 2. Claude로 답변 생성
         print(f"\n[Phase 2] Retrieval + Generation (Claude, {len(query_ids)}문항)...")
-        benchmark = E2EBenchmark(dataset_name="HotPotQA-Claude", model_name="claude-sonnet-4-20250514")
+        benchmark = E2EBenchmark(
+            dataset_name="HotPotQA-Claude", model_name="claude-sonnet-4-20250514"
+        )
         start_total = time()
 
         for i, qid in enumerate(query_ids):
@@ -483,7 +498,10 @@ class TestE2EHotPotQA:
             # Retrieval + Evidence Chain
             t0 = time()
             evidence = await graph.build_evidence(
-                question, limit=10, max_steps=8, max_tokens=2048,
+                question,
+                limit=10,
+                max_steps=8,
+                max_tokens=2048,
             )
             retrieval_ms = (time() - t0) * 1000
 
@@ -492,7 +510,9 @@ class TestE2EHotPotQA:
             # Claude로 답변 생성
             t0 = time()
             answer = await _generate_answer_claude(
-                question, contexts, api_key=api_key,
+                question,
+                contexts,
+                api_key=api_key,
             )
             gen_ms = (time() - t0) * 1000
 
@@ -506,13 +526,13 @@ class TestE2EHotPotQA:
             )
             benchmark.results.append(result)
 
-            print(f"  [{i+1}/{len(query_ids)}] Q: {question[:60]}...")
+            print(f"  [{i + 1}/{len(query_ids)}] Q: {question[:60]}...")
             print(f"         A: {answer[:80]}...")
 
         benchmark.total_time_s = time() - start_total
 
         # 3. 평가
-        print(f"\n[Phase 3] 평가 (Correctness)...")
+        print("\n[Phase 3] 평가 (Correctness)...")
         for r in benchmark.results:
             r.correctness = _evaluate_correctness_simple(r.answer, r.ground_truth)
 
@@ -526,7 +546,7 @@ class TestE2EHotPotQA:
             print("  ✅ Cognee 수준 달성/초과!")
         else:
             gap = cognee_correctness - our_correctness
-            print(f"  ⚠️  Gap: {gap:.3f} ({gap/cognee_correctness*100:.1f}%)")
+            print(f"  ⚠️  Gap: {gap:.3f} ({gap / cognee_correctness * 100:.1f}%)")
 
         assert len(benchmark.results) > 0
         await graph.backend.close()
@@ -567,7 +587,8 @@ async def _generate_answer_claude(
     async with aiohttp.ClientSession() as session:
         async with session.post(
             "https://api.anthropic.com/v1/messages",
-            json=payload, headers=headers,
+            json=payload,
+            headers=headers,
             timeout=aiohttp.ClientTimeout(total=60),
         ) as resp:
             if resp.status != 200:

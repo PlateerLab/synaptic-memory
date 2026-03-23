@@ -14,30 +14,72 @@ from synaptic.synonyms import expand_synonyms
 # Kind-query keyword mapping (boost the matching kind when these words appear in query)
 _KIND_QUERY_HINTS: dict[NodeKind, list[str]] = {
     NodeKind.LESSON: [
-        "실패", "에러", "오류", "장애", "교훈", "배운", "주의",
-        "failure", "error", "incident", "lesson", "postmortem",
+        "실패",
+        "에러",
+        "오류",
+        "장애",
+        "교훈",
+        "배운",
+        "주의",
+        "failure",
+        "error",
+        "incident",
+        "lesson",
+        "postmortem",
     ],
     NodeKind.RULE: [
-        "규칙", "정책", "규정", "금지", "필수", "가이드",
-        "rule", "policy", "constraint", "must", "forbidden",
+        "규칙",
+        "정책",
+        "규정",
+        "금지",
+        "필수",
+        "가이드",
+        "rule",
+        "policy",
+        "constraint",
+        "must",
+        "forbidden",
     ],
     NodeKind.DECISION: [
-        "결정", "선택", "판단", "채택", "어떻게",
-        "decision", "choice", "decided", "approach",
+        "결정",
+        "선택",
+        "판단",
+        "채택",
+        "어떻게",
+        "decision",
+        "choice",
+        "decided",
+        "approach",
     ],
     NodeKind.ARTIFACT: [
-        "api", "엔드포인트", "스키마", "명세", "코드",
-        "endpoint", "schema", "spec", "interface",
+        "api",
+        "엔드포인트",
+        "스키마",
+        "명세",
+        "코드",
+        "endpoint",
+        "schema",
+        "spec",
+        "interface",
     ],
     NodeKind.ENTITY: [
-        "회사", "조직", "제품", "서비스", "시스템",
-        "company", "organization", "product", "service",
+        "회사",
+        "조직",
+        "제품",
+        "서비스",
+        "시스템",
+        "company",
+        "organization",
+        "product",
+        "service",
     ],
 }
 _KIND_BOOST = 0.05  # search_score boost amount on kind match (conservative)
 
 
-def _rank_to_score(rank: int, *, top: float = 0.95, step: float = 0.05, floor: float = 0.3) -> float:
+def _rank_to_score(
+    rank: int, *, top: float = 0.95, step: float = 0.05, floor: float = 0.3
+) -> float:
     """Rank-based score conversion: rank 1 = top, decreasing by step per rank, clamped at floor."""
     return max(floor, top - rank * step)
 
@@ -209,9 +251,7 @@ class HybridSearch:
         activated.sort(key=lambda a: a.resonance, reverse=True)
 
         # Filter out internal phrase nodes (_phrase tag) from final results.
-        final: list[ActivatedNode] = [
-            a for a in activated if "_phrase" not in (a.node.tags or [])
-        ]
+        final: list[ActivatedNode] = [a for a in activated if "_phrase" not in (a.node.tags or [])]
 
         # Supersede: same-title nodes → keep only the newest (by updated_at).
         # This ensures knowledge updates are reflected: latest info wins.

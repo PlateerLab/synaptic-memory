@@ -131,7 +131,7 @@ async def combined_graph() -> AsyncGenerator[SynapticGraph]:
                     kind=NodeKind.CONCEPT,
                     source="wikipedia:ko",
                 )
-    except Exception:  # noqa: S110
+    except Exception:
         pass
 
     # GitHub commits
@@ -146,7 +146,7 @@ async def combined_graph() -> AsyncGenerator[SynapticGraph]:
                     kind=NodeKind.ARTIFACT,
                     source="github:commit",
                 )
-    except Exception:  # noqa: S110
+    except Exception:
         pass
 
     # GitHub issues
@@ -162,7 +162,7 @@ async def combined_graph() -> AsyncGenerator[SynapticGraph]:
                     kind=NodeKind.ENTITY,
                     source="github:issue",
                 )
-    except Exception:  # noqa: S110
+    except Exception:
         pass
 
     yield graph

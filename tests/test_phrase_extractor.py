@@ -9,7 +9,6 @@ from synaptic.extensions.phrase_extractor import PhraseExtractor, _is_meaningful
 from synaptic.graph import SynapticGraph
 from synaptic.models import EdgeKind, NodeKind
 
-
 # ---------------------------------------------------------------------------
 # Helper normalization / meaningful tests
 # ---------------------------------------------------------------------------
@@ -164,7 +163,9 @@ class TestExtractAndLink:
         extractor = PhraseExtractor(max_phrases_per_node=5)
         node = await graph.add("Bonn", "Bonn is a city in Germany.", kind=NodeKind.CONCEPT)
 
-        phrase_ids = await extractor.extract_and_link(graph, node.id, "Bonn", "Bonn is a city in Germany.")
+        phrase_ids = await extractor.extract_and_link(
+            graph, node.id, "Bonn", "Bonn is a city in Germany."
+        )
 
         assert len(phrase_ids) > 0
         for pid in phrase_ids:
@@ -179,7 +180,9 @@ class TestExtractAndLink:
         extractor = PhraseExtractor(max_phrases_per_node=5)
         node = await graph.add("Berlin", "Berlin is the capital.", kind=NodeKind.CONCEPT)
 
-        phrase_ids = await extractor.extract_and_link(graph, node.id, "Berlin", "Berlin is the capital.")
+        phrase_ids = await extractor.extract_and_link(
+            graph, node.id, "Berlin", "Berlin is the capital."
+        )
 
         edges = await graph.backend.get_edges(node.id)
         contains_edges = [e for e in edges if e.kind == EdgeKind.CONTAINS]
@@ -195,11 +198,17 @@ class TestExtractAndLink:
         ids1 = await extractor.extract_and_link(graph, node1.id, "Doc1", "Germany is in Europe.")
 
         node2 = await graph.add("Doc2", "Germany has 83 million people.", kind=NodeKind.CONCEPT)
-        ids2 = await extractor.extract_and_link(graph, node2.id, "Doc2", "Germany has 83 million people.")
+        ids2 = await extractor.extract_and_link(
+            graph, node2.id, "Doc2", "Germany has 83 million people."
+        )
 
         # "Germany" phrase node should be the same
-        germany_ids_1 = [pid for pid in ids1 if (await graph.backend.get_node(pid)).title == "Germany"]
-        germany_ids_2 = [pid for pid in ids2 if (await graph.backend.get_node(pid)).title == "Germany"]
+        germany_ids_1 = [
+            pid for pid in ids1 if (await graph.backend.get_node(pid)).title == "Germany"
+        ]
+        germany_ids_2 = [
+            pid for pid in ids2 if (await graph.backend.get_node(pid)).title == "Germany"
+        ]
 
         if germany_ids_1 and germany_ids_2:
             assert germany_ids_1[0] == germany_ids_2[0], "Same phrase should reuse same node"
@@ -209,11 +218,17 @@ class TestExtractAndLink:
         """Two documents sharing a phrase are indirectly connected via phrase node."""
         extractor = PhraseExtractor(max_phrases_per_node=5)
 
-        node1 = await graph.add("University of Bonn", "University of Bonn is in Germany.", kind=NodeKind.CONCEPT)
-        await extractor.extract_and_link(graph, node1.id, "University of Bonn", "University of Bonn is in Germany.")
+        node1 = await graph.add(
+            "University of Bonn", "University of Bonn is in Germany.", kind=NodeKind.CONCEPT
+        )
+        await extractor.extract_and_link(
+            graph, node1.id, "University of Bonn", "University of Bonn is in Germany."
+        )
 
         node2 = await graph.add("Bonn City", "Bonn is a city on the Rhine.", kind=NodeKind.CONCEPT)
-        await extractor.extract_and_link(graph, node2.id, "Bonn City", "Bonn is a city on the Rhine.")
+        await extractor.extract_and_link(
+            graph, node2.id, "Bonn City", "Bonn is a city on the Rhine."
+        )
 
         # Both should have edges to the shared "Bonn" phrase node
         edges1 = await graph.backend.get_edges(node1.id)
@@ -246,7 +261,8 @@ class TestExtractAndLink:
             kind=NodeKind.CONCEPT,
         )
         phrase_ids = await extractor.extract_and_link(
-            graph, node.id,
+            graph,
+            node.id,
             "Munich Overview",
             "Munich is a city in Germany known for Oktoberfest.",
         )

@@ -57,7 +57,9 @@ class QdrantBackend:
                 ),
             )
             logger.info(
-                "Created Qdrant collection '%s' (dim=%d)", self._collection, self._dimension,
+                "Created Qdrant collection '%s' (dim=%d)",
+                self._collection,
+                self._dimension,
             )
         else:
             logger.info("Qdrant collection '%s' already exists", self._collection)

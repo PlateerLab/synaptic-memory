@@ -111,7 +111,7 @@ class PostgreSQLBackend:
                 await conn.execute(
                     "ALTER TABLE syn_nodes ADD COLUMN properties_json TEXT NOT NULL DEFAULT '{}'"
                 )
-            except Exception:  # noqa: S110
+            except Exception:
                 pass  # Column already exists
             # pg_trgm (optional — graceful fallback to LIKE)
             try:

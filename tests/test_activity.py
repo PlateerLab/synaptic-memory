@@ -95,7 +95,9 @@ class TestDecisionOutcome:
 
     @pytest.mark.asyncio
     async def test_record_decision_with_context(
-        self, tracker: ActivityTracker, graph: SynapticGraph,
+        self,
+        tracker: ActivityTracker,
+        graph: SynapticGraph,
     ) -> None:
         session = await tracker.start_session(agent_id="agent-1")
         ctx = await graph.add("DB Requirements", "Need ACID + vector", kind=NodeKind.CONCEPT)
@@ -112,14 +114,21 @@ class TestDecisionOutcome:
 
     @pytest.mark.asyncio
     async def test_record_outcome_success(
-        self, tracker: ActivityTracker, graph: SynapticGraph,
+        self,
+        tracker: ActivityTracker,
+        graph: SynapticGraph,
     ) -> None:
         session = await tracker.start_session(agent_id="agent-1")
         decision = await tracker.record_decision(
-            session.id, title="Deploy v2", rationale="Ready",
+            session.id,
+            title="Deploy v2",
+            rationale="Ready",
         )
         outcome = await tracker.record_outcome(
-            decision.id, title="Deploy succeeded", content="Zero downtime", success=True,
+            decision.id,
+            title="Deploy succeeded",
+            content="Zero downtime",
+            success=True,
         )
         assert outcome.kind == NodeKind.OUTCOME
         assert outcome.properties["success"] == "true"
@@ -132,14 +141,21 @@ class TestDecisionOutcome:
 
     @pytest.mark.asyncio
     async def test_record_outcome_failure_reinforcement(
-        self, tracker: ActivityTracker, graph: SynapticGraph,
+        self,
+        tracker: ActivityTracker,
+        graph: SynapticGraph,
     ) -> None:
         session = await tracker.start_session(agent_id="agent-1")
         decision = await tracker.record_decision(
-            session.id, title="Skip tests", rationale="Time pressure",
+            session.id,
+            title="Skip tests",
+            rationale="Time pressure",
         )
         await tracker.record_outcome(
-            decision.id, title="Bug in prod", content="Caused incident", success=False,
+            decision.id,
+            title="Bug in prod",
+            content="Caused incident",
+            success=False,
         )
         # Decision should have failure_count increased via Hebbian
         updated_decision = await graph.backend.get_node(decision.id)
@@ -152,18 +168,25 @@ class TestObservation:
     async def test_record_observation(self, tracker: ActivityTracker) -> None:
         session = await tracker.start_session(agent_id="agent-1")
         obs = await tracker.record_observation(
-            session.id, title="High CPU usage", content="CPU at 95%",
+            session.id,
+            title="High CPU usage",
+            content="CPU at 95%",
         )
         assert obs.kind == NodeKind.OBSERVATION
 
     @pytest.mark.asyncio
     async def test_observation_with_source(
-        self, tracker: ActivityTracker, graph: SynapticGraph,
+        self,
+        tracker: ActivityTracker,
+        graph: SynapticGraph,
     ) -> None:
         session = await tracker.start_session(agent_id="agent-1")
         tc = await tracker.log_tool_call(session.id, tool_name="monitor", result="CPU 95%")
         obs = await tracker.record_observation(
-            session.id, title="High CPU", content="95%", source_node_id=tc.id,
+            session.id,
+            title="High CPU",
+            content="95%",
+            source_node_id=tc.id,
         )
         edges = await graph.backend.get_edges(tc.id, direction="outgoing")
         produced = [e for e in edges if e.kind == EdgeKind.PRODUCED]
@@ -188,10 +211,15 @@ class TestTimeline:
     async def test_decision_chain(self, tracker: ActivityTracker, graph: SynapticGraph) -> None:
         session = await tracker.start_session(agent_id="agent-1")
         decision = await tracker.record_decision(
-            session.id, title="Deploy v2", rationale="Ready",
+            session.id,
+            title="Deploy v2",
+            rationale="Ready",
         )
         outcome = await tracker.record_outcome(
-            decision.id, title="Success", content="Done", success=True,
+            decision.id,
+            title="Success",
+            content="Done",
+            success=True,
         )
         # Add a lesson learned from this outcome
         lesson = await graph.add("Always test first", "Pre-deploy checklist", kind=NodeKind.LESSON)

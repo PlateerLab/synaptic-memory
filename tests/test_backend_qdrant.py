@@ -70,7 +70,8 @@ class TestQdrantUpsertSearch:
     @pytest.mark.asyncio
     async def test_upsert_with_metadata(self, backend: QdrantBackend) -> None:
         await backend.upsert(
-            "node1", [1.0, 0.0, 0.0, 0.0],
+            "node1",
+            [1.0, 0.0, 0.0, 0.0],
             metadata={"title": "Test", "kind": "concept"},
         )
         results = await backend.search([1.0, 0.0, 0.0, 0.0], limit=1)

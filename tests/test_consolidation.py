@@ -8,7 +8,6 @@ from synaptic.backends.memory import MemoryBackend
 from synaptic.consolidation import (
     L0_TTL_HOURS,
     L1_PROMOTION_ACCESS,
-    L3_PROMOTION_RATE,
     L3_PROMOTION_SUCCESS,
     ConsolidationCascade,
 )

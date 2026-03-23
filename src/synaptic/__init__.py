@@ -42,7 +42,7 @@ from __future__ import annotations
 
 from synaptic.activity import ActivityTracker
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
-from synaptic.ppr import personalized_pagerank
+from synaptic.evidence import EvidenceAssembler
 from synaptic.extensions.classifier_rules import RuleBasedClassifier
 from synaptic.extensions.embedder import EmbeddingProvider, MockEmbeddingProvider
 from synaptic.extensions.phrase_extractor import PhraseExtractor
@@ -51,7 +51,6 @@ from synaptic.extensions.relation_detector import (
     RuleBasedRelationDetector,
 )
 from synaptic.graph import SynapticGraph
-from synaptic.evidence import EvidenceAssembler
 from synaptic.models import (
     ActivatedNode,
     ConsolidationLevel,
@@ -72,6 +71,7 @@ from synaptic.ontology import (
     TypeDef,
     build_agent_ontology,
 )
+from synaptic.ppr import personalized_pagerank
 from synaptic.protocols import (
     Digester,
     GraphTraversal,
@@ -83,42 +83,41 @@ from synaptic.protocols import (
 )
 from synaptic.resonance import ResonanceWeights
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "ActivatedNode",
     "ActivityTracker",
     "AgentSearch",
+    "ClassificationResult",
     "ConsolidationLevel",
     "DigestResult",
     "Digester",
     "Edge",
     "EdgeKind",
+    "EmbeddingProvider",
+    "EmbeddingRelationDetector",
     "EvidenceAssembler",
     "EvidenceChain",
     "EvidenceStep",
-    "EmbeddingProvider",
-    "EmbeddingRelationDetector",
     "GraphTraversal",
+    "HybridClassifier",
     "KindClassifier",
+    "LLMClassifier",
+    "LLMRelationDetector",
     "MaintenanceResult",
     "MockEmbeddingProvider",
     "Node",
     "NodeKind",
+    "OllamaLLMProvider",
     "OntologyRegistry",
+    "OpenAILLMProvider",
     "PhraseExtractor",
-    "personalized_pagerank",
     "PropertyDef",
     "QueryRewriter",
-    "RelationDetector",
     "RelationConstraint",
+    "RelationDetector",
     "ResonanceWeights",
-    "ClassificationResult",
-    "LLMClassifier",
-    "LLMRelationDetector",
-    "OllamaLLMProvider",
-    "OpenAILLMProvider",
-    "HybridClassifier",
     "RuleBasedClassifier",
     "RuleBasedRelationDetector",
     "SearchIntent",
@@ -128,6 +127,7 @@ __all__ = [
     "TagExtractor",
     "TypeDef",
     "build_agent_ontology",
+    "personalized_pagerank",
     "suggest_intent",
 ]
 
@@ -135,35 +135,35 @@ __all__ = [
 def __getattr__(name: str) -> object:
     """Lazy import for optional-dep providers (avoids crash when aiohttp not installed)."""
     if name == "OpenAIEmbeddingProvider":
-        from synaptic.extensions.embedder import OpenAIEmbeddingProvider  # noqa: PLC0415
+        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
 
         return OpenAIEmbeddingProvider
     if name == "OllamaEmbeddingProvider":
-        from synaptic.extensions.embedder import OllamaEmbeddingProvider  # noqa: PLC0415
+        from synaptic.extensions.embedder import OllamaEmbeddingProvider
 
         return OllamaEmbeddingProvider
     if name == "HybridClassifier":
-        from synaptic.extensions.classifier_hybrid import HybridClassifier  # noqa: PLC0415
+        from synaptic.extensions.classifier_hybrid import HybridClassifier
 
         return HybridClassifier
     if name == "LLMClassifier":
-        from synaptic.extensions.classifier_llm import LLMClassifier  # noqa: PLC0415
+        from synaptic.extensions.classifier_llm import LLMClassifier
 
         return LLMClassifier
     if name == "ClassificationResult":
-        from synaptic.extensions.classifier_llm import ClassificationResult  # noqa: PLC0415
+        from synaptic.extensions.classifier_llm import ClassificationResult
 
         return ClassificationResult
     if name == "LLMRelationDetector":
-        from synaptic.extensions.relation_detector_llm import LLMRelationDetector  # noqa: PLC0415
+        from synaptic.extensions.relation_detector_llm import LLMRelationDetector
 
         return LLMRelationDetector
     if name == "OllamaLLMProvider":
-        from synaptic.extensions.llm_provider import OllamaLLMProvider  # noqa: PLC0415
+        from synaptic.extensions.llm_provider import OllamaLLMProvider
 
         return OllamaLLMProvider
     if name == "OpenAILLMProvider":
-        from synaptic.extensions.llm_provider import OpenAILLMProvider  # noqa: PLC0415
+        from synaptic.extensions.llm_provider import OpenAILLMProvider
 
         return OpenAILLMProvider
     msg = f"module 'synaptic' has no attribute {name!r}"

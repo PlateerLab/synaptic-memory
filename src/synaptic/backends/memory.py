@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import re
 from collections.abc import Sequence
 from difflib import SequenceMatcher
 
@@ -107,8 +106,8 @@ class MemoryBackend:
         title_boost = 3.0
 
         # Pre-compute corpus statistics for BM25
-        N = len(self._nodes)  # total documents
-        if N == 0:
+        n_docs = len(self._nodes)  # total documents
+        if n_docs == 0:
             return []
 
         # Document frequencies: how many docs contain each term (substring match)
@@ -127,7 +126,7 @@ class MemoryBackend:
             doc_texts[node.id] = text
             doc_lengths[node.id] = len(text.split())
 
-        avgdl = sum(doc_lengths.values()) / N if N > 0 else 1.0
+        avgdl = sum(doc_lengths.values()) / n_docs if n_docs > 0 else 1.0
 
         for t in terms:
             count = 0
@@ -167,7 +166,7 @@ class MemoryBackend:
 
                 # --- BM25 component ---
                 df = doc_freq.get(t, 0)
-                idf = math.log((N - df + 0.5) / (df + 0.5) + 1.0)
+                idf = math.log((n_docs - df + 0.5) / (df + 0.5) + 1.0)
 
                 if tf_content > 0:
                     numerator = tf_content * (k1 + 1)
@@ -216,7 +215,7 @@ class MemoryBackend:
 
             # Hybrid: BM25 weight increases with corpus size
             # N≤500: mostly substring, N=5000+: mostly BM25
-            bm25_weight = min(0.8, max(0.1, (N - 500) / 5000))
+            bm25_weight = min(0.8, max(0.1, (n_docs - 500) / 5000))
             score = bm25_score * bm25_weight + substr_score * (1 - bm25_weight)
 
             if score > 0:

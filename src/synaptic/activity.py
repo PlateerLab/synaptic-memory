@@ -133,7 +133,8 @@ class ActivityTracker:
         if context_node_ids:
             for ctx_id in context_node_ids:
                 await self._graph.link(
-                    node.id, ctx_id,
+                    node.id,
+                    ctx_id,
                     kind=EdgeKind.DEPENDS_ON,
                     weight=0.8,
                 )
@@ -159,7 +160,8 @@ class ActivityTracker:
 
         if source_node_id:
             await self._graph.link(
-                source_node_id, node.id,
+                source_node_id,
+                node.id,
                 kind=EdgeKind.PRODUCED,
                 weight=0.7,
             )
@@ -189,7 +191,8 @@ class ActivityTracker:
 
         # Link decision → outcome
         await self._graph.link(
-            decision_id, node.id,
+            decision_id,
+            node.id,
             kind=EdgeKind.RESULTED_IN,
             weight=1.0,
         )
@@ -246,7 +249,8 @@ class ActivityTracker:
         """Link activity node to session via PART_OF + FOLLOWED_BY chain."""
         # PART_OF → session
         await self._graph.link(
-            node_id, session_id,
+            node_id,
+            session_id,
             kind=EdgeKind.PART_OF,
             weight=1.0,
         )
@@ -254,7 +258,8 @@ class ActivityTracker:
         prev_id = self._prev_activity.get(session_id)
         if prev_id:
             await self._graph.link(
-                prev_id, node_id,
+                prev_id,
+                node_id,
                 kind=EdgeKind.FOLLOWED_BY,
                 weight=1.0,
             )

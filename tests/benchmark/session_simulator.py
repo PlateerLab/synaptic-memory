@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from synaptic import SynapticGraph
 
@@ -52,9 +52,7 @@ class SessionSimulator:
 
         for query_id, doc_rels in list(qrels.items())[:max_sessions]:
             # corpus_id → graph node id 변환 (id_map에 있는 것만)
-            node_ids = [
-                id_map[cid] for cid in doc_rels if cid in id_map
-            ]
+            node_ids = [id_map[cid] for cid in doc_rels if cid in id_map]
 
             # co-activation에는 최소 2개 노드 필요
             if len(node_ids) < 2:

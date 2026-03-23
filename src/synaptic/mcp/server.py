@@ -40,16 +40,16 @@ async def _ensure_graph() -> Any:
     if _graph is not None:
         return _graph
 
-    from synaptic.extensions.tagger_regex import RegexTagExtractor  # noqa: PLC0415
-    from synaptic.graph import SynapticGraph  # noqa: PLC0415
-    from synaptic.ontology import build_agent_ontology  # noqa: PLC0415
+    from synaptic.extensions.tagger_regex import RegexTagExtractor
+    from synaptic.graph import SynapticGraph
+    from synaptic.ontology import build_agent_ontology
 
     if _dsn:
-        from synaptic.backends.postgresql import PostgreSQLBackend  # noqa: PLC0415
+        from synaptic.backends.postgresql import PostgreSQLBackend
 
         _backend = PostgreSQLBackend(_dsn)
     else:
-        from synaptic.backends.sqlite import SQLiteBackend  # noqa: PLC0415
+        from synaptic.backends.sqlite import SQLiteBackend
 
         _backend = SQLiteBackend(_db_path)
 
@@ -58,7 +58,7 @@ async def _ensure_graph() -> Any:
     # Auto-embedding: connect to any OpenAI-compatible endpoint
     embedder = None
     if _embed_url:
-        from synaptic.extensions.embedder import OpenAIEmbeddingProvider  # noqa: PLC0415
+        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
 
         embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
         logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
@@ -80,7 +80,7 @@ async def _ensure_tracker() -> Any:
     if _tracker is not None:
         return _tracker
 
-    from synaptic.activity import ActivityTracker  # noqa: PLC0415
+    from synaptic.activity import ActivityTracker
 
     graph = await _ensure_graph()
     _tracker = ActivityTracker(graph)
@@ -151,7 +151,7 @@ async def knowledge_add(
         tags: Comma-separated tags (e.g. "deploy,ci/cd,automation")
         source: Origin of this knowledge (e.g. "sprint:123", "manual")
     """
-    from synaptic.models import NodeKind  # noqa: PLC0415
+    from synaptic.models import NodeKind
 
     graph = await _ensure_graph()
 
@@ -194,7 +194,7 @@ async def knowledge_link(
         kind: Edge type (related/caused/learned_from/depends_on/produced/contradicts/supersedes)
         weight: Connection strength (0.0 to 5.0)
     """
-    from synaptic.models import EdgeKind  # noqa: PLC0415
+    from synaptic.models import EdgeKind
 
     graph = await _ensure_graph()
 
@@ -332,7 +332,7 @@ async def agent_log_action(
         success: Whether the tool call succeeded
         duration_ms: How long the tool call took in milliseconds
     """
-    import json as _json  # noqa: PLC0415
+    import json as _json
 
     tracker = await _ensure_tracker()
     params = _json.loads(parameters) if parameters else None
@@ -371,8 +371,7 @@ async def agent_record_decision(
     tracker = await _ensure_tracker()
     alt_list = [a.strip() for a in alternatives.split(",") if a.strip()] if alternatives else None
     ctx_ids = (
-        [c.strip() for c in context_node_ids.split(",") if c.strip()]
-        if context_node_ids else None
+        [c.strip() for c in context_node_ids.split(",") if c.strip()] if context_node_ids else None
     )
 
     node = await tracker.record_decision(
@@ -450,7 +449,10 @@ async def agent_find_similar(
 
     try:
         result = await graph.agent_search(
-            query, intent=intent, context_tags=tags, limit=limit,
+            query,
+            intent=intent,
+            context_tags=tags,
+            limit=limit,
         )
     except ValueError as e:
         return {"success": False, "message": str(e)}
@@ -458,15 +460,17 @@ async def agent_find_similar(
     results = []
     for activated in result.nodes:
         node = activated.node
-        results.append({
-            "id": node.id,
-            "kind": str(node.kind),
-            "title": node.title,
-            "content": node.content[:500],
-            "tags": node.tags,
-            "score": round(activated.resonance, 3),
-            "properties": node.properties,
-        })
+        results.append(
+            {
+                "id": node.id,
+                "kind": str(node.kind),
+                "title": node.title,
+                "content": node.content[:500],
+                "tags": node.tags,
+                "score": round(activated.resonance, 3),
+                "properties": node.properties,
+            }
+        )
 
     return {
         "success": True,
@@ -570,9 +574,9 @@ async def ontology_define_type(
         description: What this type represents
         properties: JSON array of property defs, e.g. [{"name":"severity","required":true}]
     """
-    import json as _json  # noqa: PLC0415
+    import json as _json
 
-    from synaptic.ontology import PropertyDef, TypeDef  # noqa: PLC0415
+    from synaptic.ontology import PropertyDef, TypeDef
 
     graph = await _ensure_graph()
     ontology = graph.ontology
@@ -586,22 +590,26 @@ async def ontology_define_type(
             if isinstance(raw, list):
                 for p in raw:
                     if isinstance(p, dict):
-                        props.append(PropertyDef(
-                            name=str(p.get("name", "")),
-                            value_type=str(p.get("value_type", "str")),
-                            required=bool(p.get("required", False)),
-                            default=str(p.get("default", "")),
-                        ))
+                        props.append(
+                            PropertyDef(
+                                name=str(p.get("name", "")),
+                                value_type=str(p.get("value_type", "str")),
+                                required=bool(p.get("required", False)),
+                                default=str(p.get("default", "")),
+                            )
+                        )
         except _json.JSONDecodeError:
             return {"success": False, "message": "Invalid JSON in properties parameter"}
 
     try:
-        ontology.register_type(TypeDef(
-            name=name,
-            parent=parent,
-            properties=props,
-            description=description,
-        ))
+        ontology.register_type(
+            TypeDef(
+                name=name,
+                parent=parent,
+                properties=props,
+                description=description,
+            )
+        )
     except ValueError as e:
         return {"success": False, "message": str(e)}
 

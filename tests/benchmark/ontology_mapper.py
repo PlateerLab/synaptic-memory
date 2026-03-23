@@ -11,34 +11,96 @@ from collections import Counter
 
 from synaptic.models import EdgeKind, NodeKind
 
-
 # ---------------------------------------------------------------------------
 # 키워드 → NodeKind 매핑 사전
 # ---------------------------------------------------------------------------
 _KIND_KEYWORDS: dict[NodeKind, list[str]] = {
     NodeKind.RULE: [
-        "규정", "정책", "규칙", "가이드라인", "약관", "법률", "조항", "기준", "원칙",
-        "regulation", "policy", "rule", "guideline", "terms", "law", "clause",
-        "standard", "principle",
+        "규정",
+        "정책",
+        "규칙",
+        "가이드라인",
+        "약관",
+        "법률",
+        "조항",
+        "기준",
+        "원칙",
+        "regulation",
+        "policy",
+        "rule",
+        "guideline",
+        "terms",
+        "law",
+        "clause",
+        "standard",
+        "principle",
     ],
     NodeKind.LESSON: [
-        "교훈", "장애", "실패", "사고", "사례", "경험", "주의", "오류",
-        "lesson", "failure", "incident", "case study", "experience", "caution",
-        "error", "postmortem",
+        "교훈",
+        "장애",
+        "실패",
+        "사고",
+        "사례",
+        "경험",
+        "주의",
+        "오류",
+        "lesson",
+        "failure",
+        "incident",
+        "case study",
+        "experience",
+        "caution",
+        "error",
+        "postmortem",
     ],
     NodeKind.ENTITY: [
-        "회사", "기관", "조직", "제품", "서비스", "인물", "도시", "국가",
-        "company", "organization", "institution", "product", "service", "person",
-        "city", "country",
+        "회사",
+        "기관",
+        "조직",
+        "제품",
+        "서비스",
+        "인물",
+        "도시",
+        "국가",
+        "company",
+        "organization",
+        "institution",
+        "product",
+        "service",
+        "person",
+        "city",
+        "country",
     ],
     NodeKind.DECISION: [
-        "결정", "선택", "채택", "결론", "판단", "합의",
-        "decision", "choice", "adoption", "conclusion", "judgment", "consensus",
+        "결정",
+        "선택",
+        "채택",
+        "결론",
+        "판단",
+        "합의",
+        "decision",
+        "choice",
+        "adoption",
+        "conclusion",
+        "judgment",
+        "consensus",
     ],
     NodeKind.ARTIFACT: [
-        "API", "문서", "보고서", "코드", "시스템", "도구", "프로토콜",
-        "document", "report", "code", "system", "tool", "protocol",
-        "framework", "library",
+        "API",
+        "문서",
+        "보고서",
+        "코드",
+        "시스템",
+        "도구",
+        "프로토콜",
+        "document",
+        "report",
+        "code",
+        "system",
+        "tool",
+        "protocol",
+        "framework",
+        "library",
     ],
 }
 
@@ -46,28 +108,181 @@ _KIND_KEYWORDS: dict[NodeKind, list[str]] = {
 # 도메인 사전 (tag 추출용)
 # ---------------------------------------------------------------------------
 _DOMAIN_KEYWORDS: dict[str, list[str]] = {
-    "의료": ["의료", "의학", "건강", "질병", "진료", "환자", "병원", "약물", "치료", "증상",
-             "medical", "health", "disease", "patient", "hospital", "treatment"],
-    "법률": ["법률", "법원", "판결", "소송", "계약", "헌법", "재판", "변호사",
-             "legal", "court", "verdict", "lawsuit", "contract", "constitution"],
-    "기술": ["기술", "소프트웨어", "하드웨어", "프로그래밍", "알고리즘", "데이터", "클라우드", "서버",
-             "technology", "software", "hardware", "programming", "algorithm", "data", "cloud"],
-    "금융": ["금융", "은행", "투자", "주식", "보험", "대출", "이자", "자산",
-             "finance", "bank", "investment", "stock", "insurance", "loan", "asset"],
-    "교육": ["교육", "학교", "대학", "학습", "교사", "학생", "교과", "입학",
-             "education", "school", "university", "learning", "teacher", "student"],
-    "과학": ["과학", "연구", "실험", "논문", "물리", "화학", "생물", "수학",
-             "science", "research", "experiment", "physics", "chemistry", "biology"],
-    "환경": ["환경", "기후", "탄소", "오염", "생태", "재활용", "에너지",
-             "environment", "climate", "carbon", "pollution", "ecology", "energy"],
-    "정치": ["정치", "정부", "국회", "선거", "외교", "정당", "대통령",
-             "politics", "government", "parliament", "election", "diplomacy"],
-    "경제": ["경제", "GDP", "무역", "수출", "수입", "성장률", "인플레이션",
-             "economy", "trade", "export", "import", "growth", "inflation"],
-    "문화": ["문화", "예술", "영화", "음악", "문학", "축제", "유산",
-             "culture", "art", "film", "music", "literature", "festival", "heritage"],
-    "스포츠": ["스포츠", "축구", "야구", "농구", "올림픽", "선수", "경기",
-              "sports", "football", "baseball", "basketball", "olympics", "athlete"],
+    "의료": [
+        "의료",
+        "의학",
+        "건강",
+        "질병",
+        "진료",
+        "환자",
+        "병원",
+        "약물",
+        "치료",
+        "증상",
+        "medical",
+        "health",
+        "disease",
+        "patient",
+        "hospital",
+        "treatment",
+    ],
+    "법률": [
+        "법률",
+        "법원",
+        "판결",
+        "소송",
+        "계약",
+        "헌법",
+        "재판",
+        "변호사",
+        "legal",
+        "court",
+        "verdict",
+        "lawsuit",
+        "contract",
+        "constitution",
+    ],
+    "기술": [
+        "기술",
+        "소프트웨어",
+        "하드웨어",
+        "프로그래밍",
+        "알고리즘",
+        "데이터",
+        "클라우드",
+        "서버",
+        "technology",
+        "software",
+        "hardware",
+        "programming",
+        "algorithm",
+        "data",
+        "cloud",
+    ],
+    "금융": [
+        "금융",
+        "은행",
+        "투자",
+        "주식",
+        "보험",
+        "대출",
+        "이자",
+        "자산",
+        "finance",
+        "bank",
+        "investment",
+        "stock",
+        "insurance",
+        "loan",
+        "asset",
+    ],
+    "교육": [
+        "교육",
+        "학교",
+        "대학",
+        "학습",
+        "교사",
+        "학생",
+        "교과",
+        "입학",
+        "education",
+        "school",
+        "university",
+        "learning",
+        "teacher",
+        "student",
+    ],
+    "과학": [
+        "과학",
+        "연구",
+        "실험",
+        "논문",
+        "물리",
+        "화학",
+        "생물",
+        "수학",
+        "science",
+        "research",
+        "experiment",
+        "physics",
+        "chemistry",
+        "biology",
+    ],
+    "환경": [
+        "환경",
+        "기후",
+        "탄소",
+        "오염",
+        "생태",
+        "재활용",
+        "에너지",
+        "environment",
+        "climate",
+        "carbon",
+        "pollution",
+        "ecology",
+        "energy",
+    ],
+    "정치": [
+        "정치",
+        "정부",
+        "국회",
+        "선거",
+        "외교",
+        "정당",
+        "대통령",
+        "politics",
+        "government",
+        "parliament",
+        "election",
+        "diplomacy",
+    ],
+    "경제": [
+        "경제",
+        "GDP",
+        "무역",
+        "수출",
+        "수입",
+        "성장률",
+        "인플레이션",
+        "economy",
+        "trade",
+        "export",
+        "import",
+        "growth",
+        "inflation",
+    ],
+    "문화": [
+        "문화",
+        "예술",
+        "영화",
+        "음악",
+        "문학",
+        "축제",
+        "유산",
+        "culture",
+        "art",
+        "film",
+        "music",
+        "literature",
+        "festival",
+        "heritage",
+    ],
+    "스포츠": [
+        "스포츠",
+        "축구",
+        "야구",
+        "농구",
+        "올림픽",
+        "선수",
+        "경기",
+        "sports",
+        "football",
+        "baseball",
+        "basketball",
+        "olympics",
+        "athlete",
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -146,8 +361,36 @@ class OntologyMapper:
         english_words = _ENGLISH_WORD_RE.findall(title)
 
         # 불용어 제거
-        stopwords_ko = {"에서", "으로", "에게", "대한", "에서는", "대해", "하는", "있는", "없는", "되는", "위한", "이는", "통해"}
-        stopwords_en = {"the", "and", "for", "with", "from", "that", "this", "are", "was", "were", "has", "have", "been"}
+        stopwords_ko = {
+            "에서",
+            "으로",
+            "에게",
+            "대한",
+            "에서는",
+            "대해",
+            "하는",
+            "있는",
+            "없는",
+            "되는",
+            "위한",
+            "이는",
+            "통해",
+        }
+        stopwords_en = {
+            "the",
+            "and",
+            "for",
+            "with",
+            "from",
+            "that",
+            "this",
+            "are",
+            "was",
+            "were",
+            "has",
+            "have",
+            "been",
+        }
 
         for w in hangul_words:
             if w not in stopwords_ko and w not in tags:
@@ -160,9 +403,7 @@ class OntologyMapper:
         self._tag_cache[doc_id] = tags
         return tags
 
-    def extract_edges(
-        self, id_map: dict[str, str]
-    ) -> list[tuple[str, str, str, float]]:
+    def extract_edges(self, id_map: dict[str, str]) -> list[tuple[str, str, str, float]]:
         """문서 간 Edge 관계 추출.
 
         Args:
@@ -195,9 +436,7 @@ class OntologyMapper:
             if title and len(title) >= 4:  # 너무 짧은 title은 false positive 유발
                 title_to_cid[title] = cid
 
-        def _add_edge(
-            src_cid: str, tgt_cid: str, kind: EdgeKind, weight: float
-        ) -> None:
+        def _add_edge(src_cid: str, tgt_cid: str, kind: EdgeKind, weight: float) -> None:
             src_nid = id_map[src_cid]
             tgt_nid = id_map[tgt_cid]
             if src_nid == tgt_nid:
@@ -269,9 +508,7 @@ class OntologyMapper:
 
         return edges
 
-    def map_all(
-        self, id_map: dict[str, str]
-    ) -> dict[str, dict[str, NodeKind | list[str]]]:
+    def map_all(self, id_map: dict[str, str]) -> dict[str, dict[str, NodeKind | list[str]]]:
         """전체 corpus에 대해 classify + extract_tags 일괄 수행.
 
         Returns:

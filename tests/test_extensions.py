@@ -34,7 +34,7 @@ class TestRegexTagExtractor:
         assert "test" in tags
 
     def test_custom_patterns(self) -> None:
-        import re  # noqa: PLC0415
+        import re
 
         extra = [("custom", re.compile(r"\bcustom_tag\b"))]
         extractor = RegexTagExtractor(extra_patterns=extra)

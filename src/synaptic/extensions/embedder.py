@@ -76,7 +76,7 @@ class OpenAIEmbeddingProvider(_EmbedFromBatchMixin):
         self._timeout = timeout
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        import aiohttp  # noqa: PLC0415
+        import aiohttp
 
         url = f"{self._api_base}/embeddings"
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -126,7 +126,7 @@ class OllamaEmbeddingProvider(_EmbedFromBatchMixin):
         self._timeout = timeout
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        import aiohttp  # noqa: PLC0415
+        import aiohttp
 
         url = f"{self._base_url}/api/embed"
         payload = {"model": self._model, "input": texts}

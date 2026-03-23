@@ -147,9 +147,7 @@ class LLMRelationDetector:
         relations.sort(key=lambda r: r[2], reverse=True)
         return relations[: self._max_edges]
 
-    async def _gather_candidates(
-        self, node: Node, backend: StorageBackend
-    ) -> list[Node]:
+    async def _gather_candidates(self, node: Node, backend: StorageBackend) -> list[Node]:
         """Collect candidate nodes via InvertedIndex + vector search.
 
         Args:

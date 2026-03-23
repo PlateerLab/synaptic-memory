@@ -19,58 +19,117 @@ from synaptic.models import (
     SearchResult,
 )
 
-
 # Directed edge kinds used for topological sorting
-_DIRECTED_KINDS = frozenset({
-    EdgeKind.CAUSED,
-    EdgeKind.RESULTED_IN,
-    EdgeKind.DEPENDS_ON,
-    EdgeKind.FOLLOWED_BY,
-    EdgeKind.LEARNED_FROM,
-})
+_DIRECTED_KINDS = frozenset(
+    {
+        EdgeKind.CAUSED,
+        EdgeKind.RESULTED_IN,
+        EdgeKind.DEPENDS_ON,
+        EdgeKind.FOLLOWED_BY,
+        EdgeKind.LEARNED_FROM,
+    }
+)
 
 # Stop words (excluded from term overlap calculation)
-_STOPWORDS = frozenset({
-    # English
-    "the", "a", "an", "is", "are", "was", "were", "in", "on", "at",
-    "to", "for", "of", "and", "or", "but", "not", "with", "by", "from",
-    "that", "this", "it", "its", "be", "been", "being", "have", "has",
-    "had", "do", "does", "did", "will", "would", "could", "should",
-    "what", "which", "who", "when", "where", "how", "why",
-    # Korean
-    "은", "는", "이", "가", "을", "를", "에", "의", "와", "과", "도",
-    "에서", "로", "으로", "하는", "있는", "하고", "하면", "에게",
-})
+_STOPWORDS = frozenset(
+    {
+        # English
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "and",
+        "or",
+        "but",
+        "not",
+        "with",
+        "by",
+        "from",
+        "that",
+        "this",
+        "it",
+        "its",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "what",
+        "which",
+        "who",
+        "when",
+        "where",
+        "how",
+        "why",
+        # Korean
+        "은",
+        "는",
+        "이",
+        "가",
+        "을",
+        "를",
+        "에",
+        "의",
+        "와",
+        "과",
+        "도",
+        "에서",
+        "로",
+        "으로",
+        "하는",
+        "있는",
+        "하고",
+        "하면",
+        "에게",
+    }
+)
 
 # Fact extraction patterns
 _FACT_PATTERNS = [
     # Numbers + units
     re.compile(
-        r'\d[\d,.]*\s*(%|만|억|원|달러|km|kg|GB|MB|TB|명|건|개|년|월|일|시간|분|초|percent|million|billion|thousand)',
+        r"\d[\d,.]*\s*(%|만|억|원|달러|km|kg|GB|MB|TB|명|건|개|년|월|일|시간|분|초|percent|million|billion|thousand)",
         re.IGNORECASE,
     ),
     # Dates (2024-01-01, 2024년, January 2024, 15 March 1990)
-    re.compile(r'\b\d{4}[-/년.]\d{1,2}[-/월.]?\d{0,2}일?\b'),
+    re.compile(r"\b\d{4}[-/년.]\d{1,2}[-/월.]?\d{0,2}일?\b"),
     re.compile(
-        r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)'
-        r'\s+\d{1,2},?\s*\d{4}\b',
+        r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)"
+        r"\s+\d{1,2},?\s*\d{4}\b",
         re.IGNORECASE,
     ),
     re.compile(
-        r'\b\d{1,2}\s+'
-        r'(?:January|February|March|April|May|June|July|August|September|October|November|December)'
-        r'\s+\d{4}\b',
+        r"\b\d{1,2}\s+"
+        r"(?:January|February|March|April|May|June|July|August|September|October|November|December)"
+        r"\s+\d{4}\b",
         re.IGNORECASE,
     ),
     # Numbers only (years, population, etc.) - 4+ digits
-    re.compile(r'\b\d{4,}\b'),
+    re.compile(r"\b\d{4,}\b"),
 ]
 
 
 class EvidenceAssembler:
     """Converts SearchResult into an LLM-optimized evidence chain."""
 
-    __slots__ = ("_max_sentences", "_relevance_threshold", "_max_tokens")
+    __slots__ = ("_max_sentences", "_max_tokens", "_relevance_threshold")
 
     def __init__(
         self,
@@ -149,18 +208,21 @@ class EvidenceAssembler:
             if i < len(sorted_ids) - 1:
                 next_id = sorted_ids[i + 1]
                 for e in all_edges:
-                    if (e.source_id == nid and e.target_id == next_id) or \
-                       (e.target_id == nid and e.source_id == next_id):
+                    if (e.source_id == nid and e.target_id == next_id) or (
+                        e.target_id == nid and e.source_id == next_id
+                    ):
                         conn = e.kind.value
                         break
 
-            steps.append(EvidenceStep(
-                node=node,
-                role=role,
-                connection_to_next=conn,
-                compressed_content=compressed,
-                facts=facts,
-            ))
+            steps.append(
+                EvidenceStep(
+                    node=node,
+                    role=role,
+                    connection_to_next=conn,
+                    compressed_content=compressed,
+                    facts=facts,
+                )
+            )
 
         # 6. Final context formatting
         context = self._format_context(steps)
@@ -238,10 +300,9 @@ class EvidenceAssembler:
 
         # Filter to directed edges only
         directed = [
-            e for e in edges
-            if e.kind in _DIRECTED_KINDS
-            and e.source_id in id_set
-            and e.target_id in id_set
+            e
+            for e in edges
+            if e.kind in _DIRECTED_KINDS and e.source_id in id_set and e.target_id in id_set
         ]
 
         if not directed:
@@ -278,25 +339,26 @@ class EvidenceAssembler:
             return ""
 
         # Sentence splitting — after period/question mark/exclamation mark + whitespace
-        sentences = re.split(r'(?<=[.!?。])\s+', content.strip())
+        sentences = re.split(r"(?<=[.!?。])\s+", content.strip())
         if not sentences:
             return content[:500]
 
         # Extract query terms
         query_terms = {
-            t.lower() for t in re.split(r'[\s,;:!?()\[\]]+', query)
+            t.lower()
+            for t in re.split(r"[\s,;:!?()\[\]]+", query)
             if t.lower() not in _STOPWORDS and len(t) >= 2
         }
 
         if not query_terms:
             # No terms extracted from query — return first N sentences
-            return " ".join(sentences[:self._max_sentences])
+            return " ".join(sentences[: self._max_sentences])
 
         # Score each sentence by relevance (with position bias for first sentence)
         scored: list[tuple[int, str, float]] = []
         for i, sent in enumerate(sentences):
             sent_lower = sent.lower()
-            sent_terms = set(re.split(r'[\s,;:!?()\[\]]+', sent_lower))
+            sent_terms = set(re.split(r"[\s,;:!?()\[\]]+", sent_lower))
             overlap = len(query_terms & sent_terms)
             relevance = overlap / len(query_terms)
             # Position bias: first sentence gets +0.1 bonus
@@ -310,13 +372,13 @@ class EvidenceAssembler:
         # Fall back to top N if none selected
         if not selected:
             scored.sort(key=lambda x: x[2], reverse=True)
-            selected = [(i, s) for i, s, _ in scored[:self._max_sentences]]
+            selected = [(i, s) for i, s, _ in scored[: self._max_sentences]]
 
         # Preserve original order
         selected.sort(key=lambda x: x[0])
 
         # Limit count
-        selected = selected[:self._max_sentences]
+        selected = selected[: self._max_sentences]
 
         return " ".join(s for _, s in selected)
 
@@ -325,7 +387,7 @@ class EvidenceAssembler:
         if not content:
             return []
 
-        sentences = re.split(r'(?<=[.!?。])\s+', content.strip())
+        sentences = re.split(r"(?<=[.!?。])\s+", content.strip())
         facts: list[str] = []
         seen: set[str] = set()
 
@@ -369,6 +431,6 @@ class EvidenceAssembler:
         # Token limit
         words = context.split()
         if len(words) > self._max_tokens:
-            context = " ".join(words[:self._max_tokens])
+            context = " ".join(words[: self._max_tokens])
 
         return context
