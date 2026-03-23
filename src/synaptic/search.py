@@ -209,11 +209,29 @@ class HybridSearch:
         activated.sort(key=lambda a: a.resonance, reverse=True)
 
         # Filter out internal phrase nodes (_phrase tag) from final results.
-        # Phrase nodes serve as PPR bridge nodes but should not appear in
-        # user-facing search results — they carry no passage content.
         final: list[ActivatedNode] = [
             a for a in activated if "_phrase" not in (a.node.tags or [])
         ]
+
+        # Supersede: same-title nodes → keep only the newest (by updated_at).
+        # This ensures knowledge updates are reflected: latest info wins.
+        seen_titles: dict[str, int] = {}  # normalized_title → index in final
+        deduped: list[ActivatedNode] = []
+        for a in final:
+            title_key = a.node.title.strip().lower()
+            if not title_key or len(title_key) < 4:
+                deduped.append(a)
+                continue
+            if title_key in seen_titles:
+                # Compare updated_at — keep the newer one
+                existing_idx = seen_titles[title_key]
+                if a.node.updated_at > deduped[existing_idx].node.updated_at:
+                    deduped[existing_idx] = a  # replace with newer
+                # else: skip older duplicate
+            else:
+                seen_titles[title_key] = len(deduped)
+                deduped.append(a)
+        final = deduped
 
         elapsed_ms = (time() - start) * 1000
         return SearchResult(

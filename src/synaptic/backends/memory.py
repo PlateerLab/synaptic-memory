@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Sequence
 from difflib import SequenceMatcher
@@ -96,65 +97,106 @@ class MemoryBackend:
 
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         query_lower = query.lower()
-        terms = query_lower.split()
-        # No word boundary patterns — substring matching is better for diverse corpora
-        # (medical terms like "APOE4", Korean compounds, morphological variants)
-        term_patterns: dict[str, re.Pattern[str]] = {}
-        # Generate 2-gram substrings (for Korean compound word matching)
+        terms = [t for t in query_lower.split() if len(t) >= 1]
+        if not terms:
+            return []
+
+        # --- BM25 parameters ---
+        k1 = 1.5
+        b = 0.75
+        title_boost = 3.0  # title 매칭 가중치 (IDF와 곱해져서 additive)
+
+        # Pre-compute corpus statistics for BM25
+        N = len(self._nodes)  # total documents
+        if N == 0:
+            return []
+
+        # Document frequencies: how many docs contain each term (substring match)
+        doc_freq: dict[str, int] = {}
+        doc_texts: dict[str, str] = {}  # node_id → full searchable text
+        doc_lengths: dict[str, int] = {}  # node_id → word count
+
+        for node in self._nodes.values():
+            text = f"{node.title.lower()} {node.content.lower()}"
+            if node.tags:
+                text += " " + " ".join(node.tags).lower()
+            if node.properties:
+                kw = node.properties.get("_search_keywords", "")
+                if kw:
+                    text += " " + kw.lower()
+            doc_texts[node.id] = text
+            doc_lengths[node.id] = len(text.split())
+
+        avgdl = sum(doc_lengths.values()) / N if N > 0 else 1.0
+
+        for t in terms:
+            count = 0
+            for text in doc_texts.values():
+                if t in text:
+                    count += 1
+            doc_freq[t] = count
+
+        # Bigrams for phrase matching
         bigrams: list[str] = []
         if len(terms) >= 2:
             for i in range(len(terms) - 1):
                 bigrams.append(f"{terms[i]} {terms[i + 1]}")
 
+        # --- Score each document ---
         scored: list[tuple[Node, float]] = []
         for node in self._nodes.values():
             title_lower = node.title.lower()
             content_lower = node.content.lower()
-            full_text = f"{title_lower} {content_lower}"
+            full_text = doc_texts[node.id]
+            dl = doc_lengths[node.id]
+
             score = 0.0
 
-            # High bonus if full query is contained in title
-            if query_lower in title_lower:
-                score += len(terms) * 3.0
-            else:
-                # Individual term matching in title (weight 2x)
-                for t in terms:
-                    pat = term_patterns.get(t)
-                    if pat is not None:
-                        if pat.search(title_lower):
-                            score += 2.0
-                    else:
-                        if t in title_lower:
-                            score += 2.0
-
-            # Individual term matching in content
             for t in terms:
-                pat = term_patterns.get(t)
-                if pat is not None:
-                    score += len(pat.findall(content_lower)) * 1.0
-                else:
-                    if t in content_lower:
-                        score += 1.0
+                # Term frequency (substring count)
+                tf_content = content_lower.count(t)
+                tf_title = title_lower.count(t)
 
-            # Bigram match bonus (higher relevance when 2 consecutive terms appear together)
-            score += sum(1.5 for bg in bigrams if bg in full_text)
+                if tf_content == 0 and tf_title == 0:
+                    continue
 
-            # Tag match bonus
+                # IDF: log((N - df + 0.5) / (df + 0.5) + 1)
+                df = doc_freq.get(t, 0)
+                idf = math.log((N - df + 0.5) / (df + 0.5) + 1.0)
+
+                # BM25 content score
+                if tf_content > 0:
+                    numerator = tf_content * (k1 + 1)
+                    denominator = tf_content + k1 * (1 - b + b * dl / avgdl)
+                    score += idf * numerator / denominator
+
+                # Title bonus (separate, additive — not affected by BM25 length normalization)
+                if tf_title > 0:
+                    score += idf * title_boost
+
+            # Bigram bonus (phrase proximity)
+            for bg in bigrams:
+                if bg in full_text:
+                    score += 1.5
+
+            # Tag exact match bonus
             if node.tags:
                 tag_text = " ".join(node.tags).lower()
-                score += sum(1.0 for t in terms if t in tag_text)
+                for t in terms:
+                    if t in tag_text:
+                        score += 0.5
 
-            # _search_keywords matching (LLM-generated search-optimized keywords)
+            # LLM-generated search keywords bonus
             if node.properties:
                 search_kw = node.properties.get("_search_keywords", "").lower()
                 if search_kw:
-                    score += sum(1.5 for t in terms if t in search_kw)
-                summary = node.properties.get("_summary", "").lower()
-                if summary:
-                    score += sum(0.5 for t in terms if t in summary)
+                    for t in terms:
+                        if t in search_kw:
+                            score += 1.0
 
             if score > 0:
                 scored.append((node, score))
+
         scored.sort(key=lambda x: x[1], reverse=True)
         return [n for n, _ in scored[:limit]]
 

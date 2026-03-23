@@ -10,8 +10,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from synaptic.models import EdgeKind
+
 if TYPE_CHECKING:
     from synaptic.protocols import StorageBackend
+
+# Edge type별 PPR 전파 가중치 — 의미 있는 관계일수록 더 강하게 전파
+_EDGE_TYPE_WEIGHTS: dict[EdgeKind, float] = {
+    EdgeKind.CAUSED: 1.0,        # 인과 관계 — 강한 전파
+    EdgeKind.RESULTED_IN: 1.0,   # 결과 — 강한 전파
+    EdgeKind.DEPENDS_ON: 0.9,    # 의존 — 강한 전파
+    EdgeKind.LEARNED_FROM: 0.8,  # 교훈 — 중간
+    EdgeKind.PRODUCED: 0.8,      # 생산 — 중간
+    EdgeKind.PART_OF: 0.7,       # 부분-전체 — 중간
+    EdgeKind.CONTAINS: 0.6,      # 포함 (phrase) — 약한 전파
+    EdgeKind.RELATED: 0.4,       # 일반 관련 — 약한 (노이즈 방지)
+    EdgeKind.CONTRADICTS: 0.2,   # 모순 — 최소 전파
+    EdgeKind.SUPERSEDES: 0.3,    # 대체 — 약한
+    EdgeKind.IS_A: 0.5,          # 타입 계층 — 중간
+    EdgeKind.INVOKED: 0.6,       # 호출 — 중간
+    EdgeKind.FOLLOWED_BY: 0.7,   # 순서 — 중간
+}
 
 
 async def personalized_pagerank(
@@ -68,11 +87,15 @@ async def personalized_pagerank(
                 else:
                     neighbor_id = edge.source_id
 
+                # Edge type weighting: meaningful relations spread more
+                edge_type_weight = _EDGE_TYPE_WEIGHTS.get(edge.kind, 0.5)
+                effective_weight = edge.weight * edge_type_weight
+
                 # Add edge in both directions (undirected for PPR spreading)
-                adj[nid].append((neighbor_id, edge.weight))
+                adj[nid].append((neighbor_id, effective_weight))
                 if neighbor_id not in adj:
                     adj[neighbor_id] = []
-                adj[neighbor_id].append((nid, edge.weight))
+                adj[neighbor_id].append((nid, effective_weight))
 
                 if neighbor_id not in visited:
                     next_frontier.add(neighbor_id)

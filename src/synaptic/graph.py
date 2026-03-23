@@ -300,6 +300,92 @@ class SynapticGraph:
 
         return node
 
+    async def add_document(
+        self,
+        title: str,
+        content: str,
+        *,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200,
+        kind: str | NodeKind | None = None,
+        tags: list[str] | None = None,
+        source: str = "",
+        properties: dict[str, str] | None = None,
+    ) -> list[Node]:
+        """긴 문서를 자동 청킹하여 여러 노드로 추가.
+
+        chunk_size 이하 문서는 단일 노드로 추가 (add()와 동일).
+        긴 문서는 문장 경계에서 분할하고 PART_OF 관계로 연결.
+
+        Returns:
+            생성된 노드 리스트 (첫 번째가 대표 노드).
+        """
+        # 짧은 문서는 그냥 add()
+        if len(content) <= chunk_size:
+            node = await self.add(
+                title=title, content=content, kind=kind,
+                tags=tags, source=source, properties=properties,
+            )
+            return [node]
+
+        # 문장 경계에서 청킹
+        chunks = self._split_into_chunks(content, chunk_size, chunk_overlap)
+        nodes: list[Node] = []
+        for i, chunk in enumerate(chunks):
+            chunk_title = f"{title} [{i+1}/{len(chunks)}]" if len(chunks) > 1 else title
+            chunk_tags = list(tags) if tags else []
+            chunk_tags.append(f"chunk:{i}")
+            if len(chunks) > 1:
+                chunk_tags.append(f"chunks:{len(chunks)}")
+
+            node = await self.add(
+                title=chunk_title, content=chunk, kind=kind,
+                tags=chunk_tags, source=source, properties=properties,
+            )
+            nodes.append(node)
+
+        # 청크 간 PART_OF 관계 연결
+        if len(nodes) > 1:
+            for i in range(1, len(nodes)):
+                await self.link(
+                    nodes[i].id, nodes[0].id,
+                    kind=EdgeKind.PART_OF, weight=0.9,
+                )
+
+        return nodes
+
+    @staticmethod
+    def _split_into_chunks(text: str, chunk_size: int, overlap: int) -> list[str]:
+        """문장 경계에서 텍스트 분할."""
+        import re as _re
+        sentences = _re.split(r'(?<=[.!?。\n])\s+', text)
+
+        chunks: list[str] = []
+        current: list[str] = []
+        current_len = 0
+
+        for sent in sentences:
+            if current_len + len(sent) > chunk_size and current:
+                chunks.append(" ".join(current))
+                # overlap: 마지막 문장들 유지
+                overlap_sents: list[str] = []
+                overlap_len = 0
+                for s in reversed(current):
+                    if overlap_len + len(s) > overlap:
+                        break
+                    overlap_sents.insert(0, s)
+                    overlap_len += len(s)
+                current = overlap_sents
+                current_len = overlap_len
+
+            current.append(sent)
+            current_len += len(sent)
+
+        if current:
+            chunks.append(" ".join(current))
+
+        return chunks if chunks else [text]
+
     async def link(
         self,
         source_id: str,
