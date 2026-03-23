@@ -152,6 +152,11 @@ class MemoryBackend:
 
             bm25_score = 0.0
             substr_score = 0.0
+            matched_terms = 0  # query term coverage 계산용
+
+            # Full query in title — 강한 신호 (모든 corpus 크기에서 유효)
+            if query_lower in title_lower:
+                substr_score += len(terms) * 3.0
 
             for t in terms:
                 tf_content = content_lower.count(t)
@@ -177,6 +182,7 @@ class MemoryBackend:
                     substr_score += 2.0
                 if tf_content > 0:
                     substr_score += 1.0
+                matched_terms += 1
 
             # Bigram bonus
             for bg in bigrams:
@@ -199,9 +205,18 @@ class MemoryBackend:
                         if t in search_kw:
                             substr_score += 1.5
 
+            # Query term coverage bonus — 쿼리 단어 대부분 매칭 시 보너스
+            # coverage 80%+ → 보너스, 대규모 corpus에서 precision 향상
+            if len(terms) >= 2 and matched_terms > 0:
+                coverage = matched_terms / len(terms)
+                if coverage >= 0.8:
+                    substr_score += len(terms) * 1.5  # 높은 coverage 보상
+                elif coverage >= 0.5:
+                    substr_score += len(terms) * 0.5
+
             # Hybrid: BM25 weight increases with corpus size
-            # N=100: 30% BM25 + 70% substr, N=1000+: 80% BM25 + 20% substr
-            bm25_weight = min(0.8, 0.3 + 0.5 * min(1.0, N / 1000))
+            # N≤500: mostly substring, N=5000+: mostly BM25
+            bm25_weight = min(0.8, max(0.1, (N - 500) / 5000))
             score = bm25_score * bm25_weight + substr_score * (1 - bm25_weight)
 
             if score > 0:
