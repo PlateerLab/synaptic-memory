@@ -42,11 +42,23 @@ async def _build_graph(
     corpus: dict[str, dict[str, str]],
     *,
     max_docs: int = 0,
+    no_embedding: bool = False,
 ) -> tuple[SynapticGraph, dict[str, str]]:
-    """corpus를 SynapticGraph에 인덱싱. FTS only (embedding은 모델 품질에 의존)."""
+    """corpus를 SynapticGraph에 인덱싱. FTS + embedding (qwen3-embedding:4b)."""
+    from synaptic.extensions.embedder import OllamaEmbeddingProvider
+
     backend = MemoryBackend()
     await backend.connect()
-    graph = SynapticGraph(backend)
+
+    embedder = None
+    if not no_embedding:
+        try:
+            embedder = OllamaEmbeddingProvider(model="qwen3-embedding:4b")
+            await embedder.embed("test")
+        except Exception:
+            pass  # Ollama 미동작 시 FTS only
+
+    graph = SynapticGraph(backend, embedder=embedder)
     id_map: dict[str, str] = {}
 
     items = list(corpus.items())

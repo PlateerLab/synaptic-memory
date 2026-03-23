@@ -27,8 +27,21 @@ class _EmbedFromBatchMixin:
     """Mixin that provides a default embed() implementation by delegating to embed_batch()."""
 
     async def embed(self, text: str) -> list[float]:
-        results = await self.embed_batch([text])  # type: ignore[attr-defined]
-        return results[0]
+        # 빈/공백 텍스트 방어
+        if not text or not text.strip():
+            text = " "
+        try:
+            results = await self.embed_batch([text])  # type: ignore[attr-defined]
+            vec = results[0]
+            # NaN 방어
+            import math
+            if any(math.isnan(v) for v in vec):
+                logger.warning("NaN in embedding, returning zero vector")
+                return [0.0] * len(vec)
+            return vec
+        except Exception:
+            logger.warning("Embedding failed, returning empty", exc_info=True)
+            return []
 
 
 class MockEmbeddingProvider:

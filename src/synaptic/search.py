@@ -84,6 +84,11 @@ def _rank_to_score(
     return max(floor, top - rank * step)
 
 
+def _rrf_score(rank: int, k: int = 60) -> float:
+    """Reciprocal Rank Fusion score: 1/(k + rank + 1). k=60 is standard."""
+    return 1.0 / (k + rank + 1)
+
+
 def _cosine_sim(a: list[float], b: list[float]) -> float:
     """Cosine similarity between two vectors."""
     dot = sum(x * y for x, y in zip(a, b))
@@ -125,42 +130,42 @@ class HybridSearch:
         stages_used: list[str] = []
         all_nodes: dict[str, tuple[Node, float]] = {}
 
-        # Stage 1: FTS + vector hybrid scoring
-        fts_scores: dict[str, float] = {}
+        # Stage 1: FTS-primary + vector-boost hybrid scoring
+        # 전략: FTS 스코어를 기본으로 유지, vector는 부스팅/보완 역할만
         fts_nodes = await backend.search_fts(query, limit=limit * 2)
         stages_used.append("fts")
+        fts_ids: set[str] = set()
         for rank, node in enumerate(fts_nodes):
             score = _rank_to_score(rank)
-            fts_scores[node.id] = score
+            fts_ids.add(node.id)
             all_nodes[node.id] = (node, score)
 
-        vec_scores: dict[str, float] = {}
         if embedding:
             vec_nodes = await backend.search_vector(embedding, limit=limit * 2)
             stages_used.append("vector")
-            for rank, node in enumerate(vec_nodes):
-                # Vector rank-based score + actual cosine similarity
-                rank_score = _rank_to_score(rank)
-                # Directly compute cosine similarity (when possible)
-                if node.embedding and embedding:
-                    sim = _cosine_sim(embedding, node.embedding)
-                    vec_score = sim * 0.7 + rank_score * 0.3  # prioritize similarity
-                else:
-                    vec_score = rank_score
-                vec_scores[node.id] = vec_score
 
-            # FTS + vector hybrid score aggregation
-            alpha = 0.5  # FTS vs vector weight
-            for nid, node in {n.id: n for n in vec_nodes}.items():
-                fts_s = fts_scores.get(nid, 0.0)
-                vec_s = vec_scores.get(nid, 0.0)
-                if nid in all_nodes:
-                    # Both FTS and vector matched — hybrid score
-                    hybrid = alpha * fts_s + (1 - alpha) * vec_s + 0.1  # dual-match bonus
-                    all_nodes[nid] = (all_nodes[nid][0], min(1.0, hybrid))
+            # Vector 결과에서 cosine similarity 수집
+            vec_cosine: dict[str, float] = {}
+            vec_rank: dict[str, int] = {}
+            for rank, node in enumerate(vec_nodes):
+                vec_rank[node.id] = rank
+                if node.embedding and embedding:
+                    vec_cosine[node.id] = _cosine_sim(embedding, node.embedding)
+
+            for node in vec_nodes:
+                nid = node.id
+                cos = vec_cosine.get(nid, 0.0)
+
+                if nid in fts_ids:
+                    # FTS + vector 양쪽 매칭 — FTS 스코어 유지 (변경 없음)
+                    # FTS 랭킹이 검증된 신호이므로 vector로 교란하지 않음
+                    pass
                 else:
-                    # vector only
-                    all_nodes[nid] = (node, vec_s * 0.9)
+                    # Vector-only — cosine 높을 때만 삽입, FTS 최하위보다 낮은 스코어
+                    if cos >= 0.5:
+                        fts_floor = 0.3 if not fts_nodes else _rank_to_score(len(fts_nodes))
+                        vec_score = fts_floor * cos  # cosine에 비례
+                        all_nodes[nid] = (node, vec_score)
 
         # Stage 2: Synonym expansion (if insufficient results)
         if len(all_nodes) < limit:
@@ -253,9 +258,10 @@ class HybridSearch:
         # Filter out internal phrase nodes (_phrase tag) from final results.
         final: list[ActivatedNode] = [a for a in activated if "_phrase" not in (a.node.tags or [])]
 
-        # Supersede: same-title nodes → keep only the newest (by updated_at).
+        # Supersede: same-title AND similar-content nodes → keep only the newest.
         # This ensures knowledge updates are reflected: latest info wins.
-        seen_titles: dict[str, int] = {}  # normalized_title → index in final
+        # Title만 같고 content가 다른 노드(예: 같은 파일의 다른 섹션)는 유지.
+        seen_titles: dict[str, list[int]] = {}  # normalized_title → [indices in deduped]
         deduped: list[ActivatedNode] = []
         for a in final:
             title_key = a.node.title.strip().lower()
@@ -263,13 +269,23 @@ class HybridSearch:
                 deduped.append(a)
                 continue
             if title_key in seen_titles:
-                # Compare updated_at — keep the newer one
-                existing_idx = seen_titles[title_key]
-                if a.node.updated_at > deduped[existing_idx].node.updated_at:
-                    deduped[existing_idx] = a  # replace with newer
-                # else: skip older duplicate
+                # Check if content is similar to any existing with same title
+                content_snippet = a.node.content[:200].strip().lower()
+                replaced = False
+                for idx in seen_titles[title_key]:
+                    existing_snippet = deduped[idx].node.content[:200].strip().lower()
+                    if content_snippet == existing_snippet:
+                        # Same content — supersede (keep newer)
+                        if a.node.updated_at > deduped[idx].node.updated_at:
+                            deduped[idx] = a
+                        replaced = True
+                        break
+                if not replaced:
+                    # Same title, different content — keep both
+                    seen_titles[title_key].append(len(deduped))
+                    deduped.append(a)
             else:
-                seen_titles[title_key] = len(deduped)
+                seen_titles[title_key] = [len(deduped)]
                 deduped.append(a)
         final = deduped
 
