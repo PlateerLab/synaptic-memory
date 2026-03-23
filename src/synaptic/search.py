@@ -130,8 +130,9 @@ class HybridSearch:
         stages_used: list[str] = []
         all_nodes: dict[str, tuple[Node, float]] = {}
 
-        # Stage 1: FTS-primary + vector-boost hybrid scoring
-        # 전략: FTS 스코어를 기본으로 유지, vector는 부스팅/보완 역할만
+        # Stage 1: FTS-primary + vector cascade
+        # FTS 결과는 rank 기반 스코어 유지, vector는 FTS 미스 보완 역할만
+        # 실험 결과: fusion(blend, RRF) 방식은 소규모 corpus에서 FTS 순위 교란 → cascade가 최적
         fts_nodes = await backend.search_fts(query, limit=limit * 2)
         stages_used.append("fts")
         fts_ids: set[str] = set()
@@ -145,7 +146,6 @@ class HybridSearch:
             vec_nodes = await backend.search_vector(embedding, limit=limit * 2)
             stages_used.append("vector")
 
-            # Vector 결과에서 cosine similarity 수집
             for rank, node in enumerate(vec_nodes):
                 if node.embedding and embedding:
                     vec_cosine[node.id] = _cosine_sim(embedding, node.embedding)
@@ -153,18 +153,10 @@ class HybridSearch:
             for node in vec_nodes:
                 nid = node.id
                 cos = vec_cosine.get(nid, 0.0)
-
-                if nid in fts_ids:
-                    # FTS + vector 양쪽 매칭 — FTS 스코어 유지
-                    # Note: 부분 부스트는 vector top-k에 포함 안 된 FTS 결과와
-                    # 불공정한 비교를 만들어 소규모 corpus에서 MRR 하락 유발
-                    pass
-                else:
-                    # Vector-only — cosine 높을 때만 삽입, FTS 최하위보다 낮은 스코어
-                    if cos >= 0.5:
-                        fts_floor = 0.3 if not fts_nodes else _rank_to_score(len(fts_nodes))
-                        vec_score = fts_floor * cos  # cosine에 비례
-                        all_nodes[nid] = (node, vec_score)
+                if nid not in fts_ids and cos >= 0.5:
+                    # Vector-only: FTS에 없는 결과만 삽입, 최하위보다 낮은 스코어
+                    fts_floor = 0.3 if not fts_nodes else _rank_to_score(len(fts_nodes))
+                    all_nodes[nid] = (node, fts_floor * cos)
 
         # Stage 2: Synonym expansion (if insufficient results)
         if len(all_nodes) < limit:
