@@ -43,7 +43,7 @@ async def _build_graph(
     *,
     max_docs: int = 0,
 ) -> tuple[SynapticGraph, dict[str, str]]:
-    """corpus를 SynapticGraph에 인덱싱. id_map 반환."""
+    """corpus를 SynapticGraph에 인덱싱. FTS only (embedding은 모델 품질에 의존)."""
     backend = MemoryBackend()
     await backend.connect()
     graph = SynapticGraph(backend)

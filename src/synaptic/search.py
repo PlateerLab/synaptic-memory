@@ -108,7 +108,7 @@ class HybridSearch:
                 vec_scores[node.id] = vec_score
 
             # FTS + vector hybrid score aggregation
-            alpha = 0.5  # FTS vs vector weight (0.5 = equal)
+            alpha = 0.5  # FTS vs vector weight
             for nid, node in {n.id: n for n in vec_nodes}.items():
                 fts_s = fts_scores.get(nid, 0.0)
                 vec_s = vec_scores.get(nid, 0.0)
@@ -118,7 +118,7 @@ class HybridSearch:
                     all_nodes[nid] = (all_nodes[nid][0], min(1.0, hybrid))
                 else:
                     # vector only
-                    all_nodes[nid] = (node, vec_s * 0.9)  # slight decay when no FTS match
+                    all_nodes[nid] = (node, vec_s * 0.9)
 
         # Stage 2: Synonym expansion (if insufficient results)
         if len(all_nodes) < limit:
