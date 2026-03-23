@@ -140,15 +140,13 @@ class HybridSearch:
             fts_ids.add(node.id)
             all_nodes[node.id] = (node, score)
 
+        vec_cosine: dict[str, float] = {}
         if embedding:
             vec_nodes = await backend.search_vector(embedding, limit=limit * 2)
             stages_used.append("vector")
 
             # Vector 결과에서 cosine similarity 수집
-            vec_cosine: dict[str, float] = {}
-            vec_rank: dict[str, int] = {}
             for rank, node in enumerate(vec_nodes):
-                vec_rank[node.id] = rank
                 if node.embedding and embedding:
                     vec_cosine[node.id] = _cosine_sim(embedding, node.embedding)
 
@@ -157,8 +155,9 @@ class HybridSearch:
                 cos = vec_cosine.get(nid, 0.0)
 
                 if nid in fts_ids:
-                    # FTS + vector 양쪽 매칭 — FTS 스코어 유지 (변경 없음)
-                    # FTS 랭킹이 검증된 신호이므로 vector로 교란하지 않음
+                    # FTS + vector 양쪽 매칭 — FTS 스코어 유지
+                    # Note: 부분 부스트는 vector top-k에 포함 안 된 FTS 결과와
+                    # 불공정한 비교를 만들어 소규모 corpus에서 MRR 하락 유발
                     pass
                 else:
                     # Vector-only — cosine 높을 때만 삽입, FTS 최하위보다 낮은 스코어

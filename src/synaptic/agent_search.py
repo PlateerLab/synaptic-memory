@@ -225,6 +225,7 @@ class AgentSearch:
                     backend,
                     query,
                     limit,
+                    embedding,
                     context_tags,
                 )
             case SearchIntent.RELATED_RULES:
@@ -240,6 +241,7 @@ class AgentSearch:
                     backend,
                     query,
                     limit,
+                    embedding,
                     context_tags,
                 )
             case SearchIntent.CONTEXT_EXPLORE:
@@ -314,6 +316,7 @@ class AgentSearch:
         backend: StorageBackend,
         query: str,
         limit: int,
+        embedding: list[float] | None,
         context_tags: list[str] | None,
     ) -> SearchResult:
         """Find failed outcomes, lessons, and their decision context."""
@@ -325,6 +328,7 @@ class AgentSearch:
             backend,
             query,
             limit=limit * 3,
+            embedding=embedding,
             node_kinds=[NodeKind.OUTCOME, NodeKind.DECISION, NodeKind.LESSON],
         )
 
@@ -425,6 +429,7 @@ class AgentSearch:
         backend: StorageBackend,
         query: str,
         limit: int,
+        embedding: list[float] | None,
         context_tags: list[str] | None,
     ) -> SearchResult:
         """Traverse decision → outcome → lesson chains."""
@@ -436,6 +441,7 @@ class AgentSearch:
             backend,
             query,
             limit=limit,
+            embedding=embedding,
             node_kinds=[NodeKind.DECISION],
         )
         if len(result.nodes) < 2:
@@ -443,6 +449,7 @@ class AgentSearch:
                 backend,
                 query,
                 limit=limit,
+                embedding=embedding,
             )
 
         expanded: dict[str, tuple[Node, float]] = {}
