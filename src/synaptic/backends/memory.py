@@ -104,7 +104,7 @@ class MemoryBackend:
         # --- BM25 parameters ---
         k1 = 1.5
         b = 0.75
-        title_boost = 3.0  # title 매칭 가중치 (IDF와 곱해져서 additive)
+        title_boost = 3.0
 
         # Pre-compute corpus statistics for BM25
         N = len(self._nodes)  # total documents
@@ -142,7 +142,7 @@ class MemoryBackend:
             for i in range(len(terms) - 1):
                 bigrams.append(f"{terms[i]} {terms[i + 1]}")
 
-        # --- Score each document ---
+        # --- Score each document (BM25 + substring hybrid) ---
         scored: list[tuple[Node, float]] = []
         for node in self._nodes.values():
             title_lower = node.title.lower()
@@ -150,49 +150,59 @@ class MemoryBackend:
             full_text = doc_texts[node.id]
             dl = doc_lengths[node.id]
 
-            score = 0.0
+            bm25_score = 0.0
+            substr_score = 0.0
 
             for t in terms:
-                # Term frequency (substring count)
                 tf_content = content_lower.count(t)
                 tf_title = title_lower.count(t)
 
                 if tf_content == 0 and tf_title == 0:
                     continue
 
-                # IDF: log((N - df + 0.5) / (df + 0.5) + 1)
+                # --- BM25 component ---
                 df = doc_freq.get(t, 0)
                 idf = math.log((N - df + 0.5) / (df + 0.5) + 1.0)
 
-                # BM25 content score
                 if tf_content > 0:
                     numerator = tf_content * (k1 + 1)
                     denominator = tf_content + k1 * (1 - b + b * dl / avgdl)
-                    score += idf * numerator / denominator
+                    bm25_score += idf * numerator / denominator
 
-                # Title bonus (separate, additive — not affected by BM25 length normalization)
                 if tf_title > 0:
-                    score += idf * title_boost
+                    bm25_score += idf * title_boost
 
-            # Bigram bonus (phrase proximity)
+                # --- Substring component (corpus-size independent) ---
+                if tf_title > 0:
+                    substr_score += 2.0
+                if tf_content > 0:
+                    substr_score += 1.0
+
+            # Bigram bonus
             for bg in bigrams:
                 if bg in full_text:
-                    score += 1.5
+                    bm25_score += 1.5
+                    substr_score += 1.5
 
-            # Tag exact match bonus
+            # Tag match
             if node.tags:
                 tag_text = " ".join(node.tags).lower()
                 for t in terms:
                     if t in tag_text:
-                        score += 0.5
+                        substr_score += 1.0
 
-            # LLM-generated search keywords bonus
+            # Search keywords
             if node.properties:
                 search_kw = node.properties.get("_search_keywords", "").lower()
                 if search_kw:
                     for t in terms:
                         if t in search_kw:
-                            score += 1.0
+                            substr_score += 1.5
+
+            # Hybrid: BM25 weight increases with corpus size
+            # N=100: 30% BM25 + 70% substr, N=1000+: 80% BM25 + 20% substr
+            bm25_weight = min(0.8, 0.3 + 0.5 * min(1.0, N / 1000))
+            score = bm25_score * bm25_weight + substr_score * (1 - bm25_weight)
 
             if score > 0:
                 scored.append((node, score))
