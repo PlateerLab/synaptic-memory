@@ -63,6 +63,7 @@ class SynapticGraph:
         "_cache",
         "_classifier",
         "_consolidation",
+        "_corpus_size",
         "_embedder",
         "_hebbian",
         "_json_exporter",
@@ -101,6 +102,7 @@ class SynapticGraph:
         self._relation_detector = relation_detector
         self._phrase_extractor = phrase_extractor
         self._agent_search = AgentSearch(hybrid=self._search)
+        self._corpus_size = 0
 
     # --- Factory methods ---
 
@@ -219,6 +221,18 @@ class SynapticGraph:
     def backend(self) -> StorageBackend:
         return self._backend
 
+    async def _get_corpus_size(self) -> int:
+        """Get corpus size for adaptive search weighting (cached)."""
+        if self._corpus_size > 0:
+            return self._corpus_size
+        # First call: compute from backend
+        if hasattr(self._backend, "_nodes"):
+            self._corpus_size = len(self._backend._nodes)  # type: ignore[attr-defined]
+        else:
+            nodes = await self._backend.list_nodes(limit=100000)
+            self._corpus_size = len(nodes)
+        return self._corpus_size
+
     @property
     def cache(self) -> NodeCache:
         return self._cache
@@ -289,6 +303,7 @@ class SynapticGraph:
             properties=properties,
         )
         self._cache.put(node)
+        self._corpus_size += 1
 
         # Auto-detect relations with existing nodes
         if self._relation_detector is not None:
@@ -443,7 +458,11 @@ class SynapticGraph:
         # Auto-embed query for vector search
         if embedding is None and self._embedder is not None:
             embedding = await self._embedder.embed(query)
-        return await self._search.search(self._backend, query, limit=limit, embedding=embedding)
+        # Corpus size for adaptive vector weighting
+        corpus_size = await self._get_corpus_size()
+        return await self._search.search(
+            self._backend, query, limit=limit, embedding=embedding, corpus_size=corpus_size
+        )
 
     async def agent_search(
         self,
@@ -466,6 +485,7 @@ class SynapticGraph:
             search_intent = suggest_intent(query)
         else:
             search_intent = SearchIntent(intent)
+        corpus_size = await self._get_corpus_size()
         return await self._agent_search.search(
             self._backend,
             query,
@@ -474,6 +494,7 @@ class SynapticGraph:
             limit=limit,
             embedding=embedding,
             depth=depth,
+            corpus_size=corpus_size,
         )
 
     async def list(
@@ -541,6 +562,7 @@ class SynapticGraph:
             self._relation_detector.index.remove(node_id)
         await self._store.delete_node(node_id)
         self._cache.invalidate(node_id)
+        self._corpus_size = max(0, self._corpus_size - 1)
         return True
 
     async def reinforce(self, node_ids: list[str], *, success: bool = True) -> None:

@@ -125,13 +125,14 @@ class HybridSearch:
         limit: int = 10,
         embedding: list[float] | None = None,
         node_kinds: list[NodeKind] | None = None,
+        corpus_size: int = 0,
     ) -> SearchResult:
         start = time()
         stages_used: list[str] = []
         all_nodes: dict[str, tuple[Node, float]] = {}
 
         # Stage 1: FTS-primary + vector cascade
-        # FTS 결과는 rank 기반 스코어 유지, vector는 FTS 미스 보완 역할만
+        # FTS 결과는 rank 기반 스코어 유지, vector는 보완 역할
         # 실험 결과: fusion(blend, RRF) 방식은 소규모 corpus에서 FTS 순위 교란 → cascade가 최적
         fts_nodes = await backend.search_fts(query, limit=limit * 2)
         stages_used.append("fts")
@@ -150,13 +151,22 @@ class HybridSearch:
                 if node.embedding and embedding:
                     vec_cosine[node.id] = _cosine_sim(embedding, node.embedding)
 
+            # Corpus-size adaptive vector integration:
+            # FTS 순위 보존 + vector는 FTS가 놓친 결과만 보완
+            # vec_alpha: 소규모(0.3) → 대규모(0.85) 점진 증가
+            # 실험 기록:
+            #   - fusion(blend, RRF) → 소규모에서 FTS 순위 교란, 폐기 (2026-03-23)
+            #   - FTS+vector 중복 boost → 모든 규모에서 노이즈 유입, 폐기 (2026-03-26)
+            #   - threshold 0.40 → 대규모에서도 recall 개선 없음, 0.45 유지 (2026-03-26)
+            vec_alpha = min(0.85, max(0.3, (corpus_size - 500) / 5000 + 0.3))
+
             for node in vec_nodes:
                 nid = node.id
                 cos = vec_cosine.get(nid, 0.0)
-                if nid not in fts_ids and cos >= 0.5:
-                    # Vector-only: FTS에 없는 결과만 삽입, 최하위보다 낮은 스코어
-                    fts_floor = 0.3 if not fts_nodes else _rank_to_score(len(fts_nodes))
-                    all_nodes[nid] = (node, fts_floor * cos)
+                if nid not in fts_ids and cos >= 0.45:
+                    # Vector-only: FTS에 없는 결과만 삽입
+                    vec_score = cos * vec_alpha
+                    all_nodes[nid] = (node, vec_score)
 
         # Stage 2: Synonym expansion (if insufficient results)
         if len(all_nodes) < limit:

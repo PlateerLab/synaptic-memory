@@ -96,32 +96,31 @@ uv run python tests/benchmark/download_datasets.py
 - MIRACL (레거시 형식), Mr. TyDi는 HuggingFace datasets 호환 이슈로 skip
 - MIRACLRetrieval (mteb 형식)은 정상 동작 (1.49M → 10K 샘플링)
 
-### 외부 데이터셋 벤치마크 결과 (FTS only, MemoryBackend, 14종)
-| 데이터셋 | 언어 | Corpus | Queries | MRR | nDCG@10 | R@10 |
-|----------|------|--------|---------|-----|---------|------|
-| Allganize RAG-Eval | KO | 300 | 300 | 0.796 | 0.808 | 0.853 |
-| MIRACLRetrieval | KO | 10,000 | 100 | 0.792 | 0.480 | 0.291 |
-| Allganize rag-ko | KO | 200 | 200 | 0.782 | 0.800 | 0.865 |
-| HotPotQA-24 | EN | 226 | 24 | 0.752 | 0.636 | 0.729 |
-| HotPotQA-200 | EN | 1,990 | 200 | 0.742 | 0.604 | 0.665 |
-| AutoRAGRetrieval | KO | 720 | 114 | 0.647 | 0.681 | 0.798 |
-| KLUE-MRC | KO | 500 | 100 | 0.607 | 0.643 | 0.760 |
-| NFCorpus | EN | 3,633 | 100 | 0.443 | 0.223 | 0.119 |
-| SciFact | EN | 5,183 | 100 | 0.415 | 0.430 | 0.513 |
-| PublicHealthQA | KO | 77 | 77 | 0.346 | 0.394 | 0.571 |
-| Ko-StrategyQA | KO | 9,251 | 100 | 0.317 | 0.260 | 0.292 |
-| XPQARetrieval | KO | 889 | 654 | 0.167 | 0.161 | 0.199 |
-| FiQA | EN | 57,638 | 100 | 0.132 | 0.103 | 0.154 |
-| MultiLongDocRetrieval | KO | 6,176 | 100 | 0.070 | 0.098 | 0.200 |
+### 외부 데이터셋 벤치마크 결과 (MemoryBackend, qwen3-embedding:4b)
+| 데이터셋 | 언어 | Corpus | FTS only MRR | FTS+Embed MRR | 개선 |
+|----------|------|--------|-------------|--------------|------|
+| HotPotQA-24 | EN | 226 | 0.752 | **0.873** | +16.1% |
+| HotPotQA-200 | EN | 1,990 | 0.742 | **0.846** | +14.0% |
+| Allganize rag-ko | KO | 200 | 0.782 | **0.841** | +7.5% |
+| Allganize RAG-Eval | KO | 300 | 0.796 | **0.828** | +4.0% |
+| KLUE-MRC | KO | 500 | 0.607 | **0.727** | +19.8% |
+| SciFact | EN | 5,183 | 0.415 | **0.548** | +32.0% |
+| NFCorpus | EN | 3,633 | 0.443 | **0.511** | +15.3% |
+| Ko-StrategyQA | KO | 9,251 | 0.317 | **0.459** | +44.8% |
+| PublicHealthQA | KO | 77 | 0.346 | **0.402** | +16.2% |
+| MIRACLRetrieval | KO | 10,000 | 0.792 | (미측정) | - |
+| XPQARetrieval | KO | 889 | 0.167 | (미측정) | - |
+| FiQA | EN | 57,638 | 0.132 | (미측정) | - |
+| MultiLongDocRetrieval | KO | 6,176 | 0.070 | (미측정) | - |
 
-### 자체 시나리오 벤치마크 결과 (v0.5.0 + 검색 개선)
-| 지표 | Baseline | 개선 후 |
-|------|----------|--------|
-| MRR | 0.326 | **0.477** (+46%) |
-| Mean P@5 | 0.160 | **0.227** (+42%) |
-| Mean R@5 | 0.467 | **0.533** (+14%) |
-| Mean nDCG@5 | 0.351 | **0.431** (+23%) |
-| Hit rate | 9/15 | **13/15** |
+### 자체 시나리오 벤치마크 결과
+| 지표 | v0.5.0 Baseline | v0.5.0 개선 | v0.9.0 + Embedding |
+|------|-----------------|------------|-------------------|
+| MRR | 0.326 | 0.477 | **0.791** (+66%) |
+| Mean P@5 | 0.160 | 0.227 | **0.293** (+29%) |
+| Mean R@5 | 0.467 | 0.533 | **0.767** (+44%) |
+| Mean nDCG@5 | 0.351 | 0.431 | **0.695** (+61%) |
+| Hit rate | 9/15 | 13/15 | **15/15** |
 
 ### Ablation Study 핵심 발견
 - S1 Ontology: 현재 graph.search()가 NodeKind를 랭킹에 미활용 → 효과 없음
@@ -142,8 +141,12 @@ uv run python tests/benchmark/download_datasets.py
 1. FTS: title 가중치 3x, bigram 서브스트링 매칭, tag 매칭
 2. FTS: 순위 기반 점수 (1위 0.95 → 감소)
 3. Fuzzy: threshold 0.3→0.4, content 샘플 50→100 단어, title boost
-4. Spreading activation: depth 1→2, 다중 경로 보상
+4. Spreading activation: depth 1→2, 다중 경로 보상 → PPR로 교체
 5. AgentSearch past_failures: LESSON 노드 포함, fallback 추가
+6. **Embedding cascade**: FTS 순위 보존 + vector-only 결과 보완 (corpus 크기 적응)
+   - vec_alpha: 소규모 0.3 → 대규모 0.85 (corpus_size 기반)
+   - cos_threshold: 0.45 (전 규모 통일)
+   - 실패 실험: fusion/blend/RRF → FTS 순위 교란, 중복 boost cos*0.15/0.05 → regression, threshold 0.40 → 노이즈
 
 ## 배포
 
@@ -178,12 +181,13 @@ pip install synaptic-memory[mcp]       # MCP 서버
 - agent_search kind 필터 완화: recall 보존하면서 precision 유지
 
 ### 타겟 수치
-| 지표 | 현재 (최고) | 목표 | 근거 |
-|------|-------------|------|------|
-| MRR (Allganize) | 0.796 | 0.85+ | FTS+embedding 결합 시 |
-| MRR (HotPotQA-200) | 0.742 | 0.80+ | spreading activation 개선 시 |
-| MRR (Ko-StrategyQA) | 0.315 | 0.50+ | embedding 필수 (9K corpus) |
-| 자체 시나리오 MRR | 0.477 | 0.65+ | ontology+embedding 결합 |
+| 지표 | v0.9.0 FTS only | v0.9.0 + Embed | 목표 | 달성 |
+|------|-----------------|----------------|------|------|
+| MRR (Allganize) | 0.796 | **0.828** | 0.85+ | 근접 |
+| MRR (HotPotQA-200) | 0.742 | **0.846** | 0.80+ | ✅ |
+| MRR (Ko-StrategyQA) | 0.317 | **0.459** | 0.50+ | 근접 |
+| 자체 시나리오 MRR | 0.477 | **0.791** | 0.65+ | ✅ |
+| MRR (KLUE-MRC) | 0.607 | **0.727** | 0.75+ | 근접 |
 
 ## 방향성
 - 플래티어 온톨로지 비전과 연계: 엔터프라이즈 시맨틱 레이어

@@ -187,7 +187,7 @@ def suggest_intent(query: str) -> SearchIntent:
 class AgentSearch:
     """Agent-optimized search with intent, graph awareness, and context."""
 
-    __slots__ = ("_hybrid", "_scorer")
+    __slots__ = ("_corpus_size", "_hybrid", "_scorer")
 
     def __init__(
         self,
@@ -197,6 +197,7 @@ class AgentSearch:
     ) -> None:
         self._hybrid = hybrid or HybridSearch()
         self._scorer = scorer or ResonanceScorer()
+        self._corpus_size = 0
 
     async def search(
         self,
@@ -209,8 +210,10 @@ class AgentSearch:
         limit: int = 10,
         embedding: list[float] | None = None,
         depth: int = 2,
+        corpus_size: int = 0,
     ) -> SearchResult:
         """Intent-aware search dispatching to specialized strategies."""
+        self._corpus_size = corpus_size
         match intent:
             case SearchIntent.SIMILAR_DECISIONS:
                 return await self._search_similar_decisions(
@@ -260,6 +263,7 @@ class AgentSearch:
                     limit=limit,
                     embedding=embedding,
                     node_kinds=node_kinds,
+                    corpus_size=self._corpus_size,
                 )
 
     async def _search_similar_decisions(
@@ -281,6 +285,7 @@ class AgentSearch:
             limit=limit * 2,
             embedding=embedding,
             node_kinds=[NodeKind.DECISION],
+            corpus_size=self._corpus_size,
         )
         if len(result.nodes) < 2:
             result = await self._hybrid.search(
@@ -288,6 +293,7 @@ class AgentSearch:
                 query,
                 limit=limit * 2,
                 embedding=embedding,
+                corpus_size=self._corpus_size,
             )
 
         # Expand: follow RESULTED_IN edges to include outcomes
@@ -330,6 +336,7 @@ class AgentSearch:
             limit=limit * 3,
             embedding=embedding,
             node_kinds=[NodeKind.OUTCOME, NodeKind.DECISION, NodeKind.LESSON],
+            corpus_size=self._corpus_size,
         )
 
         expanded: dict[str, tuple[Node, float]] = {}
@@ -365,6 +372,7 @@ class AgentSearch:
                 backend,
                 query,
                 limit=limit * 2,
+                corpus_size=self._corpus_size,
             )
             for an in result.nodes:
                 expanded[an.node.id] = (an.node, an.activation)
@@ -396,6 +404,7 @@ class AgentSearch:
             limit=limit * 2,
             embedding=embedding,
             node_kinds=[NodeKind.RULE, NodeKind.LESSON],
+            corpus_size=self._corpus_size,
         )
         if len(result.nodes) < 2:
             result = await self._hybrid.search(
@@ -403,6 +412,7 @@ class AgentSearch:
                 query,
                 limit=limit * 2,
                 embedding=embedding,
+                corpus_size=self._corpus_size,
             )
 
         # Expand via graph traversal
@@ -443,6 +453,7 @@ class AgentSearch:
             limit=limit,
             embedding=embedding,
             node_kinds=[NodeKind.DECISION],
+            corpus_size=self._corpus_size,
         )
         if len(result.nodes) < 2:
             result = await self._hybrid.search(
@@ -450,6 +461,7 @@ class AgentSearch:
                 query,
                 limit=limit,
                 embedding=embedding,
+                corpus_size=self._corpus_size,
             )
 
         expanded: dict[str, tuple[Node, float]] = {}
@@ -504,6 +516,7 @@ class AgentSearch:
             query,
             limit=5,
             embedding=embedding,
+            corpus_size=self._corpus_size,
         )
 
         expanded: dict[str, tuple[Node, float]] = {}
