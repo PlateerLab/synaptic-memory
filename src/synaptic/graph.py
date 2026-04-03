@@ -12,10 +12,12 @@ from synaptic.cache import NodeCache
 from synaptic.consolidation import ConsolidationCascade
 from synaptic.evidence import EvidenceAssembler
 from synaptic.exporter import JSONExporter, MarkdownExporter
+from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
 from synaptic.extensions.embedder import EmbeddingProvider
 from synaptic.extensions.phrase_extractor import PhraseExtractor
 from synaptic.hebbian import HebbianEngine
 from synaptic.models import (
+    ActivatedNode,
     ConsolidationLevel,
     DigestResult,
     Edge,
@@ -61,6 +63,7 @@ class SynapticGraph:
         "_agent_search",
         "_backend",
         "_cache",
+        "_chunk_entity_index",
         "_classifier",
         "_consolidation",
         "_corpus_size",
@@ -70,6 +73,8 @@ class SynapticGraph:
         "_md_exporter",
         "_ontology",
         "_phrase_extractor",
+        "_query_decomposer",
+        "_reranker",
         "_relation_detector",
         "_search",
         "_store",
@@ -86,11 +91,17 @@ class SynapticGraph:
         classifier: KindClassifier | None = None,
         relation_detector: RelationDetector | None = None,
         phrase_extractor: PhraseExtractor | None = None,
+        chunk_entity_index: ChunkEntityIndex | None = None,
+        query_decomposer: object | None = None,
+        reranker: object | None = None,
         cache_size: int = 256,
     ) -> None:
         self._backend = backend
         self._store = Store(backend, tag_extractor=tag_extractor)
-        self._search = HybridSearch(query_rewriter=query_rewriter)
+        self._search = HybridSearch(
+            query_rewriter=query_rewriter,
+            chunk_entity_index=chunk_entity_index,
+        )
         self._hebbian = HebbianEngine()
         self._consolidation = ConsolidationCascade()
         self._md_exporter = MarkdownExporter()
@@ -101,6 +112,9 @@ class SynapticGraph:
         self._classifier = classifier
         self._relation_detector = relation_detector
         self._phrase_extractor = phrase_extractor
+        self._chunk_entity_index = chunk_entity_index
+        self._query_decomposer = query_decomposer
+        self._reranker = reranker
         self._agent_search = AgentSearch(hybrid=self._search)
         self._corpus_size = 0
 
@@ -241,6 +255,17 @@ class SynapticGraph:
     def ontology(self) -> OntologyRegistry | None:
         return self._ontology
 
+    @property
+    def chunk_entity_index(self) -> ChunkEntityIndex | None:
+        return self._chunk_entity_index
+
+    @property
+    def explorer(self) -> object:
+        """Graph data exploration API for visualization frontends."""
+        from synaptic.explorer import GraphExplorer
+
+        return GraphExplorer(self._backend, self._chunk_entity_index)
+
     async def add(
         self,
         title: str,
@@ -343,21 +368,27 @@ class SynapticGraph:
         """긴 문서를 자동 청킹하여 여러 노드로 추가.
 
         chunk_size 이하 문서는 단일 노드로 추가 (add()와 동일).
-        긴 문서는 문장 경계에서 분할하고 PART_OF 관계로 연결.
+        긴 문서는 문장 경계에서 분할하고 CHUNK 노드 + NEXT_CHUNK 순서 엣지로 연결.
+        ChunkEntityIndex가 있으면 phrase_extractor가 만든 엔티티를 양방향 인덱스에 등록.
 
         Returns:
             생성된 노드 리스트 (첫 번째가 대표 노드).
         """
+        use_chunk_kind = self._chunk_entity_index is not None
+
         # 짧은 문서는 그냥 add()
         if len(content) <= chunk_size:
             node = await self.add(
                 title=title,
                 content=content,
-                kind=kind,
+                kind=NodeKind.CHUNK if use_chunk_kind else kind,
                 tags=tags,
                 source=source,
                 properties=properties,
             )
+            # Register in chunk-entity index if available
+            if use_chunk_kind and self._chunk_entity_index is not None:
+                await self._register_chunk_entities(node)
             return [node]
 
         # 문장 경계에서 청킹
@@ -370,18 +401,23 @@ class SynapticGraph:
             if len(chunks) > 1:
                 chunk_tags.append(f"chunks:{len(chunks)}")
 
+            chunk_props = dict(properties) if properties else {}
+            chunk_props["chunk_index"] = str(i)
+            chunk_props["total_chunks"] = str(len(chunks))
+            chunk_props["parent_doc"] = title
+
             node = await self.add(
                 title=chunk_title,
                 content=chunk,
-                kind=kind,
+                kind=NodeKind.CHUNK if use_chunk_kind else kind,
                 tags=chunk_tags,
                 source=source,
-                properties=properties,
+                properties=chunk_props,
             )
             nodes.append(node)
 
-        # 청크 간 PART_OF 관계 연결
         if len(nodes) > 1:
+            # 청크 간 PART_OF 관계 (첫 번째가 대표 노드)
             for i in range(1, len(nodes)):
                 await self.link(
                     nodes[i].id,
@@ -389,8 +425,34 @@ class SynapticGraph:
                     kind=EdgeKind.PART_OF,
                     weight=0.9,
                 )
+            # 순차 청크 간 NEXT_CHUNK 엣지
+            for i in range(len(nodes) - 1):
+                await self.link(
+                    nodes[i].id,
+                    nodes[i + 1].id,
+                    kind=EdgeKind.NEXT_CHUNK,
+                    weight=0.7,
+                )
+
+        # Register all chunks in chunk-entity index
+        if use_chunk_kind and self._chunk_entity_index is not None:
+            for node in nodes:
+                await self._register_chunk_entities(node)
 
         return nodes
+
+    async def _register_chunk_entities(self, chunk_node: Node) -> None:
+        """Register chunk-entity links in the bidirectional index.
+
+        Scans outgoing CONTAINS/MENTIONS edges from the chunk node
+        (created by phrase_extractor or entity_extractor) and registers them.
+        """
+        if self._chunk_entity_index is None:
+            return
+        edges = await self._backend.get_edges(chunk_node.id, direction="outgoing")
+        for edge in edges:
+            if edge.kind in (EdgeKind.CONTAINS, EdgeKind.MENTIONS):
+                self._chunk_entity_index.register(chunk_node.id, edge.target_id)
 
     @staticmethod
     def _split_into_chunks(text: str, chunk_size: int, overlap: int) -> list[str]:
@@ -424,6 +486,48 @@ class SynapticGraph:
             chunks.append(" ".join(current))
 
         return chunks if chunks else [text]
+
+    async def add_table(
+        self,
+        table_name: str,
+        columns: list[dict[str, str]],
+        rows: list[dict[str, object]],
+        *,
+        foreign_keys: dict[str, tuple[str, str]] | None = None,
+        primary_key: str = "id",
+        tags: list[str] | None = None,
+        source: str = "",
+    ) -> list[Node]:
+        """테이블 데이터를 지식 그래프에 추가.
+
+        각 행을 ENTITY 노드로 생성하고, FK를 엣지로 연결.
+        테이블 스키마는 OntologyRegistry에 자동 등록.
+
+        Args:
+            table_name: 테이블 이름.
+            columns: 컬럼 정의 [{"name": "col", "type": "str"}, ...].
+            rows: 행 데이터 [{"col": value, ...}, ...].
+            foreign_keys: FK 매핑 {"col": ("target_table", "target_col")}.
+            primary_key: PK 컬럼 이름.
+            tags: 추가 태그.
+            source: 소스 식별자.
+
+        Returns:
+            생성된 ENTITY 노드 리스트.
+        """
+        from synaptic.extensions.table_ingester import TableIngester
+
+        ingester = TableIngester()
+        return await ingester.ingest(
+            self,
+            table_name,
+            columns,
+            rows,
+            foreign_keys=foreign_keys,
+            primary_key=primary_key,
+            tags=tags,
+            source=source,
+        )
 
     async def link(
         self,
@@ -460,8 +564,93 @@ class SynapticGraph:
             embedding = await self._embedder.embed(query)
         # Corpus size for adaptive vector weighting
         corpus_size = await self._get_corpus_size()
-        return await self._search.search(
-            self._backend, query, limit=limit, embedding=embedding, corpus_size=corpus_size
+
+        # Query decomposition: split complex queries into sub-queries
+        if self._query_decomposer is not None and hasattr(
+            self._query_decomposer, "decompose"
+        ):
+            import asyncio
+
+            sub_queries = await self._query_decomposer.decompose(query)
+            if len(sub_queries) > 1:
+                # Search each sub-query in parallel
+                tasks = [
+                    self._search.search(
+                        self._backend, sq, limit=limit, embedding=embedding,
+                        corpus_size=corpus_size,
+                    )
+                    for sq in sub_queries
+                ]
+                sub_results = await asyncio.gather(*tasks)
+
+                # Merge results with RRF fusion
+                from synaptic.search import _rrf_fusion
+
+                rankings: list[dict[str, float]] = []
+                node_map: dict[str, ActivatedNode] = {}
+                for sr in sub_results:
+                    ranking = {}
+                    for activated in sr.nodes:
+                        ranking[activated.node.id] = activated.resonance
+                        # Keep the best ActivatedNode per node_id
+                        existing = node_map.get(activated.node.id)
+                        if existing is None or activated.resonance > existing.resonance:
+                            node_map[activated.node.id] = activated
+                    rankings.append(ranking)
+
+                rrf_scores = _rrf_fusion(*rankings)
+                max_rrf = max(rrf_scores.values()) if rrf_scores else 1.0
+
+                merged: list[ActivatedNode] = []
+                for nid, rrf_s in sorted(
+                    rrf_scores.items(), key=lambda x: x[1], reverse=True
+                )[:limit]:
+                    an = node_map[nid]
+                    merged.append(
+                        ActivatedNode(
+                            node=an.node,
+                            activation=an.activation,
+                            resonance=rrf_s / max_rrf if max_rrf > 0 else 0.0,
+                            path=an.path,
+                        )
+                    )
+
+                total = sum(sr.total_candidates for sr in sub_results)
+                elapsed = sum(sr.search_time_ms for sr in sub_results)
+                stages = ["decompose"]
+                for sr in sub_results:
+                    for s in sr.stages_used:
+                        if s not in stages:
+                            stages.append(s)
+
+                result = SearchResult(
+                    query=query,
+                    nodes=merged,
+                    total_candidates=total,
+                    search_time_ms=elapsed,
+                    stages_used=stages,
+                )
+                return await self._apply_reranker(query, result, limit)
+
+        result = await self._search.search(
+            self._backend, query, limit=limit, embedding=embedding,
+            corpus_size=corpus_size,
+        )
+        return await self._apply_reranker(query, result, limit)
+
+    async def _apply_reranker(
+        self, query: str, result: SearchResult, limit: int
+    ) -> SearchResult:
+        """Apply reranker to search results if configured."""
+        if self._reranker is None or not hasattr(self._reranker, "rerank"):
+            return result
+        reranked = await self._reranker.rerank(query, result.nodes, top_k=limit)
+        return SearchResult(
+            query=result.query,
+            nodes=reranked,
+            total_candidates=result.total_candidates,
+            search_time_ms=result.search_time_ms,
+            stages_used=result.stages_used + ["rerank"],
         )
 
     async def agent_search(

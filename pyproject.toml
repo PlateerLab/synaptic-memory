@@ -53,6 +53,8 @@ neo4j = ["neo4j>=5.25"]
 qdrant = ["qdrant-client>=1.12"]
 minio = ["miniopy-async>=1.21"]
 embedding = ["aiohttp>=3.9"]
+spacy = ["spacy>=3.7"]
+rag = ["spacy>=3.7", "aiohttp>=3.9"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
 scale = [
     "neo4j>=5.25",

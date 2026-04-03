@@ -109,3 +109,19 @@ class RelationDetector(Protocol):
         node: Node,
         backend: StorageBackend,
     ) -> list[tuple[str, EdgeKind, float]]: ...
+
+
+class EntityExtractor(Protocol):
+    """Extracts entities from text and links them in the graph.
+
+    Drop-in compatible with PhraseExtractor, SpaCyEntityExtractor,
+    and HybridEntityExtractor.
+    """
+
+    async def extract_and_link(
+        self,
+        graph: object,  # SynapticGraph (avoid circular import)
+        node_id: str,
+        title: str,
+        content: str,
+    ) -> list[str]: ...

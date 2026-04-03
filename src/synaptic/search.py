@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import math
 from time import time
+from typing import TYPE_CHECKING
 
-from synaptic.models import ActivatedNode, Node, NodeKind, SearchResult
-from synaptic.ppr import personalized_pagerank
+from synaptic.models import ActivatedNode, EdgeKind, Node, NodeKind, SearchResult
+from synaptic.ppr import personalized_pagerank, personalized_pagerank_v2
 from synaptic.protocols import QueryRewriter, StorageBackend
 from synaptic.resonance import ResonanceScorer
 from synaptic.synonyms import expand_synonyms
+
+if TYPE_CHECKING:
+    from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
 
 # Kind-query keyword mapping (boost the matching kind when these words appear in query)
 _KIND_QUERY_HINTS: dict[NodeKind, list[str]] = {
@@ -89,6 +93,28 @@ def _rrf_score(rank: int, k: int = 60) -> float:
     return 1.0 / (k + rank + 1)
 
 
+def _rrf_fusion(*rankings: dict[str, float], k: int = 60) -> dict[str, float]:
+    """Reciprocal Rank Fusion — robust score fusion across different distributions.
+
+    RRF(d) = sum(1 / (k + rank_i)) for each ranking.
+    More stable than linear alpha-blending when score distributions differ.
+
+    Args:
+        *rankings: Each ranking is {node_id: score}, higher score = better.
+        k: RRF constant (default 60, standard value).
+
+    Returns:
+        {node_id: rrf_score} — unified scores, higher = better.
+    """
+    scores: dict[str, float] = {}
+    for ranking in rankings:
+        # Sort by score descending to get ranks
+        sorted_ids = sorted(ranking, key=lambda nid: ranking[nid], reverse=True)
+        for rank, nid in enumerate(sorted_ids):
+            scores[nid] = scores.get(nid, 0.0) + 1.0 / (k + rank)
+    return scores
+
+
 def _cosine_sim(a: list[float], b: list[float]) -> float:
     """Cosine similarity between two vectors."""
     dot = sum(x * y for x, y in zip(a, b))
@@ -102,7 +128,7 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
 class HybridSearch:
     """3-stage fallback search: FTS+vector → synonym expansion → query rewrite."""
 
-    __slots__ = ("_ppr_damping", "_query_rewriter", "_scorer")
+    __slots__ = ("_chunk_entity_index", "_ppr_damping", "_query_rewriter", "_scorer")
 
     def __init__(
         self,
@@ -112,10 +138,12 @@ class HybridSearch:
         spread_decay: float = 0.25,  # deprecated, kept for compat
         spread_depth: int = 1,  # deprecated, kept for compat
         ppr_damping: float = 0.85,
+        chunk_entity_index: ChunkEntityIndex | None = None,
     ) -> None:
         self._scorer = scorer or ResonanceScorer()
         self._query_rewriter = query_rewriter
         self._ppr_damping = ppr_damping
+        self._chunk_entity_index = chunk_entity_index
 
     async def search(
         self,
@@ -193,12 +221,22 @@ class HybridSearch:
         total_candidates = len(all_nodes)
         if all_nodes:
             seed_scores = {nid: score for nid, (_node, score) in all_nodes.items()}
-            ppr_results = await personalized_pagerank(
-                backend,
-                seed_scores,
-                damping=self._ppr_damping,
-                top_k=limit * 2,
-            )
+            # Use PPR v2 (noise-reduced) when chunk-entity index is available
+            if self._chunk_entity_index is not None:
+                ppr_results = await personalized_pagerank_v2(
+                    backend,
+                    seed_scores,
+                    chunk_entity_index=self._chunk_entity_index,
+                    damping=self._ppr_damping,
+                    top_k=limit * 2,
+                )
+            else:
+                ppr_results = await personalized_pagerank(
+                    backend,
+                    seed_scores,
+                    damping=self._ppr_damping,
+                    top_k=limit * 2,
+                )
             for node_id, ppr_score in ppr_results:
                 if node_id not in all_nodes:
                     # Node discovered by PPR — reachable only through graph paths
@@ -211,6 +249,25 @@ class HybridSearch:
                     boosted = min(1.0, existing[1] + ppr_score * 0.1)
                     if boosted > existing[1]:
                         all_nodes[node_id] = (existing[0], boosted)
+
+        # Chunk-entity expansion: when entity nodes are found, pull in their
+        # source chunks so the final result includes grounded passages.
+        if self._chunk_entity_index is not None:
+            entity_ids = [
+                nid
+                for nid, (node, _) in all_nodes.items()
+                if node.kind == NodeKind.ENTITY and "_phrase" not in (node.tags or [])
+            ]
+            if entity_ids:
+                chunk_scores = self._chunk_entity_index.chunks_for_entities(entity_ids)
+                for chunk_id, overlap_count in list(chunk_scores.items())[:limit * 2]:
+                    if chunk_id not in all_nodes:
+                        chunk_node = await backend.get_node(chunk_id)
+                        if chunk_node:
+                            # Score based on entity overlap (normalized)
+                            chunk_score = min(0.85, 0.4 + overlap_count * 0.15)
+                            all_nodes[chunk_id] = (chunk_node, chunk_score)
+                stages_used.append("chunk_expansion")
 
         # Soft boost for preferred node_kinds (instead of hard filtering)
         if node_kinds:

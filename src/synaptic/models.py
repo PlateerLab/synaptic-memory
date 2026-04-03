@@ -46,6 +46,9 @@ class NodeKind(StrEnum):
     OUTCOME = "outcome"
     SESSION = "session"
     TYPE_DEF = "type_def"
+    # v1.0: RAG enhancement — chunk-entity graph
+    CHUNK = "chunk"
+    COMMUNITY = "community"
 
 
 class EdgeKind(StrEnum):
@@ -63,6 +66,10 @@ class EdgeKind(StrEnum):
     PART_OF = "part_of"
     FOLLOWED_BY = "followed_by"
     CONTAINS = "contains"
+    # v1.0: RAG enhancement — chunk-entity graph
+    MENTIONS = "mentions"
+    EXTRACTED_FROM = "extracted_from"
+    NEXT_CHUNK = "next_chunk"
 
 
 @dataclass(slots=True)
@@ -82,6 +89,19 @@ class Node:
     source: str = ""
     created_at: float = field(default_factory=time)
     updated_at: float = field(default_factory=time)
+
+
+def _sparse_dict() -> dict[int, float]:
+    return {}
+
+
+@dataclass(slots=True)
+class HybridEmbedding:
+    """BGE-M3 style hybrid embedding: dense + sparse + ColBERT vectors."""
+
+    dense: list[float] = field(default_factory=_float_list)
+    sparse: dict[int, float] = field(default_factory=_sparse_dict)
+    colbert: list[list[float]] | None = None
 
 
 @dataclass(slots=True)
@@ -172,3 +192,103 @@ class EvidenceChain:
     facts: list[str] = field(default_factory=_str_list)
     total_tokens_approx: int = 0  # approximate token count
     assembly_time_ms: float = 0.0
+
+
+# --- Visualization / Explorer data models ---
+
+
+def _dict_list() -> list[dict[str, object]]:
+    return []
+
+
+def _node_edge_list() -> list[tuple["Node", "Edge"]]:
+    return []
+
+
+@dataclass(slots=True)
+class GraphData:
+    """Graph visualization data — nodes + edges + communities + stats."""
+
+    nodes: list[dict[str, object]] = field(default_factory=_dict_list)
+    edges: list[dict[str, object]] = field(default_factory=_dict_list)
+    communities: list[dict[str, object]] = field(default_factory=_dict_list)
+    stats: dict[str, object] = field(default_factory=_str_dict)
+
+
+@dataclass(slots=True)
+class NodeDetail:
+    """Full node detail with neighbors and context."""
+
+    node: Node
+    neighbors: list[tuple[Node, Edge]] = field(default_factory=_node_edge_list)
+    chunk_count: int = 0
+    community_id: str = ""
+
+
+@dataclass(slots=True)
+class EntityContext:
+    """Entity with all source chunks and related entities."""
+
+    entity: Node
+    source_chunks: list[Node] = field(default_factory=_node_list)
+    related_entities: list[tuple[Node, Edge]] = field(default_factory=_node_edge_list)
+    community: dict[str, object] | None = None
+
+
+@dataclass(slots=True)
+class ChunkDetail:
+    """Chunk with extracted entities and navigation."""
+
+    chunk: Node
+    extracted_entities: list[dict[str, object]] = field(default_factory=_dict_list)
+    prev_chunk: Node | None = None
+    next_chunk: Node | None = None
+    parent_doc: str = ""
+
+
+@dataclass(slots=True)
+class EdgeDetail:
+    """Edge with source/target nodes and evidence chunks."""
+
+    edge: Edge
+    source_node: Node | None = None
+    target_node: Node | None = None
+    evidence_chunks: list[Node] = field(default_factory=_node_list)
+
+
+@dataclass(slots=True)
+class TableRowDetail:
+    """Table row node with column data and FK relations."""
+
+    node: Node
+    columns: dict[str, str] = field(default_factory=_str_dict)
+    table_name: str = ""
+    related_rows: list[tuple[Node, Edge]] = field(default_factory=_node_edge_list)
+    schema: dict[str, object] = field(default_factory=_str_dict)
+
+
+@dataclass(slots=True)
+class CommunityDetail:
+    """Community with members and key entities."""
+
+    community: Node
+    summary: str = ""
+    members: list[Node] = field(default_factory=_node_list)
+    key_entities: list[Node] = field(default_factory=_node_list)
+    sub_communities: list[Node] = field(default_factory=_node_list)
+
+
+@dataclass(slots=True)
+class GraphStats:
+    """Graph-level statistics."""
+
+    total_nodes: int = 0
+    total_edges: int = 0
+    nodes_by_kind: dict[str, int] = field(default_factory=_str_dict)
+    edges_by_kind: dict[str, int] = field(default_factory=_str_dict)
+    entity_count: int = 0
+    chunk_count: int = 0
+    community_count: int = 0
+    table_count: int = 0
+    avg_entities_per_chunk: float = 0.0
+    avg_edges_per_entity: float = 0.0

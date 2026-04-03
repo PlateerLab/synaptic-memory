@@ -43,6 +43,7 @@ from __future__ import annotations
 from synaptic.activity import ActivityTracker
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.evidence import EvidenceAssembler
+from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
 from synaptic.extensions.classifier_rules import RuleBasedClassifier
 from synaptic.extensions.embedder import EmbeddingProvider, MockEmbeddingProvider
 from synaptic.extensions.phrase_extractor import PhraseExtractor
@@ -74,6 +75,7 @@ from synaptic.ontology import (
 from synaptic.ppr import personalized_pagerank
 from synaptic.protocols import (
     Digester,
+    EntityExtractor,
     GraphTraversal,
     KindClassifier,
     QueryRewriter,
@@ -88,6 +90,7 @@ __version__ = "0.9.0"
 __all__ = [
     "ActivatedNode",
     "ActivityTracker",
+    "ChunkEntityIndex",
     "AgentSearch",
     "ClassificationResult",
     "ConsolidationLevel",
@@ -97,6 +100,7 @@ __all__ = [
     "EdgeKind",
     "EmbeddingProvider",
     "EmbeddingRelationDetector",
+    "EntityExtractor",
     "EvidenceAssembler",
     "EvidenceChain",
     "EvidenceStep",
@@ -120,6 +124,9 @@ __all__ = [
     "ResonanceWeights",
     "RuleBasedClassifier",
     "RuleBasedRelationDetector",
+    "SpaCyEntityExtractor",
+    "HybridEntityExtractor",
+    "TableIngester",
     "SearchIntent",
     "SearchResult",
     "StorageBackend",
@@ -166,5 +173,17 @@ def __getattr__(name: str) -> object:
         from synaptic.extensions.llm_provider import OpenAILLMProvider
 
         return OpenAILLMProvider
+    if name == "SpaCyEntityExtractor":
+        from synaptic.extensions.entity_extractor_spacy import SpaCyEntityExtractor
+
+        return SpaCyEntityExtractor
+    if name == "HybridEntityExtractor":
+        from synaptic.extensions.entity_extractor_hybrid import HybridEntityExtractor
+
+        return HybridEntityExtractor
+    if name == "TableIngester":
+        from synaptic.extensions.table_ingester import TableIngester
+
+        return TableIngester
     msg = f"module 'synaptic' has no attribute {name!r}"
     raise AttributeError(msg)

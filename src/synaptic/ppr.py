@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from synaptic.models import EdgeKind
+from synaptic.models import EdgeKind, NodeKind
 
 if TYPE_CHECKING:
+    from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
     from synaptic.protocols import StorageBackend
 
 # Edge type별 PPR 전파 가중치 — 의미 있는 관계일수록 더 강하게 전파
@@ -30,6 +31,10 @@ _EDGE_TYPE_WEIGHTS: dict[EdgeKind, float] = {
     EdgeKind.IS_A: 0.5,  # 타입 계층 — 중간
     EdgeKind.INVOKED: 0.6,  # 호출 — 중간
     EdgeKind.FOLLOWED_BY: 0.7,  # 순서 — 중간
+    # v1.0: chunk-entity graph
+    EdgeKind.MENTIONS: 0.8,  # chunk → entity — 강한
+    EdgeKind.EXTRACTED_FROM: 0.8,  # entity → chunk — 강한
+    EdgeKind.NEXT_CHUNK: 0.3,  # chunk → chunk 순서 — 약한 (청크 간 직접 전파 제한)
 }
 
 
@@ -153,6 +158,160 @@ async def personalized_pagerank(
                 new_rank[tgt] = new_rank.get(tgt, 0.0) + contribution
 
         # Check convergence (L1 norm)
+        diff = sum(abs(new_rank.get(nid, 0.0) - rank.get(nid, 0.0)) for nid in all_nodes)
+        rank = new_rank
+        if diff < tol:
+            break
+
+    # --- 5. Return top-k ---
+    sorted_results = sorted(rank.items(), key=lambda x: x[1], reverse=True)
+    return sorted_results[:top_k]
+
+
+async def personalized_pagerank_v2(
+    backend: StorageBackend,
+    seed_scores: dict[str, float],
+    *,
+    chunk_entity_index: ChunkEntityIndex | None = None,
+    damping: float = 0.85,
+    max_iter: int = 50,
+    tol: float = 1e-6,
+    top_k: int = 20,
+    edge_weight_floor: float = 0.15,
+    passage_boost: float = 1.5,
+) -> list[tuple[str, float]]:
+    """HippoRAG2-inspired PPR v2 with noise reduction.
+
+    Key improvements over v1:
+      1. CHUNK seed boost: passage nodes get higher teleport weight (more grounded)
+      2. Entity-mediated spreading: CHUNK→CHUNK direct propagation blocked,
+         spreading only through ENTITY nodes (reduces noise)
+      3. Weak edge zeroing: edges with weight < edge_weight_floor are ignored
+
+    Args:
+        backend: Storage backend.
+        seed_scores: {node_id: weight} — search result scores.
+        chunk_entity_index: Bidirectional index (enables chunk/entity awareness).
+        damping: Edge-follow probability.
+        max_iter: Max iterations.
+        tol: Convergence threshold.
+        top_k: Top results to return.
+        edge_weight_floor: Zero out edges below this weight.
+        passage_boost: Teleport weight multiplier for CHUNK nodes.
+
+    Returns:
+        List of (node_id, ppr_score) sorted descending.
+    """
+    if not seed_scores:
+        return []
+
+    # --- 1. BFS subgraph discovery (depth 2) ---
+    adj: dict[str, list[tuple[str, float]]] = {}
+    node_kinds: dict[str, str] = {}  # node_id → kind
+    visited: set[str] = set()
+    frontier = set(seed_scores.keys())
+    bfs_depth = 2
+
+    for _ in range(bfs_depth):
+        if not frontier:
+            break
+        next_frontier: set[str] = set()
+        for nid in frontier:
+            if nid in visited:
+                continue
+            visited.add(nid)
+            if nid not in adj:
+                adj[nid] = []
+
+            # Track node kind for chunk/entity awareness
+            if nid not in node_kinds:
+                node = await backend.get_node(nid)
+                if node:
+                    node_kinds[nid] = str(node.kind)
+
+            edges = await backend.get_edges(nid, direction="both")
+            for edge in edges:
+                if edge.source_id == nid:
+                    neighbor_id = edge.target_id
+                else:
+                    neighbor_id = edge.source_id
+
+                # Track neighbor kind
+                if neighbor_id not in node_kinds:
+                    neighbor_node = await backend.get_node(neighbor_id)
+                    if neighbor_node:
+                        node_kinds[neighbor_id] = str(neighbor_node.kind)
+
+                edge_type_weight = _EDGE_TYPE_WEIGHTS.get(edge.kind, 0.5)
+                effective_weight = edge.weight * edge_type_weight
+
+                # Weak edge zeroing
+                if effective_weight < edge_weight_floor:
+                    continue
+
+                # Entity-mediated spreading: block CHUNK→CHUNK direct propagation
+                src_kind = node_kinds.get(nid, "")
+                dst_kind = node_kinds.get(neighbor_id, "")
+                if src_kind == NodeKind.CHUNK and dst_kind == NodeKind.CHUNK:
+                    # Only allow NEXT_CHUNK (sequential reading), heavily dampened
+                    if edge.kind != EdgeKind.NEXT_CHUNK:
+                        continue
+
+                adj[nid].append((neighbor_id, effective_weight))
+                if neighbor_id not in adj:
+                    adj[neighbor_id] = []
+                adj[neighbor_id].append((nid, effective_weight))
+
+                if neighbor_id not in visited:
+                    next_frontier.add(neighbor_id)
+        frontier = next_frontier
+
+    visited.update(frontier)
+    for nid in frontier:
+        if nid not in adj:
+            adj[nid] = []
+
+    all_nodes = set(adj.keys()) | set(seed_scores.keys())
+
+    if not any(adj.values()):
+        sorted_seeds = sorted(seed_scores.items(), key=lambda x: x[1], reverse=True)
+        return sorted_seeds[:top_k]
+
+    # --- 2. Column-normalized adjacency ---
+    out_weight: dict[str, float] = {}
+    for src, neighbors in adj.items():
+        total = sum(w for _, w in neighbors)
+        out_weight[src] = total if total > 0 else 1.0
+
+    # --- 3. Personalization with passage boost ---
+    boosted_seeds: dict[str, float] = {}
+    for nid, score in seed_scores.items():
+        if node_kinds.get(nid) == NodeKind.CHUNK:
+            boosted_seeds[nid] = score * passage_boost
+        else:
+            boosted_seeds[nid] = score
+
+    total_seed = sum(boosted_seeds.values())
+    if total_seed == 0:
+        return []
+    personalization = {nid: s / total_seed for nid, s in boosted_seeds.items()}
+
+    # --- 4. Power iteration ---
+    rank: dict[str, float] = {nid: personalization.get(nid, 0.0) for nid in all_nodes}
+    teleport_coeff = 1.0 - damping
+
+    for _ in range(max_iter):
+        new_rank = {nid: teleport_coeff * personalization.get(nid, 0.0) for nid in all_nodes}
+
+        for src, neighbors in adj.items():
+            if not neighbors:
+                continue
+            src_rank = rank[src]
+            src_out = out_weight[src]
+            for tgt, w in neighbors:
+                contribution = damping * src_rank * w / src_out
+                new_rank[tgt] = new_rank.get(tgt, 0.0) + contribution
+
         diff = sum(abs(new_rank.get(nid, 0.0) - rank.get(nid, 0.0)) for nid in all_nodes)
         rank = new_rank
         if diff < tol:
