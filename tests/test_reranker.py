@@ -1,8 +1,6 @@
 """Tests for Reranker — NoOp and LLM reranking."""
 
-import pytest
-
-from synaptic import SynapticGraph, NodeKind
+from synaptic import NodeKind, SynapticGraph
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.reranker import LLMReranker, NoOpReranker
 from synaptic.models import ActivatedNode, Node

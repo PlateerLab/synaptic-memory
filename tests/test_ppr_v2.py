@@ -1,8 +1,6 @@
 """Tests for personalized_pagerank_v2 — HippoRAG2-style noise reduction."""
 
-import pytest
-
-from synaptic import SynapticGraph, NodeKind, EdgeKind
+from synaptic import EdgeKind, NodeKind, SynapticGraph
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
 from synaptic.ppr import personalized_pagerank_v2
@@ -38,12 +36,8 @@ class TestPPRv2Basic:
         await backend.save_node(shared)
 
         # Both connect to shared entity equally
-        await backend.save_edge(
-            Edge(source_id="c1", target_id="s1", kind=EdgeKind.MENTIONS)
-        )
-        await backend.save_edge(
-            Edge(source_id="c2", target_id="s1", kind=EdgeKind.RELATED)
-        )
+        await backend.save_edge(Edge(source_id="c1", target_id="s1", kind=EdgeKind.MENTIONS))
+        await backend.save_edge(Edge(source_id="c2", target_id="s1", kind=EdgeKind.RELATED))
 
         # Seeded equally, but chunk gets passage_boost in teleport
         result = await personalized_pagerank_v2(
@@ -96,13 +90,9 @@ class TestPPRv2NoiseReduction:
         await backend.save_node(entity)
 
         # c1 → c2 via PART_OF (should be blocked in v2)
-        await backend.save_edge(
-            Edge(source_id="c1", target_id="c2", kind=EdgeKind.PART_OF)
-        )
+        await backend.save_edge(Edge(source_id="c1", target_id="c2", kind=EdgeKind.PART_OF))
         # c1 → entity via MENTIONS (should propagate)
-        await backend.save_edge(
-            Edge(source_id="c1", target_id="e1", kind=EdgeKind.MENTIONS)
-        )
+        await backend.save_edge(Edge(source_id="c1", target_id="e1", kind=EdgeKind.MENTIONS))
 
         result = await personalized_pagerank_v2(backend, {"c1": 1.0})
         scores = dict(result)

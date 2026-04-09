@@ -150,15 +150,13 @@ class MockBGEM3Provider:
 
         # Generate sparse: a few token IDs with weights
         sparse = {
-            (h + i) % 30000: ((h >> (i * 4)) & 0xF) / 15.0
-            for i in range(min(5, len(text.split())))
+            (h + i) % 30000: ((h >> (i * 4)) & 0xF) / 15.0 for i in range(min(5, len(text.split())))
         }
 
         # ColBERT: per-token vectors (simplified)
         tokens = text.split()[:8]
         colbert = [
-            [((hash(t) >> (j * 8)) & 0xFF) / 255.0 for j in range(self._dim)]
-            for t in tokens
+            [((hash(t) >> (j * 8)) & 0xFF) / 255.0 for j in range(self._dim)] for t in tokens
         ]
 
         return HybridEmbedding(dense=dense, sparse=sparse, colbert=colbert)

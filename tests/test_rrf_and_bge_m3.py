@@ -1,10 +1,7 @@
 """Tests for RRF fusion, BGE-M3 provider, and ColBERT reranker."""
 
-import pytest
-
 from synaptic.models import ActivatedNode, HybridEmbedding, Node, NodeKind
 from synaptic.search import _rrf_fusion
-
 
 # --- RRF Fusion ---
 
@@ -184,10 +181,7 @@ class TestColBERTReranker:
         from synaptic.extensions.reranker_colbert import ColBERTReranker
 
         reranker = ColBERTReranker()
-        candidates = [
-            (self._make_activated(f"Node{i}", 0.5), [[0.1, 0.2]])
-            for i in range(10)
-        ]
+        candidates = [(self._make_activated(f"Node{i}", 0.5), [[0.1, 0.2]]) for i in range(10)]
 
         result = reranker.rerank([[0.1, 0.2]], candidates, top_k=3)
         assert len(result) == 3

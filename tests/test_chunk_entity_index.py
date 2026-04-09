@@ -2,9 +2,8 @@
 
 import pytest
 
-from synaptic import SynapticGraph, NodeKind, EdgeKind
+from synaptic import EdgeKind, NodeKind, SynapticGraph
 from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
-
 
 # --- Unit tests for ChunkEntityIndex ---
 
@@ -139,8 +138,7 @@ class TestChunkEntityIndexIntegration:
         graph, idx = graph_with_index
         nodes = await graph.add_document(
             "Sequential Doc",
-            "First section about PostgreSQL. " * 30
-            + "Second section about Redis cache. " * 30,
+            "First section about PostgreSQL. " * 30 + "Second section about Redis cache. " * 30,
             chunk_size=200,
         )
 

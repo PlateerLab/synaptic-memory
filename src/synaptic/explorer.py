@@ -30,13 +30,13 @@ from synaptic.models import (
     ChunkDetail,
     CommunityDetail,
     EdgeDetail,
+    EdgeKind,
     EntityContext,
     GraphData,
     GraphStats,
     Node,
     NodeDetail,
     NodeKind,
-    EdgeKind,
     TableRowDetail,
 )
 
@@ -95,7 +95,10 @@ class GraphExplorer:
                 continue
             if source and n.source != source:
                 # Also check parent_doc property
-                if n.properties.get("parent_doc") != source and n.properties.get("_table_name") != source:
+                if (
+                    n.properties.get("parent_doc") != source
+                    and n.properties.get("_table_name") != source
+                ):
                     continue
             filtered.append(n)
 
@@ -117,38 +120,44 @@ class GraphExplorer:
                 other = e.target_id if e.source_id == n.id else e.source_id
                 if other in node_ids:
                     seen_edges.add(e.id)
-                    edge_dicts.append({
-                        "id": e.id,
-                        "source": e.source_id,
-                        "target": e.target_id,
-                        "kind": str(e.kind),
-                        "weight": e.weight,
-                    })
+                    edge_dicts.append(
+                        {
+                            "id": e.id,
+                            "source": e.source_id,
+                            "target": e.target_id,
+                            "kind": str(e.kind),
+                            "weight": e.weight,
+                        }
+                    )
 
         # Build node dicts
         node_dicts: list[dict[str, object]] = []
         for n in filtered:
             edges = await self._backend.get_edges(n.id)
-            node_dicts.append({
-                "id": n.id,
-                "label": n.title,
-                "kind": str(n.kind),
-                "tags": n.tags,
-                "size": len(edges),  # edge count as size
-                "properties": dict(n.properties),
-                "content_preview": n.content[:100] if n.content else "",
-            })
+            node_dicts.append(
+                {
+                    "id": n.id,
+                    "label": n.title,
+                    "kind": str(n.kind),
+                    "tags": n.tags,
+                    "size": len(edges),  # edge count as size
+                    "properties": dict(n.properties),
+                    "content_preview": n.content[:100] if n.content else "",
+                }
+            )
 
         # Community nodes
         comm_dicts: list[dict[str, object]] = []
         for n in filtered:
             if n.kind == NodeKind.COMMUNITY:
-                comm_dicts.append({
-                    "id": n.id,
-                    "label": n.title,
-                    "member_count": int(n.properties.get("member_count", "0")),
-                    "summary_preview": n.content[:200] if n.content else "",
-                })
+                comm_dicts.append(
+                    {
+                        "id": n.id,
+                        "label": n.title,
+                        "member_count": int(n.properties.get("member_count", "0")),
+                        "summary_preview": n.content[:200] if n.content else "",
+                    }
+                )
 
         stats = await self.get_graph_stats(source=source)
         return GraphData(
@@ -272,15 +281,17 @@ class GraphExplorer:
                 if ent:
                     # Try to find mention position in chunk content
                     start = chunk.content.find(ent.title) if chunk.content else -1
-                    entities.append({
-                        "entity": {
-                            "id": ent.id,
-                            "title": ent.title,
-                            "kind": str(ent.kind),
-                            "tags": ent.tags,
-                        },
-                        "mention_span": (start, start + len(ent.title)) if start >= 0 else None,
-                    })
+                    entities.append(
+                        {
+                            "entity": {
+                                "id": ent.id,
+                                "title": ent.title,
+                                "kind": str(ent.kind),
+                                "tags": ent.tags,
+                            },
+                            "mention_span": (start, start + len(ent.title)) if start >= 0 else None,
+                        }
+                    )
 
         # Prev/next chunks via NEXT_CHUNK edges
         prev_chunk: Node | None = None
@@ -357,10 +368,7 @@ class GraphExplorer:
         primary_key = node.properties.get("_primary_key", "id")
 
         # Extract column values (exclude internal properties)
-        columns = {
-            k: v for k, v in node.properties.items()
-            if not k.startswith("_")
-        }
+        columns = {k: v for k, v in node.properties.items() if not k.startswith("_")}
 
         # FK-linked rows
         related_rows: list[tuple[Node, object]] = []
@@ -456,7 +464,8 @@ class GraphExplorer:
 
         if source:
             all_nodes = [
-                n for n in all_nodes
+                n
+                for n in all_nodes
                 if n.source == source
                 or n.properties.get("parent_doc") == source
                 or n.properties.get("_table_name") == source
@@ -508,9 +517,7 @@ class GraphExplorer:
 
     # --- Internal helpers ---
 
-    async def _bfs_subgraph(
-        self, root_id: str, max_depth: int, max_nodes: int
-    ) -> list[Node]:
+    async def _bfs_subgraph(self, root_id: str, max_depth: int, max_nodes: int) -> list[Node]:
         """BFS from root to collect subgraph."""
         from collections import deque
 

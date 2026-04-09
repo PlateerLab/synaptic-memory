@@ -2,7 +2,7 @@
 
 import pytest
 
-from synaptic import SynapticGraph, NodeKind, EdgeKind
+from synaptic import EdgeKind, NodeKind, SynapticGraph
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
 from synaptic.extensions.entity_resolver import EntityResolver, _title_similarity

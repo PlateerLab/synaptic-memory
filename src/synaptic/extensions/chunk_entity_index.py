@@ -34,7 +34,7 @@ class ChunkEntityIndex:
         index.entities_for_chunk("chunk_001")   # {"entity_042"}
     """
 
-    __slots__ = ("_entity_to_chunks", "_chunk_to_entities")
+    __slots__ = ("_chunk_to_entities", "_entity_to_chunks")
 
     def __init__(self) -> None:
         self._entity_to_chunks: dict[str, set[str]] = defaultdict(set)

@@ -93,10 +93,7 @@ class LLMReranker:
             content = an.node.content[:200] if an.node.content else ""
             candidate_texts.append(f"[{i}] {title}: {content}")
 
-        user_prompt = (
-            f"질문: {query}\n\n"
-            f"후보 문서:\n" + "\n".join(candidate_texts)
-        )
+        user_prompt = f"질문: {query}\n\n후보 문서:\n" + "\n".join(candidate_texts)
 
         try:
             response = await self._llm.generate(

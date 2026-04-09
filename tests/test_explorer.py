@@ -2,11 +2,14 @@
 
 import pytest
 
-from synaptic import SynapticGraph, NodeKind, EdgeKind
+from synaptic import EdgeKind, NodeKind, SynapticGraph
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
-from synaptic.explorer import GraphExplorer
-from synaptic.models import GraphData, NodeDetail, EntityContext, ChunkDetail, EdgeDetail, TableRowDetail, GraphStats
+from synaptic.models import (
+    GraphData,
+    GraphStats,
+    NodeDetail,
+)
 
 
 @pytest.fixture
@@ -40,7 +43,11 @@ async def populated_graph():
     # Add table data
     await graph.add_table(
         "service",
-        [{"name": "id", "type": "int"}, {"name": "name", "type": "str"}, {"name": "port", "type": "int"}],
+        [
+            {"name": "id", "type": "int"},
+            {"name": "name", "type": "str"},
+            {"name": "port", "type": "int"},
+        ],
         [
             {"id": 1, "name": "PostgreSQL", "port": 5432},
             {"id": 2, "name": "Redis", "port": 6379},
@@ -48,8 +55,12 @@ async def populated_graph():
     )
 
     # Add community node
-    comm = await graph.add("Community DB", "database related nodes", kind=NodeKind.COMMUNITY,
-                           properties={"member_count": "3"})
+    comm = await graph.add(
+        "Community DB",
+        "database related nodes",
+        kind=NodeKind.COMMUNITY,
+        properties={"member_count": "3"},
+    )
     await graph.link(entity.id, comm.id, kind=EdgeKind.PART_OF, weight=0.5)
 
     return graph, idx, {"chunks": chunks, "entity": entity, "entity2": entity2, "community": comm}

@@ -2,7 +2,7 @@
 
 import pytest
 
-from synaptic import SynapticGraph, NodeKind, EdgeKind
+from synaptic import EdgeKind, NodeKind, SynapticGraph
 from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
 from synaptic.extensions.table_ingester import TableIngester, _row_to_natural_language
 
@@ -91,7 +91,10 @@ class TestTableIngesterIntegration:
         # Need to use same ingester instance so node_cache is shared
         await ingester.ingest(graph, "category", cat_cols, cat_rows)
         prod_nodes = await ingester.ingest(
-            graph, "product2", prod_cols, prod_rows,
+            graph,
+            "product2",
+            prod_cols,
+            prod_rows,
             foreign_keys={"category_id": ("category", "id")},
         )
 

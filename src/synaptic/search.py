@@ -6,7 +6,7 @@ import math
 from time import time
 from typing import TYPE_CHECKING
 
-from synaptic.models import ActivatedNode, EdgeKind, Node, NodeKind, SearchResult
+from synaptic.models import ActivatedNode, Node, NodeKind, SearchResult
 from synaptic.ppr import personalized_pagerank, personalized_pagerank_v2
 from synaptic.protocols import QueryRewriter, StorageBackend
 from synaptic.resonance import ResonanceScorer
@@ -260,7 +260,7 @@ class HybridSearch:
             ]
             if entity_ids:
                 chunk_scores = self._chunk_entity_index.chunks_for_entities(entity_ids)
-                for chunk_id, overlap_count in list(chunk_scores.items())[:limit * 2]:
+                for chunk_id, overlap_count in list(chunk_scores.items())[: limit * 2]:
                     if chunk_id not in all_nodes:
                         chunk_node = await backend.get_node(chunk_id)
                         if chunk_node:

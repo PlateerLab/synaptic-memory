@@ -2,12 +2,11 @@
 
 import pytest
 
-from synaptic import SynapticGraph, NodeKind, EdgeKind
+from synaptic import EdgeKind, NodeKind, SynapticGraph
 from synaptic.backends.memory import MemoryBackend
-from synaptic.extensions.community import CommunityDetector, Community
+from synaptic.extensions.community import Community, CommunityDetector
 from synaptic.extensions.dual_level_search import DualLevelSearch
 from synaptic.search import HybridSearch
-
 
 # --- CommunityDetector ---
 
@@ -110,6 +109,7 @@ class TestDualLevelSearch:
     async def test_search_local(self, dual_search):
         backend = MemoryBackend()
         from synaptic.models import Node
+
         await backend.save_node(
             Node(title="PostgreSQL Guide", content="database guide", kind=NodeKind.CONCEPT)
         )
@@ -120,6 +120,7 @@ class TestDualLevelSearch:
     async def test_search_global(self, dual_search):
         backend = MemoryBackend()
         from synaptic.models import Node
+
         await backend.save_node(
             Node(title="Community Overview", content="overall summary", kind=NodeKind.COMMUNITY)
         )
@@ -130,9 +131,8 @@ class TestDualLevelSearch:
     async def test_search_hybrid_level(self, dual_search):
         backend = MemoryBackend()
         from synaptic.models import Node
-        await backend.save_node(
-            Node(title="Test", content="content", kind=NodeKind.CONCEPT)
-        )
+
+        await backend.save_node(Node(title="Test", content="content", kind=NodeKind.CONCEPT))
 
         result = await dual_search.search(backend, "test query", level="hybrid")
         assert "dual_level" in result.stages_used
@@ -140,9 +140,8 @@ class TestDualLevelSearch:
     async def test_search_auto(self, dual_search):
         backend = MemoryBackend()
         from synaptic.models import Node
-        await backend.save_node(
-            Node(title="PostgreSQL", content="database", kind=NodeKind.CONCEPT)
-        )
+
+        await backend.save_node(Node(title="PostgreSQL", content="database", kind=NodeKind.CONCEPT))
 
         result = await dual_search.search(backend, "PostgreSQL 성능")
         assert result is not None
@@ -150,9 +149,8 @@ class TestDualLevelSearch:
     async def test_local_filters_community_nodes(self, dual_search):
         backend = MemoryBackend()
         from synaptic.models import Node
-        await backend.save_node(
-            Node(title="Entity", content="real content", kind=NodeKind.ENTITY)
-        )
+
+        await backend.save_node(Node(title="Entity", content="real content", kind=NodeKind.ENTITY))
         await backend.save_node(
             Node(title="Community 1", content="summary", kind=NodeKind.COMMUNITY)
         )

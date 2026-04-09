@@ -115,9 +115,8 @@ class EntityResolver:
                 # Combined score
                 if embed_sim > 0:
                     combined = (
-                        (1 - self._embedding_weight) * title_sim
-                        + self._embedding_weight * embed_sim
-                    )
+                        1 - self._embedding_weight
+                    ) * title_sim + self._embedding_weight * embed_sim
                 else:
                     combined = title_sim
 
@@ -163,8 +162,7 @@ class EntityResolver:
                     chunk_idx.unregister_entity(remove_id)
 
                 logger.info(
-                    f"Merged entity '{to_remove.title}' into '{kept.title}' "
-                    f"(similarity={sim:.2f})"
+                    f"Merged entity '{to_remove.title}' into '{kept.title}' (similarity={sim:.2f})"
                 )
 
         if merged:
@@ -201,8 +199,7 @@ class EntityResolver:
                     embed_sim = _cosine_sim(a.embedding, b.embedding)
 
                 combined = (
-                    (1 - self._embedding_weight) * title_sim
-                    + self._embedding_weight * embed_sim
+                    (1 - self._embedding_weight) * title_sim + self._embedding_weight * embed_sim
                     if embed_sim > 0
                     else title_sim
                 )

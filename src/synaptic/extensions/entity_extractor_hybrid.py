@@ -87,9 +87,7 @@ class HybridEntityExtractor:
             existing_entities = self._spacy.extract_entities(text)
             existing_names = [e.text for e in existing_entities]
 
-            additional_ids = await self._llm_enrich(
-                graph, node_id, text, existing_names
-            )
+            additional_ids = await self._llm_enrich(graph, node_id, text, existing_names)
             entity_node_ids.extend(additional_ids)
 
         return entity_node_ids
@@ -140,9 +138,7 @@ class HybridEntityExtractor:
                     tags=["_llm_enriched", f"_label:{label}"],
                 )
 
-                await graph.link(
-                    chunk_id, entity_node.id, kind=EdgeKind.MENTIONS, weight=0.7
-                )
+                await graph.link(chunk_id, entity_node.id, kind=EdgeKind.MENTIONS, weight=0.7)
                 additional_ids.append(entity_node.id)
 
                 if chunk_entity_index is not None:
@@ -158,9 +154,7 @@ class HybridEntityExtractor:
                 # Find entity nodes by title
                 subj_node = None
                 obj_node = None
-                all_entities = await graph.backend.list_nodes(
-                    kind=NodeKind.ENTITY, limit=1000
-                )
+                all_entities = await graph.backend.list_nodes(kind=NodeKind.ENTITY, limit=1000)
                 for n in all_entities:
                     if n.title.lower() == subj.lower():
                         subj_node = n

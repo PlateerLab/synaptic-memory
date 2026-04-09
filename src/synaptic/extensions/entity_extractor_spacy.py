@@ -177,9 +177,7 @@ class SpaCyEntityExtractor:
         try:
             import spacy
 
-            nlp_with_parser = spacy.load(
-                "ko_core_news_lg" if lang == "ko" else "en_core_web_sm"
-            )
+            nlp_with_parser = spacy.load("ko_core_news_lg" if lang == "ko" else "en_core_web_sm")
         except (ImportError, OSError):
             return []
 
@@ -204,10 +202,7 @@ class SpaCyEntityExtractor:
                         subj_text = _normalize(subj.text)
                         obj_text = _normalize(obj.text)
                         # Only keep relations involving known entities
-                        if (
-                            subj_text.lower() in entity_texts
-                            or obj_text.lower() in entity_texts
-                        ):
+                        if subj_text.lower() in entity_texts or obj_text.lower() in entity_texts:
                             relations.append(
                                 ExtractedRelation(
                                     subject=subj_text,
@@ -250,9 +245,7 @@ class SpaCyEntityExtractor:
             return []
 
         entity_node_ids: list[str] = []
-        chunk_entity_index: ChunkEntityIndex | None = getattr(
-            graph, "_chunk_entity_index", None
-        )
+        chunk_entity_index: ChunkEntityIndex | None = getattr(graph, "_chunk_entity_index", None)
 
         for entity in entities:
             normalized_key = entity.text.lower()

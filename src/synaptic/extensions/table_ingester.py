@@ -58,7 +58,7 @@ def _row_title(table_name: str, row: dict[str, Any], primary_key: str) -> str:
     pk_val = row.get(primary_key, "")
     # Try to find a more descriptive column (name, title, etc.)
     for col in ("name", "title", "label", "이름", "제목"):
-        if col in row and row[col]:
+        if row.get(col):
             return f"{table_name}:{row[col]}"
     return f"{table_name}:{pk_val}"
 
@@ -121,18 +121,14 @@ class TableIngester:
 
         # Step 2: Create nodes for each row
         nodes: list[Node] = []
-        chunk_entity_index: ChunkEntityIndex | None = getattr(
-            graph, "_chunk_entity_index", None
-        )
+        chunk_entity_index: ChunkEntityIndex | None = getattr(graph, "_chunk_entity_index", None)
 
         for row in rows:
             title = _row_title(table_name, row, primary_key)
             content = _row_to_natural_language(table_name, row)
 
             # Store all column values as properties
-            properties: dict[str, str] = {
-                str(k): str(v) for k, v in row.items() if v is not None
-            }
+            properties: dict[str, str] = {str(k): str(v) for k, v in row.items() if v is not None}
             properties["_table_name"] = table_name
             properties["_primary_key"] = primary_key
 
@@ -173,13 +169,10 @@ class TableIngester:
                         weight=0.8,
                     )
                 else:
-                    logger.debug(
-                        f"FK target not found: {target_table}.{target_col}={fk_val}"
-                    )
+                    logger.debug(f"FK target not found: {target_table}.{target_col}={fk_val}")
 
         logger.info(
-            f"Ingested table '{table_name}': {len(nodes)} rows, "
-            f"{len(foreign_keys)} FK definitions"
+            f"Ingested table '{table_name}': {len(nodes)} rows, {len(foreign_keys)} FK definitions"
         )
         return nodes
 

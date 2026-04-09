@@ -35,6 +35,7 @@ class _EmbedFromBatchMixin:
             vec = results[0]
             # NaN 방어
             import math
+
             if any(math.isnan(v) for v in vec):
                 logger.warning("NaN in embedding, returning zero vector")
                 return [0.0] * len(vec)

@@ -2,7 +2,7 @@
 
 import pytest
 
-from synaptic import SynapticGraph, NodeKind
+from synaptic import SynapticGraph
 from synaptic.extensions.query_decomposer import QueryDecomposer
 
 

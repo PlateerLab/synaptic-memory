@@ -33,9 +33,7 @@ _RE_KO_CONJUNCTION = re.compile(
 )
 
 # English conjunction patterns
-_RE_EN_CONJUNCTION = re.compile(
-    r"\s+(?:and|or|versus)\s+|\s+vs\.?\s+", re.IGNORECASE
-)
+_RE_EN_CONJUNCTION = re.compile(r"\s+(?:and|or|versus)\s+|\s+vs\.?\s+", re.IGNORECASE)
 
 # Comparison/contrast keywords — the query asks to compare items
 _RE_COMPARISON = re.compile(

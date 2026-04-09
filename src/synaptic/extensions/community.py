@@ -29,7 +29,6 @@ from synaptic.models import EdgeKind, Node, NodeKind
 if TYPE_CHECKING:
     from synaptic.extensions.llm_provider import LLMProvider
     from synaptic.graph import SynapticGraph
-    from synaptic.protocols import StorageBackend
 
 logger = logging.getLogger("community-detector")
 
@@ -98,7 +97,8 @@ class CommunityDetector:
         # Gather all non-internal nodes
         all_nodes = await backend.list_nodes(limit=100_000)
         nodes = [
-            n for n in all_nodes
+            n
+            for n in all_nodes
             if n.kind not in (NodeKind.TYPE_DEF, NodeKind.COMMUNITY)
             and "_phrase" not in (n.tags or [])
         ]
@@ -212,9 +212,7 @@ class CommunityDetector:
         next_comm = len(nodes)
 
         # Total edge weight
-        total_weight = sum(
-            sum(weights.values()) for weights in adj.values()
-        ) / 2.0
+        total_weight = sum(sum(weights.values()) for weights in adj.values()) / 2.0
         if total_weight == 0:
             return [[nid] for nid in nodes]
 
@@ -267,7 +265,7 @@ class CommunityDetector:
         adj: dict[str, dict[str, float]],
     ) -> list[list[str]]:
         """Leiden community detection using igraph + leidenalg."""
-        import igraph  # noqa: F401 — raises ImportError if not installed
+        import igraph
         import leidenalg
 
         nodes = list(node_ids)
@@ -318,9 +316,7 @@ class CommunityDetector:
             return extractive
 
         # LLM summary
-        nodes_text = "\n".join(
-            f"- {m.title}: {m.content[:200]}" for m in members[:10]
-        )
+        nodes_text = "\n".join(f"- {m.title}: {m.content[:200]}" for m in members[:10])
         prompt = _LLM_SUMMARY_PROMPT.format(nodes_text=nodes_text)
 
         try:

@@ -26,11 +26,31 @@ if TYPE_CHECKING:
 # Keywords that suggest global/abstract queries
 _GLOBAL_HINTS = {
     # Korean
-    "전체", "요약", "개요", "트렌드", "경향", "패턴", "주요", "핵심",
-    "전반적", "대략", "종합", "정리", "무엇이", "어떤",
+    "전체",
+    "요약",
+    "개요",
+    "트렌드",
+    "경향",
+    "패턴",
+    "주요",
+    "핵심",
+    "전반적",
+    "대략",
+    "종합",
+    "정리",
+    "무엇이",
+    "어떤",
     # English
-    "overview", "summary", "trend", "overall", "general", "main",
-    "key", "major", "pattern", "comprehensive",
+    "overview",
+    "summary",
+    "trend",
+    "overall",
+    "general",
+    "main",
+    "key",
+    "major",
+    "pattern",
+    "comprehensive",
 }
 
 # Named entity indicators (suggest local search)
@@ -103,13 +123,13 @@ class DualLevelSearch:
     ) -> SearchResult:
         """Local search: entity/chunk level, exclude community nodes."""
         result = await self._hybrid.search(
-            backend, query, limit=limit, embedding=embedding,
+            backend,
+            query,
+            limit=limit,
+            embedding=embedding,
         )
         # Filter out community nodes
-        filtered = [
-            a for a in result.nodes
-            if a.node.kind != NodeKind.COMMUNITY
-        ]
+        filtered = [a for a in result.nodes if a.node.kind != NodeKind.COMMUNITY]
         return SearchResult(
             query=result.query,
             nodes=filtered[:limit],
@@ -128,7 +148,10 @@ class DualLevelSearch:
     ) -> SearchResult:
         """Global search: community summaries only."""
         result = await self._hybrid.search(
-            backend, query, limit=limit * 2, embedding=embedding,
+            backend,
+            query,
+            limit=limit * 2,
+            embedding=embedding,
             node_kinds=[NodeKind.COMMUNITY],
         )
         return SearchResult(
