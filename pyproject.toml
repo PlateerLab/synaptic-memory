@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synaptic-memory"
-version = "0.10.0"
+version = "0.11.0"
 description = "Brain-inspired knowledge graph for LLM agents — PPR, evidence chain, auto-ontology (rule/embedding/LLM), Hebbian learning, memory consolidation."
 license = "MIT"
 requires-python = ">=3.12"
@@ -86,7 +86,23 @@ eval = [
 ]
 
 [tool.hatch.build.targets.sdist]
-exclude = [".claude/", "tests/benchmark/data/", "tests/qa/data/", "dist/"]
+include = [
+    "src/",
+    "tests/",
+    "docs/",
+    ".github/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "CLAUDE.md",
+    "pyproject.toml",
+    "docker-compose.yml",
+]
+exclude = [
+    "tests/benchmark/data/",
+    "tests/qa/data/",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/synaptic"]
