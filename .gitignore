@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 tests/benchmark/data/*.json
 .claude/
+tmp/
+마사회/
+eval/data/raw/
+eval/data/parsed/
+eval/results/
+.DS_Store
+~/

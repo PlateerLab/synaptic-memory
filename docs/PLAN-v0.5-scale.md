@@ -1,5 +1,10 @@
 # Synaptic Memory v0.5 — 10TB+ Scale Architecture
 
+> **ARCHIVED (v0.11.0)** — 이 문서는 Neo4j 기반 scale-out 설계를 담고 있으며
+> 역사적 참고용으로 보존합니다. v0.11.0부터 Neo4j는 제거되었고
+> **KuzuBackend** (임베디드) + Qdrant + MinIO 조합이 기본 권장 경로입니다.
+> 새 설계는 `CHANGELOG.md`의 `[0.11.0]` 항목을 참고하세요.
+
 ## 현재 상태
 
 v0.4.0 — 3개 backend (Memory, SQLite, PostgreSQL), Protocol 기반 확장 구조 완성.

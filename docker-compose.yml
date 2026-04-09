@@ -1,15 +1,6 @@
+# Optional services for CompositeBackend scale-out tests.
+# Kuzu is embedded (`pip install synaptic-memory[kuzu]`) and needs no container.
 services:
-  neo4j:
-    image: neo4j:5-community
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    environment:
-      NEO4J_AUTH: neo4j/password
-      NEO4J_PLUGINS: '["apoc"]'
-    volumes:
-      - neo4j_data:/data
-
   qdrant:
     image: qdrant/qdrant:v1.12
     ports:
@@ -17,6 +8,18 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    volumes:
+      - minio_data:/data
+
 volumes:
-  neo4j_data:
   qdrant_data:
+  minio_data:

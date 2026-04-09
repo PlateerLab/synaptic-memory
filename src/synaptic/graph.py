@@ -74,8 +74,8 @@ class SynapticGraph:
         "_ontology",
         "_phrase_extractor",
         "_query_decomposer",
-        "_reranker",
         "_relation_detector",
+        "_reranker",
         "_search",
         "_store",
     )
@@ -159,6 +159,37 @@ class SynapticGraph:
 
         return cls(
             SQLiteBackend(db_path),
+            classifier=RuleBasedClassifier(),
+            relation_detector=RuleBasedRelationDetector(),
+            ontology=build_agent_ontology(),
+            cache_size=cache_size,
+        )
+
+    @classmethod
+    def kuzu(
+        cls,
+        db_path: str = "synaptic.kuzu",
+        *,
+        cache_size: int = 256,
+    ) -> SynapticGraph:
+        """Kuzu embedded graph backend — native Cypher, property graph, MIT-licensed.
+
+        Kuzu runs in-process (no server, no Docker) and supports
+        openCypher, FTS, vector search, and graph algorithms via
+        bundled extensions.
+
+        Example::
+
+            graph = SynapticGraph.kuzu("knowledge.kuzu")
+            await graph.backend.connect()
+            await graph.add("Hello", "World")
+        """
+        from synaptic.backends.kuzu import KuzuBackend
+        from synaptic.extensions.classifier_rules import RuleBasedClassifier
+        from synaptic.extensions.relation_detector import RuleBasedRelationDetector
+
+        return cls(
+            KuzuBackend(db_path),
             classifier=RuleBasedClassifier(),
             relation_detector=RuleBasedRelationDetector(),
             ontology=build_agent_ontology(),
@@ -566,9 +597,7 @@ class SynapticGraph:
         corpus_size = await self._get_corpus_size()
 
         # Query decomposition: split complex queries into sub-queries
-        if self._query_decomposer is not None and hasattr(
-            self._query_decomposer, "decompose"
-        ):
+        if self._query_decomposer is not None and hasattr(self._query_decomposer, "decompose"):
             import asyncio
 
             sub_queries = await self._query_decomposer.decompose(query)
@@ -576,7 +605,10 @@ class SynapticGraph:
                 # Search each sub-query in parallel
                 tasks = [
                     self._search.search(
-                        self._backend, sq, limit=limit, embedding=embedding,
+                        self._backend,
+                        sq,
+                        limit=limit,
+                        embedding=embedding,
                         corpus_size=corpus_size,
                     )
                     for sq in sub_queries
@@ -602,9 +634,9 @@ class SynapticGraph:
                 max_rrf = max(rrf_scores.values()) if rrf_scores else 1.0
 
                 merged: list[ActivatedNode] = []
-                for nid, rrf_s in sorted(
-                    rrf_scores.items(), key=lambda x: x[1], reverse=True
-                )[:limit]:
+                for nid, rrf_s in sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[
+                    :limit
+                ]:
                     an = node_map[nid]
                     merged.append(
                         ActivatedNode(
@@ -633,14 +665,15 @@ class SynapticGraph:
                 return await self._apply_reranker(query, result, limit)
 
         result = await self._search.search(
-            self._backend, query, limit=limit, embedding=embedding,
+            self._backend,
+            query,
+            limit=limit,
+            embedding=embedding,
             corpus_size=corpus_size,
         )
         return await self._apply_reranker(query, result, limit)
 
-    async def _apply_reranker(
-        self, query: str, result: SearchResult, limit: int
-    ) -> SearchResult:
+    async def _apply_reranker(self, query: str, result: SearchResult, limit: int) -> SearchResult:
         """Apply reranker to search results if configured."""
         if self._reranker is None or not hasattr(self._reranker, "rerank"):
             return result

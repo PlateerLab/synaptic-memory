@@ -1,7 +1,10 @@
 """Composite backend integration tests.
 
-Requires: Neo4j + Qdrant + MinIO all running.
+Requires: Qdrant + MinIO running. Kuzu is embedded (no server).
 """
+
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -9,8 +12,8 @@ from synaptic.models import Edge, EdgeKind, Node
 
 try:
     from synaptic.backends.composite import CompositeBackend
+    from synaptic.backends.kuzu import KuzuBackend
     from synaptic.backends.minio_store import MinIOBackend
-    from synaptic.backends.neo4j import Neo4jBackend
     from synaptic.backends.qdrant import QdrantBackend
 
     HAS_ALL = True
@@ -19,7 +22,7 @@ except ImportError:
 
 pytestmark = [
     pytest.mark.composite,
-    pytest.mark.skipif(not HAS_ALL, reason="Missing neo4j/qdrant/minio deps"),
+    pytest.mark.skipif(not HAS_ALL, reason="Missing kuzu/qdrant/minio deps"),
 ]
 
 TEST_DIM = 4
@@ -27,7 +30,8 @@ TEST_DIM = 4
 
 @pytest.fixture
 async def backend():
-    graph = Neo4jBackend("bolt://localhost:7687", auth=("neo4j", "password"))
+    tmp_dir = tempfile.mkdtemp(prefix="kuzu-composite-")
+    graph = KuzuBackend(str(Path(tmp_dir) / "graph.kuzu"))
     vector = QdrantBackend("http://localhost:6333", collection="test_composite", dimension=TEST_DIM)
     blob = MinIOBackend(
         "localhost:9000",
@@ -44,7 +48,10 @@ async def backend():
         pytest.skip(f"Infrastructure not available: {e}")
 
     yield composite
-    await composite.clear_all()
+    try:
+        await composite.clear_all()
+    except Exception:
+        pass
     # Cleanup MinIO bucket
     try:
         client = blob._get_client()
@@ -55,6 +62,10 @@ async def backend():
     except Exception:
         pass
     await composite.close()
+    # Cleanup kuzu tmp dir
+    import shutil
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _make_node(**kwargs) -> Node:
@@ -115,13 +126,13 @@ class TestCompositeNodeCRUD:
 
 class TestCompositeSearch:
     @pytest.mark.asyncio
-    async def test_fts_routes_to_neo4j(self, backend: CompositeBackend) -> None:
+    async def test_fts_routes_to_graph(self, backend: CompositeBackend) -> None:
         await backend.save_node(_make_node(title="Docker deployment", content="K8s"))
         results = await backend.search_fts("Docker")
         assert len(results) >= 1
 
     @pytest.mark.asyncio
-    async def test_fuzzy_routes_to_neo4j(self, backend: CompositeBackend) -> None:
+    async def test_fuzzy_routes_to_graph(self, backend: CompositeBackend) -> None:
         await backend.save_node(_make_node(title="배포 자동화", content="CI/CD"))
         results = await backend.search_fuzzy("배포")
         assert len(results) >= 1
@@ -148,18 +159,25 @@ class TestCompositeSearch:
     @pytest.mark.asyncio
     async def test_vector_without_qdrant_returns_empty(self) -> None:
         """CompositeBackend without Qdrant should return empty for vector search."""
-        graph = Neo4jBackend("bolt://localhost:7687", auth=("neo4j", "password"))
+        tmp_dir = tempfile.mkdtemp(prefix="kuzu-novec-")
+        graph = KuzuBackend(str(Path(tmp_dir) / "graph.kuzu"))
         composite = CompositeBackend(graph)  # no vector backend
         try:
             await composite.connect()
         except Exception:
-            pytest.skip("Neo4j not available")
+            pytest.skip("Kuzu not available")
         try:
             results = await composite.search_vector([1.0, 0.0, 0.0, 0.0])
             assert results == []
         finally:
-            await graph.clear_all()
+            try:
+                await graph.clear_all()
+            except Exception:
+                pass
             await composite.close()
+            import shutil
+
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 class TestCompositeGraphTraversal:

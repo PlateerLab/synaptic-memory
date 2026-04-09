@@ -12,17 +12,24 @@ Thanks for your interest in contributing! This guide will help you get started.
 ```bash
 git clone https://github.com/PlateerLab/synaptic-memory.git
 cd synaptic-memory
-uv sync --extra dev --extra sqlite --extra neo4j --extra qdrant --extra minio
+uv sync --extra dev --extra sqlite --extra kuzu --extra qdrant --extra minio
 ```
 
 ## Running Tests
 
 ```bash
-# All tests (requires external services: Neo4j, Qdrant, MinIO)
-uv run pytest tests/ -v
+# Fast local suite (no external infra — uses Memory/SQLite/Kuzu embedded backends)
+uv run pytest tests/ \
+  --ignore=tests/test_backend_postgresql.py \
+  --ignore=tests/test_backend_qdrant.py \
+  --ignore=tests/test_backend_minio.py \
+  --ignore=tests/test_backend_composite.py \
+  --ignore=tests/benchmark \
+  --ignore=tests/qa -v
 
-# Skip external backends (recommended for most contributors)
-uv run pytest tests/ --ignore=tests/test_backend_postgresql.py --ignore=tests/benchmark --ignore=tests/qa -v
+# Full suite (requires Qdrant + MinIO + PostgreSQL running)
+docker-compose up -d qdrant minio
+uv run pytest tests/ -v
 ```
 
 ## Linting
@@ -69,7 +76,7 @@ src/synaptic/
 ├── ontology.py        # Type hierarchy & constraints
 ├── activity.py        # Agent activity tracking
 ├── models.py          # Core data models
-└── backends/          # Storage backends (Memory, SQLite, PostgreSQL, Neo4j, Qdrant, MinIO)
+└── backends/          # Storage backends (Memory, SQLite, Kuzu, PostgreSQL, Qdrant, MinIO)
 ```
 
 ## Questions?

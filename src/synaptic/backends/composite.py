@@ -1,9 +1,10 @@
-"""Composite backend — routes operations to Neo4j + Qdrant + MinIO."""
+"""Composite backend — routes operations to Kuzu + Qdrant + MinIO."""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from typing import Any
 
 from synaptic.models import (
     ConsolidationLevel,
@@ -16,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Import types conditionally for type checking
 try:
-    from synaptic.backends.neo4j import Neo4jBackend
+    from synaptic.backends.kuzu import KuzuBackend
 except ImportError:
-    Neo4jBackend = None  # type: ignore[assignment,misc]
+    KuzuBackend = None  # type: ignore[assignment,misc]
 
 try:
     from synaptic.backends.qdrant import QdrantBackend
@@ -36,7 +37,7 @@ _BLOB_PREFIX = "blob://"
 class CompositeBackend:
     """Routes storage operations to specialized backends.
 
-    - Neo4j: node/edge CRUD, FTS, fuzzy, graph traversal
+    - Kuzu: node/edge CRUD, FTS, fuzzy, graph traversal (embedded)
     - Qdrant: vector embedding search (optional)
     - MinIO: large content blob storage (optional)
 
@@ -47,10 +48,10 @@ class CompositeBackend:
 
     def __init__(
         self,
-        graph: Neo4jBackend,  # type: ignore[valid-type]
+        graph: Any,  # KuzuBackend or any StorageBackend
         *,
-        vector: QdrantBackend | None = None,  # type: ignore[valid-type]
-        blob: MinIOBackend | None = None,  # type: ignore[valid-type]
+        vector: Any | None = None,  # QdrantBackend
+        blob: Any | None = None,  # MinIOBackend
         blob_threshold: int = 100_000,  # 100KB
     ) -> None:
         self._graph = graph

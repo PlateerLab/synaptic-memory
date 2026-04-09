@@ -6,9 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-09
+
+### Added
+- **KuzuBackend** — embedded property graph database using Kuzu 0.11.3.
+  Native openCypher, FTS extension (Okapi BM25), and built-in graph traversal.
+  Zero-config deployment (`pip install synaptic-memory[kuzu]` — no Docker, no server).
+- `SynapticGraph.kuzu(db_path)` factory method for one-line setup.
+- `tests/test_backend_kuzu.py` — 25 unit tests covering CRUD, search, traversal,
+  batch ops, and maintenance. Runs in CI without external infrastructure.
+
+### Removed — BREAKING
+- **Neo4jBackend removed.** GPLv3 licensing on Neo4j Community, clustering limits,
+  and operational overhead did not fit an MIT-licensed embedded library.
+  Users still needing Neo4j can depend on the `neo4j` driver directly and
+  implement the `StorageBackend` protocol themselves.
+- `synaptic-memory[neo4j]` optional dependency removed.
+- `tests/test_backend_neo4j.py` deleted.
+- `docker-compose.yml` Neo4j service removed.
+- `pytest.mark.neo4j` marker removed.
+
 ### Changed
+- `CompositeBackend` now routes graph operations to Kuzu by default.
+- `SynapticGraph.full(...)` and the scale preset reference Kuzu in docstrings.
+- `pyproject.toml` — `scale` and `all` extras swap `neo4j>=5.25` for `kuzu>=0.11.0`.
+- README Quick Start reorganized with Kuzu as the recommended embedded backend.
 - Refactored README Quick Start to use factory functions.
 - Refactored public API: factory functions, type stubs, reduced code duplication.
+
+### Migration guide
+- **Before:** `SynapticGraph(Neo4jBackend("bolt://localhost:7687", auth=("neo4j", "password")))`
+- **After:** `SynapticGraph.kuzu("knowledge.kuzu")`
+
+The Kuzu backend implements the same `StorageBackend` + `GraphTraversal`
+protocols so Phase-level graph operations (PPR, Hebbian, consolidation)
+work identically.
 
 ## [0.7.0] - 2026-03-22
 

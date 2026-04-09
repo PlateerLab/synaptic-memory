@@ -202,17 +202,30 @@ await graph.add("Deployment Strategy", "Blue-green deployment for zero downtime"
 result = await graph.search("deployment approach")
 ```
 
-### 5. Scale — CompositeBackend
+### 5. Kuzu — Embedded Property Graph
+
+```python
+from synaptic import SynapticGraph
+
+graph = SynapticGraph.kuzu("knowledge.kuzu")
+await graph.backend.connect()
+await graph.add("Deploy Policy", "Auto-deploy after PR merge")
+```
+
+Kuzu runs in-process (like SQLite for graphs) — native openCypher, FTS
+and vector indexes via bundled extensions, no server required. MIT licensed.
+
+### 6. Scale — CompositeBackend
 
 ```python
 from synaptic import SynapticGraph
 from synaptic.backends.composite import CompositeBackend
-from synaptic.backends.neo4j import Neo4jBackend
+from synaptic.backends.kuzu import KuzuBackend
 from synaptic.backends.qdrant import QdrantBackend
 from synaptic.backends.minio_store import MinIOBackend
 
 composite = CompositeBackend(
-    graph=Neo4jBackend("bolt://localhost:7687"),
+    graph=KuzuBackend("knowledge.kuzu"),
     vector=QdrantBackend("http://localhost:6333"),
     blob=MinIOBackend("localhost:9000", access_key="minio", secret_key="secret"),
 )
@@ -221,7 +234,7 @@ await composite.connect()
 graph = SynapticGraph.full(composite, embed_api_base="http://gpu-server:8080/v1")
 
 # Internal routing:
-# - embedding → Qdrant, content > 100KB → MinIO, everything else → Neo4j
+# - embedding → Qdrant, content > 100KB → MinIO, everything else → Kuzu
 ```
 
 ---
@@ -248,8 +261,9 @@ SynapticGraph (Facade)
        │
   ┌────┼──────────┬───────────────┬──────────────┐
   │    │          │               │              │
-Memory SQLite  PostgreSQL     Neo4j       CompositeBackend
-(dev)  (FTS5)  (pgvector)   (Cypher)    (Neo4j+Qdrant+MinIO)
+Memory SQLite  PostgreSQL      Kuzu       CompositeBackend
+(dev)  (FTS5)  (pgvector)   (embedded    (Kuzu+Qdrant+MinIO)
+                             Cypher)
 ```
 
 ---
@@ -306,12 +320,12 @@ knowledge                          agent_activity
 | Backend | Graph Traversal | Vector Search | Scale | Use Case |
 |---------|----------------|--------------|-------|----------|
 | `MemoryBackend` | Python BFS | cosine | ~10K | Testing |
-| `SQLiteBackend` | CTE recursive | - | ~100K | Embedded |
-| `PostgreSQLBackend` | CTE recursive | pgvector HNSW | ~1M | Production |
-| `Neo4jBackend` | Cypher native | - | ~10B | Large-scale graph |
+| `SQLiteBackend` | CTE recursive | - | ~100K | Embedded (no graph) |
+| `KuzuBackend` | Cypher (embedded) | HNSW (optional) | ~10M | **Embedded graph (recommended)** |
+| `PostgreSQLBackend` | CTE recursive | pgvector HNSW | ~1M | Production (single DB stack) |
 | `QdrantBackend` | - | HNSW + quantization | ~10B | Vector-only |
 | `MinIOBackend` | - | - | ~10TB | Blob (S3-compatible) |
-| `CompositeBackend` | Neo4j | Qdrant | Unlimited | **Unified router** |
+| `CompositeBackend` | Kuzu | Qdrant | Unlimited | **Unified router** |
 
 ## MCP Server — 16 Tools
 

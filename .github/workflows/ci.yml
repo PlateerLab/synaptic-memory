@@ -54,13 +54,12 @@ jobs:
           restore-keys: uv-${{ runner.os }}-
 
       - name: Install dependencies
-        run: uv sync --extra dev --extra sqlite
+        run: uv sync --extra dev --extra sqlite --extra kuzu --extra embedding
 
       - name: Run tests
         run: |
           uv run pytest tests/ \
             --ignore=tests/test_backend_postgresql.py \
-            --ignore=tests/test_backend_neo4j.py \
             --ignore=tests/test_backend_qdrant.py \
             --ignore=tests/test_backend_minio.py \
             --ignore=tests/test_backend_composite.py \

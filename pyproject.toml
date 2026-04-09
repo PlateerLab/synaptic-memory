@@ -21,8 +21,9 @@ keywords = [
     "hybrid-search",
     "ontology",
     "mcp",
-    "neo4j",
+    "kuzu",
     "qdrant",
+    "cypher",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -49,7 +50,7 @@ synaptic-mcp = "synaptic.mcp.server:main"
 [project.optional-dependencies]
 sqlite = ["aiosqlite>=0.20"]
 postgresql = ["asyncpg>=0.30", "pgvector>=0.3"]
-neo4j = ["neo4j>=5.25"]
+kuzu = ["kuzu>=0.11.0"]
 qdrant = ["qdrant-client>=1.12"]
 minio = ["miniopy-async>=1.21"]
 embedding = ["aiohttp>=3.9"]
@@ -57,7 +58,7 @@ spacy = ["spacy>=3.7"]
 rag = ["spacy>=3.7", "aiohttp>=3.9"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
 scale = [
-    "neo4j>=5.25",
+    "kuzu>=0.11.0",
     "qdrant-client>=1.12",
     "miniopy-async>=1.21",
     "aiohttp>=3.9",
@@ -66,7 +67,7 @@ all = [
     "aiosqlite>=0.20",
     "asyncpg>=0.30",
     "pgvector>=0.3",
-    "neo4j>=5.25",
+    "kuzu>=0.11.0",
     "qdrant-client>=1.12",
     "miniopy-async>=1.21",
     "aiohttp>=3.9",
@@ -95,10 +96,10 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "integration: PostgreSQL integration tests (require running PG server)",
-    "neo4j: Neo4j integration tests (require running Neo4j server)",
+    "kuzu: Kuzu embedded backend tests (require kuzu installed)",
     "qdrant: Qdrant integration tests (require running Qdrant server)",
     "minio: MinIO integration tests (require running MinIO server)",
-    "composite: Composite backend integration tests (require Neo4j + Qdrant + MinIO)",
+    "composite: Composite backend integration tests (require Kuzu + Qdrant + MinIO)",
     "qa: Quality assurance tests with real external data",
 ]
 

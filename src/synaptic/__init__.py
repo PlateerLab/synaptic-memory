@@ -33,9 +33,9 @@ Backends
 --------
 - ``MemoryBackend`` — testing/development (zero-dep)
 - ``SQLiteBackend`` — lightweight production (``pip install synaptic-memory[sqlite]``)
-- ``PostgreSQLBackend`` — production (``pip install synaptic-memory[postgresql]``)
-- ``Neo4jBackend`` — graph traversal (``pip install synaptic-memory[neo4j]``)
-- ``CompositeBackend`` — Neo4j + Qdrant + MinIO combined (``pip install synaptic-memory[scale]``)
+- ``KuzuBackend`` — embedded property graph DB (``pip install synaptic-memory[kuzu]``)
+- ``PostgreSQLBackend`` — production with pgvector (``pip install synaptic-memory[postgresql]``)
+- ``CompositeBackend`` — Kuzu + Qdrant + MinIO combined (``pip install synaptic-memory[scale]``)
 """
 
 from __future__ import annotations
@@ -85,13 +85,13 @@ from synaptic.protocols import (
 )
 from synaptic.resonance import ResonanceWeights
 
-__version__ = "0.9.0"
+__version__ = "0.11.0"
 
 __all__ = [
     "ActivatedNode",
     "ActivityTracker",
-    "ChunkEntityIndex",
     "AgentSearch",
+    "ChunkEntityIndex",
     "ClassificationResult",
     "ConsolidationLevel",
     "DigestResult",
@@ -106,6 +106,7 @@ __all__ = [
     "EvidenceStep",
     "GraphTraversal",
     "HybridClassifier",
+    "HybridEntityExtractor",
     "KindClassifier",
     "LLMClassifier",
     "LLMRelationDetector",
@@ -124,13 +125,12 @@ __all__ = [
     "ResonanceWeights",
     "RuleBasedClassifier",
     "RuleBasedRelationDetector",
-    "SpaCyEntityExtractor",
-    "HybridEntityExtractor",
-    "TableIngester",
     "SearchIntent",
     "SearchResult",
+    "SpaCyEntityExtractor",
     "StorageBackend",
     "SynapticGraph",
+    "TableIngester",
     "TagExtractor",
     "TypeDef",
     "build_agent_ontology",
