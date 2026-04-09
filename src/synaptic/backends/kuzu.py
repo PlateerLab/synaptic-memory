@@ -18,13 +18,13 @@ statically-typed schema requirements.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from synaptic.backends._scoring import bm25_hybrid_score, fuzzy_score
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
@@ -89,7 +89,7 @@ class KuzuBackend:
         side if you fan out across multiple coroutines
     """
 
-    __slots__ = ("_async_conn", "_conn", "_db", "_fts_enabled", "_path")
+    __slots__ = ("_async_conn", "_conn", "_db", "_path")
 
     def __init__(self, path: str | Path = ":memory:") -> None:
         # Kuzu requires an explicit directory; use a tmp path for in-memory mode
@@ -102,7 +102,6 @@ class KuzuBackend:
         self._db: kuzu.Database | None = None
         self._conn: kuzu.Connection | None = None
         self._async_conn: kuzu.AsyncConnection | None = None
-        self._fts_enabled: bool = False
 
     async def connect(self) -> None:
         # Database / Connection construction is sync but cheap
@@ -115,24 +114,7 @@ class KuzuBackend:
         self._conn.execute(_NODE_TABLE_DDL)
         self._conn.execute(_EDGE_TABLE_DDL)
 
-        # Try to enable FTS extension (best-effort — older Kuzu may lack it)
-        try:
-            self._conn.execute("INSTALL FTS")
-            self._conn.execute("LOAD EXTENSION FTS")
-            try:
-                self._conn.execute(
-                    "CALL CREATE_FTS_INDEX('Node', 'node_fts', ['title', 'content'])"
-                )
-            except RuntimeError as exc:
-                # Index may already exist
-                if "already exists" not in str(exc).lower():
-                    logger.debug("FTS index creation skipped: %s", exc)
-            self._fts_enabled = True
-        except Exception as exc:
-            logger.warning("FTS extension unavailable, falling back to LIKE search: %s", exc)
-            self._fts_enabled = False
-
-        logger.info("Kuzu connected: %s (fts=%s)", self._path, self._fts_enabled)
+        logger.info("Kuzu connected: %s", self._path)
 
     async def close(self) -> None:
         # Kuzu connections close on GC; explicit close not strictly needed
@@ -158,18 +140,6 @@ class KuzuBackend:
         if params is None:
             return await conn.execute(query)
         return await conn.execute(query, parameters=params)
-
-    @staticmethod
-    def _refresh_fts_index(conn: kuzu.Connection) -> None:
-        """Recreate FTS index after data changes (Kuzu FTS is currently static)."""
-        try:
-            conn.execute("CALL DROP_FTS_INDEX('Node', 'node_fts')")
-        except Exception:
-            pass
-        try:
-            conn.execute("CALL CREATE_FTS_INDEX('Node', 'node_fts', ['title', 'content'])")
-        except Exception as exc:
-            logger.debug("FTS reindex failed: %s", exc)
 
     # --- Node CRUD ---
 
@@ -363,46 +333,35 @@ class KuzuBackend:
 
     # --- Search ---
 
-    async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
-        terms = query.strip().split()
-        if not terms:
-            return []
-        if not self._fts_enabled:
-            return await self.search_fuzzy(query, limit=limit)
-
-        # FTS index reflects only data committed before index creation in some
-        # Kuzu versions; refresh on demand for consistency
-        await asyncio.to_thread(self._refresh_fts_index, self._get_sync())
-
-        try:
-            result = await self._execute(
-                "CALL QUERY_FTS_INDEX('Node', 'node_fts', $query) "
-                "RETURN node.*, score ORDER BY score DESC LIMIT $limit",
-                {"query": query, "limit": int(limit)},
-            )
-            return _rows_to_nodes(result, prefix="node.")
-        except Exception as exc:
-            logger.debug("FTS query failed, falling back to fuzzy: %s", exc)
-            return await self.search_fuzzy(query, limit=limit)
-
-    async def search_fuzzy(
-        self, query: str, *, limit: int = 20, threshold: float = 0.3
-    ) -> list[Node]:
-        terms = query.strip().split()
-        if not terms:
-            return []
-        # Build OR'd CONTAINS conditions
-        conditions: list[str] = []
-        params: dict[str, Any] = {"limit": int(limit)}
-        for i, term in enumerate(terms):
-            params[f"t{i}"] = term.lower()
-            conditions.append(f"(lower(n.title) CONTAINS $t{i} OR lower(n.content) CONTAINS $t{i})")
-        where = " OR ".join(conditions)
+    async def _fetch_all_nodes(self, *, cap: int = 10_000) -> list[Node]:
+        """Return every node in the graph (used by shared Python scoring)."""
         result = await self._execute(
-            f"MATCH (n:Node) WHERE {where} RETURN n.* ORDER BY n.updated_at DESC LIMIT $limit",
-            params,
+            "MATCH (n:Node) RETURN n.* LIMIT $limit",
+            {"limit": int(cap)},
         )
         return _rows_to_nodes(result)
+
+    async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
+        """Hybrid BM25 + substring scoring via the shared Python ranker.
+
+        Uses the same scoring as ``MemoryBackend`` for IR parity. Kuzu's
+        built-in FTS extension is not used here because its plain Okapi
+        BM25 diverges from the library's tuned hybrid scoring; we'll wire
+        it in as a candidate prefilter once the scoring path has been
+        benchmarked at scale.
+        """
+        if not query.strip():
+            return []
+        nodes = await self._fetch_all_nodes()
+        return bm25_hybrid_score(nodes, query, limit=limit)
+
+    async def search_fuzzy(
+        self, query: str, *, limit: int = 20, threshold: float = 0.4
+    ) -> list[Node]:
+        if not query.strip():
+            return []
+        nodes = await self._fetch_all_nodes()
+        return fuzzy_score(nodes, query, limit=limit, threshold=threshold)
 
     async def search_vector(self, embedding: list[float], *, limit: int = 20) -> list[Node]:
         # Vector search via Kuzu vector extension is not yet wired up here.
