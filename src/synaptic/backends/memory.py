@@ -71,6 +71,28 @@ class MemoryBackend:
                 break
         return result
 
+    async def get_nodes_batch(self, node_ids: list[str]) -> list[Node]:
+        return [self._nodes[nid] for nid in node_ids if nid in self._nodes]
+
+    async def count_nodes(
+        self,
+        *,
+        kind: str | NodeKind | None = None,
+        category: str | None = None,
+        year: int | None = None,
+    ) -> int:
+        count = 0
+        for node in self._nodes.values():
+            if kind is not None and node.kind != kind:
+                continue
+            props = node.properties or {}
+            if category and category.lower() not in (props.get("category") or "").lower():
+                continue
+            if year is not None and str(props.get("year")) != str(year):
+                continue
+            count += 1
+        return count
+
     # --- Edge CRUD ---
 
     async def save_edge(self, edge: Edge) -> None:

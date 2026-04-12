@@ -48,6 +48,7 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from synaptic.extensions.node_metadata import authority_of, is_current
 from synaptic.models import Node, NodeKind
 
 if TYPE_CHECKING:
@@ -241,13 +242,19 @@ class HybridReranker:
                 props = node.properties or {}
                 cat_field = (props.get("category") or "").lower()
                 if cat_field and any(c in cat_field for c in category_set):
-                    score += 0.6
+                    score += 0.4
                 if node.tags and any(
                     c in t.lower() for t in node.tags for c in category_set
                 ):
-                    score += 0.2
+                    score += 0.1
             if kind_set and node.kind in kind_set:
-                score += 0.4
+                score += 0.2
+            # Authority: higher-authority nodes (RULE > DECISION > OBSERVATION)
+            # get a structural boost. Normalized to 0-0.2 range (authority 0-10).
+            score += authority_of(node) * 0.02
+            # Temporal: current documents get a small boost over expired ones
+            if is_current(node):
+                score += 0.1
             return min(score, 1.0)
 
         # --- Combine ---

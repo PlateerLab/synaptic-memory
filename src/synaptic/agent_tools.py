@@ -443,17 +443,14 @@ async def get_document_tool(
             error=f"document_not_found: {doc_id}",
         )
 
-    # Walk CONTAINS edges to assemble chunks in index order
+    # Walk CONTAINS edges to assemble chunks in index order.
+    # Uses get_nodes_batch (single SQL WHERE IN) instead of N+1 get_node calls.
     edges = await backend.get_edges(doc_node.id, direction="outgoing")
     chunk_ids = [
         e.target_id for e in edges if e.kind == EdgeKind.CONTAINS
     ][:max_chunks]
 
-    chunks: list[Node] = []
-    for cid in chunk_ids:
-        c = await backend.get_node(cid)
-        if c is not None:
-            chunks.append(c)
+    chunks = await backend.get_nodes_batch(chunk_ids)
 
     chunks.sort(key=lambda c: int((c.properties or {}).get("chunk_index", "0") or "0"))
 
@@ -559,26 +556,9 @@ async def count_tool(
         except ValueError:
             pass
 
-    # When category is the only filter, use search_fuzzy (LIKE) to avoid
-    # loading all nodes. Falls back to list_nodes for kind-only or combined.
-    if category and not node_kind and year is None:
-        candidates = await backend.search_fuzzy(category, limit=100_000)
-        matched = sum(
-            1 for n in candidates
-            if category.lower() in ((n.properties or {}).get("category") or "").lower()
-        )
-    else:
-        nodes = await backend.list_nodes(kind=node_kind, limit=100_000)
-        matched = 0
-        for n in nodes:
-            props = n.properties or {}
-            if category and category.lower() not in (props.get("category") or "").lower():
-                continue
-            if year is not None:
-                ny = props.get("year")
-                if ny is None or str(ny) != str(year):
-                    continue
-            matched += 1
+    matched = await backend.count_nodes(
+        kind=node_kind, category=category, year=year
+    )
 
     return ToolResult(
         tool="count",

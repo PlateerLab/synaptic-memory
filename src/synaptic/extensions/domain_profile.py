@@ -154,6 +154,11 @@ class DomainProfile:
     # evidence across conflicting sources. Default empty dict means
     # "unknown authority" — treat all kinds equally.
     authority_by_kind: dict[NodeKind, int] = field(default_factory=dict)
+    # Kind-query hints: keywords that signal a query is looking for a
+    # specific NodeKind. Used by search.py to boost matching kinds.
+    # When empty, the built-in defaults in search.py are used.
+    # Example: {"RULE": ["규칙", "정책", "policy"], "LESSON": ["실패", "error"]}
+    kind_query_hints: dict[str, list[str]] = field(default_factory=dict)
     # Document content enrichment — when True, DocumentIngester joins
     # the title with the first few chunks' text so Document nodes
     # become meaningfully searchable via FTS. Without this Document

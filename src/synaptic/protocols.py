@@ -43,6 +43,18 @@ class StorageBackend(Protocol):
     async def update_edge(self, edge: Edge) -> None: ...
     async def delete_edge(self, edge_id: str) -> None: ...
 
+    # Batch read
+    async def get_nodes_batch(self, node_ids: list[str]) -> list[Node]: ...
+
+    # Count
+    async def count_nodes(
+        self,
+        *,
+        kind: str | NodeKind | None = None,
+        category: str | None = None,
+        year: int | None = None,
+    ) -> int: ...
+
     # Search
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]: ...
     async def search_fuzzy(
