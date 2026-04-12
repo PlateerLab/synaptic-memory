@@ -339,28 +339,48 @@ class AgentRun:
 SYSTEM_PROMPT = """\
 You are a research agent with access to the Synaptic Memory knowledge graph.
 
-The graph stores Korean public-sector documents (Korean Racing Authority, KRRA)
-organised as Category → Document → Chunk. Your job is to answer the user's
-question by iteratively calling the provided tools. You must not guess —
-every claim in your final answer should be grounded in a tool result.
+The graph stores Korean public-sector documents organised as
+Category → Document → Chunk. Your job is to answer the user's question
+by iteratively calling the provided tools. You must not guess — every
+claim in your final answer should be grounded in a tool result.
 
-Tool-use guidance:
+## Search strategy (follow this order)
 
-- Start with `search` when the question is open-ended. Use Korean query
-  terms when the query is in Korean; the graph is indexed for Korean.
-- Use `list_categories` early if you don't know what's in the graph.
-- For exact codes or IDs (E217, SKU-1234, section 4.3.2), call `search_exact`.
-- For absence questions ('is there really no ...?'), fetch the full
-  document with `get_document` and read every chunk before concluding.
-- For enumerations ('list all ...'), start with `count` to see if the
-  answer set is finite, then iterate with `search(exclude_seen=true)`.
-- Stop calling tools once you have enough evidence to answer. Don't
-  keep exploring after you're confident.
+### Pass 1: Direct search
+1. Call `search` with the user's query keywords.
+2. If results are relevant → done, answer.
 
-Answer format:
+### Pass 2: Category-guided search (if Pass 1 fails or is insufficient)
+3. Call `list_categories` to see what topics exist.
+4. Identify which category(ies) the question relates to.
+5. Call `search` again with `category` filter set to the relevant category.
+6. Try alternative keywords — the user's phrasing may differ from
+   document titles. Rephrase: use synonyms, official terms, shorter keywords.
+
+### Pass 3: Graph expansion (if Pass 2 still insufficient)
+7. From the best result so far, call `expand` to find neighboring documents.
+8. Or call `follow(edge_kind="part_of")` to find sibling documents in
+   the same category.
+
+### Pass 4: Deep read (for absence/detail questions)
+9. Call `get_document(query="...")` with the original query to read the
+   most relevant chunks of a specific document.
+
+## Key principles
+- ALWAYS try rephrasing before giving up. If "말 복지" returns nothing,
+  try "승마", "힐링승마", "재활" — official document titles often use
+  different terminology than casual questions.
+- When searching in Korean, try both the full phrase AND individual
+  keywords separately.
+- Use `category` filter aggressively — it dramatically narrows the
+  search space and often surfaces results that broad search misses.
+- Stop after finding sufficient evidence. Don't over-explore.
+
+## Answer format
 - Give a direct answer first.
-- Then cite the evidence: which documents/chunks you used.
-- If you couldn't find the answer, say so plainly — do NOT hallucinate.
+- Cite the evidence: which documents/chunks you used.
+- If you couldn't find the answer after trying multiple approaches,
+  say so plainly — do NOT hallucinate.
 - Respond in Korean when the question is in Korean.
 """
 
@@ -545,6 +565,27 @@ SCENARIOS = [
         "id": "version",
         "label": "최신 버전",
         "question": "가장 최근 연도의 운영계획 문서 하나를 찾아서 요약해줘.",
+    },
+    # --- Hard queries (single-shot에서 실패하는 것들) ---
+    {
+        "id": "h001",
+        "label": "패러프레이즈 (말 복지)",
+        "question": "말 복지 향상을 위한 프로그램이 뭐가 있어?",
+    },
+    {
+        "id": "h004",
+        "label": "교차 문서 (인권+예산)",
+        "question": "인권경영 지침이 예산 편성에 어떻게 반영되나?",
+    },
+    {
+        "id": "h014",
+        "label": "대화체 (승마 체험)",
+        "question": "올해 승마 체험 행사를 기획하려는데 작년에 어떻게 했는지 참고할 자료 있나요?",
+    },
+    {
+        "id": "h015",
+        "label": "패러프레이즈 (윤리경영)",
+        "question": "우리 회사 윤리경영 점수가 어떻게 되는지 보고서 좀 찾아줘",
     },
 ]
 
