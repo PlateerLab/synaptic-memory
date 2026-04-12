@@ -98,6 +98,11 @@ def _parse_args() -> argparse.Namespace:
         default="qwen3-embedding:4b",
         help="Embedding model name (default: qwen3-embedding:4b)",
     )
+    parser.add_argument(
+        "--entity-link",
+        action="store_true",
+        help="Run EntityLinker after ingestion (creates MENTIONS edges)",
+    )
     return parser.parse_args()
 
 
@@ -245,6 +250,26 @@ async def main() -> int:
 
         embed_elapsed = time.time() - embed_start
         print(f"  Embedded {embedded_count}/{len(embed_targets)} nodes in {embed_elapsed:.1f}s")
+
+    # Entity linking pass — creates MENTIONS edges from chunks to hub
+    # entity nodes via DF-filtered phrase extraction. Gives the graph
+    # expander an entity-mention path that's otherwise absent.
+    if args.entity_link:
+        from synaptic.extensions.entity_linker import EntityLinker
+        from synaptic.extensions.phrase_extractor import create_phrase_extractor
+
+        extractor = create_phrase_extractor(profile)
+        linker = EntityLinker(extractor=extractor, profile=profile)
+        print("\n[Entity linking pass]")
+        link_stats = await linker.link(backend, source_kind=NodeKind.CHUNK)
+        print(f"  Sources scanned:     {link_stats.source_nodes_scanned}")
+        print(f"  Raw phrases:         {link_stats.raw_phrase_candidates}")
+        print(f"  Kept (DF filtered):  {link_stats.kept_phrases}")
+        print(f"  Hub nodes created:   {link_stats.phrase_nodes_created}")
+        print(f"  MENTIONS edges:      {link_stats.mentions_edges_created}")
+        print(f"  Elapsed:             {link_stats.elapsed_seconds:.1f}s")
+        if link_stats.top_phrases_by_df:
+            print(f"  Top phrases:         {link_stats.top_phrases_by_df[:10]}")
 
     # Quick sanity probe
     if stats.documents_ingested > 0:
