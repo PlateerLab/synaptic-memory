@@ -54,24 +54,35 @@ def _normalize_korean(text: str) -> str:
 
     Without Kiwi: regex particle stripping only.
     "정보화기기를" → "정보화기기"
+
+    Guard: only apply Kiwi when the text has significant Korean content
+    (≥30% Hangul characters). For structured/tabular data (CSV rows,
+    code identifiers, English-heavy text) Kiwi over-segments tokens
+    like "25SS" → "25 SS" or "product_code" → "product code", breaking
+    exact matches. The regex fallback handles particle stripping without
+    damaging non-Korean tokens.
     """
     if not text:
         return text
 
-    kiwi = _get_kiwi()
-    if kiwi is not None:
-        try:
-            tokens = kiwi.tokenize(text)
-            # Keep nouns (NN*), verbs (VV), adjectives (VA),
-            # foreign words (SL), numbers (SN)
-            stems = [
-                tk.form for tk in tokens
-                if tk.tag.startswith(("NN", "VV", "VA", "SL", "SN"))
-            ]
-            if stems:
-                return " ".join(stems)
-        except Exception:
-            pass  # fall through to regex
+    # Check Korean content ratio — skip Kiwi for non-Korean-dominant text
+    hangul_count = sum(1 for c in text if '가' <= c <= '힣')
+    total_chars = sum(1 for c in text if not c.isspace())
+    korean_ratio = hangul_count / total_chars if total_chars > 0 else 0
+
+    if korean_ratio >= 0.5:
+        kiwi = _get_kiwi()
+        if kiwi is not None:
+            try:
+                tokens = kiwi.tokenize(text)
+                stems = [
+                    tk.form for tk in tokens
+                    if tk.tag.startswith(("NN", "VV", "VA", "SL", "SN"))
+                ]
+                if stems:
+                    return " ".join(stems)
+            except Exception:
+                pass
 
     return _KO_PARTICLE.sub(r"\1", text)
 
@@ -369,10 +380,21 @@ class SQLiteBackend:
 
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         db = self._db()
-        # Strip Korean particles from query terms so "정보화기기를"
-        # matches the particle-stripped FTS index ("정보화기기").
-        query = _normalize_korean(query)
-        terms = query.strip().split()
+        # Normalize query the same way content was indexed.
+        # Also try the original query as a fallback — Kiwi over-
+        # segmentation on the query side can miss exact matches that
+        # the regex path (used for indexed structured data) would hit.
+        normalized = _normalize_korean(query)
+        original_terms = query.strip().split()
+        norm_terms = normalized.strip().split()
+        # Merge: normalized terms first, then any original terms not
+        # already present (handles Kiwi-split vs unsplit mismatch)
+        seen = set(norm_terms)
+        terms = list(norm_terms)
+        for t in original_terms:
+            if t not in seen:
+                terms.append(t)
+                seen.add(t)
         if not terms:
             return []
 
