@@ -550,11 +550,37 @@ def _mssql_type_map(raw_type: str) -> str:
 # --- DbIngester ---
 
 
+def _is_join_table(schema: TableSchema) -> bool:
+    """Detect M:N join/bridge tables.
+
+    A join table typically has:
+    - Exactly 2 FK columns (pointing to 2 different tables)
+    - At most 1 additional column (PK/ID)
+    - No other meaningful data columns
+
+    Example: product_categories(id PK, product_id FK, category_id FK)
+    → should become a direct edge, not a node.
+    """
+    if len(schema.foreign_keys) < 2:
+        return False
+    fk_cols = {fk.column for fk in schema.foreign_keys}
+    non_fk_cols = [c for c in schema.columns if c.name not in fk_cols and not c.primary_key]
+    # At most 1 extra column (e.g. a created_at timestamp) is OK
+    return len(non_fk_cols) <= 1
+
+
 class DbIngester:
     """Auto-ingest a relational database into a knowledge graph.
 
     Discovers schema, reads data, and calls TableIngester for each table.
     Foreign keys become typed RELATED edges automatically.
+
+    **M:N join tables** are detected automatically: tables with 2+ FKs
+    and no meaningful data columns become direct edges between the
+    referenced tables instead of intermediate nodes.
+
+    **Batch processing**: large tables are read in configurable batches
+    (default 10,000 rows) to avoid memory exhaustion.
     """
 
     __slots__ = ("_table_ingester", "_batch_size")
@@ -576,38 +602,11 @@ class DbIngester:
         schemas = _read_sqlite_schema(db_path)
         if tables:
             schemas = [s for s in schemas if s.name in tables]
-
-        stats = DbIngestStats(tables_discovered=len(schemas))
-
-        # Ingest order: tables without FKs first, then tables with FKs
-        no_fk = [s for s in schemas if not s.foreign_keys]
-        has_fk = [s for s in schemas if s.foreign_keys]
-        ordered = no_fk + has_fk
-
-        for schema in ordered:
-            rows = _read_sqlite_rows(db_path, schema.name, limit=row_limit)
-            if not rows:
-                continue
-
-            col_defs = [{"name": c.name, "type": c.type} for c in schema.columns]
-            fk_map = {fk.column: (fk.ref_table, fk.ref_column) for fk in schema.foreign_keys}
-
-            # Cast values
-            cast_rows = [_cast_row(r, schema.columns) for r in rows]
-
-            nodes = await self._table_ingester.ingest(
-                graph, schema.name, col_defs, cast_rows,
-                primary_key=schema.primary_key,
-                foreign_keys=fk_map if fk_map else None,
-            )
-            stats.tables_ingested += 1
-            stats.total_rows += len(rows)
-            stats.total_nodes += len(nodes)
-            stats.total_fk_edges += len(fk_map) * len(rows)
-            logger.info("Ingested %s: %d rows → %d nodes", schema.name, len(rows), len(nodes))
-
-        stats.elapsed_seconds = time.time() - t0
-        return stats
+        return await self._ingest_schemas(
+            schemas, graph,
+            row_reader=lambda tbl: _read_sqlite_rows(db_path, tbl, limit=row_limit),
+            t0=t0,
+        )
 
     async def ingest_from_mysql(
         self,
@@ -674,28 +673,88 @@ class DbIngester:
         row_reader,
         t0: float,
     ) -> DbIngestStats:
-        """Shared ingestion logic for all DB types."""
+        """Shared ingestion logic for all DB types.
+
+        Handles M:N join tables as edges and processes large tables
+        in batches.
+        """
         stats = DbIngestStats(tables_discovered=len(schemas))
-        no_fk = [s for s in schemas if not s.foreign_keys]
-        has_fk = [s for s in schemas if s.foreign_keys]
+
+        # Separate: regular tables vs M:N join tables
+        regular = []
+        join_tables = []
+        for s in schemas:
+            if _is_join_table(s):
+                join_tables.append(s)
+                logger.info("Detected M:N join table: %s → will create edges", s.name)
+            else:
+                regular.append(s)
+
+        # Ingest order: tables without FKs first, then FK tables
+        no_fk = [s for s in regular if not s.foreign_keys]
+        has_fk = [s for s in regular if s.foreign_keys]
 
         for schema in no_fk + has_fk:
             rows = await row_reader(schema.name) if asyncio.iscoroutinefunction(row_reader) else row_reader(schema.name)
             if not rows:
                 continue
+
             col_defs = [{"name": c.name, "type": c.type} for c in schema.columns]
             fk_map = {fk.column: (fk.ref_table, fk.ref_column) for fk in schema.foreign_keys}
-            cast_rows = [_cast_row(r, schema.columns) for r in rows]
 
-            nodes = await self._table_ingester.ingest(
-                graph, schema.name, col_defs, cast_rows,
-                primary_key=schema.primary_key,
-                foreign_keys=fk_map if fk_map else None,
-            )
+            # Batch processing for large tables
+            total_nodes = 0
+            for i in range(0, len(rows), self._batch_size):
+                batch = rows[i : i + self._batch_size]
+                cast_batch = [_cast_row(r, schema.columns) for r in batch]
+                nodes = await self._table_ingester.ingest(
+                    graph, schema.name, col_defs, cast_batch,
+                    primary_key=schema.primary_key,
+                    foreign_keys=fk_map if fk_map else None,
+                )
+                total_nodes += len(nodes)
+
             stats.tables_ingested += 1
             stats.total_rows += len(rows)
-            stats.total_nodes += len(nodes)
-            logger.info("Ingested %s: %d rows → %d nodes", schema.name, len(rows), len(nodes))
+            stats.total_nodes += total_nodes
+            logger.info("Ingested %s: %d rows → %d nodes", schema.name, len(rows), total_nodes)
+
+        # M:N join tables → direct edges (no intermediate nodes)
+        for schema in join_tables:
+            rows = await row_reader(schema.name) if asyncio.iscoroutinefunction(row_reader) else row_reader(schema.name)
+            if not rows:
+                continue
+
+            fk_a = schema.foreign_keys[0]
+            fk_b = schema.foreign_keys[1]
+            edge_count = 0
+
+            from synaptic.models import EdgeKind
+
+            for row in rows:
+                val_a = str(row.get(fk_a.column, ""))
+                val_b = str(row.get(fk_b.column, ""))
+                if not val_a or not val_b:
+                    continue
+
+                # Find the nodes by their cached keys
+                key_a = (fk_a.ref_table, val_a)
+                key_b = (fk_b.ref_table, val_b)
+                node_a_id = self._table_ingester._node_cache.get(key_a)
+                node_b_id = self._table_ingester._node_cache.get(key_b)
+
+                if node_a_id and node_b_id:
+                    await graph.link(
+                        node_a_id, node_b_id,
+                        kind=EdgeKind.RELATED,
+                        weight=0.8,
+                    )
+                    edge_count += 1
+
+            stats.total_fk_edges += edge_count
+            logger.info("M:N %s: %d rows → %d edges (%s ↔ %s)",
+                       schema.name, len(rows), edge_count,
+                       fk_a.ref_table, fk_b.ref_table)
 
         stats.elapsed_seconds = time.time() - t0
         return stats
@@ -713,36 +772,11 @@ class DbIngester:
         schemas = await _read_pg_schema(dsn)
         if tables:
             schemas = [s for s in schemas if s.name in tables]
-
-        stats = DbIngestStats(tables_discovered=len(schemas))
-
-        no_fk = [s for s in schemas if not s.foreign_keys]
-        has_fk = [s for s in schemas if s.foreign_keys]
-        ordered = no_fk + has_fk
-
-        for schema in ordered:
-            rows = await _read_pg_rows(dsn, schema.name, limit=row_limit)
-            if not rows:
-                continue
-
-            col_defs = [{"name": c.name, "type": c.type} for c in schema.columns]
-            fk_map = {fk.column: (fk.ref_table, fk.ref_column) for fk in schema.foreign_keys}
-
-            cast_rows = [_cast_row(r, schema.columns) for r in rows]
-
-            nodes = await self._table_ingester.ingest(
-                graph, schema.name, col_defs, cast_rows,
-                primary_key=schema.primary_key,
-                foreign_keys=fk_map if fk_map else None,
-            )
-            stats.tables_ingested += 1
-            stats.total_rows += len(rows)
-            stats.total_nodes += len(nodes)
-            stats.total_fk_edges += len(fk_map) * len(rows)
-            logger.info("Ingested %s: %d rows → %d nodes", schema.name, len(rows), len(nodes))
-
-        stats.elapsed_seconds = time.time() - t0
-        return stats
+        return await self._ingest_schemas(
+            schemas, graph,
+            row_reader=lambda tbl: _read_pg_rows(dsn, tbl, limit=row_limit),
+            t0=t0,
+        )
 
 
 def _cast_row(row: dict, columns: list[ColumnInfo]) -> dict:
