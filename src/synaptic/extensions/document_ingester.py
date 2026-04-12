@@ -55,10 +55,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
 
-
-def _nfc(s: str) -> str:
-    return unicodedata.normalize("NFC", s) if s else s
-
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
@@ -70,6 +66,10 @@ from synaptic.models import (
 if TYPE_CHECKING:
     from synaptic.extensions.domain_profile import DomainProfile
     from synaptic.protocols import StorageBackend
+
+
+def _nfc(s: str) -> str:
+    return unicodedata.normalize("NFC", s) if s else s
 
 
 # --- Record types ---

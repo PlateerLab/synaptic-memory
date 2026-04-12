@@ -88,6 +88,16 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Delete the graph file/dir before ingesting (full rebuild)",
     )
+    parser.add_argument(
+        "--embed-url",
+        default=None,
+        help="Embedding API base URL (e.g. http://14.6.220.78:11434/v1)",
+    )
+    parser.add_argument(
+        "--embed-model",
+        default="qwen3-embedding:4b",
+        help="Embedding model name (default: qwen3-embedding:4b)",
+    )
     return parser.parse_args()
 
 
@@ -186,7 +196,57 @@ async def main() -> int:
     print(f"  Graph path:          {_rel(graph_path)}")
     print(f"{'=' * 60}")
 
-    # Quick sanity probe: a few known KRRA terms should return hits
+    # Embedding pass — add embeddings to all chunk + document nodes.
+    # Runs after ingestion because DocumentIngester saves nodes without
+    # embeddings (the embedder is a search-time concern, not a storage
+    # concern in the generic ingester). This pass is optional and skipped
+    # when --embed-url is not provided.
+    if args.embed_url:
+        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+        from synaptic.models import NodeKind
+
+        embedder = OpenAIEmbeddingProvider(
+            api_base=args.embed_url,
+            model=args.embed_model,
+        )
+        print(f"\n[Embedding pass] {args.embed_url} model={args.embed_model}")
+
+        nodes = await backend.list_nodes(kind=None, limit=100_000)
+        embed_targets = [
+            n for n in nodes
+            if n.kind in (NodeKind.CHUNK, NodeKind.ENTITY, NodeKind.CONCEPT)
+            or "document" in (n.tags or [])
+        ]
+        print(f"  Embedding {len(embed_targets)} nodes...")
+
+        batch_size = 32
+        embedded_count = 0
+        embed_start = time.time()
+        for i in range(0, len(embed_targets), batch_size):
+            batch = embed_targets[i : i + batch_size]
+            texts = [
+                f"{n.title}\n{n.content[:300]}" if n.content else n.title
+                for n in batch
+            ]
+            try:
+                vectors = await embedder.embed_batch(texts)
+            except Exception as exc:
+                print(f"  ⚠ batch {i//batch_size} failed: {exc}")
+                continue
+
+            for node, vec in zip(batch, vectors):
+                if vec:
+                    node.embedding = vec
+                    await backend.save_node(node)
+                    embedded_count += 1
+
+            if (i // batch_size) % 20 == 0 and i > 0:
+                print(f"  ... {embedded_count}/{len(embed_targets)}")
+
+        embed_elapsed = time.time() - embed_start
+        print(f"  Embedded {embedded_count}/{len(embed_targets)} nodes in {embed_elapsed:.1f}s")
+
+    # Quick sanity probe
     if stats.documents_ingested > 0:
         from synaptic.graph import SynapticGraph
 

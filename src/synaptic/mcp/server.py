@@ -693,13 +693,23 @@ from synaptic.search_session import SessionStore  # noqa: E402
 _session_store = SessionStore()
 
 
-async def _session(session_id: str | None) -> Any:
-    """Resolve (or create) a SearchSession from an agent-supplied id.
+async def _ensure_backend() -> Any:
+    """Ensure the graph is initialized and return the backend.
 
-    MCP tool calls come in with a session id as a plain string, so we
-    delegate to the store and let it handle both "new session" and
-    "continue existing session" in one call.
+    Wraps ``_ensure_graph()`` and raises a clear error if the backend
+    is still ``None`` after initialization (e.g. because the connect
+    failed). Every agent tool calls this instead of ``_ensure_graph()``
+    directly so we never pass a ``None`` backend into the tool layer.
     """
+    await _ensure_graph()
+    if _backend is None:
+        msg = "Backend not initialized — check the --db / --dsn configuration"
+        raise RuntimeError(msg)
+    return _backend
+
+
+async def _session(session_id: str | None) -> Any:
+    """Resolve (or create) a SearchSession from an agent-supplied id."""
     return _session_store.get_or_create(session_id=session_id or None)
 
 
@@ -735,10 +745,10 @@ async def agent_search(
         exclude_seen: When True, results already returned in this
             session are filtered out so the agent paginates.
     """
-    await _ensure_graph()
+    backend = await _ensure_backend()
     session = await _session(session_id)
     result = await search_tool(
-        _backend,
+        backend,
         session,
         query,
         limit=limit,
@@ -769,10 +779,10 @@ async def agent_expand(
         limit: Max neighbours to return.
         exclude_seen: Skip neighbours the agent has already seen.
     """
-    await _ensure_graph()
+    backend = await _ensure_backend()
     session = await _session(session_id)
     result = await expand_tool(
-        _backend,
+        backend,
         session,
         node_id,
         limit=limit,
@@ -799,10 +809,10 @@ async def agent_get_document(
         session_id: Session to continue.
         max_chunks: Safety fuse on how many chunks to fetch.
     """
-    await _ensure_graph()
+    backend = await _ensure_backend()
     session = await _session(session_id)
     result = await get_document_tool(
-        _backend, session, doc_id, max_chunks=max_chunks
+        backend, session, doc_id, max_chunks=max_chunks
     )
     return result.to_dict()
 
@@ -818,9 +828,9 @@ async def agent_list_categories(
     graph contains before searching. Each category comes with a
     document count so the agent can judge where to look first.
     """
-    await _ensure_graph()
+    backend = await _ensure_backend()
     session = await _session(session_id)
-    result = await list_categories_tool(_backend, session, limit=limit)
+    result = await list_categories_tool(backend, session, limit=limit)
     return result.to_dict()
 
 
@@ -843,10 +853,10 @@ async def agent_count(
         category: Optional category label filter.
         year: Optional year filter. ``0`` means "no year filter".
     """
-    await _ensure_graph()
+    backend = await _ensure_backend()
     session = await _session(session_id)
     result = await count_tool(
-        _backend,
+        backend,
         session,
         kind=kind or None,
         category=category or None,
@@ -872,9 +882,9 @@ async def agent_search_exact(
         session_id: Session to continue.
         limit: Max matches to return.
     """
-    await _ensure_graph()
+    backend = await _ensure_backend()
     session = await _session(session_id)
-    result = await search_exact_tool(_backend, session, identifier, limit=limit)
+    result = await search_exact_tool(backend, session, identifier, limit=limit)
     return result.to_dict()
 
 
@@ -900,10 +910,10 @@ async def agent_follow(
         direction: ``"outgoing"``, ``"incoming"``, or ``"both"``.
         limit: Max neighbours to return.
     """
-    await _ensure_graph()
+    backend = await _ensure_backend()
     session = await _session(session_id)
     result = await follow_tool(
-        _backend,
+        backend,
         session,
         node_id,
         edge_kind,

@@ -392,11 +392,19 @@ class ProfileGenerator:
         fences and, as a last resort, carve out the first balanced
         ``{...}`` block before parsing.
         """
-        cleaned = _extract_json_object(raw)
-        try:
-            data = json.loads(cleaned)
-        except (json.JSONDecodeError, ValueError) as exc:
-            logger.warning("profile-generator: LLM output not valid JSON — %s", exc)
+        # Try raw first (handles well-formed JSON), then strip fences,
+        # then brace-scan as last resort. This order prevents the brace
+        # counter from mishandling regex quantifiers like {2,5} inside
+        # string literals.
+        data = None
+        for attempt_text in (raw.strip(), _extract_json_object(raw)):
+            try:
+                data = json.loads(attempt_text)
+                break
+            except (json.JSONDecodeError, ValueError):
+                continue
+        if data is None:
+            logger.warning("profile-generator: LLM output not valid JSON")
             logger.debug("raw LLM output: %s", raw[:500])
             return _LLMResult()
         if not isinstance(data, dict):

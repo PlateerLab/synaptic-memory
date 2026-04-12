@@ -44,6 +44,7 @@ Example::
 from __future__ import annotations
 
 import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -287,8 +288,3 @@ def _make_evidence(cand: ScoredCandidate, *, reason: str) -> Evidence:
         document_id=props.get("doc_id", ""),
         category=props.get("category", ""),
     )
-
-
-# math.inf is used in the MMR loop — importing locally so the module
-# doesn't need a top-level ``import math`` for a single constant.
-import math  # noqa: E402
