@@ -67,6 +67,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--k", type=int, default=K)
     p.add_argument("--embed-url", default=None, help="Embedding API for semantic search")
     p.add_argument("--embed-model", default="qwen3-embedding:4b")
+    p.add_argument("--reranker-url", default=None, help="TEI reranker URL")
+
     return p.parse_args()
 
 
@@ -115,7 +117,12 @@ async def main() -> int:
             api_base=args.embed_url, model=args.embed_model
         )
         print(f"Embedder: {args.embed_url} ({args.embed_model})")
-    searcher = EvidenceSearch(backend=backend, embedder=embedder)
+    reranker = None
+    if args.reranker_url:
+        from synaptic.extensions.reranker_cross import TEIReranker
+        reranker = TEIReranker(base_url=args.reranker_url)
+        print(f"Reranker: {args.reranker_url}")
+    searcher = EvidenceSearch(backend=backend, embedder=embedder, reranker=reranker)
 
     bench = BenchmarkResult()
     skipped = 0
