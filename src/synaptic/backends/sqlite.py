@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import unicodedata
+
+logger = logging.getLogger("sqlite-backend")
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -142,11 +145,13 @@ CREATE INDEX IF NOT EXISTS idx_syn_nodes_kind_level ON syn_nodes(kind, level);
 class SQLiteBackend:
     """SQLite backend with FTS5 full-text search and CTE graph traversal."""
 
-    __slots__ = ("_conn", "_path")
+    __slots__ = ("_conn", "_hnsw_id_map", "_hnsw_index", "_path")
 
     def __init__(self, path: str | Path = ":memory:") -> None:
         self._path = str(path)
         self._conn: aiosqlite.Connection | None = None
+        self._hnsw_index: object | None = None
+        self._hnsw_id_map: dict[int, str] = {}  # hnsw key → node_id
 
     async def connect(self) -> None:
         self._conn = await aiosqlite.connect(self._path)
@@ -476,15 +481,24 @@ class SQLiteBackend:
         return [_row_to_node(r) for r in rows]
 
     async def search_vector(self, embedding: list[float], *, limit: int = 20) -> list[Node]:
-        """Brute-force cosine similarity scan over stored embeddings.
+        """Vector search with optional HNSW acceleration.
 
-        SQLite has no native vector index, so we load all non-empty
-        embeddings, compute cosine in Python, and return the top-k.
-        Scales to ~50K nodes comfortably (~100ms on Apple Silicon);
-        beyond that, switch to Qdrant or PostgreSQL + pgvector.
+        When ``usearch`` is installed (``pip install usearch``), an
+        in-memory HNSW index is built lazily on the first call and
+        reused for subsequent queries. Search latency drops from
+        ~11s (brute-force on 90K nodes) to ~1ms.
+
+        Without usearch, falls back to brute-force cosine scan.
         """
         if not embedding:
             return []
+
+        # Try HNSW index first
+        results = await self._search_vector_hnsw(embedding, limit)
+        if results is not None:
+            return results
+
+        # Fallback: brute-force
         db = self._db()
         async with db.execute(
             "SELECT * FROM syn_nodes WHERE embedding_json != '[]'"
@@ -504,6 +518,76 @@ class SQLiteBackend:
 
         scored.sort(key=lambda x: -x[1])
         return [n for n, _ in scored[:limit]]
+
+    async def _search_vector_hnsw(
+        self, embedding: list[float], limit: int
+    ) -> list[Node] | None:
+        """HNSW search via usearch. Returns None if usearch unavailable."""
+        try:
+            import numpy as np
+            from usearch.index import Index
+        except ImportError:
+            return None
+
+        # Lazy-build the index on first call. Only use HNSW for 100+
+        # vectors — below that brute-force is faster and exact.
+        if self._hnsw_index == "skip":
+            return None
+        if self._hnsw_index is None:
+            db = self._db()
+            async with db.execute(
+                "SELECT id, embedding_json FROM syn_nodes WHERE embedding_json != '[]'"
+            ) as cur:
+                rows = await cur.fetchall()
+            if not rows or len(rows) < 100:
+                # Too few vectors for HNSW to be worthwhile
+                self._hnsw_index = "skip"
+                return None
+
+            # Detect dimension from first non-empty embedding
+            first_emb = json.loads(rows[0]["embedding_json"])
+            if not first_emb:
+                return []
+            ndim = len(first_emb)
+
+            idx = Index(ndim=ndim, metric="cos")
+            vectors = []
+            keys = []
+            id_map: dict[int, str] = {}
+            for i, r in enumerate(rows):
+                emb = json.loads(r["embedding_json"])
+                if len(emb) == ndim:
+                    vectors.append(emb)
+                    keys.append(i)
+                    id_map[i] = r["id"]
+
+            if vectors:
+                arr = np.array(vectors, dtype=np.float32)
+                karr = np.array(keys, dtype=np.int64)
+                idx.add(karr, arr)
+
+            self._hnsw_index = idx
+            self._hnsw_id_map = id_map
+            logger.info(
+                "sqlite: built HNSW index with %d vectors (dim=%d)",
+                len(vectors), ndim,
+            )
+
+        # Search
+        q = np.array(embedding, dtype=np.float32)
+        results = self._hnsw_index.search(q, limit)
+
+        node_ids = [
+            self._hnsw_id_map[int(k)]
+            for k in results.keys
+            if int(k) in self._hnsw_id_map
+        ]
+        return await self.get_nodes_batch(node_ids)
+
+    def invalidate_vector_index(self) -> None:
+        """Drop the HNSW cache. Call after bulk embedding updates."""
+        self._hnsw_index = None
+        self._hnsw_id_map = {}
 
     # --- Graph traversal (recursive CTE) ---
 

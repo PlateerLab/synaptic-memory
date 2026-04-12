@@ -56,6 +56,7 @@ minio = ["miniopy-async>=1.21"]
 embedding = ["aiohttp>=3.9"]
 spacy = ["spacy>=3.7"]
 korean = ["kiwipiepy>=0.20"]
+vector = ["usearch>=2.0", "numpy>=1.26"]
 rag = ["spacy>=3.7", "aiohttp>=3.9"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
 scale = [
