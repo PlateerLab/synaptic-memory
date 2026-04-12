@@ -1,0 +1,65 @@
+{
+  "KRRA Easy": {
+    "mrr": 0.9667,
+    "p_at_k": 0.5032,
+    "r_at_k": 0.8934,
+    "ndcg": 0.9008,
+    "corpus_size": 20
+  },
+  "KRRA Hard": {
+    "mrr": 0.5074,
+    "p_at_k": 0.1561,
+    "r_at_k": 0.6333,
+    "ndcg": 0.5038,
+    "corpus_size": 15
+  },
+  "assort Easy": {
+    "mrr": 0.9333,
+    "p_at_k": 0.0933,
+    "r_at_k": 0.9,
+    "ndcg": 0.9075,
+    "corpus_size": 15
+  },
+  "assort Hard": {
+    "mrr": 0.0,
+    "p_at_k": 0.0,
+    "r_at_k": 0.0,
+    "ndcg": 0.0,
+    "corpus_size": 15
+  },
+  "HotPotQA-24": {
+    "mrr": 0.7271,
+    "p_at_k": 0.1625,
+    "r_at_k": 0.8125,
+    "ndcg": 0.6767,
+    "corpus_size": 226
+  },
+  "Allganize RAG-ko": {
+    "mrr": 0.6213,
+    "p_at_k": 0.1088,
+    "r_at_k": 0.9,
+    "ndcg": 0.693,
+    "corpus_size": 200
+  },
+  "Allganize RAG-Eval": {
+    "mrr": 0.6154,
+    "p_at_k": 0.0951,
+    "r_at_k": 0.88,
+    "ndcg": 0.6838,
+    "corpus_size": 300
+  },
+  "PublicHealthQA": {
+    "mrr": 0.3177,
+    "p_at_k": 0.0622,
+    "r_at_k": 0.5844,
+    "ndcg": 0.3817,
+    "corpus_size": 77
+  },
+  "AutoRAG": {
+    "mrr": 0.5919,
+    "p_at_k": 0.086,
+    "r_at_k": 0.8596,
+    "ndcg": 0.6591,
+    "corpus_size": 720
+  }
+}

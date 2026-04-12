@@ -390,7 +390,7 @@ def _parse_args():
     p.add_argument("--quick", action="store_true", help="Skip large datasets (KLUE, Ko-StrategyQA)")
     p.add_argument("--custom-only", action="store_true", help="Only run KRRA + assort")
     p.add_argument("--compare", type=Path, default=None, help="Compare against a baseline JSON")
-    p.add_argument("--save", type=Path, default=RESULTS_DIR / "qa_latest.json", help="Save results to")
+    p.add_argument("--save", type=Path, default=EVAL_DIR / "baselines" / "qa_latest.json", help="Save results to")
     p.add_argument("--embed-url", default=None, help="Embedding API URL (enables vector cascade)")
     p.add_argument("--embed-model", default="qwen3-embedding:4b")
     p.add_argument("--reranker-url", default=None, help="TEI reranker URL (enables cross-encoder)")
