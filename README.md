@@ -2,7 +2,7 @@
 
 Knowledge graph + MCP tool server for LLM agents.
 
-LLM agents call atomic search tools to explore a graph built from any domain data. The agent decides what to search, when to expand, and when to stop. The library only provides data and tools — all judgment lives in the LLM.
+Any data in, structured graph out. LLM agents explore it with 29 atomic tools.
 
 [![PyPI](https://img.shields.io/pypi/v/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![Python](https://img.shields.io/pypi/pyversions/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
@@ -10,229 +10,233 @@ LLM agents call atomic search tools to explore a graph built from any domain dat
 
 ---
 
-## What it does
+## 2 Lines to Start
 
-```
-Your data (JSONL, CSV, any format)
-  ↓  DomainProfile (auto-generated or hand-tuned)
-  ↓  DocumentIngester / TableIngester
-  ↓
-Category → Document → Chunk  (relation-free graph)
-  ↓
-7 atomic MCP tools  →  LLM agent explores via multi-turn tool use
+```python
+from synaptic import SynapticGraph
+
+# Any data → knowledge graph (CSV, JSONL, directory)
+graph = await SynapticGraph.from_data("./my_data/")
+
+# Search
+result = await graph.search("my question")
 ```
 
-**Two jobs, nothing else:**
-1. **Build the graph well** — cheap extraction, no LLM needed at index time
-2. **Give the LLM good tools** — search, expand, get_document, count, list_categories, search_exact, follow
+That's it. Auto-detects file format, generates ontology profile, ingests, indexes.
 
 ---
 
-## 3rd-generation retrieval
+## What it does
 
-| Generation | Approach | LLM cost at indexing |
-|-----------|----------|---------------------|
-| 1st (GraphRAG) | LLM extracts entities + relations + community summaries | High |
-| 2nd (LightRAG) | Delays LLM to query time, lighter indexing | Medium |
-| **3rd (this)** | **Relation-free graph, encoder-based extraction, hybrid retrieval** | **Zero** |
+```
+Your data (CSV, JSONL, PDF, any format)
+  ↓  auto-detect format + auto-generate DomainProfile
+  ↓  DocumentIngester (text) / TableIngester (structured)
+  ↓
+Knowledge Graph (Category → Document → Chunk)
+  ↓
+29 MCP tools → LLM agent explores via multi-turn tool use
+```
 
-Synaptic Memory follows the 3rd-gen pattern: no LLM at indexing, hierarchical graph structure, and hybrid FTS + graph retrieval. The graph is a search index, not a knowledge base.
+**Two jobs, nothing else:**
+1. **Build the graph well** — cheap extraction, no LLM at index time
+2. **Give the LLM good tools** — the agent decides what to search
+
+---
+
+## Install
+
+```bash
+pip install synaptic-memory                # Core (zero deps)
+pip install synaptic-memory[sqlite]        # + SQLite FTS5 backend
+pip install synaptic-memory[korean]        # + Kiwi morphological analyzer
+pip install synaptic-memory[vector]        # + usearch HNSW index
+pip install synaptic-memory[mcp]           # + MCP server for Claude
+pip install synaptic-memory[all]           # Everything
+```
 
 ---
 
 ## Quick Start
 
-### Install
+### Option A: Two lines (easiest)
 
-```bash
-pip install synaptic-memory              # Core (zero deps)
-pip install synaptic-memory[sqlite]      # + SQLite FTS5 backend
-pip install synaptic-memory[mcp]         # + MCP server for Claude
-pip install synaptic-memory[all]         # Everything
+```python
+from synaptic import SynapticGraph
+
+# CSV file
+graph = await SynapticGraph.from_data("products.csv")
+
+# JSONL documents
+graph = await SynapticGraph.from_data("documents.jsonl")
+
+# Entire directory (scans all CSV/JSONL)
+graph = await SynapticGraph.from_data("./my_corpus/")
+
+# With embedding (optional, improves semantic search)
+graph = await SynapticGraph.from_data(
+    "./my_corpus/",
+    embed_url="http://localhost:11434/v1",
+)
+
+# Search
+result = await graph.search("my question")
 ```
 
-### 1. Build a graph from your documents
+### Option B: MCP server (Claude Desktop / Code)
+
+```bash
+synaptic-mcp --db my_graph.db
+synaptic-mcp --db my_graph.db --embed-url http://localhost:11434/v1
+```
+
+Claude can now call 29 tools to explore your graph.
+
+### Option C: Full control
 
 ```python
 from synaptic.backends.sqlite_graph import SqliteGraphBackend
 from synaptic.extensions.domain_profile import DomainProfile
 from synaptic.extensions.document_ingester import DocumentIngester, JsonlDocumentSource
 
-# Auto-generate a profile from your data (or write one by hand)
-profile = DomainProfile(name="my_corpus", locale="ko")
-
-backend = SqliteGraphBackend("my_graph.db")
+profile = DomainProfile.load("my_profile.toml")
+backend = SqliteGraphBackend("graph.db")
 await backend.connect()
 
 source = JsonlDocumentSource("docs.jsonl", "chunks.jsonl")
 ingester = DocumentIngester(profile=profile, backend=backend)
-stats = await ingester.ingest(source)
-# → Category → Document → Chunk graph with FTS index
-```
-
-### 2. Let an LLM agent search it
-
-```python
-from synaptic.agent_tools import search_tool, expand_tool, get_document_tool
-from synaptic.search_session import SearchSession
-
-session = SearchSession()
-
-# The LLM calls these tools in a loop:
-result = await search_tool(backend, session, "인권영향평가 결과")
-# → evidence list + suggested next actions
-
-result = await get_document_tool(backend, session, "doc_abc123")
-# → full document with all chunks in reading order
-
-result = await expand_tool(backend, session, "chunk_xyz")
-# → 1-hop neighbours (same-doc chunks, category siblings, etc.)
-```
-
-### 3. Or use as an MCP server (Claude Desktop / Claude Code)
-
-```bash
-synaptic-mcp --db my_graph.db
-
-# Claude can now call:
-#   agent_search, agent_expand, agent_get_document,
-#   agent_list_categories, agent_count, agent_search_exact,
-#   agent_follow, agent_session_info
+await ingester.ingest(source)
 ```
 
 ---
 
-## Auto profile generation
+## 3rd-Generation Retrieval
 
-Don't want to manually configure stopwords and ontology hints? The ProfileGenerator does it for you:
+| Generation | Approach | LLM cost at indexing |
+|-----------|----------|---------------------|
+| 1st (GraphRAG) | LLM extracts entities + relations + summaries | High |
+| 2nd (LightRAG) | Delays LLM to query time | Medium |
+| **3rd (this)** | **Relation-free graph, hybrid retrieval** | **Zero** |
 
-```python
-from synaptic.extensions.profile_generator import ProfileGenerator
-
-# Rule-based (no LLM, no cost):
-gen = ProfileGenerator()
-profile = await gen.generate(
-    name="my_corpus",
-    samples=[doc.content for doc in docs[:50]],
-    categories=[doc.category for doc in docs[:50]],
-)
-profile.save("my_profile.toml")
-
-# With BYO embedder for ontology classification:
-from synaptic.extensions.ontology_classifier import OntologyClassifier
-classifier = OntologyClassifier(embedder=my_ollama_embedder)
-gen = ProfileGenerator(classifier=classifier)
-# → auto-maps category labels to NodeKind (RULE, DECISION, OBSERVATION...)
-```
+No LLM at indexing. The graph is a search index, not a knowledge base.
 
 ---
 
-## Agent tool layer
+## Agent Tools (29 total)
 
-7 atomic tools designed for multi-turn LLM exploration:
-
+### Text search tools
 | Tool | Purpose |
 |------|---------|
-| `search` | FTS-seeded hybrid search with anchor extraction + graph expansion + reranking |
-| `expand` | 1-hop graph neighbours (category siblings, chunk-next, entity mentions) |
-| `get_document` | Full document with all chunks in reading order |
-| `list_categories` | Enumerate categories with document counts |
-| `count` | Structural count by kind / category / year |
-| `search_exact` | Literal substring match for IDs and codes |
-| `follow` | Walk a specific edge type (contains, part_of, next_chunk, mentions) |
+| `deep_search` | **Recommended.** Search → expand → read documents in ONE call |
+| `compare_search` | Auto-decompose multi-topic queries, search in parallel |
+| `search` | FTS + vector hybrid search |
+| `expand` | 1-hop graph neighbours |
+| `get_document` | Full document with query-relevant chunks |
+| `search_exact` | Literal substring match for IDs/codes |
+| `follow` | Walk a specific edge type |
 
-Every tool returns:
-- `data` — the actual payload
-- `hints` — suggested next actions (LLM can ignore)
-- `session` — budget remaining, seen nodes, queries tried
+### Structured data tools
+| Tool | Purpose |
+|------|---------|
+| `filter_nodes` | Property filter (>=, <=, contains) — like SQL WHERE |
+| `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG |
+| `join_related` | FK-based related record lookup — like SQL JOIN |
 
-The `SearchSession` tracks state across turns so the agent never re-reads the same chunk.
+### Navigation tools
+| Tool | Purpose |
+|------|---------|
+| `list_categories` | Category list with document counts |
+| `count` | Structural count by kind/category/year |
+| `session_info` | Multi-turn session state |
+
+All tools return `{ data, hints, session }`. The `SearchSession` tracks seen nodes across turns so the agent never re-reads the same chunk.
 
 ---
 
-## Validated on real data
+## Retrieval Pipeline
 
-| Dataset | Type | Nodes | MRR | Pipeline |
-|---------|------|-------|-----|----------|
-| KRRA (Korean public sector) | Text documents | 19,720 | 0.95 | FTS + graph |
-| assort (fashion e-commerce) | Structured CSV | 13,909 | 0.95 | FTS + graph |
+```
+Query
+  ↓  Kiwi morphological analysis (Korean) or regex (other)
+  ↓  BM25 FTS + title 3x boost + substring fallback
+  ↓  Vector search (usearch HNSW, optional)
+  ↓  Vector PRF (pseudo relevance feedback, 2-pass)
+  ↓  PPR graph discovery (personalized pagerank)
+  ↓  GraphExpander (1-hop: category siblings, chunk-next, entity mentions)
+  ↓  HybridReranker (lexical + semantic + graph + structural + authority + temporal)
+  ↓  MaxP document aggregation (coverage bonus)
+  ↓  Cross-encoder reranker (bge-reranker-v2-m3 via TEI, optional)
+  ↓  EvidenceAggregator (MMR diversity + per-doc cap + category coverage)
+Result
+```
 
-Multi-turn agent validation (Claude Sonnet 4.6, 5 query types):
+---
+
+## Benchmarks
+
+### Single-shot retrieval
+
+| Dataset | Type | Nodes | Easy MRR | Hard MRR |
+|---------|------|-------|----------|----------|
+| KRRA (Korean public sector) | Text | 19,720 | **0.967** | 0.507 |
+| assort (fashion e-commerce) | CSV | 13,909 | **0.880** | 0.127 |
+
+### Multi-turn agent (Claude Sonnet 4.6)
 
 | Query type | Example | Turns | Result |
 |-----------|---------|-------|--------|
-| Factoid | "인권영향평가 결과" | 6 | Detailed table with scores |
-| Cross-document | "운영계획과 인권경영 충돌" | 9 | 4-stage framework cited |
+| Factoid | "인권영향평가 결과" | 6 | Detailed table |
+| Cross-document | "운영계획과 인권경영" | 10 | Multi-source synthesis |
 | Absence proof | "환불 예외 있나?" | 7 | Found 3 exception clauses |
-| Enumeration | "규정 총 몇 건?" | 3 | 235건 + full category breakdown |
-| Temporal | "최신 운영계획" | 8 | 2024 document summarized |
+| Paraphrase | "말 복지 프로그램" | 8 | Found 재활힐링승마 |
+| **Hard (single-shot fails)** | **4 queries** | **6-10** | **4/4 solved** |
+
+Single-shot MRR 0.507 → Multi-turn **100% solved**.
 
 ---
 
 ## Architecture
 
 ```
-DomainProfile (TOML)
+SynapticGraph.from_data("./data/")          ← Easy API
   ↓
-DocumentIngester / TableIngester
+Auto-detect → DomainProfile → Ingest → Index
   ↓
 StorageBackend (Protocol)
-  ├── MemoryBackend     (testing)
-  ├── SQLiteBackend     (FTS5, lightweight)
-  ├── SqliteGraphBackend(+ graph traversal)
-  ├── KuzuBackend       (embedded Cypher)
-  ├── PostgreSQLBackend (pgvector)
-  ├── QdrantBackend     (vector-only)
-  └── CompositeBackend  (mix backends)
+  ├── MemoryBackend        (testing)
+  ├── SqliteGraphBackend   (recommended, FTS5 + HNSW)
+  ├── KuzuBackend          (embedded Cypher)
+  ├── PostgreSQLBackend    (pgvector)
+  └── CompositeBackend     (mix backends)
   ↓
-3rd-gen retrieval pipeline
-  ├── QueryAnchorExtractor   (categories + entities + keywords)
-  ├── GraphExpander          (1-hop shallow expansion)
-  ├── HybridReranker         (4-signal fusion)
-  └── EvidenceAggregator     (MMR + per-doc cap + category coverage)
+Retrieval pipeline (BM25 + vector + PRF + PPR + reranker + MMR)
   ↓
-Agent tools (7) → MCP server (8 tools) → LLM agent
+Agent tools (29) → MCP server → LLM agent
 ```
-
-### Brain-inspired modules (still available)
-
-| Module | What it does |
-|--------|-------------|
-| `ResonanceScorer` | 4-axis ranking: relevance x importance x recency x vitality |
-| `HebbianEngine` | Co-activation strengthening / weakening |
-| `ConsolidationCascade` | L0 (raw) → L1 (sprint) → L2 (monthly) → L3 (permanent) |
-| `OntologyRegistry` | Type hierarchy + relation constraints |
-| `ActivityTracker` | Agent session / tool call / decision / outcome capture |
-| `PPR` | Personalized PageRank for graph-aware discovery |
 
 ---
 
 ## Backends
 
-| Backend | Graph Traversal | Vector Search | Scale | Use Case |
-|---------|----------------|--------------|-------|----------|
-| `MemoryBackend` | Python BFS | cosine | ~10K | Testing |
-| `SQLiteBackend` | CTE recursive | - | ~100K | Lightweight |
-| `SqliteGraphBackend` | + shortest_path | - | ~100K | **Recommended default** |
-| `KuzuBackend` | Cypher (embedded) | HNSW | ~10M | Graph-heavy |
-| `PostgreSQLBackend` | CTE recursive | pgvector | ~1M | Production |
-| `CompositeBackend` | Kuzu | Qdrant | Unlimited | Scale-out |
+| Backend | Vector Search | Scale | Use Case |
+|---------|--------------|-------|----------|
+| `MemoryBackend` | cosine | ~10K | Testing |
+| `SqliteGraphBackend` | **usearch HNSW** | ~100K | **Default** |
+| `KuzuBackend` | HNSW | ~10M | Graph-heavy |
+| `PostgreSQLBackend` | pgvector | ~1M | Production |
+| `CompositeBackend` | Qdrant | Unlimited | Scale-out |
 
 ---
 
-## MCP Server
+## Optional Extras
 
-```bash
-synaptic-mcp --db knowledge.db
-synaptic-mcp --embed-url http://localhost:11434/v1 --embed-model qwen3-embedding:4b
-```
-
-**24 tools total:**
-- Knowledge (7): search, add, link, reinforce, stats, export, consolidate
-- Agent workflow (4): start_session, log_action, record_decision, record_outcome
-- Semantic search (3): find_similar, get_reasoning_chain, explore_context
-- Ontology (2): define_type, query_schema
-- **Agent tools (8)**: search, expand, get_document, list_categories, count, search_exact, follow, session_info
+| Extra | What it adds |
+|-------|-------------|
+| `korean` | Kiwi morphological analyzer for Korean FTS |
+| `vector` | usearch HNSW index (100x faster vector search) |
+| `embedding` | aiohttp for embedding API calls |
+| `mcp` | MCP server for Claude Desktop/Code |
+| `sqlite` | aiosqlite backend |
 
 ---
 
@@ -240,8 +244,8 @@ synaptic-mcp --embed-url http://localhost:11434/v1 --embed-model qwen3-embedding
 
 ```bash
 uv sync --extra dev --extra sqlite --extra mcp
-uv run pytest tests/ -q                   # 683+ tests
-uv run ruff check --fix && uv run ruff format
+uv run pytest tests/ -q                   # 687+ tests
+uv run ruff check --fix
 ```
 
 ## License
