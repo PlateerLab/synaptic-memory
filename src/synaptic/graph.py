@@ -269,6 +269,159 @@ class SynapticGraph:
             cache_size=cache_size,
         )
 
+    # --- Easy API ---
+
+    @classmethod
+    async def from_data(
+        cls,
+        data_path: str,
+        *,
+        db: str = "synaptic.db",
+        embed_url: str | None = None,
+        embed_model: str = "qwen3-embedding:4b",
+    ) -> SynapticGraph:
+        """ONE-LINE graph construction from any data source.
+
+        Auto-detects file format, generates a DomainProfile, ingests,
+        and optionally embeds. Returns a ready-to-search graph.
+
+        Supports:
+        - Directory of files → scans for CSV, JSONL
+        - Single CSV → TableIngester
+        - Single JSONL → DocumentIngester
+        - Glob pattern (``*.csv``) → batch ingest
+
+        Example::
+
+            graph = await SynapticGraph.from_data("./my_docs/")
+            result = await graph.search("my question")
+
+            # With embedding
+            graph = await SynapticGraph.from_data(
+                "./data.csv",
+                embed_url="http://localhost:11434/v1",
+            )
+        """
+        from pathlib import Path
+
+        from synaptic.backends.sqlite_graph import SqliteGraphBackend
+        from synaptic.extensions.document_ingester import (
+            DocumentIngester,
+            JsonlDocumentSource,
+        )
+        from synaptic.extensions.profile_generator import ProfileGenerator
+        from synaptic.extensions.table_ingester import TableIngester
+
+        path = Path(data_path)
+        backend = SqliteGraphBackend(db)
+        await backend.connect()
+
+        # Detect data type and ingest
+        files: list[Path] = []
+        if path.is_dir():
+            files = sorted(
+                p for p in path.rglob("*")
+                if p.suffix in (".csv", ".jsonl", ".json")
+                and not p.name.startswith(".")
+            )
+        elif path.is_file():
+            files = [path]
+        else:
+            # Try as glob
+            import glob as _glob
+
+            files = [Path(p) for p in sorted(_glob.glob(data_path))]
+
+        if not files:
+            msg = f"No data files found at {data_path}"
+            raise FileNotFoundError(msg)
+
+        # Auto-generate profile from samples
+        samples: list[str] = []
+        categories: list[str] = []
+        for f in files[:5]:
+            if f.suffix == ".csv":
+                import csv
+
+                with f.open(encoding="utf-8") as fh:
+                    reader = csv.DictReader(fh)
+                    for i, row in enumerate(reader):
+                        if i >= 20:
+                            break
+                        samples.append(" ".join(str(v) for v in row.values()))
+            elif f.suffix == ".jsonl":
+                import json
+
+                with f.open(encoding="utf-8") as fh:
+                    for i, line in enumerate(fh):
+                        if i >= 20:
+                            break
+                        d = json.loads(line)
+                        content = d.get("content", d.get("text", d.get("title", "")))
+                        if content:
+                            samples.append(str(content)[:500])
+                        cat = d.get("category", "")
+                        if cat:
+                            categories.append(str(cat))
+
+        gen = ProfileGenerator()
+        profile = await gen.generate(
+            name=path.stem,
+            samples=samples,
+            categories=categories if categories else None,
+        )
+
+        # Ingest each file
+        for f in files:
+            if f.suffix == ".csv":
+                import csv
+
+                with f.open(encoding="utf-8") as fh:
+                    reader = csv.DictReader(fh)
+                    rows = list(reader)
+                if rows:
+                    columns = [{"name": k, "type": "str"} for k in rows[0]]
+                    table_name = f.stem
+                    graph_instance = cls(backend)
+                    ingester = TableIngester()
+                    await ingester.ingest(
+                        graph_instance, table_name, columns, rows,
+                        primary_key=list(rows[0].keys())[0],
+                    )
+            elif f.suffix == ".jsonl":
+                # Check if it's a docs+chunks pair
+                chunks_path = f.parent / f.name.replace("documents", "chunks")
+                source = JsonlDocumentSource(
+                    str(f),
+                    str(chunks_path) if chunks_path.exists() and chunks_path != f else None,
+                )
+                doc_ingester = DocumentIngester(profile=profile, backend=backend)
+                await doc_ingester.ingest(source)
+
+        # Optional: embed all nodes
+        if embed_url:
+            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
+            embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
+            nodes = await backend.list_nodes(kind=None, limit=100_000)
+            batch_size = 32
+            for i in range(0, len(nodes), batch_size):
+                batch = nodes[i : i + batch_size]
+                texts = [
+                    f"{n.title}\n{(n.content or '')[:300]}" for n in batch
+                ]
+                try:
+                    vecs = await embedder.embed_batch(texts)
+                    for n, v in zip(batch, vecs):
+                        if v:
+                            n.embedding = v
+                            await backend.save_node(n)
+                except Exception:
+                    pass
+
+        graph_obj = cls(backend)
+        return graph_obj
+
     @property
     def backend(self) -> StorageBackend:
         return self._backend
