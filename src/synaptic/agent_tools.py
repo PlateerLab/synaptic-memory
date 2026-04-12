@@ -395,6 +395,7 @@ async def expand_tool(
         out_nodes = [e for e in out_nodes if not session.has_seen(e.node.id)]
     out_nodes = out_nodes[:limit]
     session.mark_seen(e.node.id for e in out_nodes)
+    session.expanded_nodes.add(node_id)
 
     hints: list[Hint] = []
     if not out_nodes:

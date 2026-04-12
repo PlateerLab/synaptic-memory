@@ -1031,22 +1031,29 @@ async def agent_aggregate_nodes(
     group_by: str,
     table: str = "",
     metric: str = "count",
+    metric_property: str = "",
+    where_property: str = "",
+    where_op: str = "",
+    where_value: str = "",
     session_id: str = "",
     limit: int = 50,
 ) -> dict[str, Any]:
     """Aggregate nodes by property — GROUP BY + COUNT/SUM/AVG.
 
-    For questions like "색상별 상품 수" or "시즌별 매출 합계".
+    Supports optional WHERE pre-filter for conditional aggregation.
 
     Examples:
       aggregate_nodes(table="products", group_by="season", metric="count")
-      aggregate_nodes(table="product_variants", group_by="color_id", metric="count")
+      aggregate_nodes(table="feedback", group_by="goods_no", metric="count",
+                      where_property="score", where_op="==", where_value="5")
     """
     backend = await _ensure_backend()
     session = await _session(session_id)
     result = await aggregate_nodes_tool(
         backend, session, table=table or "",
-        group_by=group_by, metric=metric, limit=limit,
+        group_by=group_by, metric=metric, metric_property=metric_property,
+        where_property=where_property, where_op=where_op, where_value=where_value,
+        limit=limit,
     )
     return result.to_dict()
 

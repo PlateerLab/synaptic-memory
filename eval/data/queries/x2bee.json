@@ -1,0 +1,128 @@
+{
+  "dataset": "x2bee",
+  "description": "X2BEE ai_lab_main 이커머스 데이터 검색 GT (6 tables, ~19,843 nodes). 상품/판매/피드백 정형 데이터.",
+  "id_field": "node_title",
+  "note": "relevant_docs = 노드 title (table:pk 형식). AWS RDS PostgreSQL에서 from_database()로 인제스트.",
+  "queries": [
+    {
+      "qid": "e001",
+      "query": "iPhone 15 Pro 512GB",
+      "description": "상품명 정확 검색",
+      "relevant_docs": ["pr_goods_base:G00007"]
+    },
+    {
+      "qid": "e002",
+      "query": "Shin Ramyun",
+      "description": "상품명 정확 검색",
+      "relevant_docs": ["pr_goods_base:G00005"]
+    },
+    {
+      "qid": "e003",
+      "query": "Galaxy Book",
+      "description": "상품명 정확 검색",
+      "relevant_docs": ["pr_goods_base:G00003"]
+    },
+    {
+      "qid": "e004",
+      "query": "Dried Beef",
+      "description": "상품명 정확 검색 — 동명 상품 가능",
+      "relevant_docs": ["pr_goods_base:G00001"]
+    },
+    {
+      "qid": "e005",
+      "query": "CLA Mask",
+      "description": "상품명 정확 검색",
+      "relevant_docs": ["pr_goods_base:G00002"]
+    },
+    {
+      "qid": "e006",
+      "query": "Volume Lip plumper maxi",
+      "description": "상품명 정확 검색 (화장품)",
+      "relevant_docs": ["pr_goods_base:G00006"]
+    },
+    {
+      "qid": "e007",
+      "query": "Cheese Boursin Garlic Herbs",
+      "description": "상품명 부분 검색",
+      "relevant_docs": ["pr_goods_base:G01006"]
+    },
+    {
+      "qid": "e008",
+      "query": "Wine Niagara Reisling",
+      "description": "와인 상품 검색",
+      "relevant_docs": ["pr_goods_base:G00010", "pr_goods_base:G00462"]
+    },
+    {
+      "qid": "e009",
+      "query": "Chicken Soup Base",
+      "description": "상품명 검색",
+      "relevant_docs": ["pr_goods_base:G01004"]
+    },
+    {
+      "qid": "e010",
+      "query": "Pastry Banana Muffin",
+      "description": "복합 상품명 검색",
+      "relevant_docs": ["pr_goods_base:G00992"]
+    },
+    {
+      "qid": "e011",
+      "query": "Jameson Irish Whiskey",
+      "description": "주류 상품 검색 — 동명 상품 2개 (dash 유무 차이)",
+      "relevant_docs": ["pr_goods_base:G00082", "pr_goods_base:G00968"]
+    },
+    {
+      "qid": "e012",
+      "query": "Lamb Shoulder Boneless",
+      "description": "식재료 검색 — 유사 상품 다수",
+      "relevant_docs": ["pr_goods_base:G00470", "pr_goods_base:G00736"]
+    },
+    {
+      "qid": "e013",
+      "query": "English Muffin",
+      "description": "동명 상품 2개",
+      "relevant_docs": ["pr_goods_base:G00467", "pr_goods_base:G00569"]
+    },
+    {
+      "qid": "e014",
+      "query": "Beer Alexander Kieths Pale Ale",
+      "description": "맥주 상품 검색",
+      "relevant_docs": ["pr_goods_base:G00974"]
+    },
+    {
+      "qid": "e015",
+      "query": "Wiberg Super Cure",
+      "description": "리뷰가 가장 많은 상품 (29건)",
+      "relevant_docs": ["pr_goods_base:G00751"]
+    },
+    {
+      "qid": "e016",
+      "query": "Ice Wine",
+      "description": "아이스 와인 — 동명 2개 상품",
+      "relevant_docs": ["pr_goods_base:G00106", "pr_goods_base:G00339"]
+    },
+    {
+      "qid": "e017",
+      "query": "Cheese Feta",
+      "description": "치즈 종류 검색 — 2개 상품",
+      "relevant_docs": ["pr_goods_base:G00315", "pr_goods_base:G00694"]
+    },
+    {
+      "qid": "e018",
+      "query": "Cabernet Sauvignon wine",
+      "description": "와인 품종 검색",
+      "relevant_docs": ["pr_goods_base:G00113"]
+    },
+    {
+      "qid": "e019",
+      "query": "Bread 10 Grain",
+      "description": "빵 상품 검색 — 동명 상품 3개",
+      "relevant_docs": ["pr_goods_base:G00563", "pr_goods_base:G00817", "pr_goods_base:G01005"]
+    },
+    {
+      "qid": "e020",
+      "query": "Garlic Powder",
+      "description": "향신료 검색 — 최저가 상품 중 하나 (1000원)",
+      "relevant_docs": ["pr_goods_base:G00711"]
+    }
+  ]
+}

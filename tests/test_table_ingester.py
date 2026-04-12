@@ -16,7 +16,7 @@ class TestRowToNaturalLanguage:
 
     def test_skips_none(self):
         result = _row_to_natural_language("t", {"a": 1, "b": None})
-        assert "a=1" in result
+        assert "1" in result
         assert "b" not in result
 
 

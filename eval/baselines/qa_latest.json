@@ -1,23 +1,23 @@
 {
   "KRRA Easy": {
     "mrr": 0.9667,
-    "p_at_k": 0.4982,
+    "p_at_k": 0.5032,
     "r_at_k": 0.8934,
     "ndcg": 0.9012,
     "corpus_size": 20
   },
   "KRRA Hard": {
     "mrr": 1.0,
-    "p_at_k": 0.6099,
-    "r_at_k": 0.2957,
-    "ndcg": 0.6312,
+    "p_at_k": 0.5683,
+    "r_at_k": 0.2901,
+    "ndcg": 0.6239,
     "corpus_size": 15
   },
   "assort Easy": {
-    "mrr": 0.9333,
-    "p_at_k": 0.0933,
-    "r_at_k": 0.9,
-    "ndcg": 0.9075,
+    "mrr": 0.8667,
+    "p_at_k": 0.0867,
+    "r_at_k": 0.8333,
+    "ndcg": 0.8409,
     "corpus_size": 15
   },
   "assort Hard": {
@@ -27,18 +27,39 @@
     "ndcg": 0.0,
     "corpus_size": 15
   },
+  "X2BEE Easy": {
+    "mrr": 1.0,
+    "p_at_k": 0.125,
+    "r_at_k": 0.8417,
+    "ndcg": 0.8676,
+    "corpus_size": 20
+  },
+  "X2BEE Hard": {
+    "mrr": 0.2344,
+    "p_at_k": 0.0982,
+    "r_at_k": 0.3328,
+    "ndcg": 0.2616,
+    "corpus_size": 20
+  },
   "KRRA Hard (agent)": {
-    "mrr": 0.5333,
+    "mrr": 0.6667,
     "p_at_k": 0,
     "r_at_k": 0,
     "ndcg": 0,
     "corpus_size": 15
   },
   "assort Hard (agent)": {
-    "mrr": 0.0,
+    "mrr": 0.8,
     "p_at_k": 0,
     "r_at_k": 0,
     "ndcg": 0,
     "corpus_size": 15
+  },
+  "X2BEE Hard (agent)": {
+    "mrr": 0.8947,
+    "p_at_k": 0,
+    "r_at_k": 0,
+    "ndcg": 0,
+    "corpus_size": 19
   }
 }

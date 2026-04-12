@@ -107,6 +107,7 @@ class SearchSession:
     seen_node_ids: set[str] = field(default_factory=set)
     queries_tried: list[str] = field(default_factory=list)
     categories_explored: set[str] = field(default_factory=set)
+    expanded_nodes: set[str] = field(default_factory=set)
     facts: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
 
@@ -199,6 +200,7 @@ class SearchSession:
             "queries_tried": len(self.queries_tried),
             "last_queries": self.queries_tried[-3:],
             "categories_explored": sorted(self.categories_explored),
+            "expanded_nodes": len(self.expanded_nodes),
         }
 
 
@@ -234,12 +236,122 @@ async def build_graph_context(backend: StorageBackend) -> str:
         # Total counts
         total_docs = await backend.count_nodes(kind=None)
 
+        # Count nodes by kind to distinguish document vs structured graphs.
+        # Structured entities are identified by the ``_table_name`` property
+        # stamped by TableIngester / DbIngester — raw ENTITY nodes from
+        # phrase extraction don't count as structured.
+        try:
+            doc_count = await backend.count_nodes(kind=NodeKind.DOCUMENT)
+        except Exception:
+            doc_count = 0
+        try:
+            chunk_count = await backend.count_nodes(kind=NodeKind.CHUNK)
+        except Exception:
+            chunk_count = 0
+
         lines = [
             "[Graph metadata — use this instead of calling list_categories]",
             f"Categories ({len(cat_entries)}): {', '.join(cat_entries)}",
             f"Total nodes: {total_docs}",
             "Use category names above as the 'category' parameter in search.",
         ]
+
+        # --- Structured data: table schemas ---
+        # Detect tables from _table_name property and sample columns.
+        structured_row_count = 0
+        try:
+            sample_nodes = await backend.list_nodes(kind=NodeKind.ENTITY, limit=50_000)
+            tables: dict[str, dict[str, set[str]]] = {}  # table -> col -> sample values
+            table_counts: dict[str, int] = {}
+            for n in sample_nodes:
+                props = n.properties or {}
+                tbl = props.get("_table_name")
+                if not tbl:
+                    continue
+                table_counts[tbl] = table_counts.get(tbl, 0) + 1
+                structured_row_count += 1
+                if tbl not in tables:
+                    tables[tbl] = {}
+                for k, v in props.items():
+                    if k.startswith("_"):
+                        continue
+                    if k not in tables[tbl]:
+                        tables[tbl][k] = set()
+                    if len(tables[tbl][k]) < 3 and v:
+                        tables[tbl][k].add(str(v)[:50])
+
+            if tables:
+                lines.append("")
+                lines.append("[Structured data — tables and columns for filter/aggregate/join]")
+                for tbl in sorted(tables, key=lambda t: -table_counts.get(t, 0)):
+                    cnt = table_counts.get(tbl, 0)
+                    cols = tables[tbl]
+                    col_desc = []
+                    for col, samples in sorted(cols.items()):
+                        sample_str = ", ".join(sorted(samples)[:3])
+                        col_desc.append(f"  {col}: e.g. {sample_str}")
+                    lines.append(f"Table: {tbl} ({cnt} rows)")
+                    lines.extend(col_desc)
+            # --- FK relationships ---
+            # Detect FK columns (_id, _no, _code suffix) and match values to PK tables.
+            if tables:
+                # Also collect actual PK from _primary_key property
+                pk_tables: dict[str, str] = {}  # table -> pk column
+                for n in sample_nodes:
+                    props = n.properties or {}
+                    tbl = props.get("_table_name")
+                    pk_col = props.get("_primary_key")
+                    if tbl and pk_col and tbl not in pk_tables:
+                        pk_tables[tbl] = pk_col
+
+                # For each table's FK-looking columns, find which table they reference
+                fk_lines: list[str] = []
+                for tbl, cols in tables.items():
+                    for col in cols:
+                        if not (col.endswith("_no") or col.endswith("_id") or col.endswith("_code")):
+                            continue
+                        # Skip if this is the table's own PK
+                        if pk_tables.get(tbl) == col:
+                            continue
+                        # Find target table where this column is the PK
+                        for target_tbl, target_pk in pk_tables.items():
+                            if target_tbl == tbl:
+                                continue
+                            if target_pk == col:
+                                fk_lines.append(f"  {tbl}.{col} → {target_tbl}")
+                                break
+
+                if fk_lines:
+                    lines.append("")
+                    lines.append("[Foreign key relationships — use for join_related]")
+                    lines.extend(fk_lines)
+
+        except Exception:
+            pass  # structured metadata is optional
+
+        # Graph composition hint — tells the agent which tools fit which data.
+        # Placed at the end so table schemas are already known.
+        has_documents = doc_count > 0 or chunk_count > 0
+        has_structured = structured_row_count > 0
+        if has_documents or has_structured:
+            lines.append("")
+            lines.append("[Graph composition — match tool to data type]")
+            if has_documents:
+                lines.append(
+                    f"- Document nodes: {doc_count} docs, {chunk_count} chunks "
+                    f"→ use search/deep_search/get_document (NOT filter_nodes)"
+                )
+            if has_structured:
+                lines.append(
+                    f"- Structured rows: {structured_row_count} "
+                    f"→ use filter_nodes/aggregate_nodes/join_related"
+                )
+            if has_documents and has_structured:
+                lines.append(
+                    "- MIXED GRAPH: Pick the tool that matches your query's data type. "
+                    "Document questions need text search; row/column questions need structured tools."
+                )
+
         return "\n".join(lines)
     except Exception as exc:
         logger.warning("build_graph_context failed: %s", exc)

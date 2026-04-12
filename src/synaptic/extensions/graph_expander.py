@@ -181,6 +181,12 @@ class GraphExpander:
         # ENTITY hub nodes (post-processed by EntityLinker).
         await self._expand_entity_mentions(seed_nodes, state)
 
+        # Step 6 — RELATED edges (FK relationships for structured data).
+        # For ENTITY nodes from TableIngester/DbIngester, RELATED edges
+        # represent foreign-key relationships (e.g., product→sales,
+        # product→reviews). These are valuable for cross-table discovery.
+        await self._expand_related(seed_nodes, state)
+
         return state.results()
 
     # --- per-path helpers ---
@@ -344,6 +350,58 @@ class GraphExpander:
                     ExpandedNode(
                         node=src,
                         reason="entity_mention",
+                        hops=1,
+                        anchor_hit=seed.id,
+                    )
+                )
+                added += 1
+
+
+    async def _expand_related(
+        self,
+        seed_nodes: list[Node],
+        state: _ExpansionState,
+    ) -> None:
+        """Walk RELATED edges from seed ENTITY nodes (structured data FK).
+
+        For structured data ingested via TableIngester/DbIngester, RELATED
+        edges connect FK-linked rows (e.g., product → sales, product →
+        reviews). This step surfaces cross-table neighbours that lexical
+        search alone cannot find.
+
+        Only expands from ENTITY nodes to keep document graphs unaffected.
+        Capped at ``max_per_anchor`` per seed to prevent fan-out explosion
+        on heavily-linked rows.
+        """
+        entities = [n for n in seed_nodes if n.kind == NodeKind.ENTITY]
+        if not entities:
+            return
+
+        for seed in entities:
+            if state.is_full():
+                return
+            try:
+                edges = await self._backend.get_edges(seed.id, direction="both")
+            except Exception as exc:
+                logger.debug("related expansion failed for %s: %s", seed.id, exc)
+                continue
+
+            added = 0
+            for edge in edges:
+                if state.is_full() or added >= state.budget.max_per_anchor:
+                    break
+                if edge.kind != EdgeKind.RELATED:
+                    continue
+                other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
+                if state.contains(other_id):
+                    continue
+                other = await self._backend.get_node(other_id)
+                if other is None:
+                    continue
+                state.add(
+                    ExpandedNode(
+                        node=other,
+                        reason="related",
                         hops=1,
                         anchor_hit=seed.id,
                     )

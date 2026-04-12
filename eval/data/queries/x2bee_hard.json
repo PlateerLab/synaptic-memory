@@ -1,0 +1,209 @@
+{
+  "dataset": "x2bee_hard",
+  "description": "X2BEE ai_lab_main 이커머스 고난이도 검색 GT — 패러프레이즈, FK조인, 필터, 집계, 멀티홉",
+  "id_field": "node_title",
+  "queries": [
+    {
+      "qid": "h001",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "프리미엄 스마트폰 최신 모델",
+      "description": "iPhone 15 Pro 512GB를 직접 언급하지 않고 의미로 검색",
+      "relevant_docs": ["pr_goods_base:G00007"]
+    },
+    {
+      "qid": "h002",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "한국 즉석 라면 제품",
+      "description": "Shin Ramyun을 한국어 설명으로 검색",
+      "relevant_docs": ["pr_goods_base:G00005"]
+    },
+    {
+      "qid": "h003",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "이탈리아 숙성 치즈 제품",
+      "description": "Provolone, Gorgonzola, Parmesan 등 이탈리아 치즈",
+      "relevant_docs": [
+        "pr_goods_base:G00040", "pr_goods_base:G00083",
+        "pr_goods_base:G00442", "pr_goods_base:G00158"
+      ]
+    },
+    {
+      "qid": "h004",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "portable computing device",
+      "description": "Galaxy Book을 영어 패러프레이즈로 검색",
+      "relevant_docs": ["pr_goods_base:G00003"]
+    },
+    {
+      "qid": "h005",
+      "level": "L3",
+      "type": "cross_table",
+      "query": "Dried Beef 판매 이력",
+      "description": "상품(pr_goods_base) → 판매이력(pr_goods_sold_hist) FK 조인",
+      "relevant_docs": ["pr_goods_base:G00001"]
+    },
+    {
+      "qid": "h006",
+      "level": "L3",
+      "type": "cross_table",
+      "query": "Cheese Pont Couvert 리뷰",
+      "description": "상품 → 피드백 FK 조인. 27건의 리뷰 존재",
+      "relevant_docs": ["pr_goods_base:G00997"]
+    },
+    {
+      "qid": "h007",
+      "level": "L3",
+      "type": "cross_table",
+      "query": "iPhone 15 Pro 판매 기록은 몇 건인가?",
+      "description": "상품 → 판매이력 FK + 건수 확인 (65건)",
+      "relevant_docs": ["pr_goods_base:G00007"]
+    },
+    {
+      "qid": "h008",
+      "level": "L4",
+      "type": "filter",
+      "query": "50만원 이상 고가 상품",
+      "description": "price >= 500000 필터. iPhone만 해당 (1,600,000원)",
+      "relevant_docs": ["pr_goods_base:G00007"]
+    },
+    {
+      "qid": "h009",
+      "level": "L4",
+      "type": "filter",
+      "query": "1000원짜리 최저가 상품",
+      "description": "price = 1000 필터. 4개 상품",
+      "relevant_docs": [
+        "pr_goods_base:G00072", "pr_goods_base:G00302",
+        "pr_goods_base:G00711", "pr_goods_base:G00892"
+      ]
+    },
+    {
+      "qid": "h010",
+      "level": "L4",
+      "type": "filter",
+      "query": "5000원 이하 저가 상품 목록",
+      "description": "price <= 5000 필터. 41개 상품",
+      "relevant_docs": [
+        "pr_goods_base:G00005", "pr_goods_base:G00063", "pr_goods_base:G00068",
+        "pr_goods_base:G00072", "pr_goods_base:G00089", "pr_goods_base:G00098",
+        "pr_goods_base:G00202", "pr_goods_base:G00203", "pr_goods_base:G00204",
+        "pr_goods_base:G00217", "pr_goods_base:G00258", "pr_goods_base:G00261",
+        "pr_goods_base:G00267", "pr_goods_base:G00283", "pr_goods_base:G00302",
+        "pr_goods_base:G00314", "pr_goods_base:G00332", "pr_goods_base:G00376",
+        "pr_goods_base:G00388", "pr_goods_base:G00438", "pr_goods_base:G00444",
+        "pr_goods_base:G00492", "pr_goods_base:G00529", "pr_goods_base:G00554",
+        "pr_goods_base:G00557", "pr_goods_base:G00583", "pr_goods_base:G00634",
+        "pr_goods_base:G00635", "pr_goods_base:G00667", "pr_goods_base:G00688",
+        "pr_goods_base:G00711", "pr_goods_base:G00738", "pr_goods_base:G00754",
+        "pr_goods_base:G00768", "pr_goods_base:G00769", "pr_goods_base:G00778",
+        "pr_goods_base:G00783", "pr_goods_base:G00787", "pr_goods_base:G00892",
+        "pr_goods_base:G00965", "pr_goods_base:G01009"
+      ]
+    },
+    {
+      "qid": "h011",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "가장 많이 팔린 상품 TOP 3",
+      "description": "sold_qunt SUM GROUP BY goods_no. Dried Beef(83), Jacket(74), iPhone(69)",
+      "relevant_docs": [
+        "pr_goods_base:G00001", "pr_goods_base:G00004", "pr_goods_base:G00007"
+      ]
+    },
+    {
+      "qid": "h012",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "리뷰가 가장 많은 상품 TOP 5",
+      "description": "feedback COUNT GROUP BY goods_no. Wiberg(29), Bread Kimel(28), Pork Ham(28), Sauce Ranch(27), Cheese Pont(27)",
+      "relevant_docs": [
+        "pr_goods_base:G00751", "pr_goods_base:G00472", "pr_goods_base:G00389",
+        "pr_goods_base:G00329", "pr_goods_base:G00997"
+      ]
+    },
+    {
+      "qid": "h013",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "맥주 종류가 총 몇 개인가?",
+      "description": "Beer 포함 상품 COUNT = 11개",
+      "relevant_docs": [
+        "pr_goods_base:G00270", "pr_goods_base:G00466", "pr_goods_base:G00645",
+        "pr_goods_base:G00700", "pr_goods_base:G00719", "pr_goods_base:G00793",
+        "pr_goods_base:G00798", "pr_goods_base:G00928", "pr_goods_base:G00937",
+        "pr_goods_base:G00938", "pr_goods_base:G00974"
+      ]
+    },
+    {
+      "qid": "h014",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "5점 리뷰를 가장 많이 받은 상품의 가격은?",
+      "description": "feedback(score=5) 집계 → 상품 조회 → 가격 확인. Flour Masa De Harina(11건 5점, 가격 확인 필요)",
+      "relevant_docs": ["pr_goods_base:G00857"]
+    },
+    {
+      "qid": "h015",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "판매량 1위 상품의 리뷰 평점은?",
+      "description": "sold_hist 집계(G00001 Dried Beef=83개) → feedback 평점 확인",
+      "relevant_docs": ["pr_goods_base:G00001"]
+    },
+    {
+      "qid": "h016",
+      "level": "L7",
+      "type": "conversational",
+      "query": "이 쇼핑몰에서 와인이 몇 종류나 있어?",
+      "description": "Wine 포함 상품 COUNT. 80+ 종류",
+      "relevant_docs": [
+        "pr_goods_base:G00010", "pr_goods_base:G00034", "pr_goods_base:G00048",
+        "pr_goods_base:G00055", "pr_goods_base:G00077", "pr_goods_base:G00086",
+        "pr_goods_base:G00106", "pr_goods_base:G00112", "pr_goods_base:G00113",
+        "pr_goods_base:G00138", "pr_goods_base:G00144", "pr_goods_base:G00148",
+        "pr_goods_base:G00164", "pr_goods_base:G00172", "pr_goods_base:G00174",
+        "pr_goods_base:G00207", "pr_goods_base:G00264", "pr_goods_base:G00277",
+        "pr_goods_base:G00282", "pr_goods_base:G00293", "pr_goods_base:G00306",
+        "pr_goods_base:G00330", "pr_goods_base:G00333", "pr_goods_base:G00339",
+        "pr_goods_base:G00379", "pr_goods_base:G00402", "pr_goods_base:G00405",
+        "pr_goods_base:G00424", "pr_goods_base:G00449", "pr_goods_base:G00462"
+      ]
+    },
+    {
+      "qid": "h017",
+      "level": "L7",
+      "type": "conversational",
+      "query": "신라면이 잘 팔리나요?",
+      "description": "Shin Ramyun(G00005) 판매이력 확인. 45개 판매로 5위",
+      "relevant_docs": ["pr_goods_base:G00005"]
+    },
+    {
+      "qid": "h018",
+      "level": "L4",
+      "type": "filter",
+      "query": "양고기 제품 중 뼈 없는 것",
+      "description": "Lamb + Boneless 필터",
+      "relevant_docs": ["pr_goods_base:G00470", "pr_goods_base:G00492", "pr_goods_base:G00736"]
+    },
+    {
+      "qid": "h019",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "facial skincare product",
+      "description": "CLA Mask를 영어 카테고리로 검색",
+      "relevant_docs": ["pr_goods_base:G00002", "pr_goods_base:G00006"]
+    },
+    {
+      "qid": "h020",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "유저 한 명이 작성한 리뷰 수는 최대 몇 건?",
+      "description": "user_id GROUP BY COUNT MAX = 23건",
+      "relevant_docs": []
+    }
+  ]
+}

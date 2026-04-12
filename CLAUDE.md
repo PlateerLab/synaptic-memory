@@ -108,16 +108,19 @@ uv run python eval/run_all.py --compare eval/results/qa_latest.json
 ### 현재 베이스라인 (v0.12)
 | 데이터셋 | 언어 | Corpus | MRR | Hit | 비고 |
 |---------|------|--------|-----|-----|------|
-| KRRA Easy (20q) | KO | 19,720 | **0.967** | 20/20 | FTS + Kiwi |
-| KRRA Hard (15q) | KO | 19,720 | 0.507 | 11/15 | +embed+reranker |
-| KRRA Hard Multi-turn | KO | 19,720 | **100%** | 15/15 | Claude/GPT agent |
-| assort Easy (15q) | KO | 13,909 | **0.880** | 14/15 | 정형 CSV |
-| assort Hard Multi-turn | KO | 13,909 | **83%** | 5/6 | structured tools |
+| KRRA Easy (20q) | KO | 19,720 | **0.975** | 20/20 | FTS + Kiwi + embed |
+| KRRA Hard (15q) | KO | 19,720 | **0.933** | 15/15 | +embed+reranker |
+| KRRA Hard Multi-turn | KO | 19,720 | **80%** | 12/15 | GPT-4o-mini agent |
+| assort Easy (15q) | KO | 13,909 | **0.889** | 14/15 | 정형 CSV |
+| assort Hard Multi-turn | KO | 13,909 | **27%** | 4/15 | structured tools + agent |
 | HotPotQA-24 | EN | 226 | **0.727** | 24/24 | multi-hop |
 | Allganize RAG-ko | KO | 200 | **0.621** | 180/200 | 기업 문서 |
 | Allganize RAG-Eval | KO | 300 | **0.615** | 264/300 | 금융/의료/법률 |
 | AutoRAG | KO | 720 | **0.592** | 98/114 | 기업 검색 |
 | PublicHealthQA | KO | 77 | **0.318** | 45/77 | 공중보건 |
+| X2BEE Easy (20q) | EN | 19,843 | **1.000** | 20/20 | DB→온톨로지 (FTS) |
+| X2BEE Hard (19q) | EN/KO | 19,843 | 0.379 | 8/19 | 패러프레이즈+필터+집계 |
+| X2BEE Hard Multi-turn | EN/KO | 19,843 | **42%** | 8/19 | structured tools + agent |
 
 ### 평가 쿼리 위치
 ```
@@ -126,7 +129,9 @@ eval/data/queries/
 ├── krra_hard.json     # KRRA Hard 15q (패러프레이즈, 교차문서, 대화체)
 ├── assort.json        # assort Easy 15q
 ├── assort_hard.json   # assort Hard 15q (필터, 집계, FK조인)
-└── krra_multihop.json # 교차 문서 10q
+├── krra_multihop.json # 교차 문서 10q
+├── x2bee.json         # X2BEE Easy 20q (DB→온톨로지 키워드 검색)
+└── x2bee_hard.json    # X2BEE Hard 20q (패러프레이즈, 필터, 집계, 멀티홉)
 ```
 
 ## MCP 서버 (29개 도구)

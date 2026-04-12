@@ -69,6 +69,7 @@ _REASON_PRIOR: dict[str, float] = {
     "document_chunk": 0.70,
     "chunk_next": 0.55,
     "entity_mention": 0.50,
+    "related": 0.50,
     "ppr_discovery": 0.45,
     "category_sibling": 0.40,
 }

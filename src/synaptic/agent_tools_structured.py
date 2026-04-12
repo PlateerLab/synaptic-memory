@@ -113,8 +113,10 @@ async def filter_nodes_tool(
     try:
         # Use the StorageBackend protocol (list_nodes + Python filter)
         # instead of raw SQL. Works with ANY backend, not just SQLite.
+        # Full scan so we can report the accurate total count, not just
+        # the limited sample — this matters for "how many X?" questions.
         all_nodes = await backend.list_nodes(kind=None, limit=200_000)
-        nodes = []
+        matched_nodes: list[Any] = []
         for n in all_nodes:
             props = n.properties or {}
             if table and props.get("_table_name") != table:
@@ -124,7 +126,7 @@ async def filter_nodes_tool(
                 continue
             if op == "contains":
                 if value.lower() in str(raw_val).lower():
-                    nodes.append(n)
+                    matched_nodes.append(n)
             else:
                 try:
                     cmp_a = float(raw_val)
@@ -140,9 +142,10 @@ async def filter_nodes_tool(
                     or (op in ("!=",) and cmp_a != cmp_b)
                 )
                 if matched:
-                    nodes.append(n)
-            if len(nodes) >= limit:
-                break
+                    matched_nodes.append(n)
+
+        total = len(matched_nodes)
+        nodes = matched_nodes[:limit]
     except Exception as exc:
         return ToolResult(
             tool="filter_nodes", ok=False, data={},
@@ -157,6 +160,9 @@ async def filter_nodes_tool(
         ok=True,
         data={
             "filter": {"table": table, "property": property, "op": op, "value": value},
+            "total": total,
+            "showing": len(nodes),
+            "truncated": total > len(nodes),
             "count": len(nodes),
             "results": [_node_to_summary(n) for n in nodes],
         },
@@ -172,6 +178,10 @@ async def aggregate_nodes_tool(
     table: str = "",
     group_by: str,
     metric: str = "count",
+    metric_property: str = "",
+    where_property: str = "",
+    where_op: str = "",
+    where_value: str = "",
     limit: int = 50,
 ) -> ToolResult:
     """Aggregate nodes by a property — GROUP BY + COUNT/SUM/AVG/MAX/MIN.
@@ -179,14 +189,18 @@ async def aggregate_nodes_tool(
     Args:
         table: Optional table name filter.
         group_by: Property to group by (e.g. "color_id", "season").
-        metric: "count", "sum", "avg", "max", "min". For sum/avg/max/min,
-            a ``metric_property`` is needed (defaults to the first
-            numeric property found).
+        metric: "count", "sum", "avg", "max", "min".
+        metric_property: For sum/avg/max/min — the numeric property to
+            aggregate. If empty, aggregates the group_by values themselves.
+        where_property: Optional pre-filter property (e.g. "score").
+        where_op: Pre-filter operator (>=, <=, >, <, ==, !=, contains).
+        where_value: Pre-filter value (e.g. "5").
         limit: Max groups to return.
 
     Examples:
         - aggregate_nodes(table="products", group_by="season", metric="count")
-        - aggregate_nodes(table="product_variants", group_by="color_id", metric="count")
+        - aggregate_nodes(table="feedback", group_by="goods_no", metric="count",
+              where_property="score", where_op="==", where_value="5")
     """
     budget = _budget_check(session, "aggregate_nodes")
     if budget is not None:
@@ -212,18 +226,70 @@ async def aggregate_nodes_tool(
     try:
         all_nodes = await backend.list_nodes(kind=None, limit=200_000)
         buckets: dict[str, list[float]] = {}
+        # Detect FK target table: find which table uses group_by column as PK
+        fk_target_table: str = ""
+        pk_by_table: dict[str, str] = {}
+        for n in all_nodes:
+            props = n.properties or {}
+            tbl = props.get("_table_name")
+            pk = props.get("_primary_key")
+            if tbl and pk and tbl not in pk_by_table:
+                pk_by_table[tbl] = pk
+        for tbl, pk in pk_by_table.items():
+            if pk == group_by and tbl != table:
+                fk_target_table = tbl
+                break
+
+        # Pre-filter operator lookup
+        where_sql_op = _OPS.get(where_op) if where_op else None
+
         for n in all_nodes:
             props = n.properties or {}
             if table and props.get("_table_name") != table:
                 continue
+
+            # Apply WHERE pre-filter
+            if where_property and where_sql_op:
+                raw_w = props.get(where_property)
+                if raw_w is None:
+                    continue
+                if where_op == "contains":
+                    if where_value.lower() not in str(raw_w).lower():
+                        continue
+                else:
+                    try:
+                        cmp_a = float(raw_w)
+                        cmp_b = float(where_value)
+                    except (ValueError, TypeError):
+                        cmp_a, cmp_b = str(raw_w), str(where_value)  # type: ignore[assignment]
+                    passed = (
+                        (where_op in (">=",) and cmp_a >= cmp_b)
+                        or (where_op in ("<=",) and cmp_a <= cmp_b)
+                        or (where_op in (">",) and cmp_a > cmp_b)
+                        or (where_op in ("<",) and cmp_a < cmp_b)
+                        or (where_op in ("==", "=") and cmp_a == cmp_b)
+                        or (where_op in ("!=",) and cmp_a != cmp_b)
+                    )
+                    if not passed:
+                        continue
+
             grp_val = props.get(group_by)
             if grp_val is None:
                 continue
             grp_key = str(grp_val)
-            try:
-                num = float(grp_val)
-            except (ValueError, TypeError):
-                num = 1.0
+
+            # Value for metric: use metric_property if provided
+            if metric_property:
+                raw_m = props.get(metric_property)
+                try:
+                    num = float(raw_m) if raw_m is not None else 0.0
+                except (ValueError, TypeError):
+                    num = 0.0
+            else:
+                try:
+                    num = float(grp_val)
+                except (ValueError, TypeError):
+                    num = 1.0
             buckets.setdefault(grp_key, []).append(num)
 
         groups = []
@@ -240,9 +306,13 @@ async def aggregate_nodes_tool(
                 agg_val = min(vals)
             else:
                 agg_val = len(vals)
-            groups.append({"group": grp_key, "value": agg_val})
+            grp_entry: dict[str, Any] = {"group": grp_key, "value": agg_val}
+            if fk_target_table:
+                grp_entry["node_title"] = f"{fk_target_table}:{grp_key}"
+            groups.append(grp_entry)
 
         groups.sort(key=lambda g: -g["value"])
+        total_groups = len(groups)
         groups = groups[:limit]
     except Exception as exc:
         return ToolResult(
@@ -255,9 +325,14 @@ async def aggregate_nodes_tool(
         tool="aggregate_nodes",
         ok=True,
         data={
-            "aggregation": {"table": table, "group_by": group_by, "metric": metric},
+            "aggregation": {
+                "table": table, "group_by": group_by, "metric": metric,
+                **({"where": f"{where_property} {where_op} {where_value}"} if where_property else {}),
+            },
             "groups": groups,
-            "total_groups": len(groups),
+            "total_groups": total_groups,
+            "showing": len(groups),
+            "truncated": total_groups > len(groups),
         },
         hints=[],
         session=session.summary(),
@@ -299,16 +374,59 @@ async def join_related_tool(
         return budget
 
     try:
-        all_nodes = await backend.list_nodes(kind=None, limit=200_000)
         nodes = []
-        for n in all_nodes:
+
+        # Strategy 1: Graph edge traversal — find source node, follow RELATED edges.
+        # Much faster than full scan: O(degree) instead of O(N).
+        source_node = None
+        # Try to find the source node by title pattern (table:pk)
+        try:
+            # Guess source table: find a table where from_value is the PK
+            sample_nodes = await backend.list_nodes(kind=None, limit=1000)
+            for n in sample_nodes:
+                props = n.properties or {}
+                pk_col = props.get("_primary_key", "")
+                if pk_col == fk_property and str(props.get(fk_property, "")) == str(from_value):
+                    source_node = n
+                    break
+        except Exception:
+            pass
+
+        matched_nodes: list[Any] = []
+
+        if source_node:
+            from synaptic.models import EdgeKind
+            try:
+                edges = await backend.get_edges(source_node.id, direction="both")
+                for edge in edges:
+                    if edge.kind != EdgeKind.RELATED:
+                        continue
+                    other_id = edge.target_id if edge.source_id == source_node.id else edge.source_id
+                    other = await backend.get_node(other_id)
+                    if other is None:
+                        continue
+                    if target_table and (other.properties or {}).get("_table_name") != target_table:
+                        continue
+                    matched_nodes.append(other)
+            except Exception:
+                pass
+
+        # Strategy 2: Property scan fallback — always run to get accurate total.
+        # Full scan so we report the true count, not just edge-traversed subset.
+        seen = {n.id for n in matched_nodes}
+        all_nodes_list = await backend.list_nodes(kind=None, limit=200_000)
+        for n in all_nodes_list:
+            if n.id in seen:
+                continue
             props = n.properties or {}
             if props.get("_table_name") != target_table:
                 continue
             if str(props.get(fk_property, "")) == str(from_value):
-                nodes.append(n)
-                if len(nodes) >= limit:
-                    break
+                matched_nodes.append(n)
+                seen.add(n.id)
+
+        total = len(matched_nodes)
+        nodes = matched_nodes[:limit]
     except Exception as exc:
         return ToolResult(
             tool="join_related", ok=False, data={},
@@ -327,6 +445,9 @@ async def join_related_tool(
                 "fk_property": fk_property,
                 "target_table": target_table,
             },
+            "total": total,
+            "showing": len(nodes),
+            "truncated": total > len(nodes),
             "count": len(nodes),
             "results": [_node_to_summary(n) for n in nodes],
         },

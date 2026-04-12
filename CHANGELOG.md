@@ -6,6 +6,77 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-04-13
+
+### Added — Graph-aware agent search + structured data tools
+
+- **`SynapticGraph.from_database()`** — one-line DB → ontology migration.
+  Supports SQLite, PostgreSQL, MySQL, Oracle, SQL Server. Auto-discovers
+  schema, foreign keys, and M:N join tables (2+ FKs → RELATED edges
+  instead of intermediate nodes). Batch processing (10K rows default).
+- **Structured data tools** — `filter_nodes`, `aggregate_nodes`,
+  `join_related` for SQL-like queries on graph-stored tables. All three
+  now return `{total, showing, truncated}` for accurate counting.
+- **`aggregate_nodes` WHERE pre-filter** — conditional aggregation
+  (`where_property`/`where_op`/`where_value`). Enables "count 5-star
+  reviews per product" in one call.
+- **Graph-aware expansion for structured data** — `GraphExpander` now
+  follows RELATED edges for ENTITY nodes, so search surfaces FK-linked
+  rows (product → sales, product → reviews) automatically.
+- **`join_related` edge-first strategy** — walks RELATED edges when
+  available, falls back to property scan. O(degree) instead of O(N).
+- **Graph composition hint** in `build_graph_context()` — tells the
+  agent which tools fit the data (documents → search, structured →
+  filter/aggregate/join). Distinguishes mixed graphs.
+- **Foreign key metadata** surfaced in graph context — agents see
+  `table.column → target_table` mappings automatically.
+- **Table schema metadata** — column names, sample values, row counts
+  for every structured table, auto-injected into agent system prompt.
+- **Value-centric row content** — `TableIngester` now orders row values
+  by semantic priority (name > description > category > rest), giving
+  search the most meaningful tokens first. Removes `key=value` noise
+  from content generation.
+- **`SearchSession.expanded_nodes`** — tracks which nodes the agent has
+  already expanded for better multi-turn coordination.
+- **LLM-as-Judge evaluation** — `eval/run_all.py --judge` adds
+  semantic answer validation alongside ID matching. Essential for
+  filter/aggregate queries where "correct but different IDs" is common.
+- **X2BEE benchmark dataset** — 40 queries (20 easy + 20 hard) over
+  real production AWS RDS PostgreSQL (19,843 rows from ai_lab_main).
+
+### Changed
+
+- **`build_graph_context()`** — now includes structured data schemas
+  and FK relationships in addition to categories. Composition section
+  tells agents which tools match their query type.
+- **Agent system prompt** — explicit guidance on tool selection,
+  fallback strategies (try English keywords when Korean fails), and
+  structured data patterns (node title format, FK chaining).
+- **`HybridReranker._REASON_PRIOR`** — added `"related": 0.50` for
+  RELATED edge expansion priors.
+- **Public dataset runner** — now uses `EvidenceSearch` pipeline with
+  optional embeddings/reranker, matching custom dataset quality.
+
+### Fixed
+
+- `filter_nodes` no longer early-breaks at limit, so total counts
+  reported to agents are accurate.
+- `aggregate_nodes` groups now include `node_title` field for FK group
+  values, eliminating `goodss:` / `pr_product_base:` heuristic failures.
+- `from_database()` async row_reader for PostgreSQL (asyncpg returns
+  coroutines where aiosqlite returns sync iterators).
+
+### Performance
+
+- Agent benchmarks:
+  - X2BEE Hard: 1/19 (5%) → **17/19 (89%)**
+  - assort Hard: 1/15 (7%) → **12/15 (80%)**
+  - KRRA Hard MRR: 0.808 → **1.000** (15/15 hit)
+- Public benchmarks with EvidenceSearch + embed + reranker:
+  - HotPotQA-24: 0.727 → **0.964**
+  - Allganize RAG-ko: 0.621 → **0.905**
+  - PublicHealthQA: 0.318 → **0.600**
+
 ## [0.12.0] - 2026-04-12
 
 ### Added — 3rd-generation retrieval + agent tool layer

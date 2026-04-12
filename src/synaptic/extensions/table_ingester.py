@@ -43,14 +43,75 @@ if TYPE_CHECKING:
 logger = logging.getLogger("table-ingester")
 
 
-def _row_to_natural_language(table_name: str, row: dict[str, Any]) -> str:
-    """Convert a table row to natural language for FTS/vector search.
+# Column-name patterns that typically hold searchable/semantic content.
+# Ordered by priority — earlier patterns carry more weight during content
+# construction (they get placed at the front of the natural-language row).
+# Fully domain-agnostic: the same hints work across Korean, English, and
+# multi-language data.
+_SEMANTIC_COL_PATTERNS: tuple[tuple[str, ...], ...] = (
+    # name / title columns — primary identifiers
+    ("name", "title", "label", "nm", "이름", "제목", "상품명", "goods_nm", "product_name"),
+    # description / detail columns — rich semantic content
+    ("description", "desc", "detail", "content", "설명", "상세", "goods_detail", "product_desc"),
+    # category / type / classification columns
+    ("category", "type", "kind", "class", "group", "종류", "분류", "category_name", "group_name"),
+    # tag / season / attribute columns
+    ("tag", "tags", "season", "attribute", "속성", "태그"),
+)
 
-    Example: {"name": "운동화A", "price": 89000} →
-             "테이블 product 행: name=운동화A, price=89000"
+
+def _column_priority(col_name: str) -> int:
+    """Return semantic priority for a column (lower = higher priority).
+
+    Used to order values in the natural-language content so that
+    name/description/category values appear first, giving them more
+    weight in both BM25 FTS (earlier tokens) and embedding models
+    (which typically attend more to the start of the input).
     """
-    parts = [f"{k}={v}" for k, v in row.items() if v is not None]
-    return f"테이블 {table_name} 행: {', '.join(parts)}"
+    col_lower = col_name.lower()
+    for priority, patterns in enumerate(_SEMANTIC_COL_PATTERNS):
+        for pat in patterns:
+            if pat in col_lower:
+                return priority
+    return len(_SEMANTIC_COL_PATTERNS)  # unknown columns go last
+
+
+def _row_to_natural_language(
+    table_name: str,
+    row: dict[str, Any],
+    *,
+    column_hints: dict[str, int] | None = None,
+) -> str:
+    """Convert a table row to value-centric text for FTS/vector search.
+
+    Values are ordered by semantic priority so that descriptive columns
+    (name, description, category) appear first. Meta columns starting
+    with ``_`` and empty/zero values are excluded.
+
+    Args:
+        table_name: Table name, prepended as a prefix.
+        row: Dict of column → value.
+        column_hints: Optional explicit priority override
+            (column_name → priority, lower = earlier). Merged with
+            auto-detected priorities; explicit hints win.
+
+    Example: {"name": "운동화A", "price": 89000, "desc": "여름용 가벼운"} →
+             "product: 운동화A | 여름용 가벼운 | 89000"
+    """
+    column_hints = column_hints or {}
+    scored: list[tuple[int, str]] = []
+    for k, v in row.items():
+        if v is None or k.startswith("_"):
+            continue
+        s = str(v).strip()
+        if not s or s in ("0", "0.0", "None", "null"):
+            continue
+        priority = column_hints.get(k, _column_priority(k))
+        scored.append((priority, s))
+
+    scored.sort(key=lambda x: x[0])
+    values = [s for _, s in scored]
+    return f"{table_name}: {' | '.join(values)}"
 
 
 def _row_title(table_name: str, row: dict[str, Any], primary_key: str) -> str:
