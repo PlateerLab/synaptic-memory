@@ -3,9 +3,33 @@
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from collections.abc import Sequence
 from pathlib import Path
+
+
+# Korean particle suffixes to strip before FTS indexing. These cause
+# exact-term mismatches: "정보화기기를" ≠ "정보화기기". By stripping
+# particles at both index time and query time, FTS5 unicode61 tokenizer
+# can match stems consistently. We deliberately exclude 도/과 because
+# they form part of compound words (회계연도, 진단결과).
+_KO_PARTICLE = re.compile(
+    r"([가-힣]{2,}?)(에서|부터|까지|으로|에게|에는|에도|에서는|에서도"
+    r"|으로서|으로써|이라|이며|이고|이나|이든|처럼|만큼"
+    r"|의|을|를|에|은|는|이|가|와|로|서|며|고|나)(?=[^가-힣]|$)"
+)
+
+
+def _strip_particles(text: str) -> str:
+    """Strip Korean postposition particles for FTS normalization.
+
+    Applied to both the indexed content and the query so that a search
+    for "정보화기기" matches "정보화기기를" in the corpus.
+    """
+    if not text:
+        return text
+    return _KO_PARTICLE.sub(r"\1", text)
 
 from synaptic.models import (
     ConsolidationLevel,
@@ -136,11 +160,14 @@ class SQLiteBackend:
                 node.updated_at,
             ),
         )
-        # FTS sync (virtual tables don't support UPSERT)
+        # FTS sync — strip Korean particles so "정보화기기를" indexes as
+        # "정보화기기", matching queries for the bare stem.
+        fts_title = _strip_particles(title)
+        fts_content = _strip_particles(content)
         await db.execute("DELETE FROM syn_nodes_fts WHERE node_id = ?", (node.id,))
         await db.execute(
             "INSERT INTO syn_nodes_fts(node_id, title, content) VALUES (?, ?, ?)",
-            (node.id, title, content),
+            (node.id, fts_title, fts_content),
         )
         await db.commit()
 
@@ -176,11 +203,13 @@ class SQLiteBackend:
                 node.id,
             ),
         )
-        # FTS sync
+        # FTS sync — particle-stripped for Korean stem matching
+        fts_title = _strip_particles(title)
+        fts_content = _strip_particles(content)
         await db.execute("DELETE FROM syn_nodes_fts WHERE node_id = ?", (node.id,))
         await db.execute(
             "INSERT INTO syn_nodes_fts(node_id, title, content) VALUES (?, ?, ?)",
-            (node.id, title, content),
+            (node.id, fts_title, fts_content),
         )
         await db.commit()
 
@@ -255,6 +284,9 @@ class SQLiteBackend:
 
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         db = self._db()
+        # Strip Korean particles from query terms so "정보화기기를"
+        # matches the particle-stripped FTS index ("정보화기기").
+        query = _strip_particles(query)
         terms = query.strip().split()
         if not terms:
             return []

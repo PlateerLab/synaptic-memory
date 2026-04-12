@@ -118,9 +118,9 @@ class ExpansionBudget:
     """
 
     max_per_anchor: int = 20
-    max_total_expanded: int = 60
+    max_total_expanded: int = 100
     max_hops: int = 1
-    category_sibling_limit: int = 15
+    category_sibling_limit: int = 10
 
 
 class GraphExpander:

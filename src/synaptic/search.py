@@ -82,9 +82,16 @@ _KIND_BOOST = 0.05  # search_score boost amount on kind match (conservative)
 
 
 def _rank_to_score(
-    rank: int, *, top: float = 0.95, step: float = 0.05, floor: float = 0.3
+    rank: int, *, top: float = 0.95, step: float = 0.03, floor: float = 0.10
 ) -> float:
-    """Rank-based score conversion: rank 1 = top, decreasing by step per rank, clamped at floor."""
+    """Rank-based score conversion: rank 0 = 0.95, decreasing by step, clamped at floor.
+
+    Previous defaults (step=0.05, floor=0.30) caused rank 14+ to all
+    collapse to 0.30, erasing meaningful differences between mid-tier
+    results. The new settings keep scores differentiated down to rank
+    ~28 before hitting floor, which matters for PPR re-ranking and
+    resonance scoring on larger result pools.
+    """
     return max(floor, top - rank * step)
 
 

@@ -173,8 +173,10 @@ class EvidenceSearch:
         fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
         fts_scores: dict[str, float] = {}
         for rank, node in enumerate(fts_nodes):
-            # Linear rank score — 1.0 at rank 0, floor 0.05 at bottom
-            fts_scores[node.id] = max(0.05, 1.0 - rank * (0.95 / fts_seed_limit))
+            # Use the same scoring curve as search.py _rank_to_score:
+            # top=0.95, step=0.03, floor=0.10. Keeps both pipelines
+            # comparable so tuning transfers between them.
+            fts_scores[node.id] = max(0.10, 0.95 - rank * 0.03)
 
         # Step 3 — shallow graph expansion
         expanded = await self._expander.expand(
