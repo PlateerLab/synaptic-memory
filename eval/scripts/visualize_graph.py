@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import html
 import json
 import sys
 import webbrowser
@@ -33,21 +32,21 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.models import EdgeKind, NodeKind  # noqa: E402
+from synaptic.models import EdgeKind, NodeKind
 
 DEFAULT_SQLITE = REPO_ROOT / "eval" / "data" / "krra_graph.sqlite"
 
 # Color palette by NodeKind (used when no category color exists)
 KIND_COLORS = {
-    str(NodeKind.CONCEPT): "#e74c3c",    # red — categories
-    str(NodeKind.RULE): "#e67e22",        # orange
-    str(NodeKind.DECISION): "#3498db",    # blue
-    str(NodeKind.OBSERVATION): "#2ecc71", # green
-    str(NodeKind.OUTCOME): "#9b59b6",     # purple
-    str(NodeKind.ARTIFACT): "#1abc9c",    # teal
-    str(NodeKind.ENTITY): "#34495e",      # dark gray
-    str(NodeKind.CHUNK): "#bdc3c7",       # light gray
-    str(NodeKind.COMMUNITY): "#f39c12",   # yellow
+    str(NodeKind.CONCEPT): "#e74c3c",  # red — categories
+    str(NodeKind.RULE): "#e67e22",  # orange
+    str(NodeKind.DECISION): "#3498db",  # blue
+    str(NodeKind.OBSERVATION): "#2ecc71",  # green
+    str(NodeKind.OUTCOME): "#9b59b6",  # purple
+    str(NodeKind.ARTIFACT): "#1abc9c",  # teal
+    str(NodeKind.ENTITY): "#34495e",  # dark gray
+    str(NodeKind.CHUNK): "#bdc3c7",  # light gray
+    str(NodeKind.COMMUNITY): "#f39c12",  # yellow
 }
 
 EDGE_COLORS = {
@@ -61,7 +60,9 @@ EDGE_COLORS = {
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--graph", type=Path, default=DEFAULT_SQLITE)
     p.add_argument("--backend", choices=["sqlite", "kuzu"], default="sqlite")
     p.add_argument("--category", default=None, help="Filter to a single category")
@@ -75,9 +76,11 @@ async def _load_graph_data(args) -> dict:
     """Load nodes and edges from backend into a JSON-friendly dict."""
     if args.backend == "sqlite":
         from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
         backend = SqliteGraphBackend(str(args.graph))
     else:
         from synaptic.backends.kuzu import KuzuBackend
+
         backend = KuzuBackend(str(args.graph))
 
     await backend.connect()
@@ -121,7 +124,7 @@ async def _load_graph_data(args) -> dict:
         # Prioritize: categories first, then documents, then chunks
         priority = {str(NodeKind.CONCEPT): 0, str(NodeKind.ENTITY): 1, str(NodeKind.CHUNK): 2}
         all_nodes.sort(key=lambda n: priority.get(str(n.kind), 1))
-        all_nodes = all_nodes[:args.max_nodes]
+        all_nodes = all_nodes[: args.max_nodes]
 
     node_ids = {n.id for n in all_nodes}
 
@@ -135,17 +138,21 @@ async def _load_graph_data(args) -> dict:
         if cat:
             categories.add(cat)
         kinds.add(str(n.kind))
-        nodes.append({
-            "id": n.id,
-            "title": n.title[:80],
-            "kind": str(n.kind),
-            "category": cat,
-            "content": (n.content or "")[:500],
-            "tags": list(n.tags or []),
-            "properties": {k: str(v)[:100] for k, v in (props or {}).items()},
-            "color": KIND_COLORS.get(str(n.kind), "#999"),
-            "val": 30 if str(n.kind) == str(NodeKind.CONCEPT) else (10 if "document" in (n.tags or []) else 3),
-        })
+        nodes.append(
+            {
+                "id": n.id,
+                "title": n.title[:80],
+                "kind": str(n.kind),
+                "category": cat,
+                "content": (n.content or "")[:500],
+                "tags": list(n.tags or []),
+                "properties": {k: str(v)[:100] for k, v in (props or {}).items()},
+                "color": KIND_COLORS.get(str(n.kind), "#999"),
+                "val": 30
+                if str(n.kind) == str(NodeKind.CONCEPT)
+                else (10 if "document" in (n.tags or []) else 3),
+            }
+        )
 
     # Build doc → chunks map for sidebar display
     doc_chunks: dict[str, list[dict]] = {}
@@ -153,11 +160,13 @@ async def _load_graph_data(args) -> dict:
         if str(n.kind) == str(NodeKind.CHUNK):
             doc_id = (n.properties or {}).get("doc_id", "")
             if doc_id:
-                doc_chunks.setdefault(doc_id, []).append({
-                    "index": int((n.properties or {}).get("chunk_index", "0") or "0"),
-                    "title": n.title[:60],
-                    "content": (n.content or "")[:300],
-                })
+                doc_chunks.setdefault(doc_id, []).append(
+                    {
+                        "index": int((n.properties or {}).get("chunk_index", "0") or "0"),
+                        "title": n.title[:60],
+                        "content": (n.content or "")[:300],
+                    }
+                )
     for chunks in doc_chunks.values():
         chunks.sort(key=lambda c: c["index"])
 
@@ -175,12 +184,14 @@ async def _load_graph_data(args) -> dict:
                 target_node = next((nd for nd in all_nodes if nd.id == e.target_id), None)
                 if target_node and str(target_node.kind) == str(NodeKind.CHUNK):
                     continue  # skip edges to chunks
-                links.append({
-                    "source": e.source_id,
-                    "target": e.target_id,
-                    "kind": str(e.kind),
-                    "color": EDGE_COLORS.get(str(e.kind), "#ccc"),
-                })
+                links.append(
+                    {
+                        "source": e.source_id,
+                        "target": e.target_id,
+                        "kind": str(e.kind),
+                        "color": EDGE_COLORS.get(str(e.kind), "#ccc"),
+                    }
+                )
 
     # Filter out chunk nodes from graph display (they appear in sidebar only)
     graph_nodes = [n for n in nodes if n["kind"] != str(NodeKind.CHUNK)]
@@ -598,14 +609,11 @@ async def main() -> int:
     print(f"  Kinds: {data['kinds']}")
 
     # Generate HTML
-    html_content = HTML_TEMPLATE.replace(
-        "__GRAPH_DATA__", json.dumps(data, ensure_ascii=False)
-    ).replace(
-        "__KIND_COLORS__", json.dumps(KIND_COLORS)
-    ).replace(
-        "__EDGE_COLORS__", json.dumps(EDGE_COLORS)
-    ).replace(
-        "__DOC_CHUNKS__", json.dumps(data.get("doc_chunks", {}), ensure_ascii=False)
+    html_content = (
+        HTML_TEMPLATE.replace("__GRAPH_DATA__", json.dumps(data, ensure_ascii=False))
+        .replace("__KIND_COLORS__", json.dumps(KIND_COLORS))
+        .replace("__EDGE_COLORS__", json.dumps(EDGE_COLORS))
+        .replace("__DOC_CHUNKS__", json.dumps(data.get("doc_chunks", {}), ensure_ascii=False))
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

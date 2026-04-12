@@ -48,9 +48,7 @@ class RerankerProtocol(Protocol):
     caller normalises before using.
     """
 
-    async def rerank(
-        self, query: str, documents: list[str]
-    ) -> list[float]: ...
+    async def rerank(self, query: str, documents: list[str]) -> list[float]: ...
 
 
 class OllamaReranker:
@@ -80,9 +78,7 @@ class OllamaReranker:
         self._model = model
         self._timeout = timeout
 
-    async def rerank(
-        self, query: str, documents: list[str]
-    ) -> list[float]:
+    async def rerank(self, query: str, documents: list[str]) -> list[float]:
         import aiohttp
 
         url = f"{self._base_url}/api/rerank"
@@ -129,9 +125,7 @@ class TEIReranker:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
 
-    async def rerank(
-        self, query: str, documents: list[str]
-    ) -> list[float]:
+    async def rerank(self, query: str, documents: list[str]) -> list[float]:
         import aiohttp
 
         url = f"{self._base_url}/rerank"
@@ -173,21 +167,24 @@ class FlashRankReranker:
     def __init__(
         self,
         model_name: str = "ms-marco-MultiBERT-L-12",
-        cache_dir: str = "/tmp/flashrank",
+        cache_dir: str | None = None,
     ) -> None:
         try:
+            import tempfile
+
             from flashrank import Ranker
-            self._ranker = Ranker(model_name=model_name, cache_dir=cache_dir)
+
+            resolved_cache = cache_dir or tempfile.gettempdir() + "/flashrank"
+            self._ranker = Ranker(model_name=model_name, cache_dir=resolved_cache)
         except ImportError as exc:
             msg = "pip install flashrank"
             raise ImportError(msg) from exc
 
-    async def rerank(
-        self, query: str, documents: list[str]
-    ) -> list[float]:
+    async def rerank(self, query: str, documents: list[str]) -> list[float]:
         if not documents:
             return []
         from flashrank import RerankRequest
+
         req = RerankRequest(
             query=query,
             passages=[{"text": d} for d in documents],
@@ -201,9 +198,7 @@ class FlashRankReranker:
 class MockReranker:
     """Test double — returns scores proportional to document length."""
 
-    async def rerank(
-        self, query: str, documents: list[str]
-    ) -> list[float]:
+    async def rerank(self, query: str, documents: list[str]) -> list[float]:
         if not documents:
             return []
         max_len = max(len(d) for d in documents) or 1

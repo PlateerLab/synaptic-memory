@@ -11,12 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -24,10 +21,8 @@ sys.path.insert(0, str(REPO_ROOT))
 from synaptic.agent_tools import (
     count_tool,
     expand_tool,
-    follow_tool,
     get_document_tool,
     list_categories_tool,
-    search_exact_tool,
     search_tool,
 )
 from synaptic.agent_tools_v2 import compare_search_tool, deep_search_tool
@@ -151,35 +146,57 @@ You are a research agent with access to a knowledge graph.
 """
 
 SCENARIOS = [
-    {"id": "h001", "label": "패러프레이즈", "question": "말 복지 향상을 위한 프로그램이 뭐가 있어?"},
-    {"id": "h004", "label": "교차 문서", "question": "인권경영 지침이 예산 편성에 어떻게 반영되나?"},
-    {"id": "h014", "label": "대화체", "question": "올해 승마 체험 행사를 기획하려는데 작년에 어떻게 했는지 참고할 자료 있나요?"},
-    {"id": "h015", "label": "패러프레이즈", "question": "우리 회사 윤리경영 점수가 어떻게 되는지 보고서 좀 찾아줘"},
+    {
+        "id": "h001",
+        "label": "패러프레이즈",
+        "question": "말 복지 향상을 위한 프로그램이 뭐가 있어?",
+    },
+    {
+        "id": "h004",
+        "label": "교차 문서",
+        "question": "인권경영 지침이 예산 편성에 어떻게 반영되나?",
+    },
+    {
+        "id": "h014",
+        "label": "대화체",
+        "question": "올해 승마 체험 행사를 기획하려는데 작년에 어떻게 했는지 참고할 자료 있나요?",
+    },
+    {
+        "id": "h015",
+        "label": "패러프레이즈",
+        "question": "우리 회사 윤리경영 점수가 어떻게 되는지 보고서 좀 찾아줘",
+    },
     {"id": "exact", "label": "정확 매칭", "question": "인권영향평가 결과는 어떻게 나왔어?"},
 ]
 
 
 async def dispatch(name: str, args: dict, backend, session) -> dict:
     if name == "deep_search":
-        r = await deep_search_tool(backend, session, args["query"],
-                                   limit=args.get("limit", 5),
-                                   category=args.get("category"))
+        r = await deep_search_tool(
+            backend,
+            session,
+            args["query"],
+            limit=args.get("limit", 5),
+            category=args.get("category"),
+        )
     elif name == "compare_search":
         r = await compare_search_tool(backend, session, args["query"])
     elif name == "search":
-        r = await search_tool(backend, session, args["query"],
-                              limit=args.get("limit", 10),
-                              category=args.get("category"))
+        r = await search_tool(
+            backend,
+            session,
+            args["query"],
+            limit=args.get("limit", 10),
+            category=args.get("category"),
+        )
     elif name == "get_document":
-        r = await get_document_tool(backend, session, args["doc_id"],
-                                    query=args.get("query", ""))
+        r = await get_document_tool(backend, session, args["doc_id"], query=args.get("query", ""))
     elif name == "list_categories":
         r = await list_categories_tool(backend, session)
     elif name == "expand":
         r = await expand_tool(backend, session, args["node_id"])
     elif name == "count":
-        r = await count_tool(backend, session, kind=args.get("kind"),
-                             category=args.get("category"))
+        r = await count_tool(backend, session, kind=args.get("kind"), category=args.get("category"))
     else:
         return {"error": f"unknown tool: {name}"}
     return r.to_dict()
@@ -187,6 +204,7 @@ async def dispatch(name: str, args: dict, backend, session) -> dict:
 
 async def run_agent(question, *, backend, model="gpt-4o-mini", max_turns=8):
     from openai import AsyncOpenAI
+
     client = AsyncOpenAI()
 
     session = SearchSession(budget_tool_calls=max_turns * 3)
@@ -215,28 +233,41 @@ async def run_agent(question, *, backend, model="gpt-4o-mini", max_turns=8):
             for tc in msg.tool_calls:
                 fn = tc.function.name
                 args = json.loads(tc.function.arguments)
-                print(f"    → {fn}({', '.join(f'{k}={v}' for k,v in args.items())})")
+                print(f"    → {fn}({', '.join(f'{k}={v}' for k, v in args.items())})")
                 result = await dispatch(fn, args, backend, session)
                 tool_calls_total += 1
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": json.dumps(result, ensure_ascii=False)[:5000],
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": json.dumps(result, ensure_ascii=False)[:5000],
+                    }
+                )
         else:
             elapsed = time.time() - t0
             answer = msg.content or ""
-            print(f"------")
-            print(f"Turns: {turn+1}  |  Tool calls: {tool_calls_total}  |  {elapsed:.1f}s")
+            print("------")
+            print(f"Turns: {turn + 1}  |  Tool calls: {tool_calls_total}  |  {elapsed:.1f}s")
             print(f"\nA: {answer[:500]}")
-            return {"turns": turn+1, "tool_calls": tool_calls_total, "elapsed": elapsed, "answer": answer}
+            return {
+                "turns": turn + 1,
+                "tool_calls": tool_calls_total,
+                "elapsed": elapsed,
+                "answer": answer,
+            }
 
     elapsed = time.time() - t0
-    return {"turns": max_turns, "tool_calls": tool_calls_total, "elapsed": elapsed, "answer": "max_turns_exceeded"}
+    return {
+        "turns": max_turns,
+        "tool_calls": tool_calls_total,
+        "elapsed": elapsed,
+        "answer": "max_turns_exceeded",
+    }
 
 
 async def main():
     import argparse
+
     p = argparse.ArgumentParser()
     p.add_argument("--only", default=None)
     p.add_argument("--graph", default=str(REPO_ROOT / "eval/data/krra_graph.sqlite"))
@@ -251,10 +282,10 @@ async def main():
         scenarios = [s for s in SCENARIOS if s["id"] == args.only]
 
     for s in scenarios:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"[{s['id']}] {s['label']}")
         print(f"Q: {s['question']}")
-        print("-"*60)
+        print("-" * 60)
         await run_agent(s["question"], backend=backend, model=args.model)
 
     await backend.close()

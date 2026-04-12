@@ -71,10 +71,7 @@ _TOKEN = re.compile(r"[A-Za-z가-힣]{2,}")
 def _tokens(text: str) -> set[str]:
     if not text:
         return set()
-    return {
-        t.lower() if t[0].isascii() else t
-        for t in _TOKEN.findall(text)
-    }
+    return {t.lower() if t[0].isascii() else t for t in _TOKEN.findall(text)}
 
 
 def _jaccard(a: set[str], b: set[str]) -> float:
@@ -229,9 +226,7 @@ class EvidenceAggregator:
             selected.append(evidence)
             selected_tokens.append(_tokens(evidence.node.content))
             if evidence.document_id:
-                doc_counts[evidence.document_id] = (
-                    doc_counts.get(evidence.document_id, 0) + 1
-                )
+                doc_counts[evidence.document_id] = doc_counts.get(evidence.document_id, 0) + 1
 
         return selected
 

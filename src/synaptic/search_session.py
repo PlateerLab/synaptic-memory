@@ -308,7 +308,9 @@ async def build_graph_context(backend: StorageBackend) -> str:
                 fk_lines: list[str] = []
                 for tbl, cols in tables.items():
                     for col in cols:
-                        if not (col.endswith("_no") or col.endswith("_id") or col.endswith("_code")):
+                        if not (
+                            col.endswith("_no") or col.endswith("_id") or col.endswith("_code")
+                        ):
                             continue
                         # Skip if this is the table's own PK
                         if pk_tables.get(tbl) == col:
@@ -381,10 +383,7 @@ class SessionStore:
     def _evict_expired(self) -> None:
         """Drop sessions older than TTL. Called lazily on access."""
         now = time.time()
-        expired = [
-            sid for sid, s in self._sessions.items()
-            if (now - s.created_at) > self._ttl
-        ]
+        expired = [sid for sid, s in self._sessions.items() if (now - s.created_at) > self._ttl]
         for sid in expired:
             del self._sessions[sid]
             logger.debug("session-store: evicted expired session %s", sid)

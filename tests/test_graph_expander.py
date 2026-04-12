@@ -69,9 +69,7 @@ async def _build_fixture(backend: MemoryBackend) -> dict[str, Node]:
         await backend.save_node(n)
 
     async def _edge(eid: str, src: str, dst: str, kind: EdgeKind):
-        await backend.save_edge(
-            Edge(id=eid, source_id=src, target_id=dst, kind=kind, weight=1.0)
-        )
+        await backend.save_edge(Edge(id=eid, source_id=src, target_id=dst, kind=kind, weight=1.0))
 
     # PART_OF: doc → category
     await _edge("po_r1", doc_r1.id, cat_rule.id, EdgeKind.PART_OF)
@@ -144,9 +142,7 @@ class TestCategorySiblings:
         await _build_fixture(backend)
         expander = GraphExpander(backend=backend)
 
-        anchors = QueryAnchors(
-            query="규정", categories=["규정"], category_node_ids=["cat_rule"]
-        )
+        anchors = QueryAnchors(query="규정", categories=["규정"], category_node_ids=["cat_rule"])
         results = await expander.expand(anchors=anchors, seed_nodes=[])
         doc_results = [r for r in results if r.node.id.startswith("doc_r")]
         for r in doc_results:
@@ -160,13 +156,9 @@ class TestCategorySiblings:
         await _build_fixture(backend)
         expander = GraphExpander(backend=backend)
 
-        anchors = QueryAnchors(
-            query="규정", categories=["규정"], category_node_ids=["cat_rule"]
-        )
+        anchors = QueryAnchors(query="규정", categories=["규정"], category_node_ids=["cat_rule"])
         budget = ExpansionBudget(category_sibling_limit=1)
-        results = await expander.expand(
-            anchors=anchors, seed_nodes=[], budget=budget
-        )
+        results = await expander.expand(anchors=anchors, seed_nodes=[], budget=budget)
         doc_count = sum(1 for r in results if r.reason == "category_sibling")
         assert doc_count == 1
 
@@ -239,9 +231,7 @@ class TestBudget:
         nodes = await _build_fixture(backend)
         expander = GraphExpander(backend=backend)
 
-        anchors = QueryAnchors(
-            query="규정", categories=["규정"], category_node_ids=["cat_rule"]
-        )
+        anchors = QueryAnchors(query="규정", categories=["규정"], category_node_ids=["cat_rule"])
         budget = ExpansionBudget(max_total_expanded=2)
         results = await expander.expand(
             anchors=anchors,

@@ -32,6 +32,7 @@ def _get_kiwi():
     if _kiwi_available is None:
         try:
             from kiwipiepy import Kiwi
+
             _kiwi_instance = Kiwi()
             _kiwi_available = True
         except ImportError:
@@ -68,7 +69,7 @@ def _normalize_korean(text: str) -> str:
         return text
 
     # Check Korean content ratio — skip Kiwi for non-Korean-dominant text
-    hangul_count = sum(1 for c in text if '가' <= c <= '힣')
+    hangul_count = sum(1 for c in text if "가" <= c <= "힣")
     total_chars = sum(1 for c in text if not c.isspace())
     korean_ratio = hangul_count / total_chars if total_chars > 0 else 0
 
@@ -78,8 +79,7 @@ def _normalize_korean(text: str) -> str:
             try:
                 tokens = kiwi.tokenize(text)
                 stems = [
-                    tk.form for tk in tokens
-                    if tk.tag.startswith(("NN", "VV", "VA", "SL", "SN"))
+                    tk.form for tk in tokens if tk.tag.startswith(("NN", "VV", "VA", "SL", "SN"))
                 ]
                 if stems:
                     return " ".join(stems)
@@ -87,6 +87,7 @@ def _normalize_korean(text: str) -> str:
                 pass
 
     return _KO_PARTICLE.sub(r"\1", text)
+
 
 from synaptic.models import (
     ConsolidationLevel,
@@ -429,17 +430,13 @@ class SQLiteBackend:
         # Pass 2: LIKE-based substring scan for terms FTS5 missed.
         # Handles Korean compound words where tokenisation may not align.
         if len(scored_nodes) < limit:
-            like_parts = " OR ".join(
-                "(title LIKE ? OR content LIKE ?)" for _ in terms
-            )
+            like_parts = " OR ".join("(title LIKE ? OR content LIKE ?)" for _ in terms)
             params: list[str | int] = []
             for t in terms:
                 like = f"%{t}%"
                 params.extend([like, like])
             params.append(limit * 2)
-            like_sql = (
-                f"SELECT * FROM syn_nodes WHERE {like_parts} LIMIT ?"
-            )
+            like_sql = f"SELECT * FROM syn_nodes WHERE {like_parts} LIMIT ?"
             async with db.execute(like_sql, params) as cur:
                 rows2 = await cur.fetchall()
             for r in rows2:
@@ -500,9 +497,7 @@ class SQLiteBackend:
 
         # Fallback: brute-force
         db = self._db()
-        async with db.execute(
-            "SELECT * FROM syn_nodes WHERE embedding_json != '[]'"
-        ) as cur:
+        async with db.execute("SELECT * FROM syn_nodes WHERE embedding_json != '[]'") as cur:
             rows = await cur.fetchall()
         if not rows:
             return []
@@ -519,9 +514,7 @@ class SQLiteBackend:
         scored.sort(key=lambda x: -x[1])
         return [n for n, _ in scored[:limit]]
 
-    async def _search_vector_hnsw(
-        self, embedding: list[float], limit: int
-    ) -> list[Node] | None:
+    async def _search_vector_hnsw(self, embedding: list[float], limit: int) -> list[Node] | None:
         """HNSW search via usearch. Returns None if usearch unavailable."""
         try:
             import numpy as np
@@ -570,18 +563,15 @@ class SQLiteBackend:
             self._hnsw_id_map = id_map
             logger.info(
                 "sqlite: built HNSW index with %d vectors (dim=%d)",
-                len(vectors), ndim,
+                len(vectors),
+                ndim,
             )
 
         # Search
         q = np.array(embedding, dtype=np.float32)
         results = self._hnsw_index.search(q, limit)
 
-        node_ids = [
-            self._hnsw_id_map[int(k)]
-            for k in results.keys
-            if int(k) in self._hnsw_id_map
-        ]
+        node_ids = [self._hnsw_id_map[int(k)] for k in results.keys if int(k) in self._hnsw_id_map]
         return await self.get_nodes_batch(node_ids)
 
     def invalidate_vector_index(self) -> None:
@@ -640,13 +630,25 @@ class SQLiteBackend:
             title = unicodedata.normalize("NFC", node.title) if node.title else node.title
             content = unicodedata.normalize("NFC", node.content) if node.content else node.content
             embedding_json = json.dumps(node.embedding) if node.embedding else "[]"
-            node_rows.append((
-                node.id, str(node.kind), title, content,
-                json.dumps(node.tags), str(node.level), node.vitality,
-                node.access_count, node.success_count, node.failure_count,
-                node.source, json.dumps(node.properties), embedding_json,
-                node.created_at, node.updated_at,
-            ))
+            node_rows.append(
+                (
+                    node.id,
+                    str(node.kind),
+                    title,
+                    content,
+                    json.dumps(node.tags),
+                    str(node.level),
+                    node.vitality,
+                    node.access_count,
+                    node.success_count,
+                    node.failure_count,
+                    node.source,
+                    json.dumps(node.properties),
+                    embedding_json,
+                    node.created_at,
+                    node.updated_at,
+                )
+            )
             fts_title = _normalize_korean(title) if title else ""
             fts_content = _normalize_korean(content) if content else ""
             fts_rows.append((node.id, fts_title, fts_content))
@@ -690,8 +692,7 @@ class SQLiteBackend:
             return
         db = self._db()
         rows = [
-            (e.id, e.source_id, e.target_id, str(e.kind), e.weight, e.created_at)
-            for e in edges
+            (e.id, e.source_id, e.target_id, str(e.kind), e.weight, e.created_at) for e in edges
         ]
         try:
             await db.executemany(

@@ -56,9 +56,7 @@ def _load_resolver(graph_path: Path) -> dict[str, str]:
     try:
         conn = sqlite3.connect(str(graph_path))
         conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT title, content, properties_json FROM syn_nodes"
-        ).fetchall()
+        rows = conn.execute("SELECT title, content, properties_json FROM syn_nodes").fetchall()
         for r in rows:
             title = r["title"] or ""
             raw_content = (r["content"] or "").replace("\n", " ").strip()
@@ -69,7 +67,7 @@ def _load_resolver(graph_path: Path) -> dict[str, str]:
                 tbl = title.split(":", 1)[0]
                 prefix = f"{tbl}: "
                 if raw_content.startswith(prefix):
-                    raw_content = raw_content[len(prefix):]
+                    raw_content = raw_content[len(prefix) :]
 
             # Cap content length for readability in Excel cells
             content_snippet = raw_content[:150]
@@ -176,8 +174,17 @@ def _write_sheet(
         ws[f"A{row}"].font = Font(bold=True)
 
     # Column headers
-    columns = ["qid", "query", "type", "level", "category", "description",
-               "relevant_count", "relevant_answer", "relevant_docs"]
+    columns = [
+        "qid",
+        "query",
+        "type",
+        "level",
+        "category",
+        "description",
+        "relevant_count",
+        "relevant_answer",
+        "relevant_docs",
+    ]
     header_row = 7
     for i, col in enumerate(columns, start=1):
         cell = ws.cell(row=header_row, column=i, value=col)
@@ -194,8 +201,15 @@ def _write_sheet(
 
     # Column widths — wider for answer column
     widths = {
-        "A": 8, "B": 45, "C": 18, "D": 8, "E": 22, "F": 42,
-        "G": 14, "H": 70, "I": 45,
+        "A": 8,
+        "B": 45,
+        "C": 18,
+        "D": 8,
+        "E": 22,
+        "F": 42,
+        "G": 14,
+        "H": 70,
+        "I": 45,
     }
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
@@ -228,7 +242,9 @@ def _write_summary(wb: Workbook, stats: list[dict]) -> None:
         cell.alignment = Alignment(horizontal="center")
 
     for r, s in enumerate(stats, start=header_row + 1):
-        for c, key in enumerate(["dataset", "description", "queries", "id_field", "language"], start=1):
+        for c, key in enumerate(
+            ["dataset", "description", "queries", "id_field", "language"], start=1
+        ):
             cell = ws.cell(row=r, column=c, value=s.get(key, ""))
             cell.alignment = Alignment(vertical="top", wrap_text=True)
 
@@ -290,13 +306,15 @@ def main() -> None:
             resolver = resolver_cache[graph_file]
 
         _write_sheet(wb, name, meta, queries, resolver=resolver)
-        stats.append({
-            "dataset": name,
-            "description": meta["description"][:100],
-            "queries": len(queries),
-            "id_field": meta["id_field"],
-            "language": _guess_language(name, queries),
-        })
+        stats.append(
+            {
+                "dataset": name,
+                "description": meta["description"][:100],
+                "queries": len(queries),
+                "id_field": meta["id_field"],
+                "language": _guess_language(name, queries),
+            }
+        )
         resolved = " (with answers)" if resolver else ""
         print(f"  ✓ {name}: {len(queries)} queries{resolved}")
 

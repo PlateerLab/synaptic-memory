@@ -32,8 +32,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.extensions.table_ingester import TableIngester  # noqa: E402
-from synaptic.graph import SynapticGraph  # noqa: E402
+from synaptic.extensions.table_ingester import TableIngester
+from synaptic.graph import SynapticGraph
 
 DATA_DIR = REPO_ROOT / "eval" / "data" / "raw" / "assort"
 DEFAULT_SQLITE = REPO_ROOT / "eval" / "data" / "assort_graph.sqlite"
@@ -85,7 +85,9 @@ def _cast_row(row: dict, col_defs: list[dict]) -> dict:
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--backend", choices=["sqlite", "kuzu"], default="sqlite")
     p.add_argument("--graph", type=Path, default=None)
     p.add_argument("--clean", action="store_true", help="Delete existing graph first")
@@ -95,10 +97,12 @@ def _parse_args() -> argparse.Namespace:
 async def _open_backend(backend_name: str, graph_path: Path):
     if backend_name == "sqlite":
         from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
         backend = SqliteGraphBackend(str(graph_path))
         await backend.connect()
         return backend
     from synaptic.backends.kuzu import KuzuBackend
+
     backend = KuzuBackend(str(graph_path))
     await backend.connect()
     return backend
@@ -152,7 +156,10 @@ async def main() -> int:
     cols = _col_defs(rows)
     cast = [_cast_row(r, cols) for r in rows]
     nodes = await ingester.ingest(
-        graph, "product_variants", cols, cast,
+        graph,
+        "product_variants",
+        cols,
+        cast,
         primary_key="variant_code",
         foreign_keys={
             "product_code": ("products", "product_code"),
@@ -168,7 +175,10 @@ async def main() -> int:
     cols = _col_defs(rows)
     cast = [_cast_row(r, cols) for r in rows]
     nodes = await ingester.ingest(
-        graph, "orders", cols, cast,
+        graph,
+        "orders",
+        cols,
+        cast,
         primary_key="order_id",
         foreign_keys={
             "product_code": ("products", "product_code"),
@@ -184,7 +194,10 @@ async def main() -> int:
     cols = _col_defs(rows)
     cast = [_cast_row(r, cols) for r in rows]
     nodes = await ingester.ingest(
-        graph, "reviews", cols, cast,
+        graph,
+        "reviews",
+        cols,
+        cast,
         primary_key="review_id",
         foreign_keys={"product_code": ("products", "product_code")},
     )
@@ -196,7 +209,10 @@ async def main() -> int:
     cols = _col_defs(rows)
     cast = [_cast_row(r, cols) for r in rows]
     nodes = await ingester.ingest(
-        graph, "broadcasts", cols, cast,
+        graph,
+        "broadcasts",
+        cols,
+        cast,
         primary_key="broadcast_id",
         foreign_keys={"product_code": ("products", "product_code")},
     )
@@ -208,7 +224,10 @@ async def main() -> int:
     cols = _col_defs(rows)
     cast = [_cast_row(r, cols) for r in rows]
     nodes = await ingester.ingest(
-        graph, "variant_sales", cols, cast,
+        graph,
+        "variant_sales",
+        cols,
+        cast,
         primary_key="id",
         foreign_keys={"variant_code": ("product_variants", "variant_code")},
     )
@@ -216,15 +235,16 @@ async def main() -> int:
     print(f"  variant_sales: {len(nodes)} rows")
 
     elapsed = time.perf_counter() - t0
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Ingest complete — {elapsed:.1f}s")
     print(f"  Total nodes: {total_nodes}")
     print(f"  Graph path:  {graph_path.relative_to(REPO_ROOT)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Quick search probe
     print("\n[Quick search probe]")
-    from synaptic.search import HybridSearch  # noqa: E402
+    from synaptic.search import HybridSearch
+
     searcher = HybridSearch()
     for q in ["실크블렌드 가디건", "소라 색상", "홈쇼핑 방송 일정"]:
         result = await searcher.search(backend, q, limit=3)

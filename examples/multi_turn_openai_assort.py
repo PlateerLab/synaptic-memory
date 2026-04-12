@@ -8,73 +8,120 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from synaptic.agent_tools import (
-    count_tool, expand_tool, get_document_tool,
-    list_categories_tool, search_exact_tool, search_tool,
+    search_tool,
+)
+from synaptic.agent_tools_structured import (
+    aggregate_nodes_tool,
+    filter_nodes_tool,
+    join_related_tool,
 )
 from synaptic.agent_tools_v2 import deep_search_tool
-from synaptic.agent_tools_structured import (
-    aggregate_nodes_tool, filter_nodes_tool, join_related_tool,
-)
 from synaptic.backends.sqlite_graph import SqliteGraphBackend
-from synaptic.search_session import SearchSession, build_graph_context
+from synaptic.search_session import SearchSession
 
 TOOLS = [
-    {"type": "function", "function": {
-        "name": "deep_search",
-        "description": "Text search + expand + read in ONE call.",
-        "parameters": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "default": 5},
-        }, "required": ["query"]},
-    }},
-    {"type": "function", "function": {
-        "name": "filter_nodes",
-        "description": "Filter by property value. Like SQL WHERE. Use for price ranges, dates, attribute values. Operators: >=, <=, >, <, ==, contains.",
-        "parameters": {"type": "object", "properties": {
-            "table": {"type": "string", "description": "Table name: products, reviews, orders, broadcasts, product_variants, colors, sizes"},
-            "property": {"type": "string", "description": "Property to filter on: selling_price, discount_rate, attribute_2_value, broadcast_date, season, etc."},
-            "op": {"type": "string", "description": "Operator: >=, <=, >, <, ==, contains"},
-            "value": {"type": "string"},
-            "limit": {"type": "integer", "default": 20},
-        }, "required": ["property", "op", "value"]},
-    }},
-    {"type": "function", "function": {
-        "name": "aggregate_nodes",
-        "description": "GROUP BY + COUNT/SUM/AVG. For questions like 'how many per category'.",
-        "parameters": {"type": "object", "properties": {
-            "table": {"type": "string"},
-            "group_by": {"type": "string"},
-            "metric": {"type": "string", "default": "count", "description": "count, sum, avg, max, min"},
-        }, "required": ["group_by"]},
-    }},
-    {"type": "function", "function": {
-        "name": "join_related",
-        "description": "FK lookup. Find related records in another table. Like SQL JOIN.",
-        "parameters": {"type": "object", "properties": {
-            "from_value": {"type": "string", "description": "The FK value to look up"},
-            "fk_property": {"type": "string", "description": "FK column name (e.g. product_code)"},
-            "target_table": {"type": "string", "description": "Table to search in"},
-            "limit": {"type": "integer", "default": 10},
-        }, "required": ["from_value", "fk_property", "target_table"]},
-    }},
-    {"type": "function", "function": {
-        "name": "search",
-        "description": "Basic text search. Use for product names, review text.",
-        "parameters": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "default": 10},
-        }, "required": ["query"]},
-    }},
+    {
+        "type": "function",
+        "function": {
+            "name": "deep_search",
+            "description": "Text search + expand + read in ONE call.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "default": 5},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "filter_nodes",
+            "description": "Filter by property value. Like SQL WHERE. Use for price ranges, dates, attribute values. Operators: >=, <=, >, <, ==, contains.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {
+                        "type": "string",
+                        "description": "Table name: products, reviews, orders, broadcasts, product_variants, colors, sizes",
+                    },
+                    "property": {
+                        "type": "string",
+                        "description": "Property to filter on: selling_price, discount_rate, attribute_2_value, broadcast_date, season, etc.",
+                    },
+                    "op": {"type": "string", "description": "Operator: >=, <=, >, <, ==, contains"},
+                    "value": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+                "required": ["property", "op", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "aggregate_nodes",
+            "description": "GROUP BY + COUNT/SUM/AVG. For questions like 'how many per category'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string"},
+                    "group_by": {"type": "string"},
+                    "metric": {
+                        "type": "string",
+                        "default": "count",
+                        "description": "count, sum, avg, max, min",
+                    },
+                },
+                "required": ["group_by"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "join_related",
+            "description": "FK lookup. Find related records in another table. Like SQL JOIN.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "from_value": {"type": "string", "description": "The FK value to look up"},
+                    "fk_property": {
+                        "type": "string",
+                        "description": "FK column name (e.g. product_code)",
+                    },
+                    "target_table": {"type": "string", "description": "Table to search in"},
+                    "limit": {"type": "integer", "default": 10},
+                },
+                "required": ["from_value", "fk_property", "target_table"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search",
+            "description": "Basic text search. Use for product names, review text.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "default": 10},
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """\
@@ -113,16 +160,32 @@ async def dispatch(name, args, backend, session):
     if name == "deep_search":
         r = await deep_search_tool(backend, session, args["query"], limit=args.get("limit", 5))
     elif name == "filter_nodes":
-        r = await filter_nodes_tool(backend, session, table=args.get("table", ""),
-                                     property=args["property"], op=args["op"], value=args["value"],
-                                     limit=args.get("limit", 20))
+        r = await filter_nodes_tool(
+            backend,
+            session,
+            table=args.get("table", ""),
+            property=args["property"],
+            op=args["op"],
+            value=args["value"],
+            limit=args.get("limit", 20),
+        )
     elif name == "aggregate_nodes":
-        r = await aggregate_nodes_tool(backend, session, table=args.get("table", ""),
-                                        group_by=args["group_by"], metric=args.get("metric", "count"))
+        r = await aggregate_nodes_tool(
+            backend,
+            session,
+            table=args.get("table", ""),
+            group_by=args["group_by"],
+            metric=args.get("metric", "count"),
+        )
     elif name == "join_related":
-        r = await join_related_tool(backend, session, from_value=args["from_value"],
-                                     fk_property=args["fk_property"], target_table=args["target_table"],
-                                     limit=args.get("limit", 10))
+        r = await join_related_tool(
+            backend,
+            session,
+            from_value=args["from_value"],
+            fk_property=args["fk_property"],
+            target_table=args["target_table"],
+            limit=args.get("limit", 10),
+        )
     elif name == "search":
         r = await search_tool(backend, session, args["query"], limit=args.get("limit", 10))
     else:
@@ -132,6 +195,7 @@ async def dispatch(name, args, backend, session):
 
 async def run(question, backend, model="gpt-4o-mini"):
     from openai import AsyncOpenAI
+
     client = AsyncOpenAI()
     session = SearchSession(budget_tool_calls=30)
 
@@ -144,7 +208,10 @@ async def run(question, backend, model="gpt-4o-mini"):
 
     for turn in range(8):
         resp = await client.chat.completions.create(
-            model=model, messages=messages, tools=TOOLS, max_tokens=2048,
+            model=model,
+            messages=messages,
+            tools=TOOLS,
+            max_tokens=2048,
         )
         msg = resp.choices[0].message
         if msg.tool_calls:
@@ -152,16 +219,21 @@ async def run(question, backend, model="gpt-4o-mini"):
             for tc in msg.tool_calls:
                 fn = tc.function.name
                 args = json.loads(tc.function.arguments)
-                print(f"    → {fn}({', '.join(f'{k}={v}' for k,v in list(args.items())[:3])})")
+                print(f"    → {fn}({', '.join(f'{k}={v}' for k, v in list(args.items())[:3])})")
                 result = await dispatch(fn, args, backend, session)
                 tool_calls_total += 1
-                messages.append({"role": "tool", "tool_call_id": tc.id,
-                                 "content": json.dumps(result, ensure_ascii=False)[:5000]})
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": json.dumps(result, ensure_ascii=False)[:5000],
+                    }
+                )
         else:
             elapsed = time.time() - t0
             answer = msg.content or ""
-            print(f"------")
-            print(f"Turns: {turn+1}  |  Tool calls: {tool_calls_total}  |  {elapsed:.1f}s")
+            print("------")
+            print(f"Turns: {turn + 1}  |  Tool calls: {tool_calls_total}  |  {elapsed:.1f}s")
             print(f"A: {answer[:400]}")
             return
     print(f"Turns: 8 (max)  |  Tool calls: {tool_calls_total}")
@@ -169,6 +241,7 @@ async def run(question, backend, model="gpt-4o-mini"):
 
 async def main():
     import argparse
+
     p = argparse.ArgumentParser()
     p.add_argument("--only", default=None)
     p.add_argument("--graph", default=str(REPO_ROOT / "eval/data/assort_graph.sqlite"))
@@ -182,12 +255,13 @@ async def main():
         scenarios = [s for s in SCENARIOS if s["id"] == args.only]
 
     for s in scenarios:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"[{s['id']}] {s['question']}")
-        print("-"*60)
+        print("-" * 60)
         await run(s["question"], backend)
 
     await backend.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

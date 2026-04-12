@@ -27,10 +27,9 @@ import logging
 import sqlite3
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from synaptic.extensions.table_ingester import TableIngester
-from synaptic.models import NodeKind
 
 if TYPE_CHECKING:
     from synaptic.graph import SynapticGraph
@@ -95,10 +94,14 @@ def _read_sqlite_schema(db_path: str) -> list[TableSchema]:
         for c in cols_raw:
             col_type = _sqlite_type_map(c["type"])
             is_pk = bool(c["pk"])
-            columns.append(ColumnInfo(
-                name=c["name"], type=col_type,
-                primary_key=is_pk, nullable=not c["notnull"],
-            ))
+            columns.append(
+                ColumnInfo(
+                    name=c["name"],
+                    type=col_type,
+                    primary_key=is_pk,
+                    nullable=not c["notnull"],
+                )
+            )
             if is_pk and not pk:
                 pk = c["name"]
 
@@ -106,17 +109,22 @@ def _read_sqlite_schema(db_path: str) -> list[TableSchema]:
         fks_raw = con.execute(f"PRAGMA foreign_key_list('{table_name}')").fetchall()
         fks = []
         for fk in fks_raw:
-            fks.append(ForeignKey(
-                column=fk["from"],
-                ref_table=fk["table"],
-                ref_column=fk["to"],
-            ))
+            fks.append(
+                ForeignKey(
+                    column=fk["from"],
+                    ref_table=fk["table"],
+                    ref_column=fk["to"],
+                )
+            )
 
-        schemas.append(TableSchema(
-            name=table_name, columns=columns,
-            primary_key=pk or (columns[0].name if columns else "id"),
-            foreign_keys=fks,
-        ))
+        schemas.append(
+            TableSchema(
+                name=table_name,
+                columns=columns,
+                primary_key=pk or (columns[0].name if columns else "id"),
+                foreign_keys=fks,
+            )
+        )
 
     con.close()
     return schemas
@@ -167,32 +175,41 @@ async def _read_pg_schema(dsn: str) -> list[TableSchema]:
         table_name = t["table_name"]
 
         # Columns
-        cols_raw = await con.fetch("""
+        cols_raw = await con.fetch(
+            """
             SELECT column_name, data_type, is_nullable,
                    column_default
             FROM information_schema.columns
             WHERE table_name = $1 AND table_schema = 'public'
             ORDER BY ordinal_position
-        """, table_name)
+        """,
+            table_name,
+        )
 
         columns = []
         for c in cols_raw:
-            columns.append(ColumnInfo(
-                name=c["column_name"],
-                type=_pg_type_map(c["data_type"]),
-                nullable=c["is_nullable"] == "YES",
-            ))
+            columns.append(
+                ColumnInfo(
+                    name=c["column_name"],
+                    type=_pg_type_map(c["data_type"]),
+                    nullable=c["is_nullable"] == "YES",
+                )
+            )
 
         # Primary key
-        pk_raw = await con.fetch("""
+        pk_raw = await con.fetch(
+            """
             SELECT a.attname FROM pg_index i
             JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
             WHERE i.indrelid = $1::regclass AND i.indisprimary
-        """, table_name)
+        """,
+            table_name,
+        )
         pk = pk_raw[0]["attname"] if pk_raw else (columns[0].name if columns else "id")
 
         # Foreign keys
-        fks_raw = await con.fetch("""
+        fks_raw = await con.fetch(
+            """
             SELECT kcu.column_name, ccu.table_name AS ref_table, ccu.column_name AS ref_column
             FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
@@ -200,18 +217,27 @@ async def _read_pg_schema(dsn: str) -> list[TableSchema]:
             JOIN information_schema.constraint_column_usage ccu
                 ON tc.constraint_name = ccu.constraint_name
             WHERE tc.table_name = $1 AND tc.constraint_type = 'FOREIGN KEY'
-        """, table_name)
+        """,
+            table_name,
+        )
 
-        fks = [ForeignKey(
-            column=fk["column_name"],
-            ref_table=fk["ref_table"],
-            ref_column=fk["ref_column"],
-        ) for fk in fks_raw]
+        fks = [
+            ForeignKey(
+                column=fk["column_name"],
+                ref_table=fk["ref_table"],
+                ref_column=fk["ref_column"],
+            )
+            for fk in fks_raw
+        ]
 
-        schemas.append(TableSchema(
-            name=table_name, columns=columns,
-            primary_key=pk, foreign_keys=fks,
-        ))
+        schemas.append(
+            TableSchema(
+                name=table_name,
+                columns=columns,
+                primary_key=pk,
+                foreign_keys=fks,
+            )
+        )
 
     await con.close()
     return schemas
@@ -232,6 +258,7 @@ def _pg_type_map(raw_type: str) -> str:
 
 async def _read_pg_rows(dsn: str, table: str, limit: int = 500_000) -> list[dict]:
     import asyncpg
+
     con = await asyncpg.connect(dsn)
     rows = await con.fetch(f'SELECT * FROM "{table}" LIMIT $1', limit)
     result = [dict(r) for r in rows]
@@ -252,6 +279,7 @@ async def _read_mysql_schema(dsn: str) -> list[TableSchema]:
 
     # Parse DSN: mysql://user:pass@host:port/dbname
     from urllib.parse import urlparse
+
     parsed = urlparse(dsn)
     db_name = parsed.path.lstrip("/")
 
@@ -264,23 +292,29 @@ async def _read_mysql_schema(dsn: str) -> list[TableSchema]:
     )
     cur = await con.cursor(aiomysql.DictCursor)
 
-    await cur.execute("""
+    await cur.execute(
+        """
         SELECT table_name FROM information_schema.tables
         WHERE table_schema = %s AND table_type = 'BASE TABLE'
         ORDER BY table_name
-    """, (db_name,))
+    """,
+        (db_name,),
+    )
     tables_raw = await cur.fetchall()
 
     schemas: list[TableSchema] = []
     for t in tables_raw:
         table_name = t["TABLE_NAME"] if "TABLE_NAME" in t else t["table_name"]
 
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT column_name, data_type, is_nullable, column_key
             FROM information_schema.columns
             WHERE table_schema = %s AND table_name = %s
             ORDER BY ordinal_position
-        """, (db_name, table_name))
+        """,
+            (db_name, table_name),
+        )
         cols_raw = await cur.fetchall()
 
         columns = []
@@ -289,33 +323,45 @@ async def _read_mysql_schema(dsn: str) -> list[TableSchema]:
             col_name = c.get("COLUMN_NAME", c.get("column_name", ""))
             col_type = _mysql_type_map(c.get("DATA_TYPE", c.get("data_type", "")))
             col_key = c.get("COLUMN_KEY", c.get("column_key", ""))
-            columns.append(ColumnInfo(
-                name=col_name, type=col_type,
-                primary_key=col_key == "PRI",
-                nullable=c.get("IS_NULLABLE", c.get("is_nullable", "YES")) == "YES",
-            ))
+            columns.append(
+                ColumnInfo(
+                    name=col_name,
+                    type=col_type,
+                    primary_key=col_key == "PRI",
+                    nullable=c.get("IS_NULLABLE", c.get("is_nullable", "YES")) == "YES",
+                )
+            )
             if col_key == "PRI" and not pk:
                 pk = col_name
 
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT column_name, referenced_table_name, referenced_column_name
             FROM information_schema.key_column_usage
             WHERE table_schema = %s AND table_name = %s
               AND referenced_table_name IS NOT NULL
-        """, (db_name, table_name))
+        """,
+            (db_name, table_name),
+        )
         fks_raw = await cur.fetchall()
 
-        fks = [ForeignKey(
-            column=fk.get("COLUMN_NAME", fk.get("column_name", "")),
-            ref_table=fk.get("REFERENCED_TABLE_NAME", fk.get("referenced_table_name", "")),
-            ref_column=fk.get("REFERENCED_COLUMN_NAME", fk.get("referenced_column_name", "")),
-        ) for fk in fks_raw]
+        fks = [
+            ForeignKey(
+                column=fk.get("COLUMN_NAME", fk.get("column_name", "")),
+                ref_table=fk.get("REFERENCED_TABLE_NAME", fk.get("referenced_table_name", "")),
+                ref_column=fk.get("REFERENCED_COLUMN_NAME", fk.get("referenced_column_name", "")),
+            )
+            for fk in fks_raw
+        ]
 
-        schemas.append(TableSchema(
-            name=table_name, columns=columns,
-            primary_key=pk or (columns[0].name if columns else "id"),
-            foreign_keys=fks,
-        ))
+        schemas.append(
+            TableSchema(
+                name=table_name,
+                columns=columns,
+                primary_key=pk or (columns[0].name if columns else "id"),
+                foreign_keys=fks,
+            )
+        )
 
     await cur.close()
     con.close()
@@ -336,8 +382,10 @@ def _mysql_type_map(raw_type: str) -> str:
 
 
 async def _read_mysql_rows(dsn: str, table: str, limit: int = 500_000) -> list[dict]:
-    import aiomysql
     from urllib.parse import urlparse
+
+    import aiomysql
+
     parsed = urlparse(dsn)
     con = await aiomysql.connect(
         host=parsed.hostname or "localhost",
@@ -367,6 +415,7 @@ async def _read_oracle_schema(dsn: str) -> list[TableSchema]:
 
     # dsn: oracle://user:pass@host:port/service_name
     from urllib.parse import urlparse
+
     parsed = urlparse(dsn)
     con = await oracledb.connect_async(
         user=parsed.username,
@@ -376,41 +425,56 @@ async def _read_oracle_schema(dsn: str) -> list[TableSchema]:
     owner = (parsed.username or "").upper()
 
     cur = con.cursor()
-    await cur.execute("""
+    await cur.execute(
+        """
         SELECT table_name FROM all_tables
         WHERE owner = :owner ORDER BY table_name
-    """, owner=owner)
+    """,
+        owner=owner,
+    )
     tables_raw = await cur.fetchall()
 
     schemas: list[TableSchema] = []
     for (table_name,) in tables_raw:
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT column_name, data_type, nullable
             FROM all_tab_columns
             WHERE owner = :owner AND table_name = :tbl
             ORDER BY column_id
-        """, owner=owner, tbl=table_name)
+        """,
+            owner=owner,
+            tbl=table_name,
+        )
         cols_raw = await cur.fetchall()
 
         columns = []
         for col_name, data_type, nullable in cols_raw:
-            columns.append(ColumnInfo(
-                name=col_name, type=_oracle_type_map(data_type),
-                nullable=nullable == "Y",
-            ))
+            columns.append(
+                ColumnInfo(
+                    name=col_name,
+                    type=_oracle_type_map(data_type),
+                    nullable=nullable == "Y",
+                )
+            )
 
         # Primary key
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT cols.column_name FROM all_constraints cons
             JOIN all_cons_columns cols ON cons.constraint_name = cols.constraint_name
             WHERE cons.owner = :owner AND cons.table_name = :tbl
               AND cons.constraint_type = 'P'
-        """, owner=owner, tbl=table_name)
+        """,
+            owner=owner,
+            tbl=table_name,
+        )
         pk_rows = await cur.fetchall()
         pk = pk_rows[0][0] if pk_rows else (columns[0].name if columns else "ID")
 
         # Foreign keys
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT a.column_name, c_pk.table_name, b.column_name
             FROM all_cons_columns a
             JOIN all_constraints c ON a.constraint_name = c.constraint_name
@@ -418,16 +482,25 @@ async def _read_oracle_schema(dsn: str) -> list[TableSchema]:
             JOIN all_cons_columns b ON c_pk.constraint_name = b.constraint_name
             WHERE c.owner = :owner AND c.table_name = :tbl
               AND c.constraint_type = 'R'
-        """, owner=owner, tbl=table_name)
+        """,
+            owner=owner,
+            tbl=table_name,
+        )
         fks_raw = await cur.fetchall()
 
-        fks = [ForeignKey(column=col, ref_table=ref_tbl, ref_column=ref_col)
-               for col, ref_tbl, ref_col in fks_raw]
+        fks = [
+            ForeignKey(column=col, ref_table=ref_tbl, ref_column=ref_col)
+            for col, ref_tbl, ref_col in fks_raw
+        ]
 
-        schemas.append(TableSchema(
-            name=table_name, columns=columns,
-            primary_key=pk, foreign_keys=fks,
-        ))
+        schemas.append(
+            TableSchema(
+                name=table_name,
+                columns=columns,
+                primary_key=pk,
+                foreign_keys=fks,
+            )
+        )
 
     await cur.close()
     await con.close()
@@ -446,8 +519,10 @@ def _oracle_type_map(raw_type: str) -> str:
 
 
 async def _read_oracle_rows(dsn: str, table: str, limit: int = 500_000) -> list[dict]:
-    import oracledb
     from urllib.parse import urlparse
+
+    import oracledb
+
     parsed = urlparse(dsn)
     con = await oracledb.connect_async(
         user=parsed.username,
@@ -486,31 +561,42 @@ async def _read_mssql_schema(dsn: str) -> list[TableSchema]:
 
     schemas: list[TableSchema] = []
     for (table_name,) in tables_raw:
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT column_name, data_type, is_nullable
             FROM information_schema.columns
             WHERE table_name = ? AND table_schema = 'dbo'
             ORDER BY ordinal_position
-        """, table_name)
+        """,
+            table_name,
+        )
         cols_raw = await cur.fetchall()
 
-        columns = [ColumnInfo(
-            name=r[0], type=_mssql_type_map(r[1]),
-            nullable=r[2] == "YES",
-        ) for r in cols_raw]
+        columns = [
+            ColumnInfo(
+                name=r[0],
+                type=_mssql_type_map(r[1]),
+                nullable=r[2] == "YES",
+            )
+            for r in cols_raw
+        ]
 
         # PK
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT column_name FROM information_schema.key_column_usage kcu
             JOIN information_schema.table_constraints tc
                 ON kcu.constraint_name = tc.constraint_name
             WHERE tc.table_name = ? AND tc.constraint_type = 'PRIMARY KEY'
-        """, table_name)
+        """,
+            table_name,
+        )
         pk_rows = await cur.fetchall()
         pk = pk_rows[0][0] if pk_rows else (columns[0].name if columns else "id")
 
         # FK
-        await cur.execute("""
+        await cur.execute(
+            """
             SELECT kcu.column_name, ccu.table_name, ccu.column_name
             FROM information_schema.referential_constraints rc
             JOIN information_schema.key_column_usage kcu
@@ -518,16 +604,21 @@ async def _read_mssql_schema(dsn: str) -> list[TableSchema]:
             JOIN information_schema.constraint_column_usage ccu
                 ON rc.unique_constraint_name = ccu.constraint_name
             WHERE kcu.table_name = ?
-        """, table_name)
+        """,
+            table_name,
+        )
         fks_raw = await cur.fetchall()
 
-        fks = [ForeignKey(column=r[0], ref_table=r[1], ref_column=r[2])
-               for r in fks_raw]
+        fks = [ForeignKey(column=r[0], ref_table=r[1], ref_column=r[2]) for r in fks_raw]
 
-        schemas.append(TableSchema(
-            name=table_name, columns=columns,
-            primary_key=pk, foreign_keys=fks,
-        ))
+        schemas.append(
+            TableSchema(
+                name=table_name,
+                columns=columns,
+                primary_key=pk,
+                foreign_keys=fks,
+            )
+        )
 
     await cur.close()
     await con.close()
@@ -545,6 +636,25 @@ def _mssql_type_map(raw_type: str) -> str:
     if "date" in raw or "time" in raw:
         return "date"
     return "str"
+
+
+async def _read_mssql_rows(dsn: str, table: str, limit: int = 500_000) -> list[dict]:
+    """Read rows from SQL Server via aioodbc."""
+    try:
+        import aioodbc
+    except ImportError as exc:
+        msg = "pip install aioodbc for SQL Server support"
+        raise ImportError(msg) from exc
+
+    con = await aioodbc.connect(dsn=dsn)
+    cur = await con.cursor()
+    # SQL Server uses TOP instead of LIMIT
+    await cur.execute(f"SELECT TOP {int(limit)} * FROM [{table}]")
+    cols = [d[0] for d in cur.description]
+    rows = [dict(zip(cols, r)) for r in await cur.fetchall()]
+    await cur.close()
+    await con.close()
+    return rows
 
 
 # --- DbIngester ---
@@ -583,7 +693,7 @@ class DbIngester:
     (default 10,000 rows) to avoid memory exhaustion.
     """
 
-    __slots__ = ("_table_ingester", "_batch_size")
+    __slots__ = ("_batch_size", "_table_ingester")
 
     def __init__(self, *, batch_size: int = 10_000) -> None:
         self._table_ingester = TableIngester()
@@ -603,7 +713,8 @@ class DbIngester:
         if tables:
             schemas = [s for s in schemas if s.name in tables]
         return await self._ingest_schemas(
-            schemas, graph,
+            schemas,
+            graph,
             row_reader=lambda tbl: _read_sqlite_rows(db_path, tbl, limit=row_limit),
             t0=t0,
         )
@@ -622,7 +733,8 @@ class DbIngester:
         if tables:
             schemas = [s for s in schemas if s.name in tables]
         return await self._ingest_schemas(
-            schemas, graph,
+            schemas,
+            graph,
             row_reader=lambda tbl: _read_mysql_rows(dsn, tbl, limit=row_limit),
             t0=t0,
         )
@@ -641,7 +753,8 @@ class DbIngester:
         if tables:
             schemas = [s for s in schemas if s.name in tables]
         return await self._ingest_schemas(
-            schemas, graph,
+            schemas,
+            graph,
             row_reader=lambda tbl: _read_oracle_rows(dsn, tbl, limit=row_limit),
             t0=t0,
         )
@@ -660,7 +773,8 @@ class DbIngester:
         if tables:
             schemas = [s for s in schemas if s.name in tables]
         return await self._ingest_schemas(
-            schemas, graph,
+            schemas,
+            graph,
             row_reader=lambda tbl: _read_mssql_rows(dsn, tbl, limit=row_limit),
             t0=t0,
         )
@@ -709,7 +823,10 @@ class DbIngester:
                 batch = rows[i : i + self._batch_size]
                 cast_batch = [_cast_row(r, schema.columns) for r in batch]
                 nodes = await self._table_ingester.ingest(
-                    graph, schema.name, col_defs, cast_batch,
+                    graph,
+                    schema.name,
+                    col_defs,
+                    cast_batch,
                     primary_key=schema.primary_key,
                     foreign_keys=fk_map if fk_map else None,
                 )
@@ -747,16 +864,22 @@ class DbIngester:
 
                 if node_a_id and node_b_id:
                     await graph.link(
-                        node_a_id, node_b_id,
+                        node_a_id,
+                        node_b_id,
                         kind=EdgeKind.RELATED,
                         weight=0.8,
                     )
                     edge_count += 1
 
             stats.total_fk_edges += edge_count
-            logger.info("M:N %s: %d rows → %d edges (%s ↔ %s)",
-                       schema.name, len(rows), edge_count,
-                       fk_a.ref_table, fk_b.ref_table)
+            logger.info(
+                "M:N %s: %d rows → %d edges (%s ↔ %s)",
+                schema.name,
+                len(rows),
+                edge_count,
+                fk_a.ref_table,
+                fk_b.ref_table,
+            )
 
         stats.elapsed_seconds = time.time() - t0
         return stats
@@ -775,7 +898,8 @@ class DbIngester:
         if tables:
             schemas = [s for s in schemas if s.name in tables]
         return await self._ingest_schemas(
-            schemas, graph,
+            schemas,
+            graph,
             row_reader=lambda tbl: _read_pg_rows(dsn, tbl, limit=row_limit),
             t0=t0,
         )

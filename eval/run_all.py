@@ -39,6 +39,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -75,37 +76,43 @@ CUSTOM_DATASETS = [
         name="KRRA Easy",
         path=EVAL_DIR / "data" / "krra_graph.sqlite",
         query_path=EVAL_DIR / "data" / "queries" / "krra.json",
-        is_custom=True, quick=True,
+        is_custom=True,
+        quick=True,
     ),
     DatasetConfig(
         name="KRRA Hard",
         path=EVAL_DIR / "data" / "krra_graph.sqlite",
         query_path=EVAL_DIR / "data" / "queries" / "krra_hard.json",
-        is_custom=True, quick=True,
+        is_custom=True,
+        quick=True,
     ),
     DatasetConfig(
         name="assort Easy",
         path=EVAL_DIR / "data" / "assort_graph.sqlite",
         query_path=EVAL_DIR / "data" / "queries" / "assort.json",
-        is_custom=True, quick=True,
+        is_custom=True,
+        quick=True,
     ),
     DatasetConfig(
         name="assort Hard",
         path=EVAL_DIR / "data" / "assort_graph.sqlite",
         query_path=EVAL_DIR / "data" / "queries" / "assort_hard.json",
-        is_custom=True, quick=True,
+        is_custom=True,
+        quick=True,
     ),
     DatasetConfig(
         name="X2BEE Easy",
         path=EVAL_DIR / "data" / "x2bee_graph.sqlite",
         query_path=EVAL_DIR / "data" / "queries" / "x2bee.json",
-        is_custom=True, quick=True,
+        is_custom=True,
+        quick=True,
     ),
     DatasetConfig(
         name="X2BEE Hard",
         path=EVAL_DIR / "data" / "x2bee_graph.sqlite",
         query_path=EVAL_DIR / "data" / "queries" / "x2bee_hard.json",
-        is_custom=True, quick=True,
+        is_custom=True,
+        quick=True,
     ),
 ]
 
@@ -113,8 +120,12 @@ CUSTOM_DATASETS = [
 PUBLIC_DATASETS = [
     DatasetConfig(name="HotPotQA-24", path=BENCHMARK_DIR / "hotpotqa_24.json", quick=True),
     DatasetConfig(name="HotPotQA-200", path=BENCHMARK_DIR / "hotpotqa.json", quick=False),
-    DatasetConfig(name="Allganize RAG-ko", path=BENCHMARK_DIR / "allganize_rag_ko.json", quick=True),
-    DatasetConfig(name="Allganize RAG-Eval", path=BENCHMARK_DIR / "allganize_rag_eval.json", quick=True),
+    DatasetConfig(
+        name="Allganize RAG-ko", path=BENCHMARK_DIR / "allganize_rag_ko.json", quick=True
+    ),
+    DatasetConfig(
+        name="Allganize RAG-Eval", path=BENCHMARK_DIR / "allganize_rag_eval.json", quick=True
+    ),
     DatasetConfig(name="PublicHealthQA", path=BENCHMARK_DIR / "publichealthqa_ko.json", quick=True),
     DatasetConfig(name="AutoRAG", path=BENCHMARK_DIR / "autorag_retrieval.json", quick=True),
     DatasetConfig(name="KLUE-MRC", path=BENCHMARK_DIR / "klue_mrc.json", quick=False),
@@ -136,6 +147,7 @@ class RunResult:
 
 
 # --- Custom dataset runner (SQLite graph) ---
+
 
 async def run_custom_dataset(
     cfg: DatasetConfig,
@@ -168,6 +180,7 @@ async def run_custom_dataset(
     embedder = None
     if embed_url:
         from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
         embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
 
     reranker = None
@@ -175,9 +188,11 @@ async def run_custom_dataset(
     # use TEI with bge-reranker-v2-m3 instead.
     if reranker_url:
         from synaptic.extensions.reranker_cross import TEIReranker
+
         reranker = TEIReranker(base_url=reranker_url)
 
     from synaptic.extensions.evidence_search import EvidenceSearch
+
     searcher = EvidenceSearch(backend=backend, embedder=embedder, reranker=reranker)
 
     bench = BenchmarkResult()
@@ -206,8 +221,10 @@ async def run_custom_dataset(
                     retrieved.append(doc_id)
 
         bench.add(
-            query_id=qid, query=query_text,
-            retrieved=retrieved[:cfg.k], relevant=relevant,
+            query_id=qid,
+            query=query_text,
+            retrieved=retrieved[: cfg.k],
+            relevant=relevant,
             k=cfg.k,
         )
 
@@ -231,6 +248,7 @@ async def run_custom_dataset(
 
 
 # --- Public dataset runner (in-memory) ---
+
 
 async def run_public_dataset(
     cfg: DatasetConfig,
@@ -268,7 +286,13 @@ async def run_public_dataset(
         for doc in raw_corpus:
             if isinstance(doc, dict):
                 doc_id = str(doc.get("doc_id", doc.get("_id", doc.get("id", ""))))
-                corpus.append((doc_id, str(doc.get("title", "")), str(doc.get("text", doc.get("content", "")))))
+                corpus.append(
+                    (
+                        doc_id,
+                        str(doc.get("title", "")),
+                        str(doc.get("text", doc.get("content", ""))),
+                    )
+                )
 
     if not corpus:
         return RunResult(name=cfg.name, error="could not parse corpus")
@@ -324,17 +348,20 @@ async def run_public_dataset(
     embedder = None
     if embed_url:
         from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
         embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
 
     reranker = None
     if reranker_url:
         from synaptic.extensions.reranker_cross import TEIReranker
+
         reranker = TEIReranker(base_url=reranker_url)
 
     use_evidence = embedder is not None or reranker is not None
     searcher = None
     if use_evidence:
         from synaptic.extensions.evidence_search import EvidenceSearch
+
         searcher = EvidenceSearch(backend=backend, embedder=embedder, reranker=reranker)
 
     # Search
@@ -358,8 +385,10 @@ async def run_public_dataset(
                     retrieved.append(doc_id)
 
         bench.add(
-            query_id=qid, query=query_text,
-            retrieved=retrieved[:cfg.k], relevant=relevant,
+            query_id=qid,
+            query=query_text,
+            retrieved=retrieved[: cfg.k],
+            relevant=relevant,
             k=cfg.k,
         )
 
@@ -432,63 +461,153 @@ Q: "스마트폰 제품 찾기"
 """
 
 AGENT_TOOLS = [
-    {"type": "function", "function": {"name": "deep_search",
-        "description": "Search + expand + read in ONE call.",
-        "parameters": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "category": {"type": "string"},
-        }, "required": ["query"]}}},
-    {"type": "function", "function": {"name": "search",
-        "description": "Basic text search.",
-        "parameters": {"type": "object", "properties": {
-            "query": {"type": "string"},
-        }, "required": ["query"]}}},
-    {"type": "function", "function": {"name": "filter_nodes",
-        "description": "Filter by property. Returns {total, showing, results}. Use total for counting questions.",
-        "parameters": {"type": "object", "properties": {
-            "table": {"type": "string", "description": "Table name from metadata e.g. pr_goods_base"},
-            "property": {"type": "string", "description": "Column name e.g. sales_prc"},
-            "op": {"type": "string", "description": ">=, <=, >, <, ==, !=, contains"},
-            "value": {"type": "string"},
-            "limit": {"type": "integer", "description": "Max results to return (default 20). Use higher for listings."},
-        }, "required": ["property", "op", "value"]}}},
-    {"type": "function", "function": {"name": "aggregate_nodes",
-        "description": "GROUP BY + COUNT/SUM/AVG/MAX/MIN. Supports optional WHERE pre-filter.",
-        "parameters": {"type": "object", "properties": {
-            "table": {"type": "string", "description": "Table name from metadata"},
-            "group_by": {"type": "string", "description": "Column to group by"},
-            "metric": {"type": "string", "enum": ["count", "sum", "avg", "max", "min"]},
-            "metric_property": {"type": "string", "description": "Numeric column for sum/avg/max/min"},
-            "where_property": {"type": "string", "description": "Pre-filter column e.g. score"},
-            "where_op": {"type": "string", "description": "Pre-filter operator e.g. =="},
-            "where_value": {"type": "string", "description": "Pre-filter value e.g. 5"},
-            "limit": {"type": "integer", "description": "Max groups (default 50)"},
-        }, "required": ["group_by"]}}},
-    {"type": "function", "function": {"name": "join_related",
-        "description": "FK lookup — find related records. Returns {total, showing, results}.",
-        "parameters": {"type": "object", "properties": {
-            "from_value": {"type": "string", "description": "FK value e.g. G00001"},
-            "fk_property": {"type": "string", "description": "FK column e.g. goods_no"},
-            "target_table": {"type": "string", "description": "Target table e.g. pr_goods_sold_hist"},
-            "limit": {"type": "integer", "description": "Max results (default 20)"},
-        }, "required": ["from_value", "fk_property", "target_table"]}}},
-    {"type": "function", "function": {"name": "get_document",
-        "description": "Read a full document.",
-        "parameters": {"type": "object", "properties": {
-            "doc_id": {"type": "string"},
-            "query": {"type": "string"},
-        }, "required": ["doc_id"]}}},
-    {"type": "function", "function": {"name": "expand",
-        "description": "Explore graph neighbours of a node — follow edges to discover related nodes (FK-linked rows, document chunks, category siblings).",
-        "parameters": {"type": "object", "properties": {
-            "node_id": {"type": "string", "description": "Node ID to expand from"},
-        }, "required": ["node_id"]}}},
-    {"type": "function", "function": {"name": "follow",
-        "description": "Follow a specific edge type from a node. Edge types: contains, part_of, next_chunk, related, mentions.",
-        "parameters": {"type": "object", "properties": {
-            "node_id": {"type": "string", "description": "Source node ID"},
-            "edge_kind": {"type": "string", "description": "Edge type to follow: related, contains, part_of, etc."},
-        }, "required": ["node_id", "edge_kind"]}}},
+    {
+        "type": "function",
+        "function": {
+            "name": "deep_search",
+            "description": "Search + expand + read in ONE call.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "category": {"type": "string"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search",
+            "description": "Basic text search.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "filter_nodes",
+            "description": "Filter by property. Returns {total, showing, results}. Use total for counting questions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {
+                        "type": "string",
+                        "description": "Table name from metadata e.g. pr_goods_base",
+                    },
+                    "property": {"type": "string", "description": "Column name e.g. sales_prc"},
+                    "op": {"type": "string", "description": ">=, <=, >, <, ==, !=, contains"},
+                    "value": {"type": "string"},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results to return (default 20). Use higher for listings.",
+                    },
+                },
+                "required": ["property", "op", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "aggregate_nodes",
+            "description": "GROUP BY + COUNT/SUM/AVG/MAX/MIN. Supports optional WHERE pre-filter.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string", "description": "Table name from metadata"},
+                    "group_by": {"type": "string", "description": "Column to group by"},
+                    "metric": {"type": "string", "enum": ["count", "sum", "avg", "max", "min"]},
+                    "metric_property": {
+                        "type": "string",
+                        "description": "Numeric column for sum/avg/max/min",
+                    },
+                    "where_property": {
+                        "type": "string",
+                        "description": "Pre-filter column e.g. score",
+                    },
+                    "where_op": {"type": "string", "description": "Pre-filter operator e.g. =="},
+                    "where_value": {"type": "string", "description": "Pre-filter value e.g. 5"},
+                    "limit": {"type": "integer", "description": "Max groups (default 50)"},
+                },
+                "required": ["group_by"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "join_related",
+            "description": "FK lookup — find related records. Returns {total, showing, results}.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "from_value": {"type": "string", "description": "FK value e.g. G00001"},
+                    "fk_property": {"type": "string", "description": "FK column e.g. goods_no"},
+                    "target_table": {
+                        "type": "string",
+                        "description": "Target table e.g. pr_goods_sold_hist",
+                    },
+                    "limit": {"type": "integer", "description": "Max results (default 20)"},
+                },
+                "required": ["from_value", "fk_property", "target_table"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_document",
+            "description": "Read a full document.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "doc_id": {"type": "string"},
+                    "query": {"type": "string"},
+                },
+                "required": ["doc_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "expand",
+            "description": "Explore graph neighbours of a node — follow edges to discover related nodes (FK-linked rows, document chunks, category siblings).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "node_id": {"type": "string", "description": "Node ID to expand from"},
+                },
+                "required": ["node_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "follow",
+            "description": "Follow a specific edge type from a node. Edge types: contains, part_of, next_chunk, related, mentions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "node_id": {"type": "string", "description": "Source node ID"},
+                    "edge_kind": {
+                        "type": "string",
+                        "description": "Edge type to follow: related, contains, part_of, etc.",
+                    },
+                },
+                "required": ["node_id", "edge_kind"],
+            },
+        },
+    },
 ]
 
 
@@ -510,8 +629,14 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
             Used to resolve FK column stems to real table names for aggregate groups.
     """
     # Flat item lists
-    for key in ("evidence", "results", "merged_evidence", "matches",
-                "expanded_neighbours", "neighbours"):
+    for key in (
+        "evidence",
+        "results",
+        "merged_evidence",
+        "matches",
+        "expanded_neighbours",
+        "neighbours",
+    ):
         for item in data.get(key, []):
             # Direct document_id field (from EvidenceAggregator)
             did = item.get("document_id", "")
@@ -592,8 +717,8 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
             # Method 2: Heuristic fallbacks (singular, plural, prefixed)
             for candidate in (
                 f"{base}:{g}",
-                f"{base}s:{g}",         # plural: color → colors
-                f"{base}es:{g}",        # plural: address → addresses
+                f"{base}s:{g}",  # plural: color → colors
+                f"{base}es:{g}",  # plural: address → addresses
                 f"pr_{base}_base:{g}",  # Korean DB: goods → pr_goods_base
                 f"pr_{base}:{g}",
             ):
@@ -616,25 +741,38 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
     from synaptic.agent_tools_v2 import deep_search_tool
 
     if name == "deep_search":
-        r = await deep_search_tool(backend, session, args.get("query", ""),
-                                   category=args.get("category"), embedder=embedder)
+        r = await deep_search_tool(
+            backend,
+            session,
+            args.get("query", ""),
+            category=args.get("category"),
+            embedder=embedder,
+        )
     elif name == "search":
         r = await search_tool(backend, session, args.get("query", ""), embedder=embedder)
     elif name == "expand":
         r = await expand_tool(backend, session, args.get("node_id", ""))
     elif name == "follow":
-        r = await follow_tool(backend, session, args.get("node_id", ""),
-                              args.get("edge_kind", "related"))
+        r = await follow_tool(
+            backend, session, args.get("node_id", ""), args.get("edge_kind", "related")
+        )
     elif name == "filter_nodes":
         r = await filter_nodes_tool(
-            backend, session, table=args.get("table", ""),
-            property=args.get("property", ""), op=args.get("op", "contains"),
-            value=args.get("value", ""), limit=int(args.get("limit", 20)),
+            backend,
+            session,
+            table=args.get("table", ""),
+            property=args.get("property", ""),
+            op=args.get("op", "contains"),
+            value=args.get("value", ""),
+            limit=int(args.get("limit", 20)),
         )
     elif name == "aggregate_nodes":
         r = await aggregate_nodes_tool(
-            backend, session, table=args.get("table", ""),
-            group_by=args.get("group_by", ""), metric=args.get("metric", "count"),
+            backend,
+            session,
+            table=args.get("table", ""),
+            group_by=args.get("group_by", ""),
+            metric=args.get("metric", "count"),
             metric_property=args.get("metric_property", ""),
             where_property=args.get("where_property", ""),
             where_op=args.get("where_op", ""),
@@ -643,21 +781,25 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
         )
     elif name == "join_related":
         r = await join_related_tool(
-            backend, session, from_value=args.get("from_value", ""),
+            backend,
+            session,
+            from_value=args.get("from_value", ""),
             fk_property=args.get("fk_property", ""),
             target_table=args.get("target_table", ""),
             limit=int(args.get("limit", 20)),
         )
     elif name == "get_document":
-        r = await get_document_tool(backend, session, args["doc_id"],
-                                    query=args.get("query", ""))
+        r = await get_document_tool(backend, session, args["doc_id"], query=args.get("query", ""))
     else:
         return {"error": f"unknown: {name}"}
     return r.to_dict()
 
 
 async def _llm_judge(
-    client: Any, query: str, agent_answer: str, relevant_samples: list[str],
+    client: Any,
+    query: str,
+    agent_answer: str,
+    relevant_samples: list[str],
 ) -> bool:
     """Ask an LLM whether the agent's answer semantically satisfies the query.
 
@@ -689,7 +831,8 @@ Reply with only YES or NO."""
         resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=10, temperature=0,
+            max_tokens=10,
+            temperature=0,
         )
         return "YES" in (resp.choices[0].message.content or "").upper()
     except Exception:
@@ -712,6 +855,7 @@ async def run_agent_benchmark(
         return RunResult(name=cfg.name + " (agent)", error="graph not found")
 
     import os
+
     os.environ["OPENAI_API_KEY"] = api_key
 
     from openai import AsyncOpenAI
@@ -727,6 +871,7 @@ async def run_agent_benchmark(
     embedder = None
     if embed_url:
         from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
         embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
 
     graph_ctx = await build_graph_context(backend)
@@ -734,6 +879,7 @@ async def run_agent_benchmark(
 
     # Collect known table names for _extract_ids matching
     from synaptic.models import NodeKind as _NK
+
     _sample = await backend.list_nodes(kind=_NK.ENTITY, limit=50_000)
     known_tables: set[str] = set()
     for _n in _sample:
@@ -773,8 +919,10 @@ async def run_agent_benchmark(
             turns_used = turn + 1
             try:
                 resp = await client.chat.completions.create(
-                    model=model, messages=messages,
-                    tools=AGENT_TOOLS, max_tokens=2048,
+                    model=model,
+                    messages=messages,
+                    tools=AGENT_TOOLS,
+                    max_tokens=2048,
                 )
             except Exception as exc:
                 print(f"    ⚠ API error: {exc}")
@@ -794,10 +942,13 @@ async def run_agent_benchmark(
                     # Extract ALL possible identifiers from result
                     data = result.get("data", {})
                     _extract_ids(data, found_ids, known_tables=known_tables)
-                    messages.append({
-                        "role": "tool", "tool_call_id": tc.id,
-                        "content": json.dumps(result, ensure_ascii=False)[:5000],
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": json.dumps(result, ensure_ascii=False)[:5000],
+                        }
+                    )
             else:
                 # Agent gave a text answer — no more tool calls.
                 final_answer = msg.content or ""
@@ -818,9 +969,13 @@ async def run_agent_benchmark(
         # Debug: show progress per query
         tag = "id" if id_hit else ("judge" if judge_hit else "miss")
         if not hit and found_ids:
-            print(f"      [{q.get('qid','')}] turns={turns_used} found={len(found_ids)} hit=False | relevant={relevant} | sample_found={list(found_ids)[:3]}")
+            print(
+                f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} hit=False | relevant={relevant} | sample_found={list(found_ids)[:3]}"
+            )
         else:
-            print(f"      [{q.get('qid','')}] turns={turns_used} found={len(found_ids)} hit={hit} ({tag})")
+            print(
+                f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} hit={hit} ({tag})"
+            )
 
     elapsed = time.time() - t0
     await backend.close()
@@ -839,14 +994,19 @@ async def run_agent_benchmark(
 
 # --- Report ---
 
+
 def print_table(results: list[RunResult], baseline: dict | None = None):
     print()
-    print(f"{'Dataset':<22} {'Corpus':>7} {'MRR':>7} {'P@10':>7} {'R@10':>7} {'nDCG':>7} {'Hit':>8} {'Time':>7}  Status")
+    print(
+        f"{'Dataset':<22} {'Corpus':>7} {'MRR':>7} {'P@10':>7} {'R@10':>7} {'nDCG':>7} {'Hit':>8} {'Time':>7}  Status"
+    )
     print("-" * 95)
 
     for r in results:
         if r.error:
-            print(f"{r.name:<22} {'':>7} {'':>7} {'':>7} {'':>7} {'':>7} {'':>8} {'':>7}  ❌ {r.error}")
+            print(
+                f"{r.name:<22} {'':>7} {'':>7} {'':>7} {'':>7} {'':>7} {'':>8} {'':>7}  ❌ {r.error}"
+            )
             continue
 
         status = "✅"
@@ -886,21 +1046,35 @@ def save_results(results: list[RunResult], path: Path):
 
 # --- Main ---
 
+
 def _parse_args():
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--quick", action="store_true", help="Skip large datasets (KLUE, Ko-StrategyQA)")
     p.add_argument("--custom-only", action="store_true", help="Only run KRRA + assort")
     p.add_argument("--compare", type=Path, default=None, help="Compare against a baseline JSON")
-    p.add_argument("--save", type=Path, default=EVAL_DIR / "baselines" / "qa_latest.json", help="Save results to")
+    p.add_argument(
+        "--save",
+        type=Path,
+        default=EVAL_DIR / "baselines" / "qa_latest.json",
+        help="Save results to",
+    )
     p.add_argument("--embed-url", default=None, help="Embedding API URL (enables vector cascade)")
     p.add_argument("--embed-model", default="qwen3-embedding:4b")
     p.add_argument("--reranker-url", default=None, help="TEI reranker URL (enables cross-encoder)")
-    p.add_argument("--flashrank", action="store_true", help="Use FlashRank CPU reranker (no GPU needed)")
-    p.add_argument("--agent", action="store_true", help="Run multi-turn agent benchmark (requires OpenAI key)")
+    p.add_argument(
+        "--flashrank", action="store_true", help="Use FlashRank CPU reranker (no GPU needed)"
+    )
+    p.add_argument(
+        "--agent", action="store_true", help="Run multi-turn agent benchmark (requires OpenAI key)"
+    )
     p.add_argument("--openai-key", default=None, help="OpenAI API key (or set OPENAI_API_KEY env)")
     p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
     p.add_argument("--agent-max-turns", type=int, default=5, help="Max turns per agent query")
-    p.add_argument("--judge", action="store_true", help="Enable LLM-as-Judge fallback when ID matching fails")
+    p.add_argument(
+        "--judge", action="store_true", help="Enable LLM-as-Judge fallback when ID matching fails"
+    )
     return p.parse_args()
 
 
@@ -958,10 +1132,15 @@ async def main():
         else:
             agent_datasets = [d for d in CUSTOM_DATASETS if "Hard" in d.name]
             for cfg in agent_datasets:
-                print(f"  {cfg.name} (agent, max {args.agent_max_turns} turns)...", end=" ", flush=True)
+                print(
+                    f"  {cfg.name} (agent, max {args.agent_max_turns} turns)...",
+                    end=" ",
+                    flush=True,
+                )
                 try:
                     r = await run_agent_benchmark(
-                        cfg, api_key,
+                        cfg,
+                        api_key,
                         model=args.agent_model,
                         max_turns=args.agent_max_turns,
                         embed_url=args.embed_url,

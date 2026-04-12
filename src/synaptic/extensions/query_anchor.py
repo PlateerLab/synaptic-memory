@@ -191,7 +191,10 @@ class QueryAnchorExtractor:
         )
         logger.debug(
             "query-anchor[%r]: %d keywords, %d entities, %d categories",
-            query, len(keywords), len(entities), len(cat_labels),
+            query,
+            len(keywords),
+            len(entities),
+            len(cat_labels),
         )
         return anchors
 
@@ -315,9 +318,7 @@ class QueryAnchorExtractor:
             return []
 
         pairs = [
-            (_nfc(n.title or ""), n.id)
-            for n in nodes
-            if n.title and "category" in (n.tags or [])
+            (_nfc(n.title or ""), n.id) for n in nodes if n.title and "category" in (n.tags or [])
         ]
         self._category_cache = pairs
         logger.debug("query-anchor: cached %d category nodes", len(pairs))

@@ -142,11 +142,7 @@ def suggest_stopwords_by_frequency(
             doc_presence[t] += 1
 
     threshold = max(2, int(n * min_doc_ratio))
-    candidates = [
-        (tok, count)
-        for tok, count in doc_presence.items()
-        if count >= threshold
-    ]
+    candidates = [(tok, count) for tok, count in doc_presence.items() if count >= threshold]
     candidates.sort(key=lambda kv: -kv[1])
     return [tok for tok, _ in candidates[:top_k]]
 
@@ -284,14 +280,14 @@ class ProfileGenerator:
         # Tier 2: classifier-based ontology hints (LLM-free)
         classifier_hints: dict[str, NodeKind] = {}
         if self._classifier is not None and categories:
-            unique_cats = _unique_preserve_order(
-                c for c in categories if c and c.strip()
-            )
+            unique_cats = _unique_preserve_order(c for c in categories if c and c.strip())
             if unique_cats:
                 classifier_hints = await self._classifier.classify_many(unique_cats)
                 logger.info(
                     "profile-generator[%s]: classifier mapped %d/%d categories",
-                    name, len(classifier_hints), len(unique_cats),
+                    name,
+                    len(classifier_hints),
+                    len(unique_cats),
                 )
 
         base_profile = DomainProfile(
@@ -305,7 +301,10 @@ class ProfileGenerator:
         if self._llm is None:
             logger.info(
                 "profile-generator[%s]: local only (locale=%s, stopwords=%d, hints=%d)",
-                name, locale, len(rule_stopwords), len(classifier_hints),
+                name,
+                locale,
+                len(rule_stopwords),
+                len(classifier_hints),
             )
             return base_profile
 
@@ -420,8 +419,7 @@ class ProfileGenerator:
         stopwords = data.get("stopwords_extra")
         if isinstance(stopwords, list):
             result.stopwords_extra = [
-                str(s).strip() for s in stopwords
-                if isinstance(s, str) and s.strip()
+                str(s).strip() for s in stopwords if isinstance(s, str) and s.strip()
             ]
 
         hints_raw = data.get("ontology_hints")
@@ -529,9 +527,7 @@ def _parse_node_kind(value: str) -> NodeKind | None:
         return None
 
 
-def _compile_each(
-    patterns: list[str], flags: int
-) -> tuple[re.Pattern[str], ...]:
+def _compile_each(patterns: list[str], flags: int) -> tuple[re.Pattern[str], ...]:
     """Compile regex sources, dropping any that fail."""
     out: list[re.Pattern[str]] = []
     for p in patterns:

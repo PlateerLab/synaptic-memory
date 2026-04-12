@@ -97,8 +97,7 @@ DEFAULT_NODE_KIND_DESCRIPTIONS: dict[NodeKind, str] = {
         "observation, analysis, report, evaluation, audit, monitoring"
     ),
     NodeKind.OUTCOME: (
-        "실적, 성과, 결과, 달성, 매출, 지표, "
-        "outcome, result, performance, achievement, metric, kpi"
+        "실적, 성과, 결과, 달성, 매출, 지표, outcome, result, performance, achievement, metric, kpi"
     ),
     NodeKind.CONCEPT: (
         "개념, 용어, 분류, 카테고리, 주제, 정의, "
@@ -109,16 +108,13 @@ DEFAULT_NODE_KIND_DESCRIPTIONS: dict[NodeKind, str] = {
         "artifact, system, tool, deliverable, template, code"
     ),
     NodeKind.ENTITY: (
-        "조직, 인물, 법인, 기업, 부서, 팀, "
-        "entity, organization, person, company, department, team"
+        "조직, 인물, 법인, 기업, 부서, 팀, entity, organization, person, company, department, team"
     ),
     NodeKind.LESSON: (
-        "교훈, 회고, 학습, 개선점, 레슨런, "
-        "lesson, retrospective, learning, takeaway, postmortem"
+        "교훈, 회고, 학습, 개선점, 레슨런, lesson, retrospective, learning, takeaway, postmortem"
     ),
     NodeKind.TASK: (
-        "과제, 업무, 작업, 할일, 액션아이템, "
-        "task, assignment, work item, action item, ticket"
+        "과제, 업무, 작업, 할일, 액션아이템, task, assignment, work item, action item, ticket"
     ),
 }
 
@@ -197,9 +193,7 @@ class OntologyClassifier:
             if vec:
                 self._kind_vectors[kind] = vec
             else:
-                logger.warning(
-                    "ontology-classifier: empty vector for %s — dropped", kind
-                )
+                logger.warning("ontology-classifier: empty vector for %s — dropped", kind)
 
         if not self._kind_vectors:
             msg = "ontology-classifier: all description embeddings failed"
@@ -228,16 +222,15 @@ class OntologyClassifier:
             logger.warning("ontology-classifier: empty query vector for %r", label)
             return None
 
-        scored = [
-            (kind, _cosine(query_vec, vec))
-            for kind, vec in self._kind_vectors.items()
-        ]
+        scored = [(kind, _cosine(query_vec, vec)) for kind, vec in self._kind_vectors.items()]
         scored.sort(key=lambda kv: -kv[1])
         top_kind, top_score = scored[0]
         if top_score < self._threshold:
             logger.debug(
                 "ontology-classifier: %r below threshold (top=%s score=%.3f)",
-                label, top_kind, top_score,
+                label,
+                top_kind,
+                top_score,
             )
             return None
         return top_kind
@@ -263,10 +256,7 @@ class OntologyClassifier:
         for label, vec in zip(filtered, label_vectors):
             if not vec:
                 continue
-            scored = [
-                (kind, _cosine(vec, kvec))
-                for kind, kvec in self._kind_vectors.items()
-            ]
+            scored = [(kind, _cosine(vec, kvec)) for kind, kvec in self._kind_vectors.items()]
             scored.sort(key=lambda kv: -kv[1])
             top_kind, top_score = scored[0]
             if top_score >= self._threshold:
@@ -286,7 +276,4 @@ class OntologyClassifier:
         query_vec = await self._embedder.embed(label)
         if not query_vec:
             return {}
-        return {
-            kind: _cosine(query_vec, vec)
-            for kind, vec in self._kind_vectors.items()
-        }
+        return {kind: _cosine(query_vec, vec) for kind, vec in self._kind_vectors.items()}

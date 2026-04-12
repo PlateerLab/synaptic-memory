@@ -822,9 +822,7 @@ async def agent_get_document(
     """
     backend = await _ensure_backend()
     session = await _session(session_id)
-    result = await get_document_tool(
-        backend, session, doc_id, query=query, max_chunks=max_chunks
-    )
+    result = await get_document_tool(backend, session, doc_id, query=query, max_chunks=max_chunks)
     return result.to_dict()
 
 
@@ -969,7 +967,9 @@ async def agent_deep_search(
     backend = await _ensure_backend()
     session = await _session(session_id)
     result = await deep_search_tool(
-        backend, session, query,
+        backend,
+        session,
+        query,
         limit=limit,
         category=category or None,
         embedder=_embedder,
@@ -992,9 +992,7 @@ async def agent_compare_search(
     """
     backend = await _ensure_backend()
     session = await _session(session_id)
-    result = await compare_search_tool(
-        backend, session, query, embedder=_embedder
-    )
+    result = await compare_search_tool(backend, session, query, embedder=_embedder)
     return result.to_dict()
 
 
@@ -1020,8 +1018,13 @@ async def agent_filter_nodes(
     backend = await _ensure_backend()
     session = await _session(session_id)
     result = await filter_nodes_tool(
-        backend, session, table=table or "",
-        property=property, op=op, value=value, limit=limit,
+        backend,
+        session,
+        table=table or "",
+        property=property,
+        op=op,
+        value=value,
+        limit=limit,
     )
     return result.to_dict()
 
@@ -1050,9 +1053,15 @@ async def agent_aggregate_nodes(
     backend = await _ensure_backend()
     session = await _session(session_id)
     result = await aggregate_nodes_tool(
-        backend, session, table=table or "",
-        group_by=group_by, metric=metric, metric_property=metric_property,
-        where_property=where_property, where_op=where_op, where_value=where_value,
+        backend,
+        session,
+        table=table or "",
+        group_by=group_by,
+        metric=metric,
+        metric_property=metric_property,
+        where_property=where_property,
+        where_op=where_op,
+        where_value=where_value,
         limit=limit,
     )
     return result.to_dict()
@@ -1078,8 +1087,12 @@ async def agent_join_related(
     backend = await _ensure_backend()
     session = await _session(session_id)
     result = await join_related_tool(
-        backend, session, from_value=from_value,
-        fk_property=fk_property, target_table=target_table, limit=limit,
+        backend,
+        session,
+        from_value=from_value,
+        fk_property=fk_property,
+        target_table=target_table,
+        limit=limit,
     )
     return result.to_dict()
 

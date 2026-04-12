@@ -58,13 +58,9 @@ class TestEntityLinkerBasic:
     async def test_link_korean_hub_nodes_created(self):
         backend = MemoryBackend()
         # Small test corpus: loosen DF thresholds (defaults target larger corpora)
-        profile = DomainProfile(
-            name="test", locale="ko", min_df=2, max_df_ratio=0.9
-        )
+        profile = DomainProfile(name="test", locale="ko", min_df=2, max_df_ratio=0.9)
         extractor = KoreanPhraseExtractor(profile=profile, max_phrases_per_node=20)
-        linker = EntityLinker(
-            extractor=extractor, profile=profile, max_links_per_source=10
-        )
+        linker = EntityLinker(extractor=extractor, profile=profile, max_links_per_source=10)
 
         texts = [
             "이사회 산하 위원회에서 윤리경영을 논의",
@@ -91,9 +87,7 @@ class TestEntityLinkerBasic:
     @pytest.mark.asyncio
     async def test_link_skips_low_df_phrases(self):
         backend = MemoryBackend()
-        profile = DomainProfile(
-            name="test", locale="ko", min_df=3, max_df_ratio=1.0
-        )
+        profile = DomainProfile(name="test", locale="ko", min_df=3, max_df_ratio=1.0)
         extractor = KoreanPhraseExtractor(profile=profile, max_phrases_per_node=20)
         linker = EntityLinker(extractor=extractor, profile=profile)
 
@@ -115,9 +109,7 @@ class TestEntityLinkerBasic:
     async def test_link_skips_high_df_phrases(self):
         backend = MemoryBackend()
         # max_df_ratio=0.5 → "omnipresent" in 100% of chunks gets dropped
-        profile = DomainProfile(
-            name="test", locale="ko", min_df=2, max_df_ratio=0.5
-        )
+        profile = DomainProfile(name="test", locale="ko", min_df=2, max_df_ratio=0.5)
         extractor = KoreanPhraseExtractor(profile=profile, max_phrases_per_node=20)
         linker = EntityLinker(extractor=extractor, profile=profile)
 
@@ -139,9 +131,7 @@ class TestEntityLinkerBasic:
     @pytest.mark.asyncio
     async def test_mentions_edges_connect_to_sources(self):
         backend = MemoryBackend()
-        profile = DomainProfile(
-            name="test", locale="ko", min_df=2, max_df_ratio=0.9
-        )
+        profile = DomainProfile(name="test", locale="ko", min_df=2, max_df_ratio=0.9)
         extractor = KoreanPhraseExtractor(profile=profile)
         linker = EntityLinker(extractor=extractor, profile=profile)
 
@@ -175,9 +165,7 @@ class TestEntityLinkerIdempotent:
     @pytest.mark.asyncio
     async def test_rerun_does_not_duplicate_hubs(self):
         backend = MemoryBackend()
-        profile = DomainProfile(
-            name="test", locale="ko", min_df=2, max_df_ratio=0.9
-        )
+        profile = DomainProfile(name="test", locale="ko", min_df=2, max_df_ratio=0.9)
         extractor = KoreanPhraseExtractor(profile=profile)
         linker = EntityLinker(extractor=extractor, profile=profile)
 
@@ -212,9 +200,7 @@ class TestEntityLinkerEnglish:
             max_df_ratio=0.9,
             min_phrase_len=3,
         )
-        extractor = EnglishPhraseExtractor(
-            min_phrase_length=3, max_phrases_per_node=10
-        )
+        extractor = EnglishPhraseExtractor(min_phrase_length=3, max_phrases_per_node=10)
         linker = EntityLinker(extractor=extractor, profile=profile)
 
         texts = [
@@ -238,13 +224,9 @@ class TestMaxLinksPerSource:
     @pytest.mark.asyncio
     async def test_cap_respected(self):
         backend = MemoryBackend()
-        profile = DomainProfile(
-            name="test", locale="ko", min_df=2, max_df_ratio=1.0
-        )
+        profile = DomainProfile(name="test", locale="ko", min_df=2, max_df_ratio=1.0)
         extractor = KoreanPhraseExtractor(profile=profile, max_phrases_per_node=50)
-        linker = EntityLinker(
-            extractor=extractor, profile=profile, max_links_per_source=3
-        )
+        linker = EntityLinker(extractor=extractor, profile=profile, max_links_per_source=3)
 
         # Many entities per source
         dense = "이사회 위원회 윤리경영 온실가스 지속가능경영 지역사회 전략기획 구성원"

@@ -74,50 +74,106 @@ async def _seed_graph(backend: MemoryBackend) -> None:
         )
 
     # Categories
-    await backend.save_node(_mk("cat_rule", NodeKind.CONCEPT, "규정 및 지침",
-                                "규정 및 지침", tags=["category"]))
-    await backend.save_node(_mk("cat_ops", NodeKind.CONCEPT, "운영계획",
-                                "운영계획", tags=["category"]))
+    await backend.save_node(
+        _mk("cat_rule", NodeKind.CONCEPT, "규정 및 지침", "규정 및 지침", tags=["category"])
+    )
+    await backend.save_node(
+        _mk("cat_ops", NodeKind.CONCEPT, "운영계획", "운영계획", tags=["category"])
+    )
 
     # Rule documents
-    await backend.save_node(_mk("doc_r1", NodeKind.ENTITY, "규정 문서 A",
-                                "규정 준수 의무",
-                                tags=["document"], category="규정 및 지침",
-                                doc_id="doc_r1", year="2024"))
-    await backend.save_node(_mk("doc_r2", NodeKind.ENTITY, "규정 문서 B",
-                                "규정 예외 조항",
-                                tags=["document"], category="규정 및 지침",
-                                doc_id="doc_r2", year="2023"))
+    await backend.save_node(
+        _mk(
+            "doc_r1",
+            NodeKind.ENTITY,
+            "규정 문서 A",
+            "규정 준수 의무",
+            tags=["document"],
+            category="규정 및 지침",
+            doc_id="doc_r1",
+            year="2024",
+        )
+    )
+    await backend.save_node(
+        _mk(
+            "doc_r2",
+            NodeKind.ENTITY,
+            "규정 문서 B",
+            "규정 예외 조항",
+            tags=["document"],
+            category="규정 및 지침",
+            doc_id="doc_r2",
+            year="2023",
+        )
+    )
 
     # Ops documents
-    await backend.save_node(_mk("doc_o1", NodeKind.ENTITY, "운영 문서 A",
-                                "경마 운영계획",
-                                tags=["document"], category="운영계획",
-                                doc_id="doc_o1", year="2024"))
+    await backend.save_node(
+        _mk(
+            "doc_o1",
+            NodeKind.ENTITY,
+            "운영 문서 A",
+            "경마 운영계획",
+            tags=["document"],
+            category="운영계획",
+            doc_id="doc_o1",
+            year="2024",
+        )
+    )
 
     # Chunks
-    await backend.save_node(_mk("chunk_r1a", NodeKind.CHUNK, "규정 문서 A #0",
-                                "규정 준수 의무 사항 E217 코드가 적용된다",
-                                tags=["chunk"], category="규정 및 지침",
-                                doc_id="doc_r1", chunk_index="0"))
-    await backend.save_node(_mk("chunk_r1b", NodeKind.CHUNK, "규정 문서 A #1",
-                                "규정 위반 시 제재 조치",
-                                tags=["chunk"], category="규정 및 지침",
-                                doc_id="doc_r1", chunk_index="1"))
-    await backend.save_node(_mk("chunk_r2a", NodeKind.CHUNK, "규정 문서 B #0",
-                                "규정 예외 적용 기준 해설",
-                                tags=["chunk"], category="규정 및 지침",
-                                doc_id="doc_r2", chunk_index="0"))
-    await backend.save_node(_mk("chunk_o1a", NodeKind.CHUNK, "운영 문서 A #0",
-                                "경마 운영계획 수립 절차",
-                                tags=["chunk"], category="운영계획",
-                                doc_id="doc_o1", chunk_index="0"))
+    await backend.save_node(
+        _mk(
+            "chunk_r1a",
+            NodeKind.CHUNK,
+            "규정 문서 A #0",
+            "규정 준수 의무 사항 E217 코드가 적용된다",
+            tags=["chunk"],
+            category="규정 및 지침",
+            doc_id="doc_r1",
+            chunk_index="0",
+        )
+    )
+    await backend.save_node(
+        _mk(
+            "chunk_r1b",
+            NodeKind.CHUNK,
+            "규정 문서 A #1",
+            "규정 위반 시 제재 조치",
+            tags=["chunk"],
+            category="규정 및 지침",
+            doc_id="doc_r1",
+            chunk_index="1",
+        )
+    )
+    await backend.save_node(
+        _mk(
+            "chunk_r2a",
+            NodeKind.CHUNK,
+            "규정 문서 B #0",
+            "규정 예외 적용 기준 해설",
+            tags=["chunk"],
+            category="규정 및 지침",
+            doc_id="doc_r2",
+            chunk_index="0",
+        )
+    )
+    await backend.save_node(
+        _mk(
+            "chunk_o1a",
+            NodeKind.CHUNK,
+            "운영 문서 A #0",
+            "경마 운영계획 수립 절차",
+            tags=["chunk"],
+            category="운영계획",
+            doc_id="doc_o1",
+            chunk_index="0",
+        )
+    )
 
     # Edges
     async def _edge(eid: str, src: str, dst: str, kind: EdgeKind):
-        await backend.save_edge(
-            Edge(id=eid, source_id=src, target_id=dst, kind=kind, weight=1.0)
-        )
+        await backend.save_edge(Edge(id=eid, source_id=src, target_id=dst, kind=kind, weight=1.0))
 
     await _edge("po_r1", "doc_r1", "cat_rule", EdgeKind.PART_OF)
     await _edge("po_r2", "doc_r2", "cat_rule", EdgeKind.PART_OF)
@@ -280,10 +336,7 @@ class TestListCategoriesTool:
         backend = await _fresh_backend()
         session = SearchSession()
         result = await list_categories_tool(backend, session)
-        rule_cat = next(
-            c for c in result.data["categories"]
-            if c["label"] == "규정 및 지침"
-        )
+        rule_cat = next(c for c in result.data["categories"] if c["label"] == "규정 및 지침")
         # Two rule documents in the fixture
         assert rule_cat["document_count"] == 2
 
@@ -304,18 +357,14 @@ class TestCountTool:
     async def test_count_by_category(self):
         backend = await _fresh_backend()
         session = SearchSession()
-        result = await count_tool(
-            backend, session, kind=NodeKind.CHUNK, category="규정 및 지침"
-        )
+        result = await count_tool(backend, session, kind=NodeKind.CHUNK, category="규정 및 지침")
         # Three rule chunks
         assert result.data["count"] == 3
 
     async def test_count_by_year(self):
         backend = await _fresh_backend()
         session = SearchSession()
-        result = await count_tool(
-            backend, session, kind=NodeKind.ENTITY, year=2024
-        )
+        result = await count_tool(backend, session, kind=NodeKind.ENTITY, year=2024)
         # Two 2024 documents (doc_r1, doc_o1)
         assert result.data["count"] == 2
 

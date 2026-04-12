@@ -121,6 +121,7 @@ class TestExtractPure:
         extractor = KoreanPhraseExtractor(profile=profile)
         # NFD-encoded 이사회 (decomposed Hangul) should still extract
         import unicodedata
+
         nfd_text = unicodedata.normalize("NFD", "이사회 회의")
         phrases = extractor.extract(nfd_text)
         assert "이사회" in phrases
@@ -221,9 +222,7 @@ class TestExtractAndLink:
             kind=NodeKind.CONCEPT,
         )
         nodes_after_first = await backend.list_nodes()
-        phrase_count_after_first = sum(
-            1 for n in nodes_after_first if "_phrase" in (n.tags or [])
-        )
+        phrase_count_after_first = sum(1 for n in nodes_after_first if "_phrase" in (n.tags or []))
 
         await graph.add(
             title="문서 2",
@@ -253,9 +252,7 @@ class TestExtractAndLink:
 
         passage = await graph.add(
             title="많은 엔티티",
-            content=(
-                "이사회 위원회 윤리경영 온실가스 말산업 경주마 사업장 구성원"
-            ),
+            content=("이사회 위원회 윤리경영 온실가스 말산업 경주마 사업장 구성원"),
             kind=NodeKind.CONCEPT,
         )
         edges = await backend.get_edges(passage.id, direction="outgoing")

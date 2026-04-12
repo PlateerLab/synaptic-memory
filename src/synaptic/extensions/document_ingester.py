@@ -205,9 +205,7 @@ class JsonlDocumentSource:
 
                 props_raw = d.get("properties", {})
                 props = (
-                    {k: str(v) for k, v in props_raw.items()}
-                    if isinstance(props_raw, dict)
-                    else {}
+                    {k: str(v) for k, v in props_raw.items()} if isinstance(props_raw, dict) else {}
                 )
 
                 year_raw = d.get("year")
@@ -325,9 +323,7 @@ class DocumentIngester:
             # Ensure category node
             category_id = await self._ensure_category(doc_category, category_ids, stats)
 
-            doc_kind = self._profile.ontology_hints.get(
-                doc_category, NodeKind.ENTITY
-            )
+            doc_kind = self._profile.ontology_hints.get(doc_category, NodeKind.ENTITY)
 
             doc_props = dict(doc.properties)
             doc_props["doc_id"] = doc.doc_id
@@ -432,9 +428,7 @@ class DocumentIngester:
                 if prev_chunk_node_id is not None:
                     await self._backend.save_edge(
                         Edge(
-                            id=_edge_id(
-                                "next", prev_chunk_node_id, chunk_node_id
-                            ),
+                            id=_edge_id("next", prev_chunk_node_id, chunk_node_id),
                             source_id=prev_chunk_node_id,
                             target_id=chunk_node_id,
                             kind=EdgeKind.NEXT_CHUNK,

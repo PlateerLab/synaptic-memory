@@ -120,11 +120,13 @@ class TestOntologyClassifier:
             }
         )
         clf = OntologyClassifier(embedder=embedder)
-        result = await clf.classify_many([
-            "규정 및 지침",
-            "운영계획",
-            "조사 및 평가",
-        ])
+        result = await clf.classify_many(
+            [
+                "규정 및 지침",
+                "운영계획",
+                "조사 및 평가",
+            ]
+        )
         assert result["규정 및 지침"] == NodeKind.RULE
         assert result["운영계획"] == NodeKind.DECISION
         assert result["조사 및 평가"] == NodeKind.OBSERVATION

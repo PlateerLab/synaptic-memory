@@ -26,8 +26,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.graph import SynapticGraph  # noqa: E402
-from tests.benchmark.metrics import BenchmarkResult  # noqa: E402
+from synaptic.graph import SynapticGraph
+from tests.benchmark.metrics import BenchmarkResult
 
 DEFAULT_QUERIES = REPO_ROOT / "eval" / "data" / "queries" / "assort.json"
 DEFAULT_SQLITE = REPO_ROOT / "eval" / "data" / "assort_graph.sqlite"
@@ -58,7 +58,9 @@ def _hits_to_titles(search_result: object, limit: int) -> list[str]:
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--backend", choices=["sqlite", "kuzu"], default="sqlite")
     p.add_argument("--graph", type=Path, default=None)
     p.add_argument("--queries", type=Path, default=DEFAULT_QUERIES)
@@ -68,10 +70,12 @@ def _parse_args() -> argparse.Namespace:
 async def _open_backend(backend_name: str, graph_path: Path):
     if backend_name == "sqlite":
         from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
         backend = SqliteGraphBackend(str(graph_path))
         await backend.connect()
         return backend
     from synaptic.backends.kuzu import KuzuBackend
+
     backend = KuzuBackend(str(graph_path))
     await backend.connect()
     return backend

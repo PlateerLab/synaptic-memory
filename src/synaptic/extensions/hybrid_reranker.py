@@ -229,9 +229,7 @@ class HybridReranker:
             sem_norm = {ex.node.id: 0.0 for ex in expanded}
 
         # --- Graph component ---
-        graph_raw = {
-            ex.node.id: _REASON_PRIOR.get(ex.reason, 0.3) for ex in expanded
-        }
+        graph_raw = {ex.node.id: _REASON_PRIOR.get(ex.reason, 0.3) for ex in expanded}
         graph_norm = _normalise(graph_raw)
 
         # --- Structural component ---
@@ -245,9 +243,7 @@ class HybridReranker:
                 cat_field = (props.get("category") or "").lower()
                 if cat_field and any(c in cat_field for c in category_set):
                     score += 0.4
-                if node.tags and any(
-                    c in t.lower() for t in node.tags for c in category_set
-                ):
+                if node.tags and any(c in t.lower() for t in node.tags for c in category_set):
                     score += 0.1
             if kind_set and node.kind in kind_set:
                 score += 0.2
@@ -269,12 +265,7 @@ class HybridReranker:
             graph = graph_norm.get(nid, 0.0)
             struct = _structural_score(ex.node)
 
-            total = (
-                w.lexical * lex
-                + w.semantic * sem
-                + w.graph * graph
-                + w.structural * struct
-            )
+            total = w.lexical * lex + w.semantic * sem + w.graph * graph + w.structural * struct
             scored.append(
                 ScoredCandidate(
                     node=ex.node,

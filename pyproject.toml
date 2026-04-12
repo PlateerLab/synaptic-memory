@@ -133,6 +133,18 @@ line-length = 100
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "S", "ASYNC", "PLC", "RUF"]
 ignore = ["S101", "E501", "PLC0415", "S110", "S311", "S106", "RUF005", "F841", "B007", "B905", "RUF059", "E402", "N814", "S324", "RUF002", "RUF003", "RUF022", "RUF034", "E741", "N806", "S608", "A002"]
 
+[tool.ruff.lint.per-file-ignores]
+# CLI scripts and eval harnesses: async helpers with sync file I/O and
+# pathlib operations are intentional — these run at startup, not inside
+# request paths where event-loop blocking matters. S112 (try/except/
+# continue) is a common pattern for resilient data processing scripts.
+"eval/scripts/**" = ["ASYNC230", "ASYNC240", "S112"]
+"eval/run_all.py" = ["ASYNC230"]
+"examples/**" = ["ASYNC230", "ASYNC240"]
+# from_data() / from_database() do file-system discovery during
+# ingestion — path.is_dir()/rglob()/glob() are intentional.
+"src/synaptic/graph.py" = ["ASYNC240"]
+
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"

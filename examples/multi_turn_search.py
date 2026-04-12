@@ -47,11 +47,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.agent_tools_v2 import (  # noqa: E402
-    compare_search_tool,
-    deep_search_tool,
-)
-from synaptic.agent_tools import (  # noqa: E402
+from synaptic.agent_tools import (
     count_tool,
     expand_tool,
     follow_tool,
@@ -60,9 +56,12 @@ from synaptic.agent_tools import (  # noqa: E402
     search_exact_tool,
     search_tool,
 )
-from synaptic.backends.sqlite_graph import SqliteGraphBackend  # noqa: E402
-from synaptic.search_session import SearchSession, build_graph_context  # noqa: E402
-
+from synaptic.agent_tools_v2 import (
+    compare_search_tool,
+    deep_search_tool,
+)
+from synaptic.backends.sqlite_graph import SqliteGraphBackend
+from synaptic.search_session import SearchSession, build_graph_context
 
 # --- Anthropic tool schemas ---------------------------------------------------
 #
@@ -102,8 +101,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "kind": {
                     "type": "string",
                     "description": (
-                        "Optional NodeKind filter, e.g. 'chunk', 'rule', "
-                        "'decision', 'observation'."
+                        "Optional NodeKind filter, e.g. 'chunk', 'rule', 'decision', 'observation'."
                     ),
                 },
                 "exclude_seen": {
@@ -358,14 +356,17 @@ async def dispatch_tool(
         )
     elif tool_name == "deep_search":
         result = await deep_search_tool(
-            backend, session,
+            backend,
+            session,
             tool_input["query"],
             limit=int(tool_input.get("limit", 5)),
             category=tool_input.get("category") or None,
         )
     elif tool_name == "compare_search":
         result = await compare_search_tool(
-            backend, session, tool_input["query"],
+            backend,
+            session,
+            tool_input["query"],
         )
     else:
         return {"ok": False, "error": f"unknown_tool: {tool_name}"}
@@ -505,12 +506,14 @@ async def run_agent(
                 assistant_content.append({"type": "text", "text": block.text})
             elif block.type == "tool_use":
                 tool_uses.append(block)
-                assistant_content.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
+                assistant_content.append(
+                    {
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
+                )
 
         # end_turn → assistant is done, extract answer
         if response.stop_reason == "end_turn":
@@ -532,21 +535,25 @@ async def run_agent(
                     backend=backend,
                     session=session,
                 )
-                run.tool_calls.append({
-                    "tool": tu.name,
-                    "input": dict(tu.input),
-                    "ok": result.get("ok", False),
-                    "result_preview": _preview_result(result),
-                })
-                tool_results_content.append({
-                    "type": "tool_result",
-                    "tool_use_id": tu.id,
-                    # Cap result payload at 5K chars to stay under the
-                    # per-minute input token quota on the free tier.
-                    # Evidence previews already truncate to 240 chars so
-                    # 5K is enough for ~15 hits with headroom.
-                    "content": json.dumps(result, ensure_ascii=False)[:5000],
-                })
+                run.tool_calls.append(
+                    {
+                        "tool": tu.name,
+                        "input": dict(tu.input),
+                        "ok": result.get("ok", False),
+                        "result_preview": _preview_result(result),
+                    }
+                )
+                tool_results_content.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tu.id,
+                        # Cap result payload at 5K chars to stay under the
+                        # per-minute input token quota on the free tier.
+                        # Evidence previews already truncate to 240 chars so
+                        # 5K is enough for ~15 hits with headroom.
+                        "content": json.dumps(result, ensure_ascii=False)[:5000],
+                    }
+                )
 
             messages.append({"role": "user", "content": tool_results_content})
         else:
@@ -601,16 +608,14 @@ SCENARIOS = [
         "id": "complex",
         "label": "복합 / 교차 문서",
         "question": (
-            "경마산업 운영계획 수립에서 인권경영 지침이 어떻게 반영되는지 "
-            "알려줘. 관련 근거도 같이."
+            "경마산업 운영계획 수립에서 인권경영 지침이 어떻게 반영되는지 알려줘. 관련 근거도 같이."
         ),
     },
     {
         "id": "absence",
         "label": "부재 증명",
         "question": (
-            "한국마사회 규정 중에 환불과 관련된 예외 조항이 있어? "
-            "없다면 없다고 단언해줘."
+            "한국마사회 규정 중에 환불과 관련된 예외 조항이 있어? 없다면 없다고 단언해줘."
         ),
     },
     {
@@ -651,7 +656,9 @@ SCENARIOS = [
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument(
         "--graph",
         type=Path,
@@ -702,7 +709,7 @@ async def main() -> int:
         return 1
 
     try:
-        import anthropic  # noqa: F401
+        import anthropic
     except ImportError:
         print("ERROR: pip install anthropic")
         return 1
@@ -718,6 +725,7 @@ async def main() -> int:
         scenarios = [s for s in scenarios if s["id"] not in skip_set]
 
     import anthropic
+
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
     backend = SqliteGraphBackend(str(args.graph))
@@ -730,7 +738,7 @@ async def main() -> int:
                 # Pause between scenarios so the per-minute token quota
                 # can refill. 70s is slightly above the Anthropic
                 # free-tier rate-limit window so we never race it.
-                print(f"\n  … pausing 70s before next scenario to respect rate limit")
+                print("\n  … pausing 70s before next scenario to respect rate limit")
                 await asyncio.sleep(70)
 
             print(f"\n{'=' * 70}")
@@ -746,7 +754,9 @@ async def main() -> int:
             )
             runs.append(run)
             print("-" * 70)
-            print(f"Turns: {run.turns}  |  Tool calls: {len(run.tool_calls)}  |  {run.elapsed_seconds:.1f}s")
+            print(
+                f"Turns: {run.turns}  |  Tool calls: {len(run.tool_calls)}  |  {run.elapsed_seconds:.1f}s"
+            )
             if run.error:
                 print(f"  ERROR: {run.error}")
             else:

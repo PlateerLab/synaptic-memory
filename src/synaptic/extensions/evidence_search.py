@@ -202,9 +202,7 @@ class EvidenceSearch:
         vec_seeds: list = []
         if query_embedding:
             try:
-                vec_nodes = await self._backend.search_vector(
-                    query_embedding, limit=fts_seed_limit
-                )
+                vec_nodes = await self._backend.search_vector(query_embedding, limit=fts_seed_limit)
                 for node in vec_nodes:
                     if node.id not in fts_ids:
                         vec_seeds.append(node)
@@ -223,19 +221,18 @@ class EvidenceSearch:
         prf_seeds: list = []
         if query_embedding and fts_nodes:
             top_embeddings = [
-                n.embedding for n in fts_nodes[:3]
+                n.embedding
+                for n in fts_nodes[:3]
                 if n.embedding and len(n.embedding) == len(query_embedding)
             ]
             if top_embeddings:
                 alpha = 0.7
                 dim = len(query_embedding)
                 mean_emb = [
-                    sum(e[i] for e in top_embeddings) / len(top_embeddings)
-                    for i in range(dim)
+                    sum(e[i] for e in top_embeddings) / len(top_embeddings) for i in range(dim)
                 ]
                 prf_vec = [
-                    alpha * query_embedding[i] + (1 - alpha) * mean_emb[i]
-                    for i in range(dim)
+                    alpha * query_embedding[i] + (1 - alpha) * mean_emb[i] for i in range(dim)
                 ]
                 try:
                     prf_nodes = await self._backend.search_vector(
@@ -272,15 +269,20 @@ class EvidenceSearch:
                     top_k=k * 3,
                 )
                 from synaptic.extensions.graph_expander import ExpandedNode
+
                 expanded_ids = {e.node.id for e in expanded}
                 for node_id, ppr_score in ppr_results:
                     if node_id not in expanded_ids:
                         node = await self._backend.get_node(node_id)
                         if node:
-                            expanded.append(ExpandedNode(
-                                node=node, reason="ppr_discovery",
-                                hops=2, anchor_hit=None,
-                            ))
+                            expanded.append(
+                                ExpandedNode(
+                                    node=node,
+                                    reason="ppr_discovery",
+                                    hops=2,
+                                    anchor_hit=None,
+                                )
+                            )
                             fts_scores[node_id] = ppr_score * 0.5
             except Exception:
                 pass  # PPR failure is non-fatal
@@ -302,9 +304,7 @@ class EvidenceSearch:
         if self._cross_reranker is not None and scored:
             top_n = min(20, len(scored))
             top_candidates = scored[:top_n]
-            documents = [
-                f"{s.node.title}\n{s.node.content[:400]}" for s in top_candidates
-            ]
+            documents = [f"{s.node.title}\n{s.node.content[:400]}" for s in top_candidates]
             try:
                 rerank_scores = await self._cross_reranker.rerank(query, documents)
                 # Blend: 40% cross-encoder + 60% existing hybrid score

@@ -170,9 +170,7 @@ class TestCategoryMatching:
         await _seed_categories(backend, ["규정 및 지침", "운영계획", "조사 및 평가"])
 
         extractor = QueryAnchorExtractor(backend=backend)
-        anchors = await extractor.extract(
-            "규정 및 지침 문서에서 경마 운영계획을 찾아줘"
-        )
+        anchors = await extractor.extract("규정 및 지침 문서에서 경마 운영계획을 찾아줘")
         assert "규정 및 지침" in anchors.categories
         assert "운영계획" in anchors.categories
         # The node ids match what we seeded
@@ -296,9 +294,7 @@ class TestFullAnchorShape:
             backend=backend,
             phrase_extractor=phrase_extractor,
         )
-        anchors = await extractor.extract(
-            "규정 및 지침 문서에서 인권경영 운영계획"
-        )
+        anchors = await extractor.extract("규정 및 지침 문서에서 인권경영 운영계획")
 
         assert not anchors.is_empty()
         assert len(anchors.keywords) > 0

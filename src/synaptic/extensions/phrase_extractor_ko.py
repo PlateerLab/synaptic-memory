@@ -106,10 +106,7 @@ class KoreanPhraseExtractor:
         max_phrases_per_node: int = 15,
     ) -> None:
         if profile.locale not in ("ko", "multi"):
-            msg = (
-                f"KoreanPhraseExtractor requires locale 'ko' or 'multi', "
-                f"got '{profile.locale}'"
-            )
+            msg = f"KoreanPhraseExtractor requires locale 'ko' or 'multi', got '{profile.locale}'"
             raise ValueError(msg)
         self._profile = profile
         self._max_phrases = max_phrases_per_node

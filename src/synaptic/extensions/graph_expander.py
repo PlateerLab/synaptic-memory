@@ -356,7 +356,6 @@ class GraphExpander:
                 )
                 added += 1
 
-
     async def _expand_related(
         self,
         seed_nodes: list[Node],

@@ -54,28 +54,110 @@ from synaptic.models import NodeKind
 _STOPWORDS_KO_DEFAULT: frozenset[str] = frozenset(
     {
         # particle-suffixed forms that leak through extraction
-        "조직의", "있는지", "되는지", "것이다", "것이며", "것이고",
-        "것인지", "것으로", "하기로", "하기에",
+        "조직의",
+        "있는지",
+        "되는지",
+        "것이다",
+        "것이며",
+        "것이고",
+        "것인지",
+        "것으로",
+        "하기로",
+        "하기에",
         # generic high-frequency terms
-        "경우", "내용", "결과", "부문", "해당", "다음", "관련",
-        "포함", "제공", "수행", "실시", "사항", "항목",
-        "있다", "없다", "되다", "하다", "이다",
-        "통해", "대한", "따라", "위한", "관한", "대해",
+        "경우",
+        "내용",
+        "결과",
+        "부문",
+        "해당",
+        "다음",
+        "관련",
+        "포함",
+        "제공",
+        "수행",
+        "실시",
+        "사항",
+        "항목",
+        "있다",
+        "없다",
+        "되다",
+        "하다",
+        "이다",
+        "통해",
+        "대한",
+        "따라",
+        "위한",
+        "관한",
+        "대해",
         # temporal fragments
-        "년도", "반기", "분기",
+        "년도",
+        "반기",
+        "분기",
     }
 )
 
 _STOPWORDS_EN_DEFAULT: frozenset[str] = frozenset(
     {
-        "the", "a", "an", "is", "are", "was", "were", "be", "been",
-        "have", "has", "had", "do", "does", "did", "will", "would",
-        "should", "could", "may", "might", "must", "shall", "can",
-        "this", "that", "these", "those", "it", "its",
-        "and", "or", "but", "if", "then", "else", "so",
-        "of", "in", "on", "at", "to", "from", "by", "with", "as",
-        "into", "through", "before", "after", "during", "between",
-        "also", "just", "very", "more", "most", "some", "any", "all",
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "should",
+        "could",
+        "may",
+        "might",
+        "must",
+        "shall",
+        "can",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "else",
+        "so",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "from",
+        "by",
+        "with",
+        "as",
+        "into",
+        "through",
+        "before",
+        "after",
+        "during",
+        "between",
+        "also",
+        "just",
+        "very",
+        "more",
+        "most",
+        "some",
+        "any",
+        "all",
     }
 )
 
@@ -208,9 +290,7 @@ class DomainProfile:
             "enrich_document_content": self.enrich_document_content,
             "document_preview_chars": self.document_preview_chars,
             "ontology_hints": {k: v.value.upper() for k, v in self.ontology_hints.items()},
-            "authority_by_kind": {
-                k.value.upper(): v for k, v in self.authority_by_kind.items()
-            },
+            "authority_by_kind": {k.value.upper(): v for k, v in self.authority_by_kind.items()},
         }
         return out
 
@@ -233,14 +313,18 @@ class DomainProfile:
         lines: list[str] = []
         lines.append(f'name = "{_toml_escape(str(data["name"]))}"')
         lines.append(f'locale = "{_toml_escape(str(data["locale"]))}"')
-        lines.append(f'min_df = {data["min_df"]}')
-        lines.append(f'max_df_ratio = {data["max_df_ratio"]}')
-        lines.append(f'min_phrase_len = {data["min_phrase_len"]}')
-        lines.append(f'max_phrase_len = {data["max_phrase_len"]}')
+        lines.append(f"min_df = {data['min_df']}")
+        lines.append(f"max_df_ratio = {data['max_df_ratio']}")
+        lines.append(f"min_phrase_len = {data['min_phrase_len']}")
+        lines.append(f"max_phrase_len = {data['max_phrase_len']}")
         lines.append("")
 
-        for key in ("stopwords_extra", "metadata_strip_patterns",
-                    "reference_patterns", "entity_hint_patterns"):
+        for key in (
+            "stopwords_extra",
+            "metadata_strip_patterns",
+            "reference_patterns",
+            "entity_hint_patterns",
+        ):
             items = data[key]
             if not isinstance(items, list) or not items:
                 lines.append(f"{key} = []")

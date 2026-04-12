@@ -172,7 +172,7 @@ class TestWeightOverride:
         scored = reranker.rerank(
             expanded=[_expanded(a), _expanded(b)],
             fts_scores={"a": 0.1, "b": 0.9},  # b wins on lexical
-            query_embedding=[1.0, 0.0],       # a wins on semantic
+            query_embedding=[1.0, 0.0],  # a wins on semantic
         )
         # Semantic should dominate
         assert scored[0].node.id == "a"

@@ -77,9 +77,7 @@ class TestInheritance:
         assert len(results) >= 1
         assert any(n.id == node.id for n in results)
 
-    async def test_inherited_neighbors_works(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_inherited_neighbors_works(self, backend: SqliteGraphBackend) -> None:
         nodes = await _seed_linear_chain(backend, 3)
         hops = await backend.get_neighbors(nodes[1].id, depth=1)
         neighbor_ids = {n.id for n, _ in hops}
@@ -92,16 +90,12 @@ class TestInheritance:
 
 
 class TestShortestPath:
-    async def test_same_node_returns_empty(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_same_node_returns_empty(self, backend: SqliteGraphBackend) -> None:
         await _seed_linear_chain(backend, 3)
         path = await backend.shortest_path("n0", "n0")
         assert path == []
 
-    async def test_direct_edge_one_hop(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_direct_edge_one_hop(self, backend: SqliteGraphBackend) -> None:
         nodes = await _seed_linear_chain(backend, 3)
         path = await backend.shortest_path("n0", "n1")
         assert len(path) == 1
@@ -120,26 +114,20 @@ class TestShortestPath:
         assert len(path) == 3
         assert [p[0].id for p in path] == ["n1", "n2", "n3"]
 
-    async def test_max_depth_cuts_off(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_max_depth_cuts_off(self, backend: SqliteGraphBackend) -> None:
         await _seed_linear_chain(backend, 5)
         # n0 → n4 needs depth 4, cap at 2 → no path found
         path = await backend.shortest_path("n0", "n4", max_depth=2)
         assert path == []
 
-    async def test_unreachable_returns_empty(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_unreachable_returns_empty(self, backend: SqliteGraphBackend) -> None:
         # Two disconnected nodes
         await backend.save_node(Node(id="island_a", title="A"))
         await backend.save_node(Node(id="island_b", title="B"))
         path = await backend.shortest_path("island_a", "island_b")
         assert path == []
 
-    async def test_picks_shortest_when_multiple_paths(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_picks_shortest_when_multiple_paths(self, backend: SqliteGraphBackend) -> None:
         # Diamond: A→B→D and A→C→D; either 2-hop path is acceptable
         await backend.save_node(Node(id="A", title="A"))
         await backend.save_node(Node(id="B", title="B"))
@@ -164,14 +152,10 @@ class TestShortestPath:
 
 
 class TestFindByTypeHierarchy:
-    async def test_finds_nodes_by_kind(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_finds_nodes_by_kind(self, backend: SqliteGraphBackend) -> None:
         await backend.save_node(Node(id="r1", title="R1", kind=NodeKind.RULE))
         await backend.save_node(Node(id="r2", title="R2", kind=NodeKind.RULE))
-        await backend.save_node(
-            Node(id="d1", title="D1", kind=NodeKind.DECISION)
-        )
+        await backend.save_node(Node(id="d1", title="D1", kind=NodeKind.DECISION))
 
         rules = await backend.find_by_type_hierarchy("rule")
         assert len(rules) == 2
@@ -179,15 +163,11 @@ class TestFindByTypeHierarchy:
 
     async def test_respects_limit(self, backend: SqliteGraphBackend) -> None:
         for i in range(10):
-            await backend.save_node(
-                Node(id=f"r{i}", title=f"R{i}", kind=NodeKind.RULE)
-            )
+            await backend.save_node(Node(id=f"r{i}", title=f"R{i}", kind=NodeKind.RULE))
         rules = await backend.find_by_type_hierarchy("rule", limit=3)
         assert len(rules) == 3
 
-    async def test_unknown_kind_empty(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_unknown_kind_empty(self, backend: SqliteGraphBackend) -> None:
         await backend.save_node(Node(title="X", kind=NodeKind.RULE))
         empty = await backend.find_by_type_hierarchy("agent")
         assert empty == []
@@ -197,15 +177,11 @@ class TestFindByTypeHierarchy:
 
 
 class TestPatternMatchNotImplemented:
-    async def test_raises_not_implemented(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_raises_not_implemented(self, backend: SqliteGraphBackend) -> None:
         with pytest.raises(NotImplementedError, match="Cypher"):
             await backend.pattern_match("(:Node)-[:RELATED]->(:Node)")
 
-    async def test_error_message_suggests_alternatives(
-        self, backend: SqliteGraphBackend
-    ) -> None:
+    async def test_error_message_suggests_alternatives(self, backend: SqliteGraphBackend) -> None:
         with pytest.raises(NotImplementedError) as exc_info:
             await backend.pattern_match("whatever")
         # Should point users to KuzuBackend

@@ -79,7 +79,9 @@ async def filter_nodes_tool(
     sql_op = _OPS.get(op)
     if sql_op is None:
         return ToolResult(
-            tool="filter_nodes", ok=False, data={},
+            tool="filter_nodes",
+            ok=False,
+            data={},
             session=session.summary(),
             error=f"unknown operator: {op}. Use: {list(_OPS.keys())}",
         )
@@ -148,7 +150,9 @@ async def filter_nodes_tool(
         nodes = matched_nodes[:limit]
     except Exception as exc:
         return ToolResult(
-            tool="filter_nodes", ok=False, data={},
+            tool="filter_nodes",
+            ok=False,
+            data={},
             session=session.summary(),
             error=f"query_failed: {exc}",
         )
@@ -209,7 +213,9 @@ async def aggregate_nodes_tool(
     metric_upper = metric.upper()
     if metric_upper not in ("COUNT", "SUM", "AVG", "MAX", "MIN"):
         return ToolResult(
-            tool="aggregate_nodes", ok=False, data={},
+            tool="aggregate_nodes",
+            ok=False,
+            data={},
             session=session.summary(),
             error=f"unknown metric: {metric}. Use: count, sum, avg, max, min",
         )
@@ -316,7 +322,9 @@ async def aggregate_nodes_tool(
         groups = groups[:limit]
     except Exception as exc:
         return ToolResult(
-            tool="aggregate_nodes", ok=False, data={},
+            tool="aggregate_nodes",
+            ok=False,
+            data={},
             session=session.summary(),
             error=f"aggregate_failed: {exc}",
         )
@@ -326,8 +334,14 @@ async def aggregate_nodes_tool(
         ok=True,
         data={
             "aggregation": {
-                "table": table, "group_by": group_by, "metric": metric,
-                **({"where": f"{where_property} {where_op} {where_value}"} if where_property else {}),
+                "table": table,
+                "group_by": group_by,
+                "metric": metric,
+                **(
+                    {"where": f"{where_property} {where_op} {where_value}"}
+                    if where_property
+                    else {}
+                ),
             },
             "groups": groups,
             "total_groups": total_groups,
@@ -396,12 +410,15 @@ async def join_related_tool(
 
         if source_node:
             from synaptic.models import EdgeKind
+
             try:
                 edges = await backend.get_edges(source_node.id, direction="both")
                 for edge in edges:
                     if edge.kind != EdgeKind.RELATED:
                         continue
-                    other_id = edge.target_id if edge.source_id == source_node.id else edge.source_id
+                    other_id = (
+                        edge.target_id if edge.source_id == source_node.id else edge.source_id
+                    )
                     other = await backend.get_node(other_id)
                     if other is None:
                         continue
@@ -429,7 +446,9 @@ async def join_related_tool(
         nodes = matched_nodes[:limit]
     except Exception as exc:
         return ToolResult(
-            tool="join_related", ok=False, data={},
+            tool="join_related",
+            ok=False,
+            data={},
             session=session.summary(),
             error=f"join_failed: {exc}",
         )

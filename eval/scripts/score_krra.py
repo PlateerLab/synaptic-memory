@@ -38,8 +38,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.graph import SynapticGraph  # noqa: E402
-from tests.benchmark.metrics import BenchmarkResult  # noqa: E402
+from synaptic.graph import SynapticGraph
+from tests.benchmark.metrics import BenchmarkResult
 
 DEFAULT_QUERIES = REPO_ROOT / "eval" / "data" / "queries" / "krra.json"
 DEFAULT_SQLITE_GRAPH = REPO_ROOT / "eval" / "data" / "krra_graph.sqlite"
@@ -79,7 +79,9 @@ def _hits_to_doc_ids(search_result: object, limit: int) -> list[str]:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--backend",
         choices=["sqlite", "kuzu"],

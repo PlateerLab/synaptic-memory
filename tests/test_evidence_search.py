@@ -40,9 +40,7 @@ async def _seed_graph(backend: MemoryBackend) -> None:
         await backend.save_node(node)
 
     async def _edge(eid: str, src: str, dst: str, kind: EdgeKind):
-        await backend.save_edge(
-            Edge(id=eid, source_id=src, target_id=dst, kind=kind, weight=1.0)
-        )
+        await backend.save_edge(Edge(id=eid, source_id=src, target_id=dst, kind=kind, weight=1.0))
 
     def _mk(
         id_: str,
@@ -69,30 +67,78 @@ async def _seed_graph(backend: MemoryBackend) -> None:
             level=ConsolidationLevel.L0_RAW,
         )
 
-    await _save(_mk("cat_rule", NodeKind.CONCEPT, "규정 및 지침", "규정 및 지침",
-                    tags=["category"]))
-    await _save(_mk("cat_ops", NodeKind.CONCEPT, "운영계획", "운영계획",
-                    tags=["category"]))
+    await _save(
+        _mk("cat_rule", NodeKind.CONCEPT, "규정 및 지침", "규정 및 지침", tags=["category"])
+    )
+    await _save(_mk("cat_ops", NodeKind.CONCEPT, "운영계획", "운영계획", tags=["category"]))
 
-    await _save(_mk("doc_r", NodeKind.ENTITY, "규정 문서",
-                    "규정 준수 의무 관련 문서",
-                    tags=["document"], category="규정 및 지침", doc_id="doc_r"))
-    await _save(_mk("doc_o", NodeKind.ENTITY, "운영 문서",
-                    "경마 운영계획 전반 문서",
-                    tags=["document"], category="운영계획", doc_id="doc_o"))
+    await _save(
+        _mk(
+            "doc_r",
+            NodeKind.ENTITY,
+            "규정 문서",
+            "규정 준수 의무 관련 문서",
+            tags=["document"],
+            category="규정 및 지침",
+            doc_id="doc_r",
+        )
+    )
+    await _save(
+        _mk(
+            "doc_o",
+            NodeKind.ENTITY,
+            "운영 문서",
+            "경마 운영계획 전반 문서",
+            tags=["document"],
+            category="운영계획",
+            doc_id="doc_o",
+        )
+    )
 
-    await _save(_mk("chunk_r1", NodeKind.CHUNK, "규정 준수 의무",
-                    "규정 준수 의무 사항 명시",
-                    tags=["chunk"], category="규정 및 지침", doc_id="doc_r"))
-    await _save(_mk("chunk_r2", NodeKind.CHUNK, "위반 시 제재 조치",
-                    "규정 위반 시 제재 조치 절차",
-                    tags=["chunk"], category="규정 및 지침", doc_id="doc_r"))
-    await _save(_mk("chunk_o1", NodeKind.CHUNK, "경마 운영계획 수립",
-                    "경마산업 운영계획 수립 기준",
-                    tags=["chunk"], category="운영계획", doc_id="doc_o"))
-    await _save(_mk("chunk_o2", NodeKind.CHUNK, "예산 편성 지침",
-                    "운영 예산 편성 세부 지침",
-                    tags=["chunk"], category="운영계획", doc_id="doc_o"))
+    await _save(
+        _mk(
+            "chunk_r1",
+            NodeKind.CHUNK,
+            "규정 준수 의무",
+            "규정 준수 의무 사항 명시",
+            tags=["chunk"],
+            category="규정 및 지침",
+            doc_id="doc_r",
+        )
+    )
+    await _save(
+        _mk(
+            "chunk_r2",
+            NodeKind.CHUNK,
+            "위반 시 제재 조치",
+            "규정 위반 시 제재 조치 절차",
+            tags=["chunk"],
+            category="규정 및 지침",
+            doc_id="doc_r",
+        )
+    )
+    await _save(
+        _mk(
+            "chunk_o1",
+            NodeKind.CHUNK,
+            "경마 운영계획 수립",
+            "경마산업 운영계획 수립 기준",
+            tags=["chunk"],
+            category="운영계획",
+            doc_id="doc_o",
+        )
+    )
+    await _save(
+        _mk(
+            "chunk_o2",
+            NodeKind.CHUNK,
+            "예산 편성 지침",
+            "운영 예산 편성 세부 지침",
+            tags=["chunk"],
+            category="운영계획",
+            doc_id="doc_o",
+        )
+    )
 
     # PART_OF: doc → category
     await _edge("po_r", "doc_r", "cat_rule", EdgeKind.PART_OF)

@@ -23,11 +23,23 @@ RAW_DIR = REPO_ROOT / "마사회"
 OUT_DIR = REPO_ROOT / "eval" / "data" / "parsed" / "krra"
 
 SUPPORTED_EXTS = {
-    ".pdf", ".txt", ".md", ".docx", ".doc", ".rtf",
-    ".hwp", ".hwpx",
-    ".xlsx", ".xls", ".csv", ".tsv",
-    ".pptx", ".odp",
-    ".png", ".jpg", ".jpeg",
+    ".pdf",
+    ".txt",
+    ".md",
+    ".docx",
+    ".doc",
+    ".rtf",
+    ".hwp",
+    ".hwpx",
+    ".xlsx",
+    ".xls",
+    ".csv",
+    ".tsv",
+    ".pptx",
+    ".odp",
+    ".png",
+    ".jpg",
+    ".jpeg",
 }
 
 CHUNK_SIZE = 1000
@@ -99,7 +111,8 @@ def parse_all() -> None:
     processor = DocumentProcessor()
 
     files = [
-        f for f in sorted(RAW_DIR.rglob("*"))
+        f
+        for f in sorted(RAW_DIR.rglob("*"))
         if f.is_file()
         and f.suffix.lower() in SUPPORTED_EXTS
         and not f.name.startswith(".")
@@ -130,7 +143,7 @@ def parse_all() -> None:
             if (i + 1) % 50 == 0 or i == 0:
                 elapsed = time.time() - start
                 print(
-                    f"  [{i+1}/{len(files)}] {elapsed:.0f}s "
+                    f"  [{i + 1}/{len(files)}] {elapsed:.0f}s "
                     f"docs={total_docs} chunks={total_chunks} errors={total_errors}"
                 )
 
@@ -150,11 +163,17 @@ def parse_all() -> None:
                         chunks_with_meta = [{"text": text, "page_number": None}]
 
                 if not chunks_with_meta:
-                    errors_f.write(json.dumps({
-                        "doc_id": doc_id,
-                        "path": str(rel),
-                        "error": "empty extraction",
-                    }, ensure_ascii=False) + "\n")
+                    errors_f.write(
+                        json.dumps(
+                            {
+                                "doc_id": doc_id,
+                                "path": str(rel),
+                                "error": "empty extraction",
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
                     total_errors += 1
                     continue
 
@@ -172,7 +191,11 @@ def parse_all() -> None:
                 total_docs += 1
 
                 for idx, chunk_data in enumerate(chunks_with_meta):
-                    text = chunk_data.get("text", "") if isinstance(chunk_data, dict) else str(chunk_data)
+                    text = (
+                        chunk_data.get("text", "")
+                        if isinstance(chunk_data, dict)
+                        else str(chunk_data)
+                    )
                     if not text.strip():
                         continue
                     chunk = ParsedChunk(
@@ -180,29 +203,41 @@ def parse_all() -> None:
                         doc_id=doc_id,
                         text=text.strip(),
                         index=idx,
-                        page_number=chunk_data.get("page_number") if isinstance(chunk_data, dict) else None,
-                        line_start=chunk_data.get("line_start") if isinstance(chunk_data, dict) else None,
-                        line_end=chunk_data.get("line_end") if isinstance(chunk_data, dict) else None,
+                        page_number=chunk_data.get("page_number")
+                        if isinstance(chunk_data, dict)
+                        else None,
+                        line_start=chunk_data.get("line_start")
+                        if isinstance(chunk_data, dict)
+                        else None,
+                        line_end=chunk_data.get("line_end")
+                        if isinstance(chunk_data, dict)
+                        else None,
                     )
                     chunks_f.write(json.dumps(asdict(chunk), ensure_ascii=False) + "\n")
                     total_chunks += 1
 
             except Exception as exc:
-                errors_f.write(json.dumps({
-                    "doc_id": doc_id,
-                    "path": str(rel),
-                    "error": str(exc)[:500],
-                }, ensure_ascii=False) + "\n")
+                errors_f.write(
+                    json.dumps(
+                        {
+                            "doc_id": doc_id,
+                            "path": str(rel),
+                            "error": str(exc)[:500],
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
                 total_errors += 1
 
     elapsed = time.time() - start
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"KRRA Parse Complete — {elapsed:.1f}s")
     print(f"  Documents: {total_docs}")
     print(f"  Chunks:    {total_chunks}")
     print(f"  Errors:    {total_errors}")
     print(f"  Output:    {OUT_DIR.relative_to(REPO_ROOT)}/")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

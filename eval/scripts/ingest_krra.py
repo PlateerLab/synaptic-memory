@@ -47,11 +47,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.extensions.document_ingester import (  # noqa: E402
+from synaptic.extensions.document_ingester import (
     DocumentIngester,
     JsonlDocumentSource,
 )
-from synaptic.extensions.domain_profile import DomainProfile  # noqa: E402
+from synaptic.extensions.domain_profile import DomainProfile
 
 DEFAULT_PROFILE = REPO_ROOT / "eval" / "data" / "profiles" / "krra.toml"
 DEFAULT_DOCS = REPO_ROOT / "eval" / "data" / "parsed" / "krra" / "documents.jsonl"
@@ -61,7 +61,9 @@ DEFAULT_KUZU_GRAPH = REPO_ROOT / "eval" / "data" / "krra_graph.kuzu"
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--backend",
         choices=["sqlite", "kuzu"],
@@ -218,7 +220,8 @@ async def main() -> int:
 
         nodes = await backend.list_nodes(kind=None, limit=100_000)
         embed_targets = [
-            n for n in nodes
+            n
+            for n in nodes
             if n.kind in (NodeKind.CHUNK, NodeKind.ENTITY, NodeKind.CONCEPT)
             or "document" in (n.tags or [])
         ]
@@ -229,14 +232,11 @@ async def main() -> int:
         embed_start = time.time()
         for i in range(0, len(embed_targets), batch_size):
             batch = embed_targets[i : i + batch_size]
-            texts = [
-                f"{n.title}\n{n.content[:300]}" if n.content else n.title
-                for n in batch
-            ]
+            texts = [f"{n.title}\n{n.content[:300]}" if n.content else n.title for n in batch]
             try:
                 vectors = await embedder.embed_batch(texts)
             except Exception as exc:
-                print(f"  ⚠ batch {i//batch_size} failed: {exc}")
+                print(f"  ⚠ batch {i // batch_size} failed: {exc}")
                 continue
 
             for node, vec in zip(batch, vectors):

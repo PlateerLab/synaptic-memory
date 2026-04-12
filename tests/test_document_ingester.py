@@ -53,9 +53,7 @@ class TestBasicIngest:
         profile = DomainProfile.generic_korean()
         ingester = DocumentIngester(profile=profile, backend=backend)
 
-        source = InMemoryDocumentSource(
-            [_sample_doc("d1", "제목", content="본문")]
-        )
+        source = InMemoryDocumentSource([_sample_doc("d1", "제목", content="본문")])
         stats = await ingester.ingest(source)
 
         assert stats.documents_ingested == 1
@@ -88,7 +86,9 @@ class TestBasicIngest:
         chunks = await backend.list_nodes(kind=NodeKind.CHUNK, limit=100)
         assert len(chunks) == 3
         # Chunks sorted by index
-        texts = [c.content for c in sorted(chunks, key=lambda c: int(c.properties.get("chunk_index", 0)))]
+        texts = [
+            c.content for c in sorted(chunks, key=lambda c: int(c.properties.get("chunk_index", 0)))
+        ]
         assert texts == ["첫 번째 청크", "두 번째 청크", "세 번째 청크"]
 
     @pytest.mark.asyncio
@@ -159,9 +159,7 @@ class TestMergeStrategy:
     async def test_skip_on_duplicate_doc_id(self):
         backend = MemoryBackend()
         profile = DomainProfile.generic_korean()
-        ingester = DocumentIngester(
-            profile=profile, backend=backend, merge_strategy="skip"
-        )
+        ingester = DocumentIngester(profile=profile, backend=backend, merge_strategy="skip")
 
         doc_v1 = _sample_doc("d1", "Original", content="v1 본문")
         await ingester.ingest(InMemoryDocumentSource([doc_v1]))
@@ -182,17 +180,11 @@ class TestMergeStrategy:
         backend = MemoryBackend()
         profile = DomainProfile.generic_korean()
 
-        skipper = DocumentIngester(
-            profile=profile, backend=backend, merge_strategy="skip"
-        )
-        v1 = _sample_doc(
-            "d1", "V1", chunks=[_chunk("d1", 0, "old chunk")]
-        )
+        skipper = DocumentIngester(profile=profile, backend=backend, merge_strategy="skip")
+        v1 = _sample_doc("d1", "V1", chunks=[_chunk("d1", 0, "old chunk")])
         await skipper.ingest(InMemoryDocumentSource([v1]))
 
-        replacer = DocumentIngester(
-            profile=profile, backend=backend, merge_strategy="replace"
-        )
+        replacer = DocumentIngester(profile=profile, backend=backend, merge_strategy="replace")
         v2 = _sample_doc(
             "d1", "V2", chunks=[_chunk("d1", 0, "new chunk a"), _chunk("d1", 1, "new chunk b")]
         )
@@ -218,7 +210,9 @@ class TestMergeStrategy:
         profile = DomainProfile.generic_korean()
         with pytest.raises(ValueError, match="Unknown merge_strategy"):
             DocumentIngester(
-                profile=profile, backend=backend, merge_strategy="nuclear"  # type: ignore[arg-type]
+                profile=profile,
+                backend=backend,
+                merge_strategy="nuclear",  # type: ignore[arg-type]
             )
 
 
@@ -353,9 +347,7 @@ class TestJsonlDocumentSource:
             encoding="utf-8",
         )
         chunks_path.write_text(
-            json.dumps(
-                {"chunk_id": "other", "doc_id": "a", "text": "should not win", "index": 0}
-            )
+            json.dumps({"chunk_id": "other", "doc_id": "a", "text": "should not win", "index": 0})
             + "\n",
             encoding="utf-8",
         )
@@ -382,8 +374,10 @@ class TestJsonlDocumentSource:
     def test_missing_doc_id_skipped(self, tmp_path):
         docs_path = tmp_path / "docs.jsonl"
         docs_path.write_text(
-            json.dumps({"title": "Missing id"}) + "\n"
-            + json.dumps({"doc_id": "ok", "title": "OK"}) + "\n",
+            json.dumps({"title": "Missing id"})
+            + "\n"
+            + json.dumps({"doc_id": "ok", "title": "OK"})
+            + "\n",
             encoding="utf-8",
         )
         source = JsonlDocumentSource(docs_path)
@@ -483,9 +477,7 @@ class TestKrraStyleIntegration:
         ingester = DocumentIngester(profile=profile, backend=backend)
 
         await ingester.ingest(
-            InMemoryDocumentSource(
-                [_sample_doc("d1", "인권영향평가 체크리스트")]
-            )
+            InMemoryDocumentSource([_sample_doc("d1", "인권영향평가 체크리스트")])
         )
 
         docs = await backend.list_nodes(kind=NodeKind.ENTITY, limit=100)

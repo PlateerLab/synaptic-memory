@@ -48,8 +48,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.extensions.profile_generator import ProfileGenerator  # noqa: E402
-from synaptic.extensions.ontology_classifier import OntologyClassifier  # noqa: E402
+from synaptic.extensions.ontology_classifier import OntologyClassifier
+from synaptic.extensions.profile_generator import ProfileGenerator
 
 
 def _parse_args() -> argparse.Namespace:
@@ -246,12 +246,14 @@ def _build_llm(args: argparse.Namespace):
         return None
     if args.llm == "ollama":
         from synaptic.extensions.llm_provider import OllamaLLMProvider
+
         return OllamaLLMProvider(
             base_url=args.llm_base_url or "http://localhost:11434",
             model=args.llm_model or "qwen3:4b",
         )
     if args.llm == "openai":
         from synaptic.extensions.llm_provider import OpenAILLMProvider
+
         return OpenAILLMProvider(
             api_base=args.llm_base_url or "https://api.openai.com/v1",
             api_key=os.environ.get("OPENAI_API_KEY", ""),
@@ -259,6 +261,7 @@ def _build_llm(args: argparse.Namespace):
         )
     if args.llm == "anthropic":
         from synaptic.extensions.llm_provider import AnthropicLLMProvider
+
         return AnthropicLLMProvider(
             api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
             model=args.llm_model or "claude-sonnet-4-20250514",
@@ -273,7 +276,9 @@ async def main() -> int:
         print(f"ERROR: samples file not found: {args.samples}")
         return 1
 
-    print(f"Loading samples from {args.samples.relative_to(REPO_ROOT) if args.samples.is_absolute() else args.samples}")
+    print(
+        f"Loading samples from {args.samples.relative_to(REPO_ROOT) if args.samples.is_absolute() else args.samples}"
+    )
     samples, categories = _load_samples(
         args.samples, args.field, args.categories_field, args.sample_limit
     )
@@ -290,7 +295,10 @@ async def main() -> int:
             embedder=embedder,
             threshold=args.classifier_threshold,
         )
-        print(f"  Embedder: {args.embedder}" + (f" ({args.embedder_model})" if args.embedder_model else ""))
+        print(
+            f"  Embedder: {args.embedder}"
+            + (f" ({args.embedder_model})" if args.embedder_model else "")
+        )
     else:
         print("  Embedder: none (classifier disabled)")
 

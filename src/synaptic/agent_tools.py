@@ -105,10 +105,7 @@ class ToolResult:
             "tool": self.tool,
             "ok": self.ok,
             "data": self.data,
-            "hints": [
-                {"action": h.action, "args": h.args, "reason": h.reason}
-                for h in self.hints
-            ],
+            "hints": [{"action": h.action, "args": h.args, "reason": h.reason} for h in self.hints],
             "session": self.session,
             "error": self.error,
         }
@@ -272,57 +269,62 @@ async def search_tool(
     evidence = list(result.evidence)
     if category:
         cat_lower = category.lower()
-        evidence = [
-            e for e in evidence
-            if cat_lower in (e.category or "").lower()
-        ]
+        evidence = [e for e in evidence if cat_lower in (e.category or "").lower()]
     if kind is not None:
         kind_str = str(kind).lower() if not isinstance(kind, NodeKind) else str(kind)
-        evidence = [
-            e for e in evidence
-            if str(e.node.kind).lower() == kind_str
-        ]
+        evidence = [e for e in evidence if str(e.node.kind).lower() == kind_str]
     if exclude_seen:
         evidence = [e for e in evidence if not session.has_seen(e.node.id)]
 
     evidence = evidence[:limit]
     session.mark_seen(e.node.id for e in evidence)
     session.mark_categories(result.anchors.categories)
-    session.set_fact("last_query_anchors", {
-        "categories": list(result.anchors.categories),
-        "entities": list(result.anchors.entities),
-    })
+    session.set_fact(
+        "last_query_anchors",
+        {
+            "categories": list(result.anchors.categories),
+            "entities": list(result.anchors.entities),
+        },
+    )
     session.set_fact("last_evidence_ids", [e.node.id for e in evidence])
 
     hints: list[Hint] = []
 
     if not evidence:
-        hints.append(Hint(
-            action="search",
-            args={"query": query, "exclude_seen": False},
-            reason="no new results — retry without the seen filter to revisit prior hits",
-        ))
+        hints.append(
+            Hint(
+                action="search",
+                args={"query": query, "exclude_seen": False},
+                reason="no new results — retry without the seen filter to revisit prior hits",
+            )
+        )
         if result.anchors.categories:
             first_cat = result.anchors.categories[0]
-            hints.append(Hint(
-                action="list_categories",
-                args={},
-                reason=f"query touched '{first_cat}' — inspect the full category list to pick a different angle",
-            ))
+            hints.append(
+                Hint(
+                    action="list_categories",
+                    args={},
+                    reason=f"query touched '{first_cat}' — inspect the full category list to pick a different angle",
+                )
+            )
     else:
         top = evidence[0]
-        hints.append(Hint(
-            action="get_document",
-            args={"doc_id": top.document_id},
-            reason="fetch the full parent document of the top evidence to verify absence/completeness",
-        ))
+        hints.append(
+            Hint(
+                action="get_document",
+                args={"doc_id": top.document_id},
+                reason="fetch the full parent document of the top evidence to verify absence/completeness",
+            )
+        )
         if len(result.anchors.categories) > 1:
             for cat in result.anchors.categories[1:3]:
-                hints.append(Hint(
-                    action="search",
-                    args={"query": query, "category": cat},
-                    reason=f"query also touched '{cat}' — narrow search to that category",
-                ))
+                hints.append(
+                    Hint(
+                        action="search",
+                        args={"query": query, "category": cat},
+                        reason=f"query also touched '{cat}' — narrow search to that category",
+                    )
+                )
 
     return ToolResult(
         tool="search",
@@ -399,11 +401,13 @@ async def expand_tool(
 
     hints: list[Hint] = []
     if not out_nodes:
-        hints.append(Hint(
-            action="get_document",
-            args={"doc_id": _doc_id_of(seed)},
-            reason="no new neighbours — fall back to the full document",
-        ))
+        hints.append(
+            Hint(
+                action="get_document",
+                args={"doc_id": _doc_id_of(seed)},
+                reason="no new neighbours — fall back to the full document",
+            )
+        )
 
     return ToolResult(
         tool="expand",
@@ -433,6 +437,7 @@ def _anchors_from_seed(seed: Node):
     against ``query_anchor``.
     """
     from synaptic.extensions.query_anchor import QueryAnchors
+
     cat = (seed.properties or {}).get("category") or ""
     return QueryAnchors(
         query=seed.title or seed.id,
@@ -503,9 +508,7 @@ async def get_document_tool(
     # Walk CONTAINS edges to assemble chunks in index order.
     # Uses get_nodes_batch (single SQL WHERE IN) instead of N+1 get_node calls.
     edges = await backend.get_edges(doc_node.id, direction="outgoing")
-    chunk_ids = [
-        e.target_id for e in edges if e.kind == EdgeKind.CONTAINS
-    ][:max_chunks]
+    chunk_ids = [e.target_id for e in edges if e.kind == EdgeKind.CONTAINS][:max_chunks]
 
     chunks = await backend.get_nodes_batch(chunk_ids)
 
@@ -529,23 +532,32 @@ async def get_document_tool(
         for c in chunks:  # preserve reading order
             idx = (c.properties or {}).get("chunk_index", "")
             if c.id in full_ids:
-                chunk_data.append({
-                    "id": c.id, "index": idx,
-                    "content": c.content, "relevant": True,
-                })
+                chunk_data.append(
+                    {
+                        "id": c.id,
+                        "index": idx,
+                        "content": c.content,
+                        "relevant": True,
+                    }
+                )
             else:
                 # Title-only summary — saves ~90% context
-                chunk_data.append({
-                    "id": c.id, "index": idx,
-                    "summary": (c.content or "")[:80] + "…",
-                })
+                chunk_data.append(
+                    {
+                        "id": c.id,
+                        "index": idx,
+                        "summary": (c.content or "")[:80] + "…",
+                    }
+                )
     else:
         for c in chunks:
-            chunk_data.append({
-                "id": c.id,
-                "index": (c.properties or {}).get("chunk_index", ""),
-                "content": c.content,
-            })
+            chunk_data.append(
+                {
+                    "id": c.id,
+                    "index": (c.properties or {}).get("chunk_index", ""),
+                    "content": c.content,
+                }
+            )
 
     return ToolResult(
         tool="get_document",
@@ -591,11 +603,13 @@ async def list_categories_tool(
             doc_count = sum(1 for e in edges if e.kind == EdgeKind.PART_OF)
         except Exception:
             doc_count = 0
-        category_entries.append({
-            "id": cat.id,
-            "label": cat.title,
-            "document_count": doc_count,
-        })
+        category_entries.append(
+            {
+                "id": cat.id,
+                "label": cat.title,
+                "document_count": doc_count,
+            }
+        )
 
     category_entries.sort(key=lambda c: -c["document_count"])
 
@@ -641,9 +655,7 @@ async def count_tool(
         except ValueError:
             pass
 
-    matched = await backend.count_nodes(
-        kind=node_kind, category=category, year=year
-    )
+    matched = await backend.count_nodes(kind=node_kind, category=category, year=year)
 
     return ToolResult(
         tool="count",
@@ -742,7 +754,9 @@ async def follow_tool(
         return budget
 
     try:
-        kind_enum = edge_kind if isinstance(edge_kind, EdgeKind) else EdgeKind(str(edge_kind).lower())
+        kind_enum = (
+            edge_kind if isinstance(edge_kind, EdgeKind) else EdgeKind(str(edge_kind).lower())
+        )
     except ValueError:
         return ToolResult(
             tool="follow",

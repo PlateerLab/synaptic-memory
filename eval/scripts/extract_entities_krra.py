@@ -40,9 +40,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.backends.kuzu import KuzuBackend  # noqa: E402
-from synaptic.graph import SynapticGraph  # noqa: E402
-from synaptic.models import EdgeKind, NodeKind  # noqa: E402
+from synaptic.backends.kuzu import KuzuBackend
+from synaptic.graph import SynapticGraph
+from synaptic.models import EdgeKind, NodeKind
 
 GRAPH_DIR = REPO_ROOT / "eval" / "data" / "krra_graph.kuzu"
 CHUNKS_PATH = REPO_ROOT / "eval" / "data" / "parsed" / "krra" / "chunks.jsonl"
@@ -50,10 +50,10 @@ STATS_OUT = REPO_ROOT / "eval" / "results" / "entities_krra.json"
 
 # --- Extraction tuning ---
 
-MIN_DF = 3          # phrase must appear in >=3 distinct chunks
+MIN_DF = 3  # phrase must appear in >=3 distinct chunks
 MAX_DF_RATIO = 0.30  # and in <=30% of chunks (excludes metadata bleed)
-MIN_LEN = 3          # minimum phrase character length
-MAX_LEN = 20         # cap for single phrases
+MIN_LEN = 3  # minimum phrase character length
+MAX_LEN = 20  # cap for single phrases
 MAX_PHRASES_PER_CHUNK = 15  # cap edges per chunk (prevent explosion)
 
 META_BLOCK_RE = re.compile(r"<Document-Metadata>.*?</Document-Metadata>", re.DOTALL)
@@ -66,19 +66,60 @@ PARTICLE_RE = re.compile(r"(의|을|를|에서|부터|까지|으로)$")
 KO_STOPS: frozenset[str] = frozenset(
     {
         # particle-suffixed forms
-        "조직의", "있는지", "되는지", "것이다", "것이며", "것이고",
-        "것인지", "것으로", "하기로", "하기에",
+        "조직의",
+        "있는지",
+        "되는지",
+        "것이다",
+        "것이며",
+        "것이고",
+        "것인지",
+        "것으로",
+        "하기로",
+        "하기에",
         # metadata schema pollution
-        "마지막", "수정자", "작성자", "작성일", "수정일",
-        "데이터", "원천", "기간", "범위", "산식", "단위",
-        "분류번호", "진단항목", "점검기준",
+        "마지막",
+        "수정자",
+        "작성자",
+        "작성일",
+        "수정일",
+        "데이터",
+        "원천",
+        "기간",
+        "범위",
+        "산식",
+        "단위",
+        "분류번호",
+        "진단항목",
+        "점검기준",
         # generic high-freq terms with no discriminating value
-        "경우", "내용", "결과", "부문", "해당", "다음", "관련",
-        "포함", "제공", "수행", "실시", "사항", "항목",
-        "있다", "없다", "되다", "하다", "이다",
-        "통해", "대한", "따라", "위한", "관한", "대해",
+        "경우",
+        "내용",
+        "결과",
+        "부문",
+        "해당",
+        "다음",
+        "관련",
+        "포함",
+        "제공",
+        "수행",
+        "실시",
+        "사항",
+        "항목",
+        "있다",
+        "없다",
+        "되다",
+        "하다",
+        "이다",
+        "통해",
+        "대한",
+        "따라",
+        "위한",
+        "관한",
+        "대해",
         # temporal noise
-        "년도", "반기", "분기",
+        "년도",
+        "반기",
+        "분기",
     }
 )
 
@@ -166,9 +207,7 @@ async def main() -> int:
 
     total_chunks = len(chunks)
     elapsed = time.time() - t0
-    print(
-        f"  done — {total_chunks} chunks, {len(df)} raw candidates, {elapsed:.1f}s"
-    )
+    print(f"  done — {total_chunks} chunks, {len(df)} raw candidates, {elapsed:.1f}s")
 
     # --- Pass 2: filter by DF ---
     print(f"\n[2/3] Filtering (min_df={MIN_DF}, max_df_ratio={MAX_DF_RATIO})...")
@@ -192,7 +231,7 @@ async def main() -> int:
         print(f"    {df[p]:5d}  {p}")
 
     # --- Pass 3: write to Kuzu ---
-    print(f"\n[3/3] Writing phrase nodes + MENTIONS edges to Kuzu...")
+    print("\n[3/3] Writing phrase nodes + MENTIONS edges to Kuzu...")
     backend = KuzuBackend(str(GRAPH_DIR))
     await backend.connect()
     graph = SynapticGraph(backend)
@@ -212,13 +251,15 @@ async def main() -> int:
         )
         phrase_to_node_id[phrase] = node.id
         if (i + 1) % 500 == 0:
-            print(f"  [{i + 1}/{len(kept_sorted)}] phrase nodes — {time.time() - phrase_create_t0:.0f}s")
+            print(
+                f"  [{i + 1}/{len(kept_sorted)}] phrase nodes — {time.time() - phrase_create_t0:.0f}s"
+            )
 
     print(f"  created {len(phrase_to_node_id)} phrase ENTITY nodes")
 
     # Second: walk chunks, find their chunk node id by doc_id+chunk_index,
     # and create MENTIONS edges to phrase nodes
-    print(f"\n  Linking chunks → phrases...")
+    print("\n  Linking chunks → phrases...")
     edge_t0 = time.time()
     edges_created = 0
     chunks_linked = 0
@@ -229,10 +270,7 @@ async def main() -> int:
     # Use a raw Cypher query to get chunk_id → node_id mapping quickly.
     chunk_id_to_node_id: dict[str, str] = {}
     conn = backend._conn
-    res = conn.execute(
-        "MATCH (n:Node) WHERE n.kind = 'chunk' "
-        "RETURN n.id, n.properties_json"
-    )
+    res = conn.execute("MATCH (n:Node) WHERE n.kind = 'chunk' RETURN n.id, n.properties_json")
     while res.has_next():
         row = res.get_next()
         node_id = row[0]
@@ -277,7 +315,9 @@ async def main() -> int:
             edges_created += 1
 
         if (i + 1) % 2000 == 0:
-            print(f"  [{i + 1}/{total_chunks}] — {edges_created} edges, {time.time() - edge_t0:.0f}s")
+            print(
+                f"  [{i + 1}/{total_chunks}] — {edges_created} edges, {time.time() - edge_t0:.0f}s"
+            )
 
     await backend.close()
 
@@ -309,9 +349,7 @@ async def main() -> int:
                     "max_len": MAX_LEN,
                     "max_phrases_per_chunk": MAX_PHRASES_PER_CHUNK,
                 },
-                "top_30_phrases": [
-                    {"phrase": p, "df": df[p]} for p in kept_sorted[:30]
-                ],
+                "top_30_phrases": [{"phrase": p, "df": df[p]} for p in kept_sorted[:30]],
             },
             f,
             ensure_ascii=False,

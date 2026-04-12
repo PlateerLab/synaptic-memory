@@ -24,8 +24,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.extensions.evidence_search import EvidenceSearch  # noqa: E402
-from tests.benchmark.metrics import BenchmarkResult  # noqa: E402
+from synaptic.extensions.evidence_search import EvidenceSearch
+from tests.benchmark.metrics import BenchmarkResult
 
 DEFAULT_QUERIES = REPO_ROOT / "eval" / "data" / "queries" / "krra.json"
 DEFAULT_SQLITE = REPO_ROOT / "eval" / "data" / "krra_graph.sqlite"
@@ -60,7 +60,9 @@ def _evidence_to_doc_ids(evidence_list) -> list[str]:
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--backend", choices=["sqlite", "kuzu"], default="sqlite")
     p.add_argument("--graph", type=Path, default=None)
     p.add_argument("--queries", type=Path, default=DEFAULT_QUERIES)
@@ -75,10 +77,12 @@ def _parse_args() -> argparse.Namespace:
 async def _open_backend(backend_name: str, graph_path: Path):
     if backend_name == "sqlite":
         from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
         backend = SqliteGraphBackend(str(graph_path))
         await backend.connect()
         return backend
     from synaptic.backends.kuzu import KuzuBackend
+
     backend = KuzuBackend(str(graph_path))
     await backend.connect()
     return backend
@@ -113,13 +117,13 @@ async def main() -> int:
     embedder = None
     if args.embed_url:
         from synaptic.extensions.embedder import OpenAIEmbeddingProvider
-        embedder = OpenAIEmbeddingProvider(
-            api_base=args.embed_url, model=args.embed_model
-        )
+
+        embedder = OpenAIEmbeddingProvider(api_base=args.embed_url, model=args.embed_model)
         print(f"Embedder: {args.embed_url} ({args.embed_model})")
     reranker = None
     if args.reranker_url:
         from synaptic.extensions.reranker_cross import TEIReranker
+
         reranker = TEIReranker(base_url=args.reranker_url)
         print(f"Reranker: {args.reranker_url}")
     searcher = EvidenceSearch(backend=backend, embedder=embedder, reranker=reranker)
@@ -138,7 +142,7 @@ async def main() -> int:
         t0 = time.perf_counter()
         result = await searcher.search(
             query_text,
-            k=args.k * 2,   # aggregator cap; then we cut to k at scoring
+            k=args.k * 2,  # aggregator cap; then we cut to k at scoring
             fts_seed_limit=30,
             per_document_cap=2,
         )

@@ -82,8 +82,11 @@ async def deep_search_tool(
 
     # Step 1: search
     search_result = await search_tool(
-        backend, session, query,
-        limit=limit, category=category,
+        backend,
+        session,
+        query,
+        limit=limit,
+        category=category,
         embedder=embedder,
     )
     evidence = search_result.data.get("evidence", [])
@@ -94,9 +97,9 @@ async def deep_search_tool(
 
     if evidence:
         top_node_id = evidence[0].get("id", "")
-        top_doc_ids = list(dict.fromkeys(
-            e.get("document_id", "") for e in evidence if e.get("document_id")
-        ))[:read_top_k]
+        top_doc_ids = list(
+            dict.fromkeys(e.get("document_id", "") for e in evidence if e.get("document_id"))
+        )[:read_top_k]
 
         # Parallel: expand + get_documents
         tasks = []
@@ -115,23 +118,26 @@ async def deep_search_tool(
             if r.tool == "expand" and r.ok:
                 expanded_neighbours = r.data.get("neighbours", [])
             elif r.tool == "get_document" and r.ok:
-                doc_excerpts.append({
-                    "document": r.data.get("document", {}),
-                    "relevant_chunks": [
-                        c for c in r.data.get("chunks", [])
-                        if c.get("relevant")
-                    ],
-                    "total_chunks": r.data.get("chunk_count", 0),
-                })
+                doc_excerpts.append(
+                    {
+                        "document": r.data.get("document", {}),
+                        "relevant_chunks": [
+                            c for c in r.data.get("chunks", []) if c.get("relevant")
+                        ],
+                        "total_chunks": r.data.get("chunk_count", 0),
+                    }
+                )
 
     # Build consolidated response
     hints: list[Hint] = []
     if not evidence:
-        hints.append(Hint(
-            action="deep_search",
-            args={"query": query, "category": "try a different category"},
-            reason="no results — try rephrasing or filtering by category",
-        ))
+        hints.append(
+            Hint(
+                action="deep_search",
+                args={"query": query, "category": "try a different category"},
+                reason="no results — try rephrasing or filtering by category",
+            )
+        )
 
     return ToolResult(
         tool="deep_search",
@@ -177,15 +183,10 @@ async def compare_search_tool(
 
     if len(sub_queries) <= 1:
         # Not decomposable — fall back to regular deep_search
-        return await deep_search_tool(
-            backend, session, query, embedder=embedder
-        )
+        return await deep_search_tool(backend, session, query, embedder=embedder)
 
     # Parallel search for each sub-query
-    tasks = [
-        search_tool(backend, session, sq, limit=5, embedder=embedder)
-        for sq in sub_queries
-    ]
+    tasks = [search_tool(backend, session, sq, limit=5, embedder=embedder) for sq in sub_queries]
     results = await asyncio.gather(*tasks)
 
     # Merge results
@@ -193,11 +194,13 @@ async def compare_search_tool(
     sub_results: list[dict] = []
     for sq, r in zip(sub_queries, results):
         evidence = r.data.get("evidence", []) if r.ok else []
-        sub_results.append({
-            "sub_query": sq,
-            "evidence_count": len(evidence),
-            "top_result": evidence[0] if evidence else None,
-        })
+        sub_results.append(
+            {
+                "sub_query": sq,
+                "evidence_count": len(evidence),
+                "top_result": evidence[0] if evidence else None,
+            }
+        )
         all_evidence.extend(evidence)
 
     # Deduplicate by node id
@@ -241,7 +244,9 @@ def _decompose_query(query: str) -> list[str]:
     # Clean up trailing particles
     cleaned = []
     for p in parts:
-        p = re.sub(r"(의\s+관계|의\s+연관|에\s+대해|에\s+미치는|을\s+비교|를\s+비교)$", "", p).strip()
+        p = re.sub(
+            r"(의\s+관계|의\s+연관|에\s+대해|에\s+미치는|을\s+비교|를\s+비교)$", "", p
+        ).strip()
         if len(p) >= 2:
             cleaned.append(p)
 
@@ -271,8 +276,11 @@ async def _safe_get_doc(
     """Get document with error swallowing."""
     try:
         return await get_document_tool(
-            backend, session, doc_id,
-            query=query, max_full_chunks=3,
+            backend,
+            session,
+            doc_id,
+            query=query,
+            max_full_chunks=3,
         )
     except Exception:
         return None

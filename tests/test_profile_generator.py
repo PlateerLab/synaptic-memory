@@ -348,6 +348,7 @@ class TestClassifierTier:
         # LLM disagrees — wants to relabel "규정 및 지침" as DECISION and
         # adds a second label "신규 카테고리" that the classifier missed.
         import json
+
         llm_payload = json.dumps(
             {
                 "ontology_hints": {

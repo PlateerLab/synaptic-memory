@@ -14,6 +14,7 @@ def _nfc(s: str) -> str:
     substring/FTS matches silently fail when NFD content is queried with NFC."""
     return unicodedata.normalize("NFC", s) if s else s
 
+
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
 from synaptic.consolidation import ConsolidationCascade
@@ -320,9 +321,9 @@ class SynapticGraph:
         files: list[Path] = []
         if path.is_dir():
             files = sorted(
-                p for p in path.rglob("*")
-                if p.suffix in (".csv", ".jsonl", ".json")
-                and not p.name.startswith(".")
+                p
+                for p in path.rglob("*")
+                if p.suffix in (".csv", ".jsonl", ".json") and not p.name.startswith(".")
             )
         elif path.is_file():
             files = [path]
@@ -385,8 +386,11 @@ class SynapticGraph:
                     graph_instance = cls(backend)
                     ingester = TableIngester()
                     await ingester.ingest(
-                        graph_instance, table_name, columns, rows,
-                        primary_key=list(rows[0].keys())[0],
+                        graph_instance,
+                        table_name,
+                        columns,
+                        rows,
+                        primary_key=next(iter(rows[0].keys())),
                     )
             elif f.suffix == ".jsonl":
                 # Check if it's a docs+chunks pair
@@ -407,9 +411,7 @@ class SynapticGraph:
             batch_size = 32
             for i in range(0, len(nodes), batch_size):
                 batch = nodes[i : i + batch_size]
-                texts = [
-                    f"{n.title}\n{(n.content or '')[:300]}" for n in batch
-                ]
+                texts = [f"{n.title}\n{(n.content or '')[:300]}" for n in batch]
                 try:
                     vecs = await embedder.embed_batch(texts)
                     for n, v in zip(batch, vecs):
@@ -461,35 +463,57 @@ class SynapticGraph:
 
         if connection_string.startswith("sqlite"):
             # sqlite:///path or sqlite:path
-            db_path = connection_string.split("///")[-1] if "///" in connection_string else connection_string.split(":")[-1]
+            db_path = (
+                connection_string.rsplit("///", maxsplit=1)[-1]
+                if "///" in connection_string
+                else connection_string.rsplit(":", maxsplit=1)[-1]
+            )
             stats = await ingester.ingest_from_sqlite(
-                db_path, graph, tables=tables, row_limit=row_limit,
+                db_path,
+                graph,
+                tables=tables,
+                row_limit=row_limit,
             )
         elif connection_string.startswith("postgresql"):
             stats = await ingester.ingest_from_postgres(
-                connection_string, graph, tables=tables, row_limit=row_limit,
+                connection_string,
+                graph,
+                tables=tables,
+                row_limit=row_limit,
             )
         elif connection_string.startswith("mysql") or connection_string.startswith("mariadb"):
             stats = await ingester.ingest_from_mysql(
-                connection_string, graph, tables=tables, row_limit=row_limit,
+                connection_string,
+                graph,
+                tables=tables,
+                row_limit=row_limit,
             )
         elif connection_string.startswith("oracle"):
             stats = await ingester.ingest_from_oracle(
-                connection_string, graph, tables=tables, row_limit=row_limit,
+                connection_string,
+                graph,
+                tables=tables,
+                row_limit=row_limit,
             )
         elif connection_string.startswith("mssql"):
             stats = await ingester.ingest_from_mssql(
-                connection_string, graph, tables=tables, row_limit=row_limit,
+                connection_string,
+                graph,
+                tables=tables,
+                row_limit=row_limit,
             )
         else:
-            msg = f"Unsupported database: {connection_string.split(':')[0]}. Use sqlite://, postgresql://, mysql://, oracle://, mssql://"
+            msg = f"Unsupported database: {connection_string.split(':', maxsplit=1)[0]}. Use sqlite://, postgresql://, mysql://, oracle://, mssql://"
             raise ValueError(msg)
 
         import logging
+
         logging.getLogger("db-ingester").info(
             "from_database: %d tables, %d rows, %d nodes, %.1fs",
-            stats.tables_ingested, stats.total_rows,
-            stats.total_nodes, stats.elapsed_seconds,
+            stats.tables_ingested,
+            stats.total_rows,
+            stats.total_nodes,
+            stats.elapsed_seconds,
         )
         return graph
 
@@ -547,9 +571,7 @@ class SynapticGraph:
         if tags:
             tags = [_nfc(t) for t in tags]
         if properties:
-            properties = {
-                k: _nfc(v) if isinstance(v, str) else v for k, v in properties.items()
-            }
+            properties = {k: _nfc(v) if isinstance(v, str) else v for k, v in properties.items()}
 
         # Auto-classify kind if not specified
         if kind is None:

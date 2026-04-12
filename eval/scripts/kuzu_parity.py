@@ -21,13 +21,13 @@ from time import time
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.activity import ActivityTracker  # noqa: E402
-from synaptic.backends.kuzu import KuzuBackend  # noqa: E402
-from synaptic.backends.memory import MemoryBackend  # noqa: E402
-from synaptic.graph import SynapticGraph  # noqa: E402
-from synaptic.models import EdgeKind, NodeKind  # noqa: E402
-from synaptic.protocols import StorageBackend  # noqa: E402
-from tests.benchmark.metrics import BenchmarkResult  # noqa: E402
+from synaptic.activity import ActivityTracker
+from synaptic.backends.kuzu import KuzuBackend
+from synaptic.backends.memory import MemoryBackend
+from synaptic.graph import SynapticGraph
+from synaptic.models import EdgeKind, NodeKind
+from synaptic.protocols import StorageBackend
+from tests.benchmark.metrics import BenchmarkResult
 
 DATA_FILE = REPO_ROOT / "tests" / "benchmark" / "data" / "enterprise_scenario.json"
 K = 5
@@ -62,9 +62,7 @@ def _load_scenario() -> dict:
         return json.load(f)
 
 
-async def _ingest_scenario(
-    graph: SynapticGraph, scenario: dict
-) -> dict[str, str]:
+async def _ingest_scenario(graph: SynapticGraph, scenario: dict) -> dict[str, str]:
     """Reproduces the enterprise_graph fixture ingestion."""
     tracker = ActivityTracker(graph)
     id_map: dict[str, str] = {}
@@ -143,9 +141,7 @@ async def _run_queries(
 
         start = time()
         if q.get("intent", "auto") != "auto":
-            result = await graph.agent_search(
-                q["query"], intent=q["intent"], limit=K * 2
-            )
+            result = await graph.agent_search(q["query"], intent=q["intent"], limit=K * 2)
         else:
             result = await graph.search(q["query"], limit=K * 2)
         elapsed = (time() - start) * 1000
@@ -163,9 +159,7 @@ async def _run_queries(
     return bench
 
 
-async def _run_backend(
-    backend: StorageBackend, backend_name: str, scenario: dict
-) -> RunReport:
+async def _run_backend(backend: StorageBackend, backend_name: str, scenario: dict) -> RunReport:
     await backend.connect()
     try:
         graph = SynapticGraph(backend)

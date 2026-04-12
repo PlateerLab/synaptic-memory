@@ -210,12 +210,9 @@ class TestCategoryCoverage:
     def test_each_category_gets_at_least_one_representative(self):
         agg = EvidenceAggregator()
         scored = [
-            _scored("r1", total=0.9, content="규정 내용 하나",
-                    category="규정 및 지침"),
-            _scored("r2", total=0.8, content="규정 내용 둘",
-                    category="규정 및 지침"),
-            _scored("o1", total=0.7, content="운영 내용 하나",
-                    category="운영계획"),
+            _scored("r1", total=0.9, content="규정 내용 하나", category="규정 및 지침"),
+            _scored("r2", total=0.8, content="규정 내용 둘", category="규정 및 지침"),
+            _scored("o1", total=0.7, content="운영 내용 하나", category="운영계획"),
         ]
         result = agg.aggregate(
             scored=scored,
@@ -229,10 +226,8 @@ class TestCategoryCoverage:
     def test_coverage_picks_highest_scored_in_category(self):
         agg = EvidenceAggregator()
         scored = [
-            _scored("low", total=0.3, content="content A unique first",
-                    category="규정"),
-            _scored("high", total=0.95, content="content B unique second",
-                    category="규정"),
+            _scored("low", total=0.3, content="content A unique first", category="규정"),
+            _scored("high", total=0.95, content="content B unique second", category="규정"),
         ]
         result = agg.aggregate(
             scored=scored,
@@ -244,12 +239,9 @@ class TestCategoryCoverage:
     def test_coverage_reason_tagged(self):
         agg = EvidenceAggregator()
         scored = [
-            _scored("a", total=0.9, content="규정 문서 내용 one",
-                    category="규정"),
+            _scored("a", total=0.9, content="규정 문서 내용 one", category="규정"),
         ]
-        result = agg.aggregate(
-            scored=scored, k=1, anchor_categories={"규정"}
-        )
+        result = agg.aggregate(scored=scored, k=1, anchor_categories={"규정"})
         assert result[0].reason == "category_coverage"
 
 
