@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "synaptic-memory"
 version = "0.12.0"
-description = "Brain-inspired knowledge graph for LLM agents — PPR, evidence chain, auto-ontology (rule/embedding/LLM), Hebbian learning, memory consolidation."
+description = "Knowledge graph + MCP tool server for LLM agents — 3rd-gen retrieval (relation-free, LLM-free indexing), 7 atomic search tools, multi-turn agent exploration."
 license = "MIT"
 requires-python = ">=3.12"
 readme = "README.md"

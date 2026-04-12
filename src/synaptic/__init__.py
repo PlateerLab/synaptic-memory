@@ -85,7 +85,7 @@ from synaptic.protocols import (
 )
 from synaptic.resonance import ResonanceWeights
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 __all__ = [
     "ActivatedNode",
@@ -136,6 +136,17 @@ __all__ = [
     "build_agent_ontology",
     "personalized_pagerank",
     "suggest_intent",
+    # v0.12
+    "DomainProfile",
+    "ProfileGenerator",
+    "OntologyClassifier",
+    "DocumentIngester",
+    "JsonlDocumentSource",
+    "EntityLinker",
+    "EvidenceSearch",
+    "SearchSession",
+    "SessionStore",
+    "SqliteGraphBackend",
 ]
 
 
@@ -185,5 +196,23 @@ def __getattr__(name: str) -> object:
         from synaptic.extensions.table_ingester import TableIngester
 
         return TableIngester
+    # v0.12: agent tool layer + domain profile + 3rd-gen pipeline
+    _LAZY_V012 = {
+        "DomainProfile": "synaptic.extensions.domain_profile",
+        "ProfileGenerator": "synaptic.extensions.profile_generator",
+        "OntologyClassifier": "synaptic.extensions.ontology_classifier",
+        "DocumentIngester": "synaptic.extensions.document_ingester",
+        "JsonlDocumentSource": "synaptic.extensions.document_ingester",
+        "EntityLinker": "synaptic.extensions.entity_linker",
+        "EvidenceSearch": "synaptic.extensions.evidence_search",
+        "SearchSession": "synaptic.search_session",
+        "SessionStore": "synaptic.search_session",
+        "SqliteGraphBackend": "synaptic.backends.sqlite_graph",
+    }
+    if name in _LAZY_V012:
+        import importlib
+
+        mod = importlib.import_module(_LAZY_V012[name])
+        return getattr(mod, name)
     msg = f"module 'synaptic' has no attribute {name!r}"
     raise AttributeError(msg)

@@ -126,3 +126,32 @@ class TestSQLiteMaintenance:
         await sqlite.save_node(Node(title="Test", vitality=1.0))
         count = await sqlite.decay_vitality(factor=0.9)
         assert count == 1
+
+
+class TestSQLiteVectorSearch:
+    async def test_search_vector_returns_by_cosine_similarity(self, sqlite: SQLiteBackend) -> None:
+        for i, emb in enumerate([[1, 0, 0], [0, 1, 0], [0, 0, 1], [0.9, 0.1, 0]]):
+            await sqlite.save_node(
+                Node(id=f"v{i}", title=f"vec {i}", embedding=emb)
+            )
+        results = await sqlite.search_vector([1, 0, 0], limit=3)
+        assert results[0].id == "v0"
+        assert results[1].id == "v3"
+
+    async def test_search_vector_returns_empty_when_no_embeddings(self, sqlite: SQLiteBackend) -> None:
+        await sqlite.save_node(Node(id="noEmb", title="no embedding"))
+        results = await sqlite.search_vector([1, 0, 0], limit=5)
+        assert results == []
+
+    async def test_search_vector_with_empty_query_returns_empty(self, sqlite: SQLiteBackend) -> None:
+        await sqlite.save_node(Node(id="e1", title="has emb", embedding=[1, 0]))
+        results = await sqlite.search_vector([], limit=5)
+        assert results == []
+
+    async def test_embedding_persisted_across_reload(self, sqlite: SQLiteBackend) -> None:
+        await sqlite.save_node(
+            Node(id="persist", title="persist test", embedding=[0.5, 0.5, 0.5])
+        )
+        loaded = await sqlite.get_node("persist")
+        assert loaded is not None
+        assert loaded.embedding == [0.5, 0.5, 0.5]
