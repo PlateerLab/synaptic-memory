@@ -126,8 +126,17 @@ class RunResult:
 
 # --- Custom dataset runner (SQLite graph) ---
 
-async def run_custom_dataset(cfg: DatasetConfig) -> RunResult:
-    """Run a custom dataset against its pre-built SQLite graph."""
+async def run_custom_dataset(
+    cfg: DatasetConfig,
+    embed_url: str | None = None,
+    embed_model: str = "qwen3-embedding:4b",
+    reranker_url: str | None = None,
+) -> RunResult:
+    """Run a custom dataset against its pre-built SQLite graph.
+
+    When embed_url is provided, uses EvidenceSearch with vector cascade.
+    When reranker_url is provided, adds cross-encoder reranking.
+    """
     if not cfg.path.exists():
         return RunResult(name=cfg.name, error="graph not found")
     if not cfg.query_path or not cfg.query_path.exists():
@@ -137,12 +146,25 @@ async def run_custom_dataset(cfg: DatasetConfig) -> RunResult:
 
     backend = SqliteGraphBackend(str(cfg.path))
     await backend.connect()
-    graph = SynapticGraph(backend)
 
     with open(cfg.query_path, encoding="utf-8") as f:
         gt = json.load(f)
     queries = gt.get("queries", [])
     id_field = gt.get("id_field", "doc_id")
+
+    # Build searcher — with optional embedding + reranker
+    embedder = None
+    if embed_url:
+        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+        embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
+
+    reranker = None
+    if reranker_url:
+        from synaptic.extensions.reranker_cross import TEIReranker
+        reranker = TEIReranker(base_url=reranker_url)
+
+    from synaptic.extensions.evidence_search import EvidenceSearch
+    searcher = EvidenceSearch(backend=backend, embedder=embedder, reranker=reranker)
 
     bench = BenchmarkResult()
     t0 = time.time()
@@ -154,18 +176,18 @@ async def run_custom_dataset(cfg: DatasetConfig) -> RunResult:
         if not relevant:
             continue
 
-        result = await graph.search(query_text, limit=50)
+        result = await searcher.search(query_text, k=cfg.k * 2, fts_seed_limit=30)
 
         if id_field == "node_title":
             retrieved = []
-            for hit in result.nodes:
-                title = hit.node.title
+            for ev in result.evidence:
+                title = ev.node.title
                 if title and title not in retrieved:
                     retrieved.append(title)
         else:
             retrieved = []
-            for hit in result.nodes:
-                doc_id = (hit.node.properties or {}).get("doc_id", "")
+            for ev in result.evidence:
+                doc_id = ev.document_id or (ev.node.properties or {}).get("doc_id", "")
                 if doc_id and doc_id not in retrieved:
                     retrieved.append(doc_id)
 
@@ -184,11 +206,11 @@ async def run_custom_dataset(cfg: DatasetConfig) -> RunResult:
 
     return RunResult(
         name=cfg.name,
-        corpus_size=summary.get("total_queries", 0),
+        corpus_size=total,
         mrr=summary.get("mrr", 0),
-        p_at_k=summary.get("mean_precision", 0),
-        r_at_k=summary.get("mean_recall", 0),
-        ndcg=summary.get("mean_ndcg", 0),
+        p_at_k=summary.get("mean_precision@k", 0),
+        r_at_k=summary.get("mean_recall@k", 0),
+        ndcg=summary.get("mean_ndcg@k", 0),
         hit_rate=f"{hits}/{total}",
         elapsed=elapsed,
     )
@@ -306,9 +328,9 @@ async def run_public_dataset(cfg: DatasetConfig) -> RunResult:
         name=cfg.name,
         corpus_size=len(corpus),
         mrr=summary.get("mrr", 0),
-        p_at_k=summary.get("mean_precision", 0),
-        r_at_k=summary.get("mean_recall", 0),
-        ndcg=summary.get("mean_ndcg", 0),
+        p_at_k=summary.get("mean_precision@k", 0),
+        r_at_k=summary.get("mean_recall@k", 0),
+        ndcg=summary.get("mean_ndcg@k", 0),
         hit_rate=f"{hits}/{total_q}",
         elapsed=elapsed,
     )
@@ -369,6 +391,9 @@ def _parse_args():
     p.add_argument("--custom-only", action="store_true", help="Only run KRRA + assort")
     p.add_argument("--compare", type=Path, default=None, help="Compare against a baseline JSON")
     p.add_argument("--save", type=Path, default=RESULTS_DIR / "qa_latest.json", help="Save results to")
+    p.add_argument("--embed-url", default=None, help="Embedding API URL (enables vector cascade)")
+    p.add_argument("--embed-model", default="qwen3-embedding:4b")
+    p.add_argument("--reranker-url", default=None, help="TEI reranker URL (enables cross-encoder)")
     return p.parse_args()
 
 
@@ -395,7 +420,12 @@ async def main():
         print(f"  {cfg.name}...", end=" ", flush=True)
         try:
             if cfg.is_custom:
-                r = await run_custom_dataset(cfg)
+                r = await run_custom_dataset(
+                    cfg,
+                    embed_url=args.embed_url,
+                    embed_model=args.embed_model,
+                    reranker_url=args.reranker_url,
+                )
             else:
                 r = await run_public_dataset(cfg)
             results.append(r)
