@@ -26,6 +26,7 @@ server = FastMCP(
 # Module-level state (initialized on first tool call)
 _graph: Any = None
 _backend: Any = None
+_embedder: Any = None
 _tracker: Any = None
 _db_path: str = "knowledge.db"
 _dsn: str = ""
@@ -35,7 +36,7 @@ _embed_model: str = "default"
 
 async def _ensure_graph() -> Any:
     """Lazy-initialize the SynapticGraph on first use."""
-    global _graph, _backend
+    global _graph, _backend, _embedder
 
     if _graph is not None:
         return _graph
@@ -56,18 +57,17 @@ async def _ensure_graph() -> Any:
     await _backend.connect()
 
     # Auto-embedding: connect to any OpenAI-compatible endpoint
-    embedder = None
     if _embed_url:
         from synaptic.extensions.embedder import OpenAIEmbeddingProvider
 
-        embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
+        _embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
         logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
 
     _graph = SynapticGraph(
         _backend,
         tag_extractor=RegexTagExtractor(),
         ontology=build_agent_ontology(),
-        embedder=embedder,
+        embedder=_embedder,
     )
     logger.info("Knowledge graph initialized (backend=%s)", type(_backend).__name__)
     return _graph
@@ -755,6 +755,7 @@ async def agent_search(
         category=category or None,
         kind=kind or None,
         exclude_seen=exclude_seen,
+        embedder=_embedder,
     )
     return result.to_dict()
 

@@ -171,6 +171,7 @@ async def search_tool(
     category: str | None = None,
     kind: NodeKind | str | None = None,
     exclude_seen: bool = True,
+    embedder: object | None = None,
 ) -> ToolResult:
     """Run the 3rd-gen evidence pipeline for ``query``.
 
@@ -206,7 +207,7 @@ async def search_tool(
 
     session.record_query(query)
 
-    searcher = EvidenceSearch(backend=backend)
+    searcher = EvidenceSearch(backend=backend, embedder=embedder)
     result = await searcher.search(
         query,
         k=limit * 2,  # over-fetch, then apply filters

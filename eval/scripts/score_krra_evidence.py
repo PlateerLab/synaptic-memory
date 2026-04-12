@@ -65,6 +65,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--graph", type=Path, default=None)
     p.add_argument("--queries", type=Path, default=DEFAULT_QUERIES)
     p.add_argument("--k", type=int, default=K)
+    p.add_argument("--embed-url", default=None, help="Embedding API for semantic search")
+    p.add_argument("--embed-model", default="qwen3-embedding:4b")
     return p.parse_args()
 
 
@@ -103,9 +105,17 @@ async def main() -> int:
 
     backend = await _open_backend(args.backend, graph_path)
 
-    # 3rd-gen pipeline — no phrase extractor (rule-based anchors only),
-    # no query embedding (pure lexical + graph + structural)
-    searcher = EvidenceSearch(backend=backend)
+    # 3rd-gen pipeline. When --embed-url is provided, the pipeline
+    # auto-embeds the query and supplements FTS seeds with vector
+    # search results (cascade, not fusion).
+    embedder = None
+    if args.embed_url:
+        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+        embedder = OpenAIEmbeddingProvider(
+            api_base=args.embed_url, model=args.embed_model
+        )
+        print(f"Embedder: {args.embed_url} ({args.embed_model})")
+    searcher = EvidenceSearch(backend=backend, embedder=embedder)
 
     bench = BenchmarkResult()
     skipped = 0

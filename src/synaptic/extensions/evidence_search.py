@@ -64,6 +64,7 @@ from synaptic.extensions.hybrid_reranker import (
 from synaptic.extensions.query_anchor import QueryAnchorExtractor, QueryAnchors
 
 if TYPE_CHECKING:
+    from synaptic.extensions.embedder import EmbeddingProvider
     from synaptic.extensions.query_anchor import PhraseExtractorProtocol
     from synaptic.protocols import StorageBackend
 
@@ -106,6 +107,7 @@ class EvidenceSearch:
 
     __slots__ = (
         "_backend",
+        "_embedder",
         "_anchor_extractor",
         "_expander",
         "_reranker",
@@ -117,6 +119,7 @@ class EvidenceSearch:
         self,
         *,
         backend: StorageBackend,
+        embedder: EmbeddingProvider | None = None,
         phrase_extractor: PhraseExtractorProtocol | None = None,
         reranker_weights: RerankerWeights | None = None,
         expansion_budget: ExpansionBudget | None = None,
@@ -124,6 +127,7 @@ class EvidenceSearch:
         similarity_threshold: float = 0.85,
     ) -> None:
         self._backend = backend
+        self._embedder = embedder
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -163,25 +167,55 @@ class EvidenceSearch:
         """
         t0 = time()
 
+        # Step 0 — embed the query if an embedder is wired up.
+        # The caller can also pass query_embedding directly; the
+        # embedder is a convenience so callers don't have to embed
+        # on their own every time.
+        if query_embedding is None and self._embedder is not None:
+            try:
+                query_embedding = await self._embedder.embed(query)
+                if not query_embedding:
+                    query_embedding = None
+            except Exception:
+                query_embedding = None
+
         # Step 1 — extract anchors
         anchors = await self._anchor_extractor.extract(query)
 
-        # Step 2 — initial FTS seeds.
-        # We lean on the existing backend.search_fts which already runs
-        # the BM25+substring hybrid scorer. Any node it returns becomes
-        # a seed; the rank order gives us the lexical signal below.
+        # Step 2a — FTS seeds (lexical).
         fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
         fts_scores: dict[str, float] = {}
         for rank, node in enumerate(fts_nodes):
-            # Use the same scoring curve as search.py _rank_to_score:
-            # top=0.95, step=0.03, floor=0.10. Keeps both pipelines
-            # comparable so tuning transfers between them.
             fts_scores[node.id] = max(0.10, 0.95 - rank * 0.03)
+
+        # Step 2b — Vector seeds (semantic). Supplements FTS with
+        # results that share meaning but not surface words. This is
+        # what fixes L2 paraphrase and L7 conversational queries.
+        # Only nodes NOT already found by FTS are added so lexical
+        # ranking is never disrupted (cascade, not fusion).
+        fts_ids = {n.id for n in fts_nodes}
+        vec_seeds: list = []
+        if query_embedding:
+            try:
+                vec_nodes = await self._backend.search_vector(
+                    query_embedding, limit=fts_seed_limit
+                )
+                for node in vec_nodes:
+                    if node.id not in fts_ids:
+                        vec_seeds.append(node)
+                        # Vector-only seeds get a flat score below FTS floor
+                        # so they never outrank a strong lexical hit, but they
+                        # ARE present for the reranker's semantic signal.
+                        fts_scores[node.id] = 0.08
+            except Exception:
+                pass
+
+        all_seeds = list(fts_nodes) + vec_seeds
 
         # Step 3 — shallow graph expansion
         expanded = await self._expander.expand(
             anchors=anchors,
-            seed_nodes=fts_nodes,
+            seed_nodes=all_seeds,
             budget=self._expansion_budget,
         )
 
