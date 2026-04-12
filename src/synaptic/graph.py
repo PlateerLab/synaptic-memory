@@ -422,6 +422,61 @@ class SynapticGraph:
         graph_obj = cls(backend)
         return graph_obj
 
+    @classmethod
+    async def from_database(
+        cls,
+        connection_string: str,
+        *,
+        db: str = "synaptic.db",
+        tables: list[str] | None = None,
+        row_limit: int = 500_000,
+    ) -> SynapticGraph:
+        """ONE-LINE graph construction from a relational database.
+
+        Auto-discovers schema, FK relationships, and data types.
+        No manual configuration needed.
+
+        Supports:
+        - ``sqlite:///path/to/db.sqlite``
+        - ``postgresql://user:pass@host:port/dbname``
+
+        Example::
+
+            graph = await SynapticGraph.from_database("sqlite:///shop.db")
+            graph = await SynapticGraph.from_database("postgresql://user:pass@localhost/mydb")
+
+            result = await graph.search("high price products")
+        """
+        from synaptic.backends.sqlite_graph import SqliteGraphBackend
+        from synaptic.extensions.db_ingester import DbIngester
+
+        backend = SqliteGraphBackend(db)
+        await backend.connect()
+        graph = cls(backend)
+        ingester = DbIngester()
+
+        if connection_string.startswith("sqlite"):
+            # sqlite:///path or sqlite:path
+            db_path = connection_string.split("///")[-1] if "///" in connection_string else connection_string.split(":")[-1]
+            stats = await ingester.ingest_from_sqlite(
+                db_path, graph, tables=tables, row_limit=row_limit,
+            )
+        elif connection_string.startswith("postgresql"):
+            stats = await ingester.ingest_from_postgres(
+                connection_string, graph, tables=tables, row_limit=row_limit,
+            )
+        else:
+            msg = f"Unsupported database: {connection_string.split(':')[0]}. Use sqlite:// or postgresql://"
+            raise ValueError(msg)
+
+        import logging
+        logging.getLogger("db-ingester").info(
+            "from_database: %d tables, %d rows, %d nodes, %.1fs",
+            stats.tables_ingested, stats.total_rows,
+            stats.total_nodes, stats.elapsed_seconds,
+        )
+        return graph
+
     @property
     def backend(self) -> StorageBackend:
         return self._backend
