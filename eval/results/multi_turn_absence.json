@@ -1,0 +1,112 @@
+[
+  {
+    "scenario_id": "absence",
+    "label": "부재 증명",
+    "question": "한국마사회 규정 중에 환불과 관련된 예외 조항이 있어? 없다면 없다고 단언해줘.",
+    "turns": 7,
+    "tool_calls": [
+      {
+        "tool": "list_categories",
+        "input": {},
+        "ok": true,
+        "result_preview": "10 categories"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "환불 예외 조항"
+        },
+        "ok": true,
+        "result_preview": "8 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "환불 불가 예외 규정",
+          "category": "규정 및 지침"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "acab4f1a9f2d876b"
+        },
+        "ok": true,
+        "result_preview": "document with 34 chunks"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "마권 환불 특례 예외사항",
+          "category": "규정 및 지침"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "환불 예외 규정 마사회",
+          "category": "운영계획"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "좌석권 환불 기준 예외"
+        },
+        "ok": true,
+        "result_preview": "3 evidence items"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "07c4de1cc000e7e8"
+        },
+        "ok": false,
+        "result_preview": "ERROR: document_not_found: 07c4de1cc000e7e8"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "응시수수료 환불 예외 규정",
+          "category": "규정 및 지침"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "1a695957409df03c"
+        },
+        "ok": true,
+        "result_preview": "document with 3 chunks"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "환불 제한 불가 단서 조항 예외 경우",
+          "category": "규정 및 지침"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "환급 예외 특별 규정 경마"
+        },
+        "ok": true,
+        "result_preview": "8 evidence items"
+      }
+    ],
+    "final_answer": "충분한 검색을 수행했습니다. 이제 정리하겠습니다.\n\n---\n\n## 결론: **예, 환불 관련 예외 조항이 존재합니다.**\n\n다만, 이는 독립된 \"환불 예외 조항\" 형태의 규정이 아니라 **운영계획 문서(좌석권 운영·관리 제도개선 계획)** 속에 명시된 내용입니다. 구체적인 내용은 다음과 같습니다.\n\n---\n\n### 📌 좌석권 환불 관련 예외 조항 (2020년 지사 좌석권 운영·관리 제도개선 계획)\n\n원칙은 **\"3가지 기준 외 환불 불가\"** 이며, 허용되는 환불 예외 사유는 아래 3가지입니다:\n\n| 번호 | 예외적 환불 허용 사유 |\n|------|----------------------|\n| ① | 1경주 발매시각 **이전** |\n| ② | **경주취소** (해당 경마장의 마지막 경주를 포함하여 잔여 연속 3개 경주 이상 시행 불가 시) |\n| ③ | **당일권 현장 구매 후 해당 고객이 10분 내 퇴장** 시 (단, 10분 초과 시 입장 여부 관계없이 환불 불가) |\n\n또한 **미입장 좌석권**의 경우, 환불 가능 기간이 기존 10년에서 **1년으로 단축**되는 예외 기준 조정도 포함되어 있습니다.\n\n---\n\n### 📋 출처\n\n- **문서명**: `2020년도_(요약) 지사 좌석권 운영관리 제도개선 계획(안)` (카테고리: 운영계획, doc_id: `1a695957409df03c`)\n- **문서명**: `2020년도_(붙임) 지사 좌석권 운영관리 제도개선 계획(안)` (카테고리: 운영계획, doc_id: `acab4f1a9f2d876b`, chunk #14)\n\n---\n\n> ⚠️ 단, 이 내용은 **\"규정 및 지침\"** 카테고리의 공식 규정문서가 아닌 **운영계획(내부 계획안)** 에 담긴 내용입니다. 독립적인 규정 조문 형태의 환불 예외 조항은 그래프 내 검색 결과에서 확인되지 않았습니다.",
+    "elapsed_seconds": 138.2858009338379,
+    "error": null
+  }
+]

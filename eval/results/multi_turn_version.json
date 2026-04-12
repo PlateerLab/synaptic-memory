@@ -1,0 +1,121 @@
+[
+  {
+    "scenario_id": "version",
+    "label": "최신 버전",
+    "question": "가장 최근 연도의 운영계획 문서 하나를 찾아서 요약해줘.",
+    "turns": 8,
+    "tool_calls": [
+      {
+        "tool": "list_categories",
+        "input": {},
+        "ok": true,
+        "result_preview": "10 categories"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "운영계획",
+          "category": "운영계획"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "count",
+        "input": {
+          "category": "운영계획",
+          "year": 2025
+        },
+        "ok": true,
+        "result_preview": "count=0"
+      },
+      {
+        "tool": "count",
+        "input": {
+          "category": "운영계획",
+          "year": 2024
+        },
+        "ok": true,
+        "result_preview": "count=0"
+      },
+      {
+        "tool": "count",
+        "input": {
+          "category": "운영계획",
+          "year": 2023
+        },
+        "ok": true,
+        "result_preview": "count=0"
+      },
+      {
+        "tool": "count",
+        "input": {
+          "category": "운영계획",
+          "year": 2022
+        },
+        "ok": true,
+        "result_preview": "count=0"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "2024년 운영계획",
+          "category": "운영계획",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "2023년 운영계획",
+          "category": "운영계획",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "연간 경마 운영 계획 목표",
+          "category": "운영계획",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "경주마 시행 계획 예산",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "8 evidence items"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "4f2b02c85a84bf0f",
+          "max_chunks": 30
+        },
+        "ok": true,
+        "result_preview": "document with 24 chunks"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "4f2b02c85a84bf0f",
+          "max_chunks": 50
+        },
+        "ok": true,
+        "result_preview": "document with 24 chunks"
+      }
+    ],
+    "final_answer": "전체 문서 내용을 충분히 확인했습니다. 이제 요약을 제공하겠습니다.\n\n---\n\n## 📄 문서 요약: 「2024년 경주마 토탈 케어시스템 운영 계획(안)」\n\n- **작성 기관**: 한국마사회(KRA) 제주경주자원관리부\n- **작성일**: 2024년 2월\n- **카테고리**: 운영계획\n\n---\n\n### Ⅰ. 추진 배경\n\n이 문서는 **안정적인 경마 시행 및 말 복지 향상**을 목적으로 작성되었습니다. 세 가지 핵심 배경은 다음과 같습니다:\n\n1. **제주경마 경쟁력 강화**: 2023년 제주마 경마 전면시행 이후 경주마 자원을 안정적으로 관리하여 제주경마공원 경쟁력 강화\n2. **말 복지 선도 역할**: 공공성 중심의 병원 운영을 통해 말산업전담기관으로서의 사회적 가치·책임 실현\n3. **경주마 Total Care 시스템 운영**: 경주-경주 후 휴양 등 활동 주기 전반에 걸쳐 **치료 → 재활 → 예방**의 토탈 케어 체계 구축\n\n---\n\n### Ⅱ. 2023년 추진 현황 분석 및 평가\n\n#### 1) 경마 수의 분야\n\n| 구분 | 방사선 | 초음파 | 내시경 | 합계 |\n|------|-------|-------|-------|------|\n| 2023년 | 5건 | 15건 | 1건 | **21건** |\n| 2022년 | 3건 | 12건 | 2건 | 17건 |\n\n- 정밀검사 건수가 전년 대비 **4건(24%) 증가**\n- 운동기질환 연부조직 손상(특히 **천지굴건·계인대** 손상)에 의한 초음파 검사 사례 증가\n\n#### 2) 경주 전·후 마체검사\n\n| 구분 | 편성 두수 | 출전취소 | 경주제외 | 경주 후 출전정지 |\n|------|---------|---------|---------|--------------|\n| 2023년 | 7,086두 | 14건 | 18건 | 127건 |\n| 2022년 | 7,103두 | 25건 | 67건 | 363건 |\n\n- 마체검사 강화 및 보건컨설팅 실시로 출전취소·경주제외·출전정지 건수가 **전년 대비 대폭 감소**\n\n#### 3) 치명적 손상마(경주부적격) 발생 현황\n\n- 2023년: 총 4건 (모두 제주마, 굴건·계인대 손상)\n- 2022년 7건 대비 감소\n- 골절은 2021·2022년 모두 한라마에서 발생하였고, 2023년에는 0건\n\n#### 4) 발굽 관리\n- 제주경마공원 제주마 **발굽 삭제 용역 사업** 2021년부터 운영 중\n\n---\n\n### 종합\n\n이 운영계획은 **제주경마공원**을 중심으로 경주마의 건강 관리 체계를 강화하고, 치료·재활·예방 전 주기에 걸친 **토탈 케어 시스템**을 2024년도에 지속·발전시키기 위한 세부 계획입니다. 2023년 실적 분석을 바탕으로 개선 방향을 수립하였으며, 말 복지 향상과 경주마 자원의 안정적 관리를 핵심 가치로 삼고 있습니다.\n\n> **출처**: `doc_id: 4f2b02c85a84bf0f` — 「2024년도_2. 2024년 경주마 토탈 케어시스템 운영 계획(안) 1부」, 카테고리: 운영계획, 작성: KRA 제주경주자원관리부(2024.02)",
+    "elapsed_seconds": 90.94701290130615,
+    "error": null
+  }
+]

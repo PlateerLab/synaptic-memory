@@ -1,0 +1,45 @@
+[
+  {
+    "scenario_id": "complex",
+    "label": "복합 / 교차 문서",
+    "question": "경마산업 운영계획 수립에서 인권경영 지침이 어떻게 반영되는지 알려줘. 관련 근거도 같이.",
+    "turns": 3,
+    "tool_calls": [
+      {
+        "tool": "list_categories",
+        "input": {},
+        "ok": true,
+        "result_preview": "10 categories"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "경마산업 운영계획 인권경영"
+        },
+        "ok": true,
+        "result_preview": "8 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "인권경영 지침 운영계획 반영",
+          "category": "인권경영"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "경마산업 운영계획 인권경영 반영 기준",
+          "category": "운영계획"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      }
+    ],
+    "final_answer": "",
+    "elapsed_seconds": 46.78037190437317,
+    "error": "api_error: Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 30,000 input tokens per minute (org: 8d050dd0-78e7-4dbf-835d-44edc64a3b6a, model: claude-sonnet-4-6). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZyCH3ucVNU9Zz1g5q8qU'}"
+  }
+]

@@ -1,0 +1,137 @@
+[
+  {
+    "scenario_id": "complex",
+    "label": "복합 / 교차 문서",
+    "question": "경마산업 운영계획 수립에서 인권경영 지침이 어떻게 반영되는지 알려줘. 관련 근거도 같이.",
+    "turns": 9,
+    "tool_calls": [
+      {
+        "tool": "list_categories",
+        "input": {},
+        "ok": true,
+        "result_preview": "10 categories"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "경마산업 운영계획 인권경영"
+        },
+        "ok": true,
+        "result_preview": "8 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "인권경영 추진계획 운영계획 반영",
+          "category": "인권경영"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "경마산업 운영계획 인권경영 지침 반영",
+          "category": "운영계획"
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "인권경영 지침 수립 절차",
+          "category": "인권경영",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "인권영향평가 경마 운영",
+          "category": "인권경영",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "005599102a43b8f4"
+        },
+        "ok": true,
+        "result_preview": "document with 50 chunks"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "e507dc22077335c1"
+        },
+        "ok": true,
+        "result_preview": "document with 15 chunks"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "인권경영 추진계획 경마사업 연간계획",
+          "category": "인권경영",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "인권경영 실행지침 규정",
+          "category": "규정 및 지침",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "0 evidence items"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "e507dc22077335c1",
+          "max_chunks": 15
+        },
+        "ok": true,
+        "result_preview": "document with 15 chunks"
+      },
+      {
+        "tool": "search",
+        "input": {
+          "query": "인권경영위원회 경마사업 운영계획 반영 개선",
+          "exclude_seen": false
+        },
+        "ok": true,
+        "result_preview": "8 evidence items"
+      },
+      {
+        "tool": "get_document",
+        "input": {
+          "doc_id": "3a729c75753c7cf2",
+          "max_chunks": 20
+        },
+        "ok": true,
+        "result_preview": "document with 16 chunks"
+      },
+      {
+        "tool": "expand",
+        "input": {
+          "node_id": "chunk_8f41bd3139042e49",
+          "limit": 5
+        },
+        "ok": true,
+        "result_preview": "0 neighbours"
+      }
+    ],
+    "final_answer": "충분한 근거를 확보했습니다. 이제 종합 답변을 드리겠습니다.\n\n---\n\n## 경마산업 운영계획 수립에서 인권경영 지침의 반영 방식\n\n한국마사회(KRA)는 경마산업 운영계획 수립 시 **인권경영 지침을 체계적인 단계와 구조로 반영**하고 있습니다. 아래에 그 핵심 내용을 근거와 함께 설명합니다.\n\n---\n\n### 1. 📌 근거 체계: 공공기관 인권경영 매뉴얼 4단계 이행\n\nKRA의 인권경영 반영 체계는 **국가인권위원회의 「공공기관 인권경영 매뉴얼」 적용 권고('18.8)** 에 따라 수립되었습니다. 이 매뉴얼은 다음 4단계로 구성됩니다:\n\n| 단계 | 내용 |\n|------|------|\n| ① | 인권경영체계 구축 |\n| ② | 인권영향평가 실시 |\n| ③ | 인권경영 실행·공개 |\n| ④ | 구제절차 제공 |\n\n> **근거**: 『2020년 한국마사회 인권영향평가 결과보고』 (doc_id: `e507dc22077335c1`, chunk_index: 1~2)\n\n---\n\n### 2. 🔄 운영계획과의 연계: 인권영향평가 → 개선계획 → 사업 반영 흐름\n\n인권경영 지침은 아래 **연간 절차**를 통해 경마산업 운영계획에 반영됩니다:\n\n```\n주요사업 선정 (내부설문·인권경영위) \n     ↓ (7~8월)\n체크리스트 설계 및 계획 수립 \n     ↓ (10월)\n교육, 자료제출, 평가 시행·개선 \n     ↓ (10~11월)\n최종보고·공시 (12월)\n```\n\n> **근거**: 『2024년 인권경영위원회 회의자료』 (doc_id: `3a729c75753c7cf2`, chunk_index: 1)\n\n---\n\n### 3. 📋 평가 대상: 경마산업 전 사업 영역 포괄\n\n인권영향평가는 **기관운영 부문(10대 인권 분야)** 과 **주요사업 부문(경마사업 포함 8개 분야)** 으로 나뉘어 경마 운영 전반을 포괄합니다.\n\n#### 기관운영 부문 (10대 인권 분야)\n① 인권경영 체제의 구축 / ② 고용상의 비차별 / ③ 결사·단체교섭 자유보장 / ④ 강제·아동노동 금지 / ⑤ 산업안전 보장 / ⑥ 책임있는 공급망 관리 / ⑦ 현지주민의 인권보호 / ⑧ 환경권 보장 / ⑨ 소비자인권 보호 / ⑩ 정보인권 보호\n\n#### 주요사업 부문 (경마사업 직접 포함)\n- 경마사업: **① 경주 시행 및 운영**, **② 경마사업 관리**\n- 경마시설: ③ 경마시설 관리 / ④ 경마시설 이해관계자 관리\n- 기타사업: ⑤ 교육사업 / ⑥ 말산업 자격검정 / ⑦ 승마강습 / ⑧ 말 복지 및 인식 개선 활동\n\n> **근거**: 『2020년 인권영향평가 결과보고』 (chunk_index: 4), 『2023년 기관운영 인권영향평가 체크리스트』 (doc_id: `005599102a43b8f4`, chunk_index: 1~2)\n\n---\n\n### 4. 📊 평가 결과의 피드백: 운영 개선에 직접 반영\n\n인권영향평가 결과는 단순 점검에 그치지 않고 **개선권고 과제로 도출되어 다음 연도 운영계획에 반영**됩니다.\n\n- **2024년 인권영향평가 결과** (총 170개 지표):\n  - 기관운영 97.9점('23년 95.1점 대비 2.8점 ↑)\n  - 주요사업 97.9점('23년 95.1점 대비 2.8점 ↑), 영천경마장 건설사업 **100점**\n  - 개선권고 과제 4건 도출 → 추진실적 및 계획 수립으로 연계\n\n- **경마사업 관련 권고과제** (예: 온라인 베팅 시행 연계 소비자 인권보호 등)가 경마운영 계획에 직접 피드백됨\n\n> **근거**: 『2024년 인권경영위원회 회의자료』 (chunk_index: 2~3, 14)\n\n---\n\n### 5. 🏛️ 인권경영위원회의 역할\n\n- **인권경영위원회**가 평가결과를 심의·보고받고 제언을 반영하며, 최고경영진 보고 후 공시까지 이어집니다.\n- 「**인권경영 실행지침**」 개정, 「**인권구제 매뉴얼**」 제작 등 운영계획의 제도적 기반도 위원회 주도로 강화됩니다.\n\n> **근거**: 『2020년 인권영향평가 결과보고』 (chunk_index: 3, 5)\n\n---\n\n### 📌 정리\n\n| 구분 | 내용 |\n|------|------|\n| 법적 근거 | 국가인권위 「공공기관 인권경영 매뉴얼」 권고('18.8) |\n| 반영 주체 | 한국마사회 ESG경영부, 인권경영위원회 |\n| 반영 방법 | 연간 인권영향평가 → 개선권고 도출 → 운영계획 피드백 |\n| 평가 범위 | 기관운영 10대 분야 + 경마사업 포함 주요사업 8개 분야 |\n| 평가 추세 | '19년 89.5점 → '20년 91.8점 → '23년 95.1점 → '24년 97.9점 (지속 개선) |\n\n인권경영 지침은 단순한 선언적 규범에 머물지 않고, **연간 인권영향평가 사이클 → 인권경영위원회 심의 → 운영계획 피드백**이라는 구체적인 제도 메커니즘을 통해 경마산업 운영계획 수립에 실질적으로 반영되고 있습니다.",
+    "elapsed_seconds": 176.8600311279297,
+    "error": null
+  }
+]

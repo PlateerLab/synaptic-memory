@@ -1,0 +1,28 @@
+[
+  {
+    "scenario_id": "exhaustive",
+    "label": "전수 조회",
+    "question": "한국마사회의 규정 및 지침 카테고리에 있는 문서가 총 몇 건인지 알려줘.",
+    "turns": 3,
+    "tool_calls": [
+      {
+        "tool": "count",
+        "input": {
+          "category": "규정 및 지침",
+          "kind": "document"
+        },
+        "ok": true,
+        "result_preview": "count=0"
+      },
+      {
+        "tool": "list_categories",
+        "input": {},
+        "ok": true,
+        "result_preview": "10 categories"
+      }
+    ],
+    "final_answer": "확인되었습니다! 😊\n\n한국마사회 지식 그래프에서 **\"규정 및 지침\"** 카테고리에 등록된 문서는 총 **235건**입니다.\n\n참고로 전체 카테고리 현황도 함께 안내드립니다:\n\n| 카테고리 | 문서 수 |\n|---|---|\n| 운영계획 | 315건 |\n| **규정 및 지침** | **235건** |\n| 조사 및 평가 | 110건 |\n| 경마산업관리 | 100건 |\n| 업무추진 및 실적 | 98건 |\n| 정보기술 시스템 | 82건 |\n| 승마 행사 및 대회 | 82건 |\n| 인권경영 | 39건 |\n| 복지 및 교육 | 31건 |\n| ESG 및 지속가능성 | 18건 |\n| **전체 합계** | **1,110건** |",
+    "elapsed_seconds": 23.50982689857483,
+    "error": null
+  }
+]
