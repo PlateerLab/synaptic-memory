@@ -51,6 +51,7 @@ from time import time
 from typing import TYPE_CHECKING
 
 from synaptic.extensions.evidence_aggregator import Evidence, EvidenceAggregator
+from synaptic.ppr import personalized_pagerank
 from synaptic.extensions.graph_expander import (
     ExpandedNode,
     ExpansionBudget,
@@ -256,6 +257,33 @@ class EvidenceSearch:
             seed_nodes=all_seeds,
             budget=self._expansion_budget,
         )
+
+        # Step 3b — PPR graph discovery. Uses FTS seeds as teleport
+        # nodes and walks the graph via PPR to find nodes reachable
+        # through structural paths (PART_OF, CONTAINS, MENTIONS) that
+        # neither FTS nor vector search found. Discovered nodes are
+        # added to the expanded set with a graph-based score.
+        if fts_scores:
+            try:
+                ppr_results = await personalized_pagerank(
+                    self._backend,
+                    {nid: score for nid, score in fts_scores.items()},
+                    damping=0.85,
+                    top_k=k * 3,
+                )
+                from synaptic.extensions.graph_expander import ExpandedNode
+                expanded_ids = {e.node.id for e in expanded}
+                for node_id, ppr_score in ppr_results:
+                    if node_id not in expanded_ids:
+                        node = await self._backend.get_node(node_id)
+                        if node:
+                            expanded.append(ExpandedNode(
+                                node=node, reason="ppr_discovery",
+                                hops=2, anchor_hit=None,
+                            ))
+                            fts_scores[node_id] = ppr_score * 0.5
+            except Exception:
+                pass  # PPR failure is non-fatal
 
         # Step 4 — hybrid reranking
         anchor_category_set = set(anchors.categories)

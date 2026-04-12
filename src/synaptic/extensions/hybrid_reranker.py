@@ -68,8 +68,9 @@ _REASON_PRIOR: dict[str, float] = {
     "seed": 1.00,
     "document_chunk": 0.70,
     "chunk_next": 0.55,
-    "category_sibling": 0.40,
     "entity_mention": 0.50,
+    "ppr_discovery": 0.45,
+    "category_sibling": 0.40,
 }
 
 
