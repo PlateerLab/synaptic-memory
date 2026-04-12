@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-12
+
+### Added — 3rd-generation retrieval + agent tool layer
+
+- **3rd-gen retrieval pipeline** — relation-free graph, LLM-free indexing.
+  `QueryAnchorExtractor` → `GraphExpander` → `HybridReranker` →
+  `EvidenceAggregator` → `EvidenceSearch` facade.
+- **Agent tool layer** — 7 atomic tools for multi-turn LLM exploration:
+  `search`, `expand`, `get_document`, `list_categories`, `count`,
+  `search_exact`, `follow`. Each returns structured `ToolResult` with
+  `data`, `hints`, and `session` state.
+- **SearchSession** — stateful context for multi-turn agent use. Tracks
+  seen nodes, budget, query history, category coverage.
+- **MCP server** — 8 new `agent_*` tools: `agent_search`, `agent_expand`,
+  `agent_get_document`, `agent_list_categories`, `agent_count`,
+  `agent_search_exact`, `agent_follow`, `agent_session_info`.
+- **DomainProfile** — TOML-based domain configuration injection point.
+  `to_dict()`, `save(path)` for round-trip serialization. New fields:
+  `authority_by_kind`, `enrich_document_content`, `document_preview_chars`.
+- **ProfileGenerator** — 3-tier auto profile generation (rule-based →
+  OntologyClassifier → LLM). Detects locale, suggests stopwords,
+  maps categories to NodeKind.
+- **OntologyClassifier** — BYO embedder NodeKind classification via
+  embedding cosine similarity. No torch dependency.
+- **DocumentIngester** — generic JSONL → graph ingestion with
+  `JsonlDocumentSource`, `InMemoryDocumentSource`, `CorpusSource` protocol.
+  Document content enrichment (first chunks joined). Authority metadata.
+  NFC normalization for categories/titles.
+- **EntityLinker** — post-processing DF-filtered entity hub creation.
+- **SqliteGraphBackend** — SQLite + `GraphTraversal` protocol
+  (`shortest_path` BFS, `find_by_type_hierarchy`).
+- **SQLiteBackend** improvements — NFC normalization on save, title 3x
+  BM25 weight, LIKE substring fallback for Korean compound words.
+- **Phrase extractors** — `KoreanPhraseExtractor`, `EnglishPhraseExtractor`,
+  `create_phrase_extractor()` locale dispatcher.
+- **node_metadata** helpers — `year_of()`, `authority_of()`, `is_current()`,
+  `authority_ranked()`.
+- **eval harness** — `ingest_krra`, `score_krra`, `score_krra_evidence`,
+  `ingest_assort`, `score_assort`, `generate_profile` CLI scripts.
+  KRRA + assort domain profiles and GT queries.
+- **Multi-turn demo** — `examples/multi_turn_search.py` with Claude Sonnet
+  validation (5/5 difficulty tiers passing).
+- **683+ tests** (up from 504).
+
+### Changed
+- README rewritten for v0.12 — 3rd-gen retrieval positioning, agent tool
+  quickstart, MCP server guide.
+
 ## [0.11.0] - 2026-04-09
 
 ### Added

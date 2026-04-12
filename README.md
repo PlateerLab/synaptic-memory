@@ -1,354 +1,246 @@
 # Synaptic Memory
 
-Brain-inspired knowledge graph for LLM agents and multi-agent systems.
+Knowledge graph + MCP tool server for LLM agents.
 
-Agents automatically structure their operational data — tool calls, decisions, outcomes, lessons — into an **auto-constructed ontology**, enabling self-retrieval and reasoning over past experiences. Library + MCP server.
+LLM agents call atomic search tools to explore a graph built from any domain data. The agent decides what to search, when to expand, and when to stop. The library only provides data and tools — all judgment lives in the LLM.
 
-[![CI](https://github.com/PlateerLab/synaptic-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/PlateerLab/synaptic-memory/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![Python](https://img.shields.io/pypi/pyversions/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
-## Why
+## What it does
 
-LLM agents **don't remember.** They repeat the same mistakes, fail to leverage past successes, and can't access accumulated team knowledge.
+```
+Your data (JSONL, CSV, any format)
+  ↓  DomainProfile (auto-generated or hand-tuned)
+  ↓  DocumentIngester / TableIngester
+  ↓
+Category → Document → Chunk  (relation-free graph)
+  ↓
+7 atomic MCP tools  →  LLM agent explores via multi-turn tool use
+```
 
-Traditional RAG stops at "chunk documents and search by vector." But agents need more than document retrieval — they need **structured experience**:
-
-- "What decision did I make last time in this situation, and what was the outcome?"
-- "Has this pattern failed before? Why?"
-- "What rules should I follow when using this tool?"
-
-Synaptic Memory borrows the answer from **how the brain works.**
+**Two jobs, nothing else:**
+1. **Build the graph well** — cheap extraction, no LLM needed at index time
+2. **Give the LLM good tools** — search, expand, get_document, count, list_categories, search_exact, follow
 
 ---
 
-## Differentiators
+## 3rd-generation retrieval
 
-| | Synaptic Memory | Cognee | Mem0 | LightRAG |
-|---|---|---|---|---|
-| **Agent experience learning** | Hebbian co-activation | - | - | - |
-| **Memory consolidation (4-tier)** | L0 → L1 → L2 → L3 | - | Partial | - |
-| **Auto-ontology construction** | Rules + LLM + Embedding | LLM only | - | LLM only |
-| **Multi-axis ranking** | relevance x importance x recency x vitality x context | - | - | - |
-| **Zero-dep core** | Pure Python | - | - | - |
-| **MCP server** | 16 tools | - | - | - |
-| **Korean optimization** | FTS + synonym tuning | - | - | - |
+| Generation | Approach | LLM cost at indexing |
+|-----------|----------|---------------------|
+| 1st (GraphRAG) | LLM extracts entities + relations + community summaries | High |
+| 2nd (LightRAG) | Delays LLM to query time, lighter indexing | Medium |
+| **3rd (this)** | **Relation-free graph, encoder-based extraction, hybrid retrieval** | **Zero** |
 
-### Benchmarks (FTS only, no embedding)
-
-| Dataset | Corpus | MRR | nDCG@10 | R@10 |
-|----------|--------|-----|---------|------|
-| Allganize RAG-Eval (Finance/Medical/Legal) | 300 | **0.793** | 0.810 | 0.870 |
-| HotPotQA-24 (multi-hop, Cognee comparison) | 226 | **0.754** | 0.636 | 0.729 |
-| AutoRAGRetrieval (enterprise) | 720 | **0.639** | 0.677 | 0.800 |
-| KLUE-MRC (Korean QA) | 500 | **0.607** | 0.643 | 0.760 |
+Synaptic Memory follows the 3rd-gen pattern: no LLM at indexing, hierarchical graph structure, and hybrid FTS + graph retrieval. The graph is a search index, not a knowledge base.
 
 ---
-
-## Design Philosophy — Four Principles from the Brain
-
-### 1. Spreading Activation — Associative Search
-
-When the brain hears "deploy," it co-activates CI/CD, rollback, incidents, and monitoring.
-
-```
-Search: "deployment"
-  → FTS match: [CI/CD pipeline, deployment automation]
-  → Neighbor activation: [rollback strategy, canary deployment, incident response rules]
-  → Resonance ranking: relevance × importance × recency × vitality × context
-```
-
-### 2. Hebbian Learning — "What fires together, wires together"
-
-```
-Agent uses [PostgreSQL selection] + [vector search implementation] together → success
-  → edge weight += 0.1 → co-activated in future searches
-
-Agent uses [skip tests] + [production deploy] together → failure
-  → edge weight -= 0.15 → failure experience surfaces first
-```
-
-### 3. Memory Consolidation — Keep only what matters
-
-```
-L0 (Raw, 72h)      ← All records. Deleted after 72h if not accessed.
-L1 (Sprint, 90d)   ← 3+ accesses. Retained for 90 days.
-L2 (Monthly, 365d) ← 10+ accesses. Retained for 1 year.
-L3 (Permanent)     ← 80%+ success rate. Permanently preserved. (Demoted below 60%)
-```
-
-### 4. Auto-Ontology — Structure knowledge for future retrieval
-
-**"When will an agent search for this knowledge?"** — metadata is auto-generated based on predicted future queries:
-
-```python
-await graph.add("Payment Outage Postmortem", "PG API timeout caused...")
-
-# LLM auto-generates:
-# kind: LESSON
-# tags: ["payment", "PG", "timeout", "circuit-breaker"]
-# search_keywords: ["payment failure cause", "PG outage response", "API timeout fix"]
-# search_scenarios: ["searching past cases when payment system fails"]
-# relations to existing nodes: --[LEARNED_FROM]--> "deployment decision"
-```
-
-Three-tier auto-construction:
-
-| Mode | Configuration | Cost | Details |
-|------|--------------|------|---------|
-| **Rule-based** | `RuleBasedClassifier()` | Free | Keyword matching, zero-dep |
-| **+ Embedding** | `+ RuleBasedRelationDetector()` + embedder | Free (local) | Cosine similarity auto-linking |
-| **+ LLM** | `LLMClassifier()` + `LLMRelationDetector()` | Local/API | Search keyword prediction, semantic relation extraction |
-
----
-
-## Install
-
-```bash
-pip install synaptic-memory                      # Core (zero deps)
-pip install synaptic-memory[embedding]           # + auto-embedding (Ollama/vLLM)
-pip install synaptic-memory[sqlite]              # + SQLite FTS5
-pip install synaptic-memory[scale]               # Neo4j + Qdrant + MinIO + embedding
-pip install synaptic-memory[mcp]                 # + MCP server
-pip install synaptic-memory[all]                 # Everything
-```
 
 ## Quick Start
 
-### 1. In-memory — zero-dep, instant start
+### Install
 
-```python
-from synaptic import SynapticGraph, ActivityTracker
-
-async def main():
-    graph = SynapticGraph.memory()
-    tracker = ActivityTracker(graph)
-
-    # Search past experiences (intent auto-inferred)
-    result = await graph.agent_search("DB migration failure")
-
-    # Record a decision
-    session = await tracker.start_session(agent_id="my-agent")
-    decision = await tracker.record_decision(
-        session.id,
-        title="Choose PostgreSQL",
-        rationale="Need vector search + ACID",
-        alternatives=["MongoDB", "SQLite"],
-    )
-
-    # Record outcome → auto Hebbian learning
-    await tracker.record_outcome(
-        decision.id,
-        title="Migration succeeded",
-        content="Achieved zero downtime",
-        success=True,
-    )
+```bash
+pip install synaptic-memory              # Core (zero deps)
+pip install synaptic-memory[sqlite]      # + SQLite FTS5 backend
+pip install synaptic-memory[mcp]         # + MCP server for Claude
+pip install synaptic-memory[all]         # Everything
 ```
 
-### 2. SQLite — lightweight production
+### 1. Build a graph from your documents
 
 ```python
-from synaptic import SynapticGraph
+from synaptic.backends.sqlite_graph import SqliteGraphBackend
+from synaptic.extensions.domain_profile import DomainProfile
+from synaptic.extensions.document_ingester import DocumentIngester, JsonlDocumentSource
 
-graph = SynapticGraph.sqlite("knowledge.db")
-await graph.backend.connect()
+# Auto-generate a profile from your data (or write one by hand)
+profile = DomainProfile(name="my_corpus", locale="ko")
 
-# RuleBasedClassifier + RelationDetector + Ontology included automatically.
-# Just add content — kind and relations are auto-classified.
-await graph.add("Refund Policy", "Refunds available within 7 days...")  # → kind=RULE (auto)
+backend = SqliteGraphBackend("my_graph.db")
+await backend.connect()
+
+source = JsonlDocumentSource("docs.jsonl", "chunks.jsonl")
+ingester = DocumentIngester(profile=profile, backend=backend)
+stats = await ingester.ingest(source)
+# → Category → Document → Chunk graph with FTS index
 ```
 
-### 3. Full — LLM classification + embedding + relation detection
+### 2. Let an LLM agent search it
 
 ```python
-from synaptic import SynapticGraph
-from synaptic.backends.sqlite import SQLiteBackend
-from synaptic.extensions.llm_provider import OllamaLLMProvider
+from synaptic.agent_tools import search_tool, expand_tool, get_document_tool
+from synaptic.search_session import SearchSession
 
-graph = SynapticGraph.full(
-    SQLiteBackend("knowledge.db"),
-    llm=OllamaLLMProvider(model="qwen3:0.6b"),
-    embed_api_base="http://localhost:8080/v1",
-    embed_model="BAAI/bge-m3",
+session = SearchSession()
+
+# The LLM calls these tools in a loop:
+result = await search_tool(backend, session, "인권영향평가 결과")
+# → evidence list + suggested next actions
+
+result = await get_document_tool(backend, session, "doc_abc123")
+# → full document with all chunks in reading order
+
+result = await expand_tool(backend, session, "chunk_xyz")
+# → 1-hop neighbours (same-doc chunks, category siblings, etc.)
+```
+
+### 3. Or use as an MCP server (Claude Desktop / Claude Code)
+
+```bash
+synaptic-mcp --db my_graph.db
+
+# Claude can now call:
+#   agent_search, agent_expand, agent_get_document,
+#   agent_list_categories, agent_count, agent_search_exact,
+#   agent_follow, agent_session_info
+```
+
+---
+
+## Auto profile generation
+
+Don't want to manually configure stopwords and ontology hints? The ProfileGenerator does it for you:
+
+```python
+from synaptic.extensions.profile_generator import ProfileGenerator
+
+# Rule-based (no LLM, no cost):
+gen = ProfileGenerator()
+profile = await gen.generate(
+    name="my_corpus",
+    samples=[doc.content for doc in docs[:50]],
+    categories=[doc.category for doc in docs[:50]],
 )
-await graph.backend.connect()
+profile.save("my_profile.toml")
 
-# LLM auto-generates: kind classification + tags + search keywords + search scenarios
-# Embeddings include search_keywords → improved vector search accuracy
-# Semantic relations auto-detected against existing nodes (DEPENDS_ON, LEARNED_FROM, etc.)
-node = await graph.add("Payment Outage Postmortem", "PG API timeout caused...")
+# With BYO embedder for ontology classification:
+from synaptic.extensions.ontology_classifier import OntologyClassifier
+classifier = OntologyClassifier(embedder=my_ollama_embedder)
+gen = ProfileGenerator(classifier=classifier)
+# → auto-maps category labels to NodeKind (RULE, DECISION, OBSERVATION...)
 ```
 
-### 4. Custom — manual composition
+---
 
-Instead of factory methods, compose each component directly:
+## Agent tool layer
 
-```python
-from synaptic import SynapticGraph, OpenAIEmbeddingProvider
-from synaptic.backends.sqlite import SQLiteBackend
+7 atomic tools designed for multi-turn LLM exploration:
 
-graph = SynapticGraph(
-    SQLiteBackend("knowledge.db"),
-    embedder=OpenAIEmbeddingProvider("http://gpu-server:8080/v1", model="BAAI/bge-m3"),
-)
-await graph.backend.connect()
+| Tool | Purpose |
+|------|---------|
+| `search` | FTS-seeded hybrid search with anchor extraction + graph expansion + reranking |
+| `expand` | 1-hop graph neighbours (category siblings, chunk-next, entity mentions) |
+| `get_document` | Full document with all chunks in reading order |
+| `list_categories` | Enumerate categories with document counts |
+| `count` | Structural count by kind / category / year |
+| `search_exact` | Literal substring match for IDs and codes |
+| `follow` | Walk a specific edge type (contains, part_of, next_chunk, mentions) |
 
-# Auto: title + content → vector generation → stored
-await graph.add("Deployment Strategy", "Blue-green deployment for zero downtime")
-# Auto: query → vector generation → FTS + vector hybrid search
-result = await graph.search("deployment approach")
-```
+Every tool returns:
+- `data` — the actual payload
+- `hints` — suggested next actions (LLM can ignore)
+- `session` — budget remaining, seen nodes, queries tried
 
-### 5. Kuzu — Embedded Property Graph
+The `SearchSession` tracks state across turns so the agent never re-reads the same chunk.
 
-```python
-from synaptic import SynapticGraph
+---
 
-graph = SynapticGraph.kuzu("knowledge.kuzu")
-await graph.backend.connect()
-await graph.add("Deploy Policy", "Auto-deploy after PR merge")
-```
+## Validated on real data
 
-Kuzu runs in-process (like SQLite for graphs) — native openCypher, FTS
-and vector indexes via bundled extensions, no server required. MIT licensed.
+| Dataset | Type | Nodes | MRR | Pipeline |
+|---------|------|-------|-----|----------|
+| KRRA (Korean public sector) | Text documents | 19,720 | 0.95 | FTS + graph |
+| assort (fashion e-commerce) | Structured CSV | 13,909 | 0.95 | FTS + graph |
 
-### 6. Scale — CompositeBackend
+Multi-turn agent validation (Claude Sonnet 4.6, 5 query types):
 
-```python
-from synaptic import SynapticGraph
-from synaptic.backends.composite import CompositeBackend
-from synaptic.backends.kuzu import KuzuBackend
-from synaptic.backends.qdrant import QdrantBackend
-from synaptic.backends.minio_store import MinIOBackend
-
-composite = CompositeBackend(
-    graph=KuzuBackend("knowledge.kuzu"),
-    vector=QdrantBackend("http://localhost:6333"),
-    blob=MinIOBackend("localhost:9000", access_key="minio", secret_key="secret"),
-)
-await composite.connect()
-
-graph = SynapticGraph.full(composite, embed_api_base="http://gpu-server:8080/v1")
-
-# Internal routing:
-# - embedding → Qdrant, content > 100KB → MinIO, everything else → Kuzu
-```
+| Query type | Example | Turns | Result |
+|-----------|---------|-------|--------|
+| Factoid | "인권영향평가 결과" | 6 | Detailed table with scores |
+| Cross-document | "운영계획과 인권경영 충돌" | 9 | 4-stage framework cited |
+| Absence proof | "환불 예외 있나?" | 7 | Found 3 exception clauses |
+| Enumeration | "규정 총 몇 건?" | 3 | 235건 + full category breakdown |
+| Temporal | "최신 운영계획" | 8 | 2024 document summarized |
 
 ---
 
 ## Architecture
 
 ```
-SynapticGraph (Facade)
-  │
-  ├── Auto-Ontology ───── RuleBasedClassifier / LLMClassifier
-  │                       RuleBasedRelationDetector / LLMRelationDetector
-  ├── OntologyRegistry ── Type hierarchy + property inheritance + constraint validation
-  ├── ActivityTracker ─── Session / tool call / decision / outcome capture
-  ├── AgentSearch ──────── 6 intent-based search strategies
-  ├── HybridSearch ─────── FTS + vector → synonym → LLM rewrite
-  ├── ResonanceScorer ──── 5-axis resonance (relevance × importance × recency × vitality × context)
-  ├── HebbianEngine ────── Co-activation reinforcement / weakening
-  ├── ConsolidationCascade  L0→L3 lifecycle
-  ├── EmbeddingProvider ── Auto vector generation (Ollama/vLLM/OpenAI)
-  ├── LLMProvider ──────── LLM for ontology construction (Ollama/OpenAI)
-  └── Exporters ─────────── Markdown, JSON
-       │
-  StorageBackend (Protocol)
-       │
-  ┌────┼──────────┬───────────────┬──────────────┐
-  │    │          │               │              │
-Memory SQLite  PostgreSQL      Kuzu       CompositeBackend
-(dev)  (FTS5)  (pgvector)   (embedded    (Kuzu+Qdrant+MinIO)
-                             Cypher)
+DomainProfile (TOML)
+  ↓
+DocumentIngester / TableIngester
+  ↓
+StorageBackend (Protocol)
+  ├── MemoryBackend     (testing)
+  ├── SQLiteBackend     (FTS5, lightweight)
+  ├── SqliteGraphBackend(+ graph traversal)
+  ├── KuzuBackend       (embedded Cypher)
+  ├── PostgreSQLBackend (pgvector)
+  ├── QdrantBackend     (vector-only)
+  └── CompositeBackend  (mix backends)
+  ↓
+3rd-gen retrieval pipeline
+  ├── QueryAnchorExtractor   (categories + entities + keywords)
+  ├── GraphExpander          (1-hop shallow expansion)
+  ├── HybridReranker         (4-signal fusion)
+  └── EvidenceAggregator     (MMR + per-doc cap + category coverage)
+  ↓
+Agent tools (7) → MCP server (8 tools) → LLM agent
 ```
+
+### Brain-inspired modules (still available)
+
+| Module | What it does |
+|--------|-------------|
+| `ResonanceScorer` | 4-axis ranking: relevance x importance x recency x vitality |
+| `HebbianEngine` | Co-activation strengthening / weakening |
+| `ConsolidationCascade` | L0 (raw) → L1 (sprint) → L2 (monthly) → L3 (permanent) |
+| `OntologyRegistry` | Type hierarchy + relation constraints |
+| `ActivityTracker` | Agent session / tool call / decision / outcome capture |
+| `PPR` | Personalized PageRank for graph-aware discovery |
 
 ---
-
-## 5-axis Resonance Scoring
-
-```
-Score = 0.55 × relevance     Search match score [0,1]
-      + 0.15 × importance    (success - failure) / access_count [0,1]
-      + 0.20 × recency       exp(-0.05 × days_since_update) [0,1]
-      + 0.10 × vitality      Periodic decay ×0.95 [0,1]
-      + (context weight) × context  Session tag Jaccard similarity [0,1]
-```
-
-Weights vary by intent. `past_failures` emphasizes importance; `context_explore` emphasizes context. **Same query, different intent, different results.**
-
----
-
-## Ontology
-
-```python
-from synaptic import OntologyRegistry, TypeDef, PropertyDef, build_agent_ontology
-
-ontology = build_agent_ontology()
-
-# Add custom type
-ontology.register_type(TypeDef(
-    name="incident",
-    parent="agent_activity",
-    description="Production incident",
-    properties=[
-        PropertyDef(name="severity", value_type="str", required=True),
-    ],
-))
-
-graph = SynapticGraph(backend, ontology=ontology)
-# → Auto-validated on graph.add() and graph.link()
-```
-
-### Default Ontology
-
-```
-knowledge                          agent_activity
-  ├── concept                        ├── session
-  ├── entity                         ├── tool_call
-  ├── lesson                         ├── observation
-  ├── decision                       ├── reasoning
-  ├── rule                           └── outcome
-  └── artifact
-```
 
 ## Backends
 
 | Backend | Graph Traversal | Vector Search | Scale | Use Case |
 |---------|----------------|--------------|-------|----------|
 | `MemoryBackend` | Python BFS | cosine | ~10K | Testing |
-| `SQLiteBackend` | CTE recursive | - | ~100K | Embedded (no graph) |
-| `KuzuBackend` | Cypher (embedded) | HNSW (optional) | ~10M | **Embedded graph (recommended)** |
-| `PostgreSQLBackend` | CTE recursive | pgvector HNSW | ~1M | Production (single DB stack) |
-| `QdrantBackend` | - | HNSW + quantization | ~10B | Vector-only |
-| `MinIOBackend` | - | - | ~10TB | Blob (S3-compatible) |
-| `CompositeBackend` | Kuzu | Qdrant | Unlimited | **Unified router** |
+| `SQLiteBackend` | CTE recursive | - | ~100K | Lightweight |
+| `SqliteGraphBackend` | + shortest_path | - | ~100K | **Recommended default** |
+| `KuzuBackend` | Cypher (embedded) | HNSW | ~10M | Graph-heavy |
+| `PostgreSQLBackend` | CTE recursive | pgvector | ~1M | Production |
+| `CompositeBackend` | Kuzu | Qdrant | Unlimited | Scale-out |
 
-## MCP Server — 16 Tools
+---
+
+## MCP Server
 
 ```bash
-synaptic-mcp                                              # stdio (Claude Code)
-synaptic-mcp --db ./knowledge.db                         # SQLite
-synaptic-mcp --embed-url http://localhost:8080/v1        # + auto-embedding
+synaptic-mcp --db knowledge.db
+synaptic-mcp --embed-url http://localhost:11434/v1 --embed-model qwen3-embedding:4b
 ```
 
-**Knowledge** (7) — `knowledge_search`, `knowledge_add`, `knowledge_link`, `knowledge_reinforce`, `knowledge_stats`, `knowledge_export`, `knowledge_consolidate`
+**24 tools total:**
+- Knowledge (7): search, add, link, reinforce, stats, export, consolidate
+- Agent workflow (4): start_session, log_action, record_decision, record_outcome
+- Semantic search (3): find_similar, get_reasoning_chain, explore_context
+- Ontology (2): define_type, query_schema
+- **Agent tools (8)**: search, expand, get_document, list_categories, count, search_exact, follow, session_info
 
-**Agent Workflow** (4) — `agent_start_session`, `agent_log_action`, `agent_record_decision`, `agent_record_outcome`
-
-**Semantic Search** (3) — `agent_find_similar`, `agent_get_reasoning_chain`, `agent_explore_context`
-
-**Ontology** (2) — `ontology_define_type`, `ontology_query_schema`
+---
 
 ## Dev
 
 ```bash
-uv sync --extra dev --extra sqlite --extra neo4j --extra qdrant --extra minio
-uv run pytest -v                              # 266+ tests
-uv run pytest tests/benchmark/ -v -s          # Benchmarks (8 datasets + ablation)
+uv sync --extra dev --extra sqlite --extra mcp
+uv run pytest tests/ -q                   # 683+ tests
 uv run ruff check --fix && uv run ruff format
 ```
 
