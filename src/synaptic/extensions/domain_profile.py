@@ -147,6 +147,20 @@ class DomainProfile:
     max_df_ratio: float = 0.3
     min_phrase_len: int = 3
     max_phrase_len: int = 20
+    # Authority ranking — maps NodeKind to trust level (0-10). Higher
+    # means "more authoritative" at conflict resolution time: a RULE
+    # outranks a DECISION which outranks an OBSERVATION. The agent
+    # reads this via ``node_metadata.authority_of()`` when sorting
+    # evidence across conflicting sources. Default empty dict means
+    # "unknown authority" — treat all kinds equally.
+    authority_by_kind: dict[NodeKind, int] = field(default_factory=dict)
+    # Document content enrichment — when True, DocumentIngester joins
+    # the title with the first few chunks' text so Document nodes
+    # become meaningfully searchable via FTS. Without this Document
+    # content is just the title (or empty), which is why KRRA top-k
+    # misses when the query doesn't match the title verbatim.
+    enrich_document_content: bool = True
+    document_preview_chars: int = 600
 
     def stopwords(self) -> frozenset[str]:
         """Effective stopword set = locale default ∪ extra."""
@@ -187,7 +201,12 @@ class DomainProfile:
             "max_df_ratio": self.max_df_ratio,
             "min_phrase_len": self.min_phrase_len,
             "max_phrase_len": self.max_phrase_len,
+            "enrich_document_content": self.enrich_document_content,
+            "document_preview_chars": self.document_preview_chars,
             "ontology_hints": {k: v.value.upper() for k, v in self.ontology_hints.items()},
+            "authority_by_kind": {
+                k.value.upper(): v for k, v in self.authority_by_kind.items()
+            },
         }
         return out
 
@@ -233,6 +252,13 @@ class DomainProfile:
             lines.append("[ontology_hints]")
             for k, v in hints.items():
                 lines.append(f'"{_toml_escape(str(k))}" = "{_toml_escape(str(v))}"')
+            lines.append("")
+
+        auth = data.get("authority_by_kind", {})
+        if isinstance(auth, dict) and auth:
+            lines.append("[authority_by_kind]")
+            for k, v in auth.items():
+                lines.append(f'"{_toml_escape(str(k))}" = {v}')
             lines.append("")
 
         path.write_text("\n".join(lines), encoding="utf-8")
@@ -317,6 +343,26 @@ class DomainProfile:
                         )
                         raise ValueError(msg) from None
 
+        authority_by_kind: dict[NodeKind, int] = {}
+        auth_raw = data.get("authority_by_kind", {})
+        if isinstance(auth_raw, dict):
+            for key, value in auth_raw.items():
+                if not isinstance(key, str):
+                    continue
+                kind = None
+                try:
+                    kind = NodeKind(key.lower())
+                except ValueError:
+                    try:
+                        kind = NodeKind[key.upper()]
+                    except KeyError:
+                        pass
+                if kind is not None:
+                    try:
+                        authority_by_kind[kind] = int(value)
+                    except (ValueError, TypeError):
+                        pass
+
         return cls(
             name=name,
             locale=locale,
@@ -329,6 +375,9 @@ class DomainProfile:
             max_df_ratio=float(data.get("max_df_ratio", 0.3)),
             min_phrase_len=int(data.get("min_phrase_len", 3)),
             max_phrase_len=int(data.get("max_phrase_len", 20)),
+            authority_by_kind=authority_by_kind,
+            enrich_document_content=bool(data.get("enrich_document_content", True)),
+            document_preview_chars=int(data.get("document_preview_chars", 600)),
         )
 
 

@@ -91,3 +91,14 @@ entity_hint_patterns = [
 "경마산업관리" = "CONCEPT"
 "승마 행사 및 대회" = "CONCEPT"
 "정보기술 시스템" = "ARTIFACT"
+
+# Authority ranking (0-10). RULE outranks DECISION because regulations
+# are the ground truth when policies conflict with rules. OBSERVATION
+# (reports/analyses) is lower because it describes a state, not a norm.
+[authority_by_kind]
+"RULE" = 10
+"DECISION" = 7
+"OBSERVATION" = 5
+"OUTCOME" = 4
+"CONCEPT" = 3
+"ARTIFACT" = 3

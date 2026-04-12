@@ -48,11 +48,16 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import unicodedata
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
+
+
+def _nfc(s: str) -> str:
+    return unicodedata.normalize("NFC", s) if s else s
 
 from synaptic.models import (
     ConsolidationLevel,
@@ -306,6 +311,8 @@ class DocumentIngester:
 
         for doc in source.documents():
             doc_node_id = _doc_node_id(doc.doc_id)
+            doc_category = _nfc(doc.category)
+            doc_title = _nfc(doc.title)
 
             existing = await self._backend.get_node(doc_node_id)
             if existing is not None:
@@ -316,27 +323,55 @@ class DocumentIngester:
                 await self._delete_document_cascade(doc_node_id)
 
             # Ensure category node
-            category_id = await self._ensure_category(doc.category, category_ids, stats)
+            category_id = await self._ensure_category(doc_category, category_ids, stats)
 
             doc_kind = self._profile.ontology_hints.get(
-                doc.category, NodeKind.ENTITY
+                doc_category, NodeKind.ENTITY
             )
 
             doc_props = dict(doc.properties)
             doc_props["doc_id"] = doc.doc_id
             if doc.year is not None:
                 doc_props["year"] = str(doc.year)
-            if doc.category:
-                doc_props["category"] = doc.category
+                # ``year`` is also the temporal anchor — we surface it
+                # under ``valid_from`` so the agent tools (and future
+                # temporal filters) have a single, kind-agnostic field.
+                doc_props.setdefault("valid_from", str(doc.year))
+            if doc_category:
+                doc_props["category"] = doc_category
 
-            # Document node. Use title as content when body is empty so
-            # the doc node is still FTS-searchable by its name.
-            doc_content = doc.content if doc.content else doc.title
+            # Authority tag from the profile. Only set when the profile
+            # has an explicit mapping — we never guess a default
+            # authority, because wrong authority values propagate into
+            # conflict resolution and silently change agent behaviour.
+            authority = self._profile.authority_by_kind.get(doc_kind)
+            if authority is not None:
+                doc_props["authority"] = str(authority)
+
+            # Document content. Historical default was title-only, which
+            # meant Document nodes didn't participate meaningfully in FTS
+            # — the agent had to traverse CONTAINS to reach searchable
+            # text. When ``profile.enrich_document_content`` is True
+            # (default) we glue the title together with the opening
+            # chunks so each Document node carries its own semantic
+            # signal. The limit caps the worst case at ~600 chars so
+            # Document rows stay compact even on very long corpora.
+            if doc.content:
+                doc_content = doc.content
+            elif self._profile.enrich_document_content and doc.chunks:
+                doc_content = _build_document_preview(
+                    title=doc_title,
+                    chunks=sorted(doc.chunks, key=lambda c: c.index),
+                    limit=self._profile.document_preview_chars,
+                )
+            else:
+                doc_content = doc_title
+
             await self._backend.save_node(
                 Node(
                     id=doc_node_id,
                     kind=doc_kind,
-                    title=doc.title,
+                    title=doc_title,
                     content=doc_content,
                     tags=["document"],
                     source=doc.source,
@@ -373,7 +408,7 @@ class DocumentIngester:
                     Node(
                         id=chunk_node_id,
                         kind=NodeKind.CHUNK,
-                        title=f"{doc.title} #{chunk.index}",
+                        title=f"{doc_title} #{chunk.index}",
                         content=chunk.text,
                         tags=["chunk"],
                         source=doc.source,
@@ -456,6 +491,53 @@ class DocumentIngester:
             if edge.kind == EdgeKind.CONTAINS:
                 await self._backend.delete_node(edge.target_id)
         await self._backend.delete_node(doc_node_id)
+
+
+# --- Content enrichment ---
+
+
+def _build_document_preview(
+    *,
+    title: str,
+    chunks: list[ChunkRecord],
+    limit: int,
+) -> str:
+    """Build a searchable preview for a Document node.
+
+    Joins the title with the opening chunks' text, stopping as soon as
+    we hit ``limit`` characters. The title is always included so a
+    title-only FTS match still works; the chunk text is only there to
+    raise recall on queries that would otherwise miss the document.
+
+    The preview is NOT a summary — it's a prefix. For proper
+    summarisation use ``ConsolidationCascade`` on the chunks once the
+    graph is built. The goal here is purely retrieval: give FTS
+    something of substance to match against.
+    """
+    title = (title or "").strip()
+    parts: list[str] = []
+    remaining = limit
+
+    if title:
+        parts.append(title)
+        remaining -= len(title) + 1  # +1 for the newline separator
+        if remaining <= 0:
+            return title
+
+    for chunk in chunks:
+        text = (chunk.text or "").strip()
+        if not text:
+            continue
+        if len(text) > remaining:
+            parts.append(text[: max(0, remaining)])
+            remaining = 0
+            break
+        parts.append(text)
+        remaining -= len(text) + 1
+        if remaining <= 0:
+            break
+
+    return "\n".join(parts).strip()
 
 
 # --- Deterministic id helpers ---
