@@ -1,7 +1,14 @@
 """Export all evaluation ground truth (GT) datasets to a single Excel file.
 
 Each query file under eval/data/queries/ becomes a sheet in the workbook,
-with one row per query and columns for query text, GT doc IDs, type, etc.
+with one row per query including:
+
+- query text, type, level, category
+- relevant_docs (GT IDs)
+- relevant_answer (resolved to human-readable title + content snippet)
+
+The GT ID → answer resolution uses the corresponding graph sqlite file,
+so you can see the actual answer text alongside the cryptic doc ID.
 
 Usage::
 
@@ -12,26 +19,102 @@ Usage::
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 QUERIES_DIR = REPO_ROOT / "eval" / "data" / "queries"
 OUTPUT_PATH = REPO_ROOT / "eval" / "data" / "gt_datasets.xlsx"
+
+# Map query-file name → graph sqlite file for resolving GT IDs to text.
+GRAPH_MAP = {
+    "krra": "krra_graph.sqlite",
+    "krra_hard": "krra_graph.sqlite",
+    "krra_graph": "krra_graph.sqlite",
+    "krra_multihop": "krra_graph.sqlite",
+    "assort": "assort_graph.sqlite",
+    "assort_hard": "assort_graph.sqlite",
+    "x2bee": "x2bee_graph.sqlite",
+    "x2bee_hard": "x2bee_graph.sqlite",
+}
+
+
+def _load_resolver(graph_path: Path) -> dict[str, str]:
+    """Build a map from GT-style ID to human-readable answer.
+
+    Keys cover both:
+    - node title (for structured data like "products:12800000")
+    - properties.doc_id (for document data with hash IDs)
+    """
+    if not graph_path.exists():
+        return {}
+
+    resolver: dict[str, str] = {}
+    try:
+        conn = sqlite3.connect(str(graph_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT title, content, properties_json FROM syn_nodes"
+        ).fetchall()
+        for r in rows:
+            title = r["title"] or ""
+            content = (r["content"] or "")[:120].replace("\n", " ").strip()
+            summary = f"{title}  ▸  {content}" if content else title
+
+            # Key by title (structured: "products:12800000")
+            if title:
+                resolver[title] = summary
+
+            # Key by properties.doc_id (documents: "0346542e...")
+            try:
+                props = json.loads(r["properties_json"] or "{}")
+            except json.JSONDecodeError:
+                props = {}
+            did = props.get("doc_id", "")
+            if did:
+                resolver[str(did)] = summary
+
+        conn.close()
+    except Exception as exc:
+        print(f"  ⚠ resolver failed for {graph_path.name}: {exc}")
+
+    return resolver
 
 
 HEADER_FILL = PatternFill("solid", fgColor="2F5496")
 HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
 
 
-def _flatten_query(q: dict) -> dict:
-    """Normalize a query dict to a flat set of columns."""
+def _flatten_query(q: dict, resolver: dict[str, str] | None = None) -> dict:
+    """Normalize a query dict to a flat set of columns.
+
+    When ``resolver`` is provided, the `relevant_answer` column is
+    populated with human-readable title+content for each GT ID.
+    """
     relevant = q.get("relevant_docs") or q.get("answer_ids") or []
     if isinstance(relevant, dict):
         relevant = list(relevant.keys())
+
+    # Resolve GT IDs to readable answers (title + content snippet)
+    resolved_lines: list[str] = []
+    if resolver is not None:
+        for rid in relevant[:20]:  # cap at 20 for readability
+            key = str(rid)
+            answer = resolver.get(key, "")
+            if not answer:
+                # Try stripping chunk suffix ("#1", "#2") for doc lookup
+                base = key.rsplit(" #", 1)[0]
+                answer = resolver.get(base, "")
+            if answer:
+                resolved_lines.append(f"[{key}] {answer}")
+            else:
+                resolved_lines.append(f"[{key}] (not found in graph)")
+        if len(relevant) > 20:
+            resolved_lines.append(f"... +{len(relevant) - 20} more")
+
     return {
         "qid": q.get("qid", q.get("query_id", "")),
         "query": q.get("query", q.get("question", "")),
@@ -40,11 +123,18 @@ def _flatten_query(q: dict) -> dict:
         "category": q.get("category", ""),
         "description": q.get("description", ""),
         "relevant_count": len(relevant),
+        "relevant_answer": "\n".join(resolved_lines),
         "relevant_docs": "\n".join(str(x) for x in relevant),
     }
 
 
-def _write_sheet(wb: Workbook, name: str, meta: dict, queries: list[dict]) -> None:
+def _write_sheet(
+    wb: Workbook,
+    name: str,
+    meta: dict,
+    queries: list[dict],
+    resolver: dict[str, str] | None = None,
+) -> None:
     ws = wb.create_sheet(title=name[:31])  # Excel sheet name limit
 
     # Metadata header (first rows)
@@ -56,14 +146,16 @@ def _write_sheet(wb: Workbook, name: str, meta: dict, queries: list[dict]) -> No
     ws["B3"] = meta.get("id_field", "doc_id")
     ws["A4"] = "Total queries"
     ws["B4"] = len(queries)
+    ws["A5"] = "Answer resolved?"
+    ws["B5"] = "YES — see relevant_answer column" if resolver else "NO graph found"
 
-    for row in range(1, 5):
+    for row in range(1, 6):
         ws[f"A{row}"].font = Font(bold=True)
 
     # Column headers
     columns = ["qid", "query", "type", "level", "category", "description",
-               "relevant_count", "relevant_docs"]
-    header_row = 6
+               "relevant_count", "relevant_answer", "relevant_docs"]
+    header_row = 7
     for i, col in enumerate(columns, start=1):
         cell = ws.cell(row=header_row, column=i, value=col)
         cell.fill = HEADER_FILL
@@ -72,15 +164,22 @@ def _write_sheet(wb: Workbook, name: str, meta: dict, queries: list[dict]) -> No
 
     # Data rows
     for r, q in enumerate(queries, start=header_row + 1):
-        flat = _flatten_query(q)
+        flat = _flatten_query(q, resolver=resolver)
         for c, col in enumerate(columns, start=1):
             cell = ws.cell(row=r, column=c, value=flat.get(col, ""))
             cell.alignment = Alignment(vertical="top", wrap_text=True)
 
-    # Column widths
-    widths = {"A": 8, "B": 45, "C": 18, "D": 8, "E": 22, "F": 42, "G": 14, "H": 60}
+    # Column widths — wider for answer column
+    widths = {
+        "A": 8, "B": 45, "C": 18, "D": 8, "E": 22, "F": 42,
+        "G": 14, "H": 70, "I": 45,
+    }
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
+
+    # Row heights (to accommodate wrap)
+    for r in range(header_row + 1, header_row + 1 + len(queries)):
+        ws.row_dimensions[r].height = 80
 
     # Freeze header
     ws.freeze_panes = f"A{header_row + 1}"
@@ -132,6 +231,9 @@ def main() -> None:
     if default is not None:
         wb.remove(default)
 
+    # Pre-load resolvers for each unique graph (avoid re-loading per sheet)
+    resolver_cache: dict[str, dict[str, str]] = {}
+
     files = sorted(QUERIES_DIR.glob("*.json"))
     stats: list[dict] = []
 
@@ -154,7 +256,17 @@ def main() -> None:
             "id_field": data.get("id_field", "doc_id"),
         }
 
-        _write_sheet(wb, name, meta, queries)
+        # Load resolver for this dataset's graph
+        resolver: dict[str, str] | None = None
+        graph_file = GRAPH_MAP.get(name)
+        if graph_file:
+            if graph_file not in resolver_cache:
+                graph_path = REPO_ROOT / "eval" / "data" / graph_file
+                resolver_cache[graph_file] = _load_resolver(graph_path)
+                print(f"  📖 loaded {graph_file}: {len(resolver_cache[graph_file])} entries")
+            resolver = resolver_cache[graph_file]
+
+        _write_sheet(wb, name, meta, queries, resolver=resolver)
         stats.append({
             "dataset": name,
             "description": meta["description"][:100],
@@ -162,7 +274,8 @@ def main() -> None:
             "id_field": meta["id_field"],
             "language": _guess_language(name, queries),
         })
-        print(f"  ✓ {name}: {len(queries)} queries")
+        resolved = " (with answers)" if resolver else ""
+        print(f"  ✓ {name}: {len(queries)} queries{resolved}")
 
     _write_summary(wb, stats)
 
