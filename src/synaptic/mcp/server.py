@@ -688,14 +688,14 @@ from synaptic.agent_tools import (
     search_exact_tool,
     search_tool,
 )
-from synaptic.agent_tools_v2 import (
-    compare_search_tool,
-    deep_search_tool,
-)
 from synaptic.agent_tools_structured import (
     aggregate_nodes_tool,
     filter_nodes_tool,
     join_related_tool,
+)
+from synaptic.agent_tools_v2 import (
+    compare_search_tool,
+    deep_search_tool,
 )
 from synaptic.search_session import SessionStore
 

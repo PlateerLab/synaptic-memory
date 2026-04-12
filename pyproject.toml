@@ -127,7 +127,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "S", "ASYNC", "PLC", "RUF"]
-ignore = ["S101", "E501", "PLC0415", "S110", "S311", "S106", "RUF005", "F841", "B007", "B905", "RUF059", "E402", "N814", "S324", "RUF002", "RUF022", "RUF034", "E741", "N806", "S608"]
+ignore = ["S101", "E501", "PLC0415", "S110", "S311", "S106", "RUF005", "F841", "B007", "B905", "RUF059", "E402", "N814", "S324", "RUF002", "RUF003", "RUF022", "RUF034", "E741", "N806", "S608", "A002"]
 
 [tool.pyright]
 pythonVersion = "3.12"

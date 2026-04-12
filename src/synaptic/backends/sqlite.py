@@ -150,7 +150,7 @@ class SQLiteBackend:
     def __init__(self, path: str | Path = ":memory:") -> None:
         self._path = str(path)
         self._conn: aiosqlite.Connection | None = None
-        self._hnsw_index: object | None = None
+        self._hnsw_index: object | None = None  # None=not built, False=skip (too few), Index=ready
         self._hnsw_id_map: dict[int, str] = {}  # hnsw key → node_id
 
     async def connect(self) -> None:
@@ -393,16 +393,16 @@ class SQLiteBackend:
         norm_terms = normalized.strip().split()
         # Merge: normalized terms first, then any original terms not
         # already present (handles Kiwi-split vs unsplit mismatch)
-        seen = set(norm_terms)
+        term_seen = set(norm_terms)
         terms = list(norm_terms)
         for t in original_terms:
-            if t not in seen:
+            if t not in term_seen:
                 terms.append(t)
-                seen.add(t)
+                term_seen.add(t)
         if not terms:
             return []
 
-        seen: dict[str, tuple[Node, float]] = {}
+        scored_nodes: dict[str, tuple[Node, float]] = {}
 
         # Pass 1: FTS5 with title 3x boost.
         # bm25(table, w0, w1, w2) — col0=node_id(0), col1=title(3.0), col2=content(1.0).
@@ -422,13 +422,13 @@ class SQLiteBackend:
             for r in rows:
                 node = _row_to_node(r)
                 bm25_val = r["_bm25"] or 0.0  # negative; lower = better
-                seen[node.id] = (node, bm25_val)
+                scored_nodes[node.id] = (node, bm25_val)
         except Exception:
             pass
 
         # Pass 2: LIKE-based substring scan for terms FTS5 missed.
         # Handles Korean compound words where tokenisation may not align.
-        if len(seen) < limit:
+        if len(scored_nodes) < limit:
             like_parts = " OR ".join(
                 "(title LIKE ? OR content LIKE ?)" for _ in terms
             )
@@ -444,7 +444,7 @@ class SQLiteBackend:
                 rows2 = await cur.fetchall()
             for r in rows2:
                 node = _row_to_node(r)
-                if node.id in seen:
+                if node.id in scored_nodes:
                     continue
                 title_lower = node.title.lower()
                 content_lower = node.content.lower()
@@ -455,10 +455,10 @@ class SQLiteBackend:
                 )
                 if sub > 0:
                     # Use large positive offset so substring hits sort after FTS5
-                    seen[node.id] = (node, 10000.0 - sub)
+                    scored_nodes[node.id] = (node, 10000.0 - sub)
 
         # Sort: FTS5 negatives first (ascending), then substring positives
-        ranked = sorted(seen.values(), key=lambda x: x[1])
+        ranked = sorted(scored_nodes.values(), key=lambda x: x[1])
         return [n for n, _ in ranked[:limit]]
 
     async def search_fuzzy(
@@ -531,7 +531,7 @@ class SQLiteBackend:
 
         # Lazy-build the index on first call. Only use HNSW for 100+
         # vectors — below that brute-force is faster and exact.
-        if self._hnsw_index == "skip":
+        if self._hnsw_index is False:
             return None
         if self._hnsw_index is None:
             db = self._db()
@@ -541,7 +541,7 @@ class SQLiteBackend:
                 rows = await cur.fetchall()
             if not rows or len(rows) < 100:
                 # Too few vectors for HNSW to be worthwhile
-                self._hnsw_index = "skip"
+                self._hnsw_index = False
                 return None
 
             # Detect dimension from first non-empty embedding
@@ -677,6 +677,9 @@ class SQLiteBackend:
                 fts_rows,
             )
             await db.commit()
+            # Invalidate HNSW cache — new embeddings need re-indexing
+            if any(n.embedding for n in nodes):
+                self.invalidate_vector_index()
         except Exception:
             await db.rollback()
             raise

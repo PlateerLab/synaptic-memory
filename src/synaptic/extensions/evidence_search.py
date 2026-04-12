@@ -51,7 +51,6 @@ from time import time
 from typing import TYPE_CHECKING
 
 from synaptic.extensions.evidence_aggregator import Evidence, EvidenceAggregator
-from synaptic.ppr import personalized_pagerank
 from synaptic.extensions.graph_expander import (
     ExpandedNode,
     ExpansionBudget,
@@ -63,6 +62,7 @@ from synaptic.extensions.hybrid_reranker import (
     ScoredCandidate,
 )
 from synaptic.extensions.query_anchor import QueryAnchorExtractor, QueryAnchors
+from synaptic.ppr import personalized_pagerank
 
 if TYPE_CHECKING:
     from synaptic.extensions.embedder import EmbeddingProvider

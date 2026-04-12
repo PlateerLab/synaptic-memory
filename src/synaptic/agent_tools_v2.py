@@ -25,21 +25,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from synaptic.agent_tools import (
-    ToolResult,
     Hint,
+    ToolResult,
     _budget_check,
-    _node_to_summary,
-    _extract_snippet,
-    search_tool,
     expand_tool,
     get_document_tool,
+    search_tool,
 )
-from synaptic.extensions.evidence_search import EvidenceSearch
-from synaptic.models import EdgeKind, Node, NodeKind
 from synaptic.search_session import SearchSession
 
 if TYPE_CHECKING:

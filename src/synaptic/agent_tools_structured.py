@@ -20,11 +20,10 @@ output regardless of the source schema.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from synaptic.agent_tools import Hint, ToolResult, _budget_check, _node_to_summary
+from synaptic.agent_tools import ToolResult, _budget_check, _node_to_summary
 from synaptic.search_session import SearchSession
 
 if TYPE_CHECKING:
@@ -95,7 +94,7 @@ async def filter_nodes_tool(
 
     prop_path = f"$.{property}"
     if op == "contains":
-        conditions.append(f"json_extract(properties_json, ?) LIKE ?")
+        conditions.append("json_extract(properties_json, ?) LIKE ?")
         params.extend([prop_path, f"%{value}%"])
     else:
         # Try numeric comparison first, fall back to string
@@ -112,12 +111,38 @@ async def filter_nodes_tool(
     params.append(limit)
 
     try:
-        db = backend._db()
-        async with db.execute(sql, params) as cur:
-            rows = await cur.fetchall()
-
-        from synaptic.backends.sqlite import _row_to_node
-        nodes = [_row_to_node(r) for r in rows]
+        # Use the StorageBackend protocol (list_nodes + Python filter)
+        # instead of raw SQL. Works with ANY backend, not just SQLite.
+        all_nodes = await backend.list_nodes(kind=None, limit=10_000)
+        nodes = []
+        for n in all_nodes:
+            props = n.properties or {}
+            if table and props.get("_table_name") != table:
+                continue
+            raw_val = props.get(property)
+            if raw_val is None:
+                continue
+            if op == "contains":
+                if value.lower() in str(raw_val).lower():
+                    nodes.append(n)
+            else:
+                try:
+                    cmp_a = float(raw_val)
+                    cmp_b = float(value)
+                except ValueError:
+                    cmp_a, cmp_b = str(raw_val), str(value)
+                matched = (
+                    (op in (">=",) and cmp_a >= cmp_b)
+                    or (op in ("<=",) and cmp_a <= cmp_b)
+                    or (op in (">",) and cmp_a > cmp_b)
+                    or (op in ("<",) and cmp_a < cmp_b)
+                    or (op in ("==", "=") and cmp_a == cmp_b)
+                    or (op in ("!=",) and cmp_a != cmp_b)
+                )
+                if matched:
+                    nodes.append(n)
+            if len(nodes) >= limit:
+                break
     except Exception as exc:
         return ToolResult(
             tool="filter_nodes", ok=False, data={},
@@ -184,28 +209,41 @@ async def aggregate_nodes_tool(
     where = " AND ".join(conditions) if conditions else "1=1"
     group_path = f"$.{group_by}"
 
-    if metric_upper == "COUNT":
-        sql = f"""
-            SELECT json_extract(properties_json, ?) as grp, COUNT(*) as val
-            FROM syn_nodes WHERE {where}
-            GROUP BY grp ORDER BY val DESC LIMIT ?
-        """
-        params_full = [group_path, *params, limit]
-    else:
-        # For SUM/AVG/MAX/MIN, aggregate on the group_by property itself
-        sql = f"""
-            SELECT json_extract(properties_json, ?) as grp,
-                   {metric_upper}(CAST(json_extract(properties_json, ?) AS REAL)) as val
-            FROM syn_nodes WHERE {where}
-            GROUP BY grp ORDER BY val DESC LIMIT ?
-        """
-        params_full = [group_path, group_path, *params, limit]
-
     try:
-        db = backend._db()
-        async with db.execute(sql, params_full) as cur:
-            rows = await cur.fetchall()
-        groups = [{"group": r[0], "value": r[1]} for r in rows if r[0] is not None]
+        all_nodes = await backend.list_nodes(kind=None, limit=100_000)
+        buckets: dict[str, list[float]] = {}
+        for n in all_nodes:
+            props = n.properties or {}
+            if table and props.get("_table_name") != table:
+                continue
+            grp_val = props.get(group_by)
+            if grp_val is None:
+                continue
+            grp_key = str(grp_val)
+            try:
+                num = float(grp_val)
+            except (ValueError, TypeError):
+                num = 1.0
+            buckets.setdefault(grp_key, []).append(num)
+
+        groups = []
+        for grp_key, vals in buckets.items():
+            if metric_upper == "COUNT":
+                agg_val = len(vals)
+            elif metric_upper == "SUM":
+                agg_val = sum(vals)
+            elif metric_upper == "AVG":
+                agg_val = sum(vals) / len(vals) if vals else 0
+            elif metric_upper == "MAX":
+                agg_val = max(vals)
+            elif metric_upper == "MIN":
+                agg_val = min(vals)
+            else:
+                agg_val = len(vals)
+            groups.append({"group": grp_key, "value": agg_val})
+
+        groups.sort(key=lambda g: -g["value"])
+        groups = groups[:limit]
     except Exception as exc:
         return ToolResult(
             tool="aggregate_nodes", ok=False, data={},
@@ -260,21 +298,17 @@ async def join_related_tool(
     if budget is not None:
         return budget
 
-    sql = """
-        SELECT * FROM syn_nodes
-        WHERE json_extract(properties_json, '$._table_name') = ?
-          AND json_extract(properties_json, ?) = ?
-        LIMIT ?
-    """
-    fk_path = f"$.{fk_property}"
-
     try:
-        db = backend._db()
-        async with db.execute(sql, [target_table, fk_path, from_value, limit]) as cur:
-            rows = await cur.fetchall()
-
-        from synaptic.backends.sqlite import _row_to_node
-        nodes = [_row_to_node(r) for r in rows]
+        all_nodes = await backend.list_nodes(kind=None, limit=100_000)
+        nodes = []
+        for n in all_nodes:
+            props = n.properties or {}
+            if props.get("_table_name") != target_table:
+                continue
+            if str(props.get(fk_property, "")) == str(from_value):
+                nodes.append(n)
+                if len(nodes) >= limit:
+                    break
     except Exception as exc:
         return ToolResult(
             tool="join_related", ok=False, data={},

@@ -53,7 +53,10 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from synaptic.protocols import StorageBackend
 
 logger = logging.getLogger("search-session")
 
@@ -199,7 +202,7 @@ class SearchSession:
         }
 
 
-async def build_graph_context(backend: object) -> str:
+async def build_graph_context(backend: StorageBackend) -> str:
     """Build a compact graph metadata string for system prompt injection.
 
     Calling ``list_categories`` every session wastes 1-2 turns. This
