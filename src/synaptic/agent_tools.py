@@ -424,9 +424,10 @@ async def get_document_tool(
     # the raw doc_id from properties. Try the direct lookup first.
     doc_node: Node | None = await backend.get_node(doc_id)
     if doc_node is None:
-        # Fall back to property search
-        all_docs = await backend.list_nodes(kind=None, limit=10_000)
-        for n in all_docs:
+        # Fall back: use search_fuzzy to find by doc_id string instead
+        # of loading all nodes into memory. Much cheaper on large corpora.
+        candidates = await backend.search_fuzzy(doc_id, limit=50)
+        for n in candidates:
             props = n.properties or {}
             if props.get("doc_id") == doc_id and "document" in (n.tags or []):
                 doc_node = n
@@ -557,17 +558,26 @@ async def count_tool(
         except ValueError:
             pass
 
-    nodes = await backend.list_nodes(kind=node_kind, limit=100_000)
-    matched = 0
-    for n in nodes:
-        props = n.properties or {}
-        if category and category.lower() not in (props.get("category") or "").lower():
-            continue
-        if year is not None:
-            ny = props.get("year")
-            if ny is None or str(ny) != str(year):
+    # When category is the only filter, use search_fuzzy (LIKE) to avoid
+    # loading all nodes. Falls back to list_nodes for kind-only or combined.
+    if category and not node_kind and year is None:
+        candidates = await backend.search_fuzzy(category, limit=100_000)
+        matched = sum(
+            1 for n in candidates
+            if category.lower() in ((n.properties or {}).get("category") or "").lower()
+        )
+    else:
+        nodes = await backend.list_nodes(kind=node_kind, limit=100_000)
+        matched = 0
+        for n in nodes:
+            props = n.properties or {}
+            if category and category.lower() not in (props.get("category") or "").lower():
                 continue
-        matched += 1
+            if year is not None:
+                ny = props.get("year")
+                if ny is None or str(ny) != str(year):
+                    continue
+            matched += 1
 
     return ToolResult(
         tool="count",
@@ -616,9 +626,11 @@ async def search_exact_tool(
             error="empty_identifier",
         )
 
-    nodes = await backend.list_nodes(kind=None, limit=100_000)
+    # Use search_fuzzy (LIKE '%identifier%') to push the scan into SQL
+    # instead of loading all nodes into Python memory.
+    candidates = await backend.search_fuzzy(identifier, limit=limit * 5)
     matches: list[Node] = []
-    for n in nodes:
+    for n in candidates:
         haystack = f"{n.title or ''}\n{n.content or ''}"
         if identifier in haystack:
             matches.append(n)

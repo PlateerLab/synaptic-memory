@@ -200,22 +200,35 @@ class SearchSession:
 
 
 class SessionStore:
-    """In-memory ``{session_id: SearchSession}`` map.
+    """In-memory ``{session_id: SearchSession}`` map with TTL eviction.
 
     Deliberately simple: a dict behind a couple of helper methods.
     Production deployments that need cross-process sessions can
     subclass this or write their own store with the same two
     methods — ``create`` and ``get`` — and pass it to the MCP server.
 
-    The store never evicts sessions automatically. Caller decides
-    when to call ``delete``; most agent sessions live for a single
-    conversation and are dropped when the process exits.
+    Sessions older than ``ttl_seconds`` are evicted lazily on
+    ``create`` / ``get_or_create`` calls — we don't run a background
+    thread. This prevents memory leaks on long-running MCP servers
+    where clients open sessions and never close them.
     """
 
-    __slots__ = ("_sessions",)
+    __slots__ = ("_sessions", "_ttl")
 
-    def __init__(self) -> None:
+    def __init__(self, *, ttl_seconds: float = 3600) -> None:
         self._sessions: dict[str, SearchSession] = {}
+        self._ttl = ttl_seconds
+
+    def _evict_expired(self) -> None:
+        """Drop sessions older than TTL. Called lazily on access."""
+        now = time.time()
+        expired = [
+            sid for sid, s in self._sessions.items()
+            if (now - s.created_at) > self._ttl
+        ]
+        for sid in expired:
+            del self._sessions[sid]
+            logger.debug("session-store: evicted expired session %s", sid)
 
     def create(
         self,
@@ -230,6 +243,7 @@ class SessionStore:
         using the same id across reconnects without accidentally
         resetting its own state.
         """
+        self._evict_expired()
         if session_id and session_id in self._sessions:
             return self._sessions[session_id]
         session = SearchSession(
@@ -251,6 +265,7 @@ class SessionStore:
         budget_tool_calls: int = 20,
     ) -> SearchSession:
         """Convenience method — get or make, never returns ``None``."""
+        self._evict_expired()
         if session_id:
             existing = self._sessions.get(session_id)
             if existing is not None:
