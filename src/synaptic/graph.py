@@ -439,11 +439,15 @@ class SynapticGraph:
         Supports:
         - ``sqlite:///path/to/db.sqlite``
         - ``postgresql://user:pass@host:port/dbname``
+        - ``mysql://user:pass@host:port/dbname``
+        - ``oracle://user:pass@host:port/service_name``
+        - ``mssql://connection_string``
 
         Example::
 
             graph = await SynapticGraph.from_database("sqlite:///shop.db")
             graph = await SynapticGraph.from_database("postgresql://user:pass@localhost/mydb")
+            graph = await SynapticGraph.from_database("mysql://root:pass@localhost/shop")
 
             result = await graph.search("high price products")
         """
@@ -465,8 +469,20 @@ class SynapticGraph:
             stats = await ingester.ingest_from_postgres(
                 connection_string, graph, tables=tables, row_limit=row_limit,
             )
+        elif connection_string.startswith("mysql") or connection_string.startswith("mariadb"):
+            stats = await ingester.ingest_from_mysql(
+                connection_string, graph, tables=tables, row_limit=row_limit,
+            )
+        elif connection_string.startswith("oracle"):
+            stats = await ingester.ingest_from_oracle(
+                connection_string, graph, tables=tables, row_limit=row_limit,
+            )
+        elif connection_string.startswith("mssql"):
+            stats = await ingester.ingest_from_mssql(
+                connection_string, graph, tables=tables, row_limit=row_limit,
+            )
         else:
-            msg = f"Unsupported database: {connection_string.split(':')[0]}. Use sqlite:// or postgresql://"
+            msg = f"Unsupported database: {connection_string.split(':')[0]}. Use sqlite://, postgresql://, mysql://, oracle://, mssql://"
             raise ValueError(msg)
 
         import logging
