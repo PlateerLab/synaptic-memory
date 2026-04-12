@@ -8,6 +8,8 @@ Any data in, structured graph out. LLM agents explore it with 29 atomic tools.
 [![Python](https://img.shields.io/pypi/pyversions/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+> [한국어 README](README.ko.md)
+
 ---
 
 ## 2 Lines to Start
