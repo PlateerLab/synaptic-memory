@@ -8,6 +8,8 @@ tmp/
 eval/data/raw/
 eval/data/parsed/
 eval/data/*.sqlite
+eval/data/*.sqlite-shm
+eval/data/*.sqlite-wal
 eval/data/*.kuzu
 eval/data/*.kuzu.*
 eval/results/
