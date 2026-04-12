@@ -344,9 +344,24 @@ async def run_public_dataset(cfg: DatasetConfig) -> RunResult:
 
 AGENT_SYSTEM = """\
 You are a research agent. Use the provided tools to answer the question.
-Prefer deep_search (one call = search + expand + read).
-For structured data: use filter_nodes, aggregate_nodes, join_related.
-Max 3 tool calls. Be efficient. Respond in the same language as the question.
+
+## Tool selection (pick the RIGHT one first time)
+- Text question → deep_search(query, category="relevant category from metadata")
+- Price/date/attribute filter → filter_nodes(table, property, op, value)
+- "how many per X" → aggregate_nodes(table, group_by)
+- "find related records" → join_related(from_value, fk_property, target_table)
+- Paraphrase/synonym issue → try deep_search with DIFFERENT keywords
+
+## Key rules
+- ALWAYS use category filter when you can identify the topic from metadata below
+- If first search fails, REPHRASE with official/formal terms (not casual language)
+- You can call MULTIPLE tools in ONE turn for efficiency
+- Max 5 tool calls total. Be efficient.
+- Respond in the same language as the question.
+
+## Example
+Q: "말 복지 향상 프로그램"
+→ deep_search(query="말 복지", category="복지 및 교육")  ← category from metadata
 """
 
 AGENT_TOOLS = [
@@ -597,7 +612,7 @@ def _parse_args():
     p.add_argument("--agent", action="store_true", help="Run multi-turn agent benchmark (requires OpenAI key)")
     p.add_argument("--openai-key", default=None, help="OpenAI API key (or set OPENAI_API_KEY env)")
     p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
-    p.add_argument("--agent-max-turns", type=int, default=3, help="Max turns per agent query")
+    p.add_argument("--agent-max-turns", type=int, default=5, help="Max turns per agent query")
     return p.parse_args()
 
 
