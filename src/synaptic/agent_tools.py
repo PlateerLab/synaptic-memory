@@ -137,17 +137,27 @@ def _budget_check(session: SearchSession, tool: str) -> ToolResult | None:
     return None
 
 
-def _node_to_summary(node: Node, *, content_preview_chars: int = 240) -> dict[str, Any]:
-    """Compact JSON projection of a Node.
+def _node_to_summary(
+    node: Node,
+    *,
+    content_preview_chars: int = 240,
+    query: str = "",
+) -> dict[str, Any]:
+    """Compact JSON projection of a Node with query-aware snippets.
 
-    The full node object would blow the LLM context on long chunks,
-    so we keep the first 240 chars of content by default — long enough
-    to judge relevance, short enough to fit 20+ results in a prompt.
+    When ``query`` is provided, extracts the most relevant fragment
+    from the content (the sentence containing the most query terms)
+    instead of a blind prefix. This gives the LLM better signal per
+    token — a 200-char snippet that actually matches the query is
+    worth more than 200 chars of document preamble.
     """
     content = node.content or ""
-    preview = content[:content_preview_chars]
-    if len(content) > content_preview_chars:
-        preview += "…"
+    if query and content:
+        preview = _extract_snippet(content, query, max_chars=content_preview_chars)
+    else:
+        preview = content[:content_preview_chars]
+        if len(content) > content_preview_chars:
+            preview += "…"
     return {
         "id": node.id,
         "kind": str(node.kind),
@@ -156,6 +166,51 @@ def _node_to_summary(node: Node, *, content_preview_chars: int = 240) -> dict[st
         "tags": list(node.tags or []),
         "properties": dict(node.properties or {}),
     }
+
+
+def _extract_snippet(content: str, query: str, *, max_chars: int = 240) -> str:
+    """Extract the most query-relevant fragment from content.
+
+    Splits content into sentences (by period/newline), scores each by
+    query term overlap, and returns the best window up to max_chars.
+    Falls back to prefix if no good match found.
+    """
+    import re
+
+    q_terms = set(query.lower().split())
+    if not q_terms:
+        return content[:max_chars]
+
+    # Split into rough sentences
+    sentences = re.split(r"[.。\n]+", content)
+    if not sentences:
+        return content[:max_chars]
+
+    # Score each sentence
+    scored = []
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        s_lower = s.lower()
+        overlap = sum(1 for t in q_terms if t in s_lower)
+        scored.append((s, overlap))
+
+    if not scored:
+        return content[:max_chars]
+
+    scored.sort(key=lambda x: -x[1])
+    best = scored[0]
+
+    if best[1] == 0:
+        # No term overlap — fall back to prefix
+        return content[:max_chars] + ("…" if len(content) > max_chars else "")
+
+    # Build snippet from best sentence + neighbors
+    snippet = best[0][:max_chars]
+    if len(best[0]) > max_chars:
+        snippet += "…"
+    return snippet
 
 
 # --- Tool 1: search ---
@@ -275,7 +330,7 @@ async def search_tool(
         data={
             "evidence": [
                 {
-                    **_node_to_summary(e.node),
+                    **_node_to_summary(e.node, query=query),
                     "score": round(e.score, 4),
                     "category": e.category,
                     "document_id": e.document_id,
@@ -399,22 +454,24 @@ async def get_document_tool(
     session: SearchSession,
     doc_id: str,
     *,
+    query: str = "",
     max_chunks: int = 50,
+    max_full_chunks: int = 5,
 ) -> ToolResult:
-    """Fetch a document node and its chunks in reading order.
+    """Fetch a document node and its chunks — smart context control.
 
-    Essential for "prove absence" and "read the full section" queries
-    — top-k chunks often lose surrounding context, and the agent
-    needs the complete body to commit to a conclusion.
+    When ``query`` is provided, chunks are scored by keyword overlap
+    and only the top ``max_full_chunks`` get full text. The rest are
+    returned as one-line summaries. This keeps context under ~2K tokens
+    instead of ~5K+ for a typical document.
+
+    Without ``query``, all chunks are returned in full (backward compat).
 
     Args:
-        doc_id: Logical document id — the same string the ingest
-            pipeline stashes in ``properties["doc_id"]``. The tool
-            handles both "raw doc_id" and "node_id" inputs so the
-            agent can pass either.
-        max_chunks: Safety fuse on how many chunks the tool is willing
-            to fetch. 50 is comfortable for KRRA-scale documents and
-            still fits in a typical LLM context window.
+        doc_id: Document id or node id.
+        query: Optional query for chunk relevance scoring.
+        max_chunks: Total chunks to fetch.
+        max_full_chunks: How many chunks get full text (rest = title only).
     """
     budget = _budget_check(session, "get_document")
     if budget is not None:
@@ -455,20 +512,48 @@ async def get_document_tool(
 
     session.mark_seen([doc_node.id, *[c.id for c in chunks]])
 
+    # Smart context: when query is provided, score chunks and return
+    # full text only for top-N most relevant. Rest get title-only.
+    chunk_data: list[dict] = []
+    if query and query.strip():
+        q_terms = set(query.lower().split())
+        scored_chunks = []
+        for c in chunks:
+            text_lower = (c.content or "").lower()
+            overlap = sum(1 for t in q_terms if t in text_lower)
+            scored_chunks.append((c, overlap))
+        scored_chunks.sort(key=lambda x: -x[1])
+
+        full_ids = {sc[0].id for sc in scored_chunks[:max_full_chunks]}
+        for c in chunks:  # preserve reading order
+            idx = (c.properties or {}).get("chunk_index", "")
+            if c.id in full_ids:
+                chunk_data.append({
+                    "id": c.id, "index": idx,
+                    "content": c.content, "relevant": True,
+                })
+            else:
+                # Title-only summary — saves ~90% context
+                chunk_data.append({
+                    "id": c.id, "index": idx,
+                    "summary": (c.content or "")[:80] + "…",
+                })
+    else:
+        for c in chunks:
+            chunk_data.append({
+                "id": c.id,
+                "index": (c.properties or {}).get("chunk_index", ""),
+                "content": c.content,
+            })
+
     return ToolResult(
         tool="get_document",
         ok=True,
         data={
             "document": _node_to_summary(doc_node, content_preview_chars=400),
             "chunk_count": len(chunks),
-            "chunks": [
-                {
-                    "id": c.id,
-                    "index": (c.properties or {}).get("chunk_index", ""),
-                    "content": c.content,
-                }
-                for c in chunks
-            ],
+            "full_chunks": sum(1 for c in chunk_data if "content" in c),
+            "chunks": chunk_data,
         },
         hints=[],
         session=session.summary(),

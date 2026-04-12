@@ -796,24 +796,25 @@ async def agent_expand(
 async def agent_get_document(
     doc_id: str,
     session_id: str = "",
+    query: str = "",
     max_chunks: int = 50,
 ) -> dict[str, Any]:
-    """Fetch a full document and all of its chunks in reading order.
+    """Fetch a document with smart context control.
 
-    Essential for proving absence ("is there really no refund exception
-    clause?") and for any question that needs the full surrounding
-    context, not just the top-k matched chunks.
+    When ``query`` is provided, only the most relevant chunks get full
+    text (default 5). The rest are returned as one-line summaries. This
+    keeps context under ~2K tokens instead of ~5K+ for a typical doc.
 
     Args:
-        doc_id: Document id — either the raw ``doc_id`` from a chunk's
-            properties, or the document node's own id.
+        doc_id: Document id or node id.
         session_id: Session to continue.
-        max_chunks: Safety fuse on how many chunks to fetch.
+        query: Optional query for chunk relevance scoring.
+        max_chunks: Total chunks to fetch.
     """
     backend = await _ensure_backend()
     session = await _session(session_id)
     result = await get_document_tool(
-        backend, session, doc_id, max_chunks=max_chunks
+        backend, session, doc_id, query=query, max_chunks=max_chunks
     )
     return result.to_dict()
 
