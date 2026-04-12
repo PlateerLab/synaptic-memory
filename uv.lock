@@ -990,6 +990,35 @@ wheels = [
 ]
 
 [[package]]
+name = "kiwipiepy"
+version = "0.23.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "kiwipiepy-model" },
+    { name = "numpy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/af/c5/1bff0a4dafb385e733903f5ba8d5b959ad26e85355474803b31e38984893/kiwipiepy-0.23.1.tar.gz", hash = "sha256:6800e64eefe09c9f00c08802a2facba7a84b6f2d8d32d3f5c811a29b451753d0", size = 2463805 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/64/41f46ae58077b7c9508462b44539e477db90492b9da26757b6486bfde6a2/kiwipiepy-0.23.1-cp314-cp314t-macosx_10_15_x86_64.whl", hash = "sha256:d9c088627153475b4192836ccada3f2684e6dd9e52d8c131b76defe946c2d159", size = 9685295 },
+    { url = "https://files.pythonhosted.org/packages/c2/41/61e97128861ec51ad2b0be7d9b4441d53e2693802003aad908d534d06bcf/kiwipiepy-0.23.1-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:3d8467f9f4e79f130af79ae74fb7cd38316c2443a345c90b5c1fd68d719dc207", size = 4119399 },
+    { url = "https://files.pythonhosted.org/packages/77/bd/8ca94308b78178c1d43dad6d235333b68f7656241b96f34dca404f0fcc7b/kiwipiepy-0.23.1-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:91f066cbb3edcfcb773eb3f2007d397908756ce584a37a452830ad466863a458", size = 3420625 },
+    { url = "https://files.pythonhosted.org/packages/bc/5a/3cee87f74075386f6725f0db88d139ab4d36a0931f6d11af7a822b5c0d42/kiwipiepy-0.23.1-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:28964cd73f50be09137ab09d48b4c6c5d42c7f23b6bdbe6e4afdb1057c4e0e76", size = 6321479 },
+    { url = "https://files.pythonhosted.org/packages/d2/f1/59792a520600655ad3d6224e6dfa4dcc8aacaf948a1ad2d732dd04d8304f/kiwipiepy-0.23.1-cp314-cp314t-win_amd64.whl", hash = "sha256:ead54b784fd2f08a559c03abf238e0046380b5dc5cda28b4020d6e73161fb58e", size = 2743658 },
+    { url = "https://files.pythonhosted.org/packages/13/23/007a36c0f886f74e2b2d8e9857ef5b48fe11ab3b3ce11bcb4f45a8d3ebf1/kiwipiepy-0.23.1-cp39-abi3-macosx_10_14_x86_64.whl", hash = "sha256:bfd652e20874df476d5a1c890a6f7f0f4d9cbff4f7135cd80fb814c2cf4c0144", size = 9672749 },
+    { url = "https://files.pythonhosted.org/packages/5c/d8/ff560db2e566b1cc917c89412c993c37aade81e47d08e5a30b153dafa459/kiwipiepy-0.23.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:6f8afa82ed41eed61fa1f443cd92dc08a08476159e583b3e3f96119bf10decc9", size = 4111268 },
+    { url = "https://files.pythonhosted.org/packages/15/4f/e12f062d2641dafc22f40aac2dc901fa377b8e8ab89a090abfc09abc2ff0/kiwipiepy-0.23.1-cp39-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:de9e85442848038914b0a77b995c1b21131b1ac7ffba461e4fb6549e292be278", size = 3419214 },
+    { url = "https://files.pythonhosted.org/packages/15/89/840542cce68b479b35efd8386c1300bbffacc49e98f64e9e2418ef7a4e3e/kiwipiepy-0.23.1-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:d9925c1a6e25b8fcadb064f70f72f4d809b6e88d1d09977b7dd5a7cf05169788", size = 6321162 },
+    { url = "https://files.pythonhosted.org/packages/a6/68/e0bec2d451d369dc00305b90304e624223d406a90d60ec02bf5c60373cba/kiwipiepy-0.23.1-cp39-abi3-win_amd64.whl", hash = "sha256:61ddc5bcd5ca728d85039e0c3b83ae5d6b4999188b7e170fa5ddb1adb0dce221", size = 2660314 },
+]
+
+[[package]]
+name = "kiwipiepy-model"
+version = "0.23.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/59/28403890c5f757254bf2068ff321fb3e656fb2e5658a3de8bfc092e4fd83/kiwipiepy_model-0.23.0.tar.gz", hash = "sha256:498a22f5585e6c4a162423d7557eb3ee3f71cddc6e0aeb2650c50467e85933e2", size = 87976912 }
+
+[[package]]
 name = "kuzu"
 version = "0.11.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2282,7 +2311,7 @@ wheels = [
 
 [[package]]
 name = "synaptic-memory"
-version = "0.11.0"
+version = "0.12.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
@@ -2309,6 +2338,9 @@ eval = [
     { name = "deepeval" },
     { name = "openai" },
     { name = "python-dotenv" },
+]
+korean = [
+    { name = "kiwipiepy" },
 ]
 kuzu = [
     { name = "kuzu" },
@@ -2356,6 +2388,7 @@ requires-dist = [
     { name = "asyncpg", marker = "extra == 'all'", specifier = ">=0.30" },
     { name = "asyncpg", marker = "extra == 'postgresql'", specifier = ">=0.30" },
     { name = "deepeval", marker = "extra == 'eval'", specifier = ">=2.0" },
+    { name = "kiwipiepy", marker = "extra == 'korean'", specifier = ">=0.20" },
     { name = "kuzu", marker = "extra == 'all'", specifier = ">=0.11.0" },
     { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.0" },
     { name = "kuzu", marker = "extra == 'scale'", specifier = ">=0.11.0" },
@@ -2378,7 +2411,7 @@ requires-dist = [
     { name = "spacy", marker = "extra == 'rag'", specifier = ">=3.7" },
     { name = "spacy", marker = "extra == 'spacy'", specifier = ">=3.7" },
 ]
-provides-extras = ["sqlite", "postgresql", "kuzu", "qdrant", "minio", "embedding", "spacy", "rag", "mcp", "scale", "all", "dev", "eval"]
+provides-extras = ["sqlite", "postgresql", "kuzu", "qdrant", "minio", "embedding", "spacy", "korean", "rag", "mcp", "scale", "all", "dev", "eval"]
 
 [[package]]
 name = "tabulate"
