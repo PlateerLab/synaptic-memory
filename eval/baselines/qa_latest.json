@@ -3,14 +3,14 @@
     "mrr": 0.9667,
     "p_at_k": 0.4982,
     "r_at_k": 0.8934,
-    "ndcg": 0.9008,
+    "ndcg": 0.9012,
     "corpus_size": 20
   },
   "KRRA Hard": {
-    "mrr": 0.5074,
-    "p_at_k": 0.1561,
-    "r_at_k": 0.6333,
-    "ndcg": 0.5038,
+    "mrr": 1.0,
+    "p_at_k": 0.6099,
+    "r_at_k": 0.2957,
+    "ndcg": 0.6312,
     "corpus_size": 15
   },
   "assort Easy": {
@@ -28,14 +28,14 @@
     "corpus_size": 15
   },
   "KRRA Hard (agent)": {
-    "mrr": 0.1333,
+    "mrr": 0.5333,
     "p_at_k": 0,
     "r_at_k": 0,
     "ndcg": 0,
     "corpus_size": 15
   },
   "assort Hard (agent)": {
-    "mrr": 0.0667,
+    "mrr": 0.0,
     "p_at_k": 0,
     "r_at_k": 0,
     "ndcg": 0,

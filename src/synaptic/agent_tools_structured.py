@@ -113,7 +113,7 @@ async def filter_nodes_tool(
     try:
         # Use the StorageBackend protocol (list_nodes + Python filter)
         # instead of raw SQL. Works with ANY backend, not just SQLite.
-        all_nodes = await backend.list_nodes(kind=None, limit=10_000)
+        all_nodes = await backend.list_nodes(kind=None, limit=200_000)
         nodes = []
         for n in all_nodes:
             props = n.properties or {}
@@ -210,7 +210,7 @@ async def aggregate_nodes_tool(
     group_path = f"$.{group_by}"
 
     try:
-        all_nodes = await backend.list_nodes(kind=None, limit=100_000)
+        all_nodes = await backend.list_nodes(kind=None, limit=200_000)
         buckets: dict[str, list[float]] = {}
         for n in all_nodes:
             props = n.properties or {}
@@ -299,7 +299,7 @@ async def join_related_tool(
         return budget
 
     try:
-        all_nodes = await backend.list_nodes(kind=None, limit=100_000)
+        all_nodes = await backend.list_nodes(kind=None, limit=200_000)
         nodes = []
         for n in all_nodes:
             props = n.properties or {}
