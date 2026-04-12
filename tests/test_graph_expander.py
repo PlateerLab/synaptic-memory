@@ -17,7 +17,6 @@ import pytest
 
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.graph_expander import (
-    ExpandedNode,
     ExpansionBudget,
     GraphExpander,
 )
@@ -29,7 +28,6 @@ from synaptic.models import (
     Node,
     NodeKind,
 )
-
 
 # --- Fixture helpers ---
 #

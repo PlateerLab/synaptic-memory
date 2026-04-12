@@ -106,13 +106,13 @@ class EvidenceSearch:
     """
 
     __slots__ = (
+        "_aggregator",
+        "_anchor_extractor",
         "_backend",
         "_embedder",
-        "_anchor_extractor",
         "_expander",
-        "_reranker",
-        "_aggregator",
         "_expansion_budget",
+        "_reranker",
     )
 
     def __init__(

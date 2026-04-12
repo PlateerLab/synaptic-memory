@@ -8,12 +8,11 @@ from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.domain_profile import DomainProfile
 from synaptic.extensions.entity_linker import (
     EntityLinker,
-    EntityLinkStats,
     _mention_edge_id,
     _phrase_hub_id,
 )
-from synaptic.extensions.phrase_extractor_ko import KoreanPhraseExtractor
 from synaptic.extensions.phrase_extractor_en import EnglishPhraseExtractor
+from synaptic.extensions.phrase_extractor_ko import KoreanPhraseExtractor
 from synaptic.models import ConsolidationLevel, EdgeKind, Node, NodeKind
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -21,7 +20,6 @@ from synaptic.extensions.profile_generator import (
     suggest_stopwords_by_frequency,
 )
 from synaptic.models import NodeKind
-
 
 # --- Locale detection ---
 

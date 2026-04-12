@@ -8,7 +8,6 @@ import unicodedata
 from collections.abc import Sequence
 from pathlib import Path
 
-
 # --- Korean FTS normalization ---
 #
 # Two tiers:
@@ -292,7 +291,7 @@ class SQLiteBackend:
             params.append(str(level))
         where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
         params.append(limit)
-        sql = f"SELECT * FROM syn_nodes{where} ORDER BY updated_at DESC LIMIT ?"  # noqa: S608
+        sql = f"SELECT * FROM syn_nodes{where} ORDER BY updated_at DESC LIMIT ?"
         async with db.execute(sql, params) as cur:
             rows = await cur.fetchall()
         return [_row_to_node(r) for r in rows]
@@ -343,7 +342,7 @@ class SQLiteBackend:
             return []
         db = self._db()
         placeholders = ",".join("?" for _ in node_ids)
-        sql = f"SELECT * FROM syn_nodes WHERE id IN ({placeholders})"  # noqa: S608
+        sql = f"SELECT * FROM syn_nodes WHERE id IN ({placeholders})"
         async with db.execute(sql, node_ids) as cur:
             rows = await cur.fetchall()
         return [_row_to_node(r) for r in rows]
@@ -371,7 +370,7 @@ class SQLiteBackend:
             clauses.append("properties_json LIKE ?")
             params.append(f'%"year": "{year}"%')
         where = " AND ".join(clauses) if clauses else "1=1"
-        sql = f"SELECT COUNT(*) FROM syn_nodes WHERE {where}"  # noqa: S608
+        sql = f"SELECT COUNT(*) FROM syn_nodes WHERE {where}"
         async with db.execute(sql, params) as cur:
             row = await cur.fetchone()
         return int(row[0]) if row else 0
@@ -433,7 +432,7 @@ class SQLiteBackend:
                 like = f"%{t}%"
                 params.extend([like, like])
             params.append(limit * 2)
-            like_sql = (  # noqa: S608
+            like_sql = (
                 f"SELECT * FROM syn_nodes WHERE {like_parts} LIMIT ?"
             )
             async with db.execute(like_sql, params) as cur:
@@ -471,7 +470,7 @@ class SQLiteBackend:
             like = f"%{t}%"
             params.extend([like, like])
         params.append(limit)
-        sql = f"SELECT * FROM syn_nodes WHERE {conditions} ORDER BY updated_at DESC LIMIT ?"  # noqa: S608
+        sql = f"SELECT * FROM syn_nodes WHERE {conditions} ORDER BY updated_at DESC LIMIT ?"
         async with db.execute(sql, params) as cur:
             rows = await cur.fetchall()
         return [_row_to_node(r) for r in rows]

@@ -45,7 +45,6 @@ from pathlib import Path
 
 from synaptic.models import NodeKind
 
-
 # --- Locale-default stopwords ---
 #
 # These are LANGUAGE-level stopwords — particles, pronouns, common

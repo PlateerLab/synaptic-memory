@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from synaptic.search_session import SearchSession, SessionStore
 
-
 # --- SearchSession basics ---
 
 

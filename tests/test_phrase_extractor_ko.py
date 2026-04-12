@@ -15,7 +15,6 @@ from synaptic.extensions.phrase_extractor_ko import (
 from synaptic.graph import SynapticGraph
 from synaptic.models import EdgeKind, NodeKind
 
-
 # ---------- Pure extraction (no graph) ----------
 
 

@@ -148,9 +148,9 @@ class QueryAnchorExtractor:
 
     __slots__ = (
         "_backend",
-        "_extractor",
         "_category_cache",
         "_category_cache_limit",
+        "_extractor",
         "_min_keyword_length",
     )
 

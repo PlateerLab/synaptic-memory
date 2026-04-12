@@ -88,7 +88,7 @@ class EntityLinker:
             node (prevents edge explosion on chunk-rich corpora).
     """
 
-    __slots__ = ("_extractor", "_profile", "_max_links_per_source")
+    __slots__ = ("_extractor", "_max_links_per_source", "_profile")
 
     def __init__(
         self,

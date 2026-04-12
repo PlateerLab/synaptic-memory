@@ -164,7 +164,7 @@ class OntologyClassifier:
             to reduce false positives on unclear labels.
     """
 
-    __slots__ = ("_embedder", "_descriptions", "_threshold", "_kind_vectors")
+    __slots__ = ("_descriptions", "_embedder", "_kind_vectors", "_threshold")
 
     def __init__(
         self,

@@ -679,7 +679,7 @@ async def ontology_query_schema(
 # old tools didn't support. Both APIs coexist — old tools for backward
 # compatibility, new tools for agentic use cases.
 
-from synaptic.agent_tools import (  # noqa: E402
+from synaptic.agent_tools import (
     count_tool,
     expand_tool,
     follow_tool,
@@ -688,7 +688,7 @@ from synaptic.agent_tools import (  # noqa: E402
     search_exact_tool,
     search_tool,
 )
-from synaptic.search_session import SessionStore  # noqa: E402
+from synaptic.search_session import SessionStore
 
 _session_store = SessionStore()
 

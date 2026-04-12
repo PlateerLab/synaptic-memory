@@ -234,7 +234,7 @@ class ProfileGenerator:
             again for bounded LLM input.
     """
 
-    __slots__ = ("_classifier", "_llm", "_max_samples", "_char_limit")
+    __slots__ = ("_char_limit", "_classifier", "_llm", "_max_samples")
 
     def __init__(
         self,

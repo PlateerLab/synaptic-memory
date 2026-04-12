@@ -18,7 +18,6 @@ from synaptic.extensions.ontology_classifier import (
 )
 from synaptic.models import NodeKind
 
-
 # --- Cosine helper ---
 
 

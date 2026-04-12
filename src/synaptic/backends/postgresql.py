@@ -231,7 +231,7 @@ class PostgreSQLBackend:
             idx += 1
         where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
         params.append(limit)
-        sql = f"SELECT * FROM syn_nodes{where} ORDER BY updated_at DESC LIMIT ${idx}"  # noqa: S608
+        sql = f"SELECT * FROM syn_nodes{where} ORDER BY updated_at DESC LIMIT ${idx}"
         rows = await pool.fetch(sql, *params)
         return [_row_to_node(r) for r in rows]
 
@@ -323,7 +323,7 @@ class PostgreSQLBackend:
             params.extend([like, like])
         limit_idx = len(params) + 1
         sql = (
-            f"SELECT * FROM syn_nodes WHERE {conditions}"  # noqa: S608
+            f"SELECT * FROM syn_nodes WHERE {conditions}"
             f" ORDER BY updated_at DESC LIMIT ${limit_idx}"
         )
         rows = await pool.fetch(sql, *params, limit)

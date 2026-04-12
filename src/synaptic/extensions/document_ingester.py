@@ -146,7 +146,7 @@ class JsonlDocumentSource:
     ``doc_id`` because they must be joined back to their parent.
     """
 
-    __slots__ = ("_docs_path", "_chunks_path")
+    __slots__ = ("_chunks_path", "_docs_path")
 
     def __init__(
         self,
@@ -286,7 +286,7 @@ class DocumentIngester:
           pass — that separation keeps extraction reruns cheap.
     """
 
-    __slots__ = ("_profile", "_backend", "_merge_strategy")
+    __slots__ = ("_backend", "_merge_strategy", "_profile")
 
     def __init__(
         self,

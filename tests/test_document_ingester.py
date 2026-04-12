@@ -15,7 +15,7 @@ from synaptic.extensions.document_ingester import (
     JsonlDocumentSource,
 )
 from synaptic.extensions.domain_profile import DomainProfile
-from synaptic.models import EdgeKind, NodeKind
+from synaptic.models import NodeKind
 
 
 def _sample_doc(

@@ -34,7 +34,6 @@ from synaptic.models import (
 )
 from synaptic.search_session import SearchSession
 
-
 # --- Shared fixture ---
 #
 # Two categories, two documents per category, two chunks per document.

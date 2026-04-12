@@ -97,7 +97,7 @@ class KoreanPhraseExtractor:
             passage (controls MENTIONS edge explosion).
     """
 
-    __slots__ = ("_profile", "_max_phrases", "_phrase_cache")
+    __slots__ = ("_max_phrases", "_phrase_cache", "_profile")
 
     def __init__(
         self,

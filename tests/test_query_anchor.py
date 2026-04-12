@@ -13,7 +13,6 @@ import pytest
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.query_anchor import (
     QueryAnchorExtractor,
-    QueryAnchors,
 )
 from synaptic.models import ConsolidationLevel, Node, NodeKind
 

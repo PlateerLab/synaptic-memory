@@ -54,14 +54,14 @@ PhraseExtractor = EnglishPhraseExtractor
 
 
 __all__ = [
-    "EnglishPhraseExtractor",
-    "PhraseExtractor",
-    "_STOP_WORDS",
     "_RE_ABBREVIATION",
     "_RE_KO_PARENS",
     "_RE_KO_QUOTED",
     "_RE_PROPER_NOUN",
     "_RE_SINGLE_PROPER",
+    "_STOP_WORDS",
+    "EnglishPhraseExtractor",
+    "PhraseExtractor",
     "_is_meaningful",
     "_normalize_phrase",
     "create_phrase_extractor",

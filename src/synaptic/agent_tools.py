@@ -40,7 +40,6 @@ from typing import TYPE_CHECKING, Any
 
 from synaptic.extensions.evidence_search import EvidenceSearch
 from synaptic.extensions.graph_expander import ExpansionBudget, GraphExpander
-from synaptic.extensions.query_anchor import QueryAnchorExtractor
 from synaptic.models import EdgeKind, Node, NodeKind
 from synaptic.search_session import SearchSession
 
