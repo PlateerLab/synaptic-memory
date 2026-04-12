@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS syn_nodes (
     failure_count INTEGER NOT NULL DEFAULT 0,
     source TEXT NOT NULL DEFAULT '',
     properties_json TEXT NOT NULL DEFAULT '{}',
+    embedding_json TEXT NOT NULL DEFAULT '[]',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -82,6 +83,10 @@ class SQLiteBackend:
             await self._conn.execute(
                 "ALTER TABLE syn_nodes ADD COLUMN properties_json TEXT NOT NULL DEFAULT '{}'"
             )
+        if "embedding_json" not in columns:
+            await self._conn.execute(
+                "ALTER TABLE syn_nodes ADD COLUMN embedding_json TEXT NOT NULL DEFAULT '[]'"
+            )
         await self._conn.commit()
 
     async def close(self) -> None:
@@ -101,16 +106,18 @@ class SQLiteBackend:
         db = self._db()
         title = unicodedata.normalize("NFC", node.title) if node.title else node.title
         content = unicodedata.normalize("NFC", node.content) if node.content else node.content
+        embedding_json = json.dumps(node.embedding) if node.embedding else "[]"
         await db.execute(
             """INSERT INTO syn_nodes
             (id, kind, title, content, tags_json, level, vitality,
              access_count, success_count, failure_count, source, properties_json,
-             created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             embedding_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title=excluded.title, content=excluded.content, tags_json=excluded.tags_json,
                 level=excluded.level, vitality=excluded.vitality,
-                properties_json=excluded.properties_json, updated_at=excluded.updated_at""",
+                properties_json=excluded.properties_json,
+                embedding_json=excluded.embedding_json, updated_at=excluded.updated_at""",
             (
                 node.id,
                 str(node.kind),
@@ -124,6 +131,7 @@ class SQLiteBackend:
                 node.failure_count,
                 node.source,
                 json.dumps(node.properties),
+                embedding_json,
                 node.created_at,
                 node.updated_at,
             ),
@@ -330,8 +338,34 @@ class SQLiteBackend:
         return [_row_to_node(r) for r in rows]
 
     async def search_vector(self, embedding: list[float], *, limit: int = 20) -> list[Node]:
-        # Vector search not available in SQLite — use PostgreSQL backend for vector support
-        return []
+        """Brute-force cosine similarity scan over stored embeddings.
+
+        SQLite has no native vector index, so we load all non-empty
+        embeddings, compute cosine in Python, and return the top-k.
+        Scales to ~50K nodes comfortably (~100ms on Apple Silicon);
+        beyond that, switch to Qdrant or PostgreSQL + pgvector.
+        """
+        if not embedding:
+            return []
+        db = self._db()
+        async with db.execute(
+            "SELECT * FROM syn_nodes WHERE embedding_json != '[]'"
+        ) as cur:
+            rows = await cur.fetchall()
+        if not rows:
+            return []
+
+        scored: list[tuple[Node, float]] = []
+        for r in rows:
+            node = _row_to_node(r)
+            if not node.embedding:
+                continue
+            sim = _cosine_sim(embedding, node.embedding)
+            if sim > 0:
+                scored.append((node, sim))
+
+        scored.sort(key=lambda x: -x[1])
+        return [n for n, _ in scored[:limit]]
 
     # --- Graph traversal (recursive CTE) ---
 
@@ -417,8 +451,22 @@ def _safe_node_kind(value: str) -> str | NodeKind:
         return value
 
 
+def _cosine_sim(a: list[float], b: list[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(x * x for x in b) ** 0.5
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
 def _row_to_node(row: aiosqlite.Row) -> Node:
-    props_raw = row["properties_json"] if "properties_json" in row.keys() else "{}"
+    keys = row.keys()
+    props_raw = row["properties_json"] if "properties_json" in keys else "{}"
+    emb_raw = row["embedding_json"] if "embedding_json" in keys else "[]"
+    emb = json.loads(emb_raw) if emb_raw and emb_raw != "[]" else []
     return Node(
         id=row["id"],
         kind=_safe_node_kind(row["kind"]),
@@ -426,6 +474,7 @@ def _row_to_node(row: aiosqlite.Row) -> Node:
         content=row["content"],
         tags=json.loads(row["tags_json"]),
         level=ConsolidationLevel(row["level"]),
+        embedding=emb,
         vitality=row["vitality"],
         access_count=row["access_count"],
         success_count=row["success_count"],
