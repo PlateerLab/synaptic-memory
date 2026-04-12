@@ -407,6 +407,69 @@ AGENT_TOOLS = [
 ]
 
 
+def _extract_ids(data: dict, found_ids: set[str]) -> None:
+    """Extract ALL possible document identifiers from any tool result.
+
+    Covers every tool's response structure:
+    - evidence[].document_id, evidence[].properties.doc_id, evidence[].title
+    - results[].properties.doc_id, results[].title
+    - merged_evidence[].document_id
+    - document_excerpts[].document.properties.doc_id
+    - sub_results[].top_result.document_id
+    - document.properties.doc_id (get_document)
+    - chunks[].properties (get_document)
+    - groups (aggregate — not ID-bearing, skip)
+    """
+    # Flat item lists
+    for key in ("evidence", "results", "merged_evidence", "matches",
+                "expanded_neighbours", "neighbours"):
+        for item in data.get(key, []):
+            # Direct document_id field (from EvidenceAggregator)
+            did = item.get("document_id", "")
+            if did:
+                found_ids.add(did)
+            # properties.doc_id
+            props = item.get("properties", {})
+            did2 = props.get("doc_id", "")
+            if did2:
+                found_ids.add(did2)
+            # title (for assort: "products:12800000")
+            title = item.get("title", "")
+            if title:
+                found_ids.add(title)
+
+    # document_excerpts (from deep_search)
+    for excerpt in data.get("document_excerpts", []):
+        doc = excerpt.get("document", {})
+        did = doc.get("properties", {}).get("doc_id", "")
+        if did:
+            found_ids.add(did)
+        title = doc.get("title", "")
+        if title:
+            found_ids.add(title)
+
+    # sub_results (from compare_search)
+    for sub in data.get("sub_results", []):
+        top = sub.get("top_result")
+        if isinstance(top, dict):
+            did = top.get("document_id", "")
+            if did:
+                found_ids.add(did)
+            props = top.get("properties", {})
+            did2 = props.get("doc_id", "")
+            if did2:
+                found_ids.add(did2)
+
+    # get_document response
+    doc_data = data.get("document", {})
+    if isinstance(doc_data, dict):
+        did = doc_data.get("properties", {}).get("doc_id", "")
+        if did:
+            found_ids.add(did)
+
+    # filter_nodes / join_related results already covered by "results" above
+
+
 async def _agent_dispatch(name, args, backend, session):
     """Route agent tool calls to synaptic tools."""
     from synaptic.agent_tools import (
@@ -424,13 +487,14 @@ async def _agent_dispatch(name, args, backend, session):
         r = await search_tool(backend, session, args.get("query", ""))
     elif name == "filter_nodes":
         r = await filter_nodes_tool(backend, session, table=args.get("table", ""),
-                                     property=args["property"], op=args["op"], value=args["value"])
+                                     property=args.get("property", ""), op=args.get("op", "contains"),
+                                     value=args.get("value", ""))
     elif name == "aggregate_nodes":
         r = await aggregate_nodes_tool(backend, session, table=args.get("table", ""),
-                                        group_by=args["group_by"], metric=args.get("metric", "count"))
+                                        group_by=args.get("group_by", ""), metric=args.get("metric", "count"))
     elif name == "join_related":
-        r = await join_related_tool(backend, session, from_value=args["from_value"],
-                                     fk_property=args["fk_property"], target_table=args["target_table"])
+        r = await join_related_tool(backend, session, from_value=args.get("from_value", ""),
+                                     fk_property=args.get("fk_property", ""), target_table=args.get("target_table", ""))
     elif name == "get_document":
         r = await get_document_tool(backend, session, args["doc_id"],
                                     query=args.get("query", ""))
@@ -499,7 +563,8 @@ async def run_agent_benchmark(
                     model=model, messages=messages,
                     tools=AGENT_TOOLS, max_tokens=2048,
                 )
-            except Exception:
+            except Exception as exc:
+                print(f"    ⚠ API error: {exc}")
                 break
 
             msg = resp.choices[0].message
@@ -513,17 +578,9 @@ async def run_agent_benchmark(
                         fn_args = {}
                     result = await _agent_dispatch(fn, fn_args, backend, session)
                     total_calls += 1
-                    # Extract doc_ids from result
+                    # Extract ALL possible identifiers from result
                     data = result.get("data", {})
-                    for key in ("evidence", "results", "merged_evidence"):
-                        for item in data.get(key, []):
-                            props = item.get("properties", {})
-                            did = props.get("doc_id", "")
-                            if did:
-                                found_ids.add(did)
-                            title = item.get("title", "")
-                            if title:
-                                found_ids.add(title)
+                    _extract_ids(data, found_ids)
                     messages.append({
                         "role": "tool", "tool_call_id": tc.id,
                         "content": json.dumps(result, ensure_ascii=False)[:5000],
@@ -532,8 +589,14 @@ async def run_agent_benchmark(
                 break
 
         total_turns += turns_used
-        if found_ids & relevant:
+        hit = bool(found_ids & relevant)
+        if hit:
             solved += 1
+        # Debug: show progress per query
+        if not hit and found_ids:
+            print(f"      [{q.get('qid','')}] turns={turns_used} found={len(found_ids)} hit=False | relevant={relevant} | sample_found={list(found_ids)[:3]}")
+        else:
+            print(f"      [{q.get('qid','')}] turns={turns_used} found={len(found_ids)} hit={hit}")
 
     elapsed = time.time() - t0
     await backend.close()

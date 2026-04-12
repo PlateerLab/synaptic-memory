@@ -3,94 +3,180 @@
   "description": "난이도별 평가 쿼리 — L2(패러프레이즈) ~ L7(자연어). 실제 doc_id 기반 GT.",
   "queries": [
     {
-      "qid": "h001", "level": "L2", "type": "paraphrase",
+      "qid": "h001",
+      "level": "L2",
+      "type": "paraphrase",
       "query": "말 복지 향상을 위한 프로그램",
       "description": "재활힐링승마를 직접 언급하지 않고 의미로 검색",
-      "relevant_docs": ["9293b657686b140c"]
+      "relevant_docs": [
+        "bcff71048974d2a4",
+        "5dcccad8d715ad0a",
+        "210e0e2db641965a",
+        "7ae8ccc6d06c98fe",
+        "75f6189810773545",
+        "e78c525765ace31f",
+        "958436040ccb12c4",
+        "c8a9113b5450f0b2",
+        "de08827cf2920b82",
+        "ae69bf434db74361",
+        "4c2beab48a4fa8ba",
+        "844757da66c84d87",
+        "9293b657686b140c",
+        "9514b536fd811889",
+        "aa657b52b34132e2",
+        "4cb0ece55fc920e7",
+        "f34ac7fb8cde8817",
+        "d3ab6e9ee63de321",
+        "68cce13d7f922981"
+      ]
     },
     {
-      "qid": "h002", "level": "L2", "type": "paraphrase",
+      "qid": "h002",
+      "level": "L2",
+      "type": "paraphrase",
       "query": "직원들의 역량 강화 교육 방안",
       "description": "인재개발 기본계획을 다른 표현으로",
-      "relevant_docs": ["790f2015dc65b6e1", "33ad8cb9e391ffb3"]
+      "relevant_docs": [
+        "790f2015dc65b6e1",
+        "33ad8cb9e391ffb3"
+      ]
     },
     {
-      "qid": "h003", "level": "L2", "type": "paraphrase",
+      "qid": "h003",
+      "level": "L2",
+      "type": "paraphrase",
       "query": "공공기관 탄소 배출 줄이기 전략",
       "description": "온실가스 감축을 paraphrase",
-      "relevant_docs": ["8ff32e537262bfa2", "d986946925263cee"]
+      "relevant_docs": [
+        "8ff32e537262bfa2",
+        "d986946925263cee"
+      ]
     },
     {
-      "qid": "h004", "level": "L3", "type": "cross_document",
+      "qid": "h004",
+      "level": "L3",
+      "type": "cross_document",
       "query": "인권경영 지침이 예산 편성에 어떻게 반영되나",
       "description": "인권경영(RULE) + 예산집행지침(DECISION) 교차",
-      "relevant_docs": ["436d43261922a8da", "d4d20ca93dfcd728"]
+      "relevant_docs": [
+        "436d43261922a8da",
+        "d4d20ca93dfcd728"
+      ]
     },
     {
-      "qid": "h005", "level": "L3", "type": "cross_document",
+      "qid": "h005",
+      "level": "L3",
+      "type": "cross_document",
       "query": "경주마 교배 실적과 생산 현황의 관계",
       "description": "교배실적 + 생산실적 두 문서 교차",
-      "relevant_docs": ["2b77cb92e3b2e52e", "481cdea45e2aa69d"]
+      "relevant_docs": [
+        "2b77cb92e3b2e52e",
+        "481cdea45e2aa69d"
+      ]
     },
     {
-      "qid": "h006", "level": "L3", "type": "cross_document",
+      "qid": "h006",
+      "level": "L3",
+      "type": "cross_document",
       "query": "스마트 사무환경 구축에 필요한 정보화기기 목록",
       "description": "망분리 개선 + 정보화기기 교체 교차",
-      "relevant_docs": ["afd0f60cc9c978c0", "e4f72caaf5619284"]
+      "relevant_docs": [
+        "afd0f60cc9c978c0",
+        "e4f72caaf5619284"
+      ]
     },
     {
-      "qid": "h007", "level": "L4", "type": "temporal",
+      "qid": "h007",
+      "level": "L4",
+      "type": "temporal",
       "query": "2022년과 2023년 경주마 레이팅 변화",
       "description": "연도별 비교 — 두 연도 문서 모두 찾아야",
-      "relevant_docs": ["110f8ff7eb5dbdc1", "929899bce4b8ff3e"]
+      "relevant_docs": [
+        "110f8ff7eb5dbdc1",
+        "929899bce4b8ff3e"
+      ]
     },
     {
-      "qid": "h008", "level": "L4", "type": "temporal",
+      "qid": "h008",
+      "level": "L4",
+      "type": "temporal",
       "query": "가장 최근 연도의 재물조사 결과",
       "description": "최신 버전 찾기",
-      "relevant_docs": ["c8ed7811592eac64", "59854a9e60c7d3ab"]
+      "relevant_docs": [
+        "c8ed7811592eac64",
+        "59854a9e60c7d3ab"
+      ]
     },
     {
-      "qid": "h009", "level": "L5", "type": "specific_clause",
+      "qid": "h009",
+      "level": "L5",
+      "type": "specific_clause",
       "query": "예산전용 세부내역",
       "description": "붙임 문서의 구체적 내용",
-      "relevant_docs": ["8390d154aeb39727"]
+      "relevant_docs": [
+        "8390d154aeb39727"
+      ]
     },
     {
-      "qid": "h010", "level": "L5", "type": "specific_clause",
+      "qid": "h010",
+      "level": "L5",
+      "type": "specific_clause",
       "query": "사업별 조직별 예산 구조 상세",
       "description": "붙임 별첨 문서 정밀 검색",
-      "relevant_docs": ["a4ed66c59a820e40"]
+      "relevant_docs": [
+        "a4ed66c59a820e40"
+      ]
     },
     {
-      "qid": "h011", "level": "L6", "type": "absence",
+      "qid": "h011",
+      "level": "L6",
+      "type": "absence",
       "query": "마주 경제적기준에 2020년 이전 데이터가 포함되어 있는가",
       "description": "특정 연도 범위 존재 여부 확인",
-      "relevant_docs": ["157016074626f25d"]
+      "relevant_docs": [
+        "157016074626f25d"
+      ]
     },
     {
-      "qid": "h012", "level": "L6", "type": "exhaustive",
+      "qid": "h012",
+      "level": "L6",
+      "type": "exhaustive",
       "query": "이용자보호와 관련된 모든 문서 목록",
       "description": "관련 문서 전수 열거",
-      "relevant_docs": ["d4d20ca93dfcd728", "5d0dd8502b5a0cb8"]
+      "relevant_docs": [
+        "d4d20ca93dfcd728",
+        "5d0dd8502b5a0cb8"
+      ]
     },
     {
-      "qid": "h013", "level": "L7", "type": "conversational",
+      "qid": "h013",
+      "level": "L7",
+      "type": "conversational",
       "query": "경마장에서 일하다가 인권 침해를 당하면 어디에 신고해야 하나요?",
       "description": "자연어 대화체, 인권침해 구제절차 매뉴얼 찾아야",
-      "relevant_docs": ["0cf478ddca6e92d5"]
+      "relevant_docs": [
+        "0cf478ddca6e92d5"
+      ]
     },
     {
-      "qid": "h014", "level": "L7", "type": "conversational",
+      "qid": "h014",
+      "level": "L7",
+      "type": "conversational",
       "query": "올해 승마 체험 행사를 기획하려는데 작년에 어떻게 했는지 참고할 자료 있나요?",
       "description": "도심승마체험 시행계획을 자연어로",
-      "relevant_docs": ["5751364a07bd6432"]
+      "relevant_docs": [
+        "5751364a07bd6432"
+      ]
     },
     {
-      "qid": "h015", "level": "L7", "type": "conversational",
+      "qid": "h015",
+      "level": "L7",
+      "type": "conversational",
       "query": "우리 회사 윤리경영 점수가 어떻게 되는지 보고서 좀 찾아줘",
       "description": "윤리경영 기본계획을 비공식 표현으로",
-      "relevant_docs": ["b1b444823f464103"]
+      "relevant_docs": [
+        "b1b444823f464103"
+      ]
     }
   ]
 }
