@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -336,6 +337,201 @@ async def run_public_dataset(cfg: DatasetConfig) -> RunResult:
     )
 
 
+# --- Multi-turn Agent Benchmark ---
+
+AGENT_SYSTEM = """\
+You are a research agent. Use the provided tools to answer the question.
+Prefer deep_search (one call = search + expand + read).
+For structured data: use filter_nodes, aggregate_nodes, join_related.
+Max 3 tool calls. Be efficient. Respond in the same language as the question.
+"""
+
+AGENT_TOOLS = [
+    {"type": "function", "function": {"name": "deep_search",
+        "description": "Search + expand + read in ONE call.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "category": {"type": "string"},
+        }, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "search",
+        "description": "Basic text search.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+        }, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "filter_nodes",
+        "description": "Filter by property. Operators: >=, <=, contains.",
+        "parameters": {"type": "object", "properties": {
+            "table": {"type": "string"},
+            "property": {"type": "string"},
+            "op": {"type": "string"},
+            "value": {"type": "string"},
+        }, "required": ["property", "op", "value"]}}},
+    {"type": "function", "function": {"name": "aggregate_nodes",
+        "description": "GROUP BY + COUNT/SUM.",
+        "parameters": {"type": "object", "properties": {
+            "table": {"type": "string"},
+            "group_by": {"type": "string"},
+            "metric": {"type": "string", "default": "count"},
+        }, "required": ["group_by"]}}},
+    {"type": "function", "function": {"name": "join_related",
+        "description": "FK lookup — find related records.",
+        "parameters": {"type": "object", "properties": {
+            "from_value": {"type": "string"},
+            "fk_property": {"type": "string"},
+            "target_table": {"type": "string"},
+        }, "required": ["from_value", "fk_property", "target_table"]}}},
+    {"type": "function", "function": {"name": "get_document",
+        "description": "Read a full document.",
+        "parameters": {"type": "object", "properties": {
+            "doc_id": {"type": "string"},
+            "query": {"type": "string"},
+        }, "required": ["doc_id"]}}},
+]
+
+
+async def _agent_dispatch(name, args, backend, session):
+    """Route agent tool calls to synaptic tools."""
+    from synaptic.agent_tools import (
+        get_document_tool, search_tool,
+    )
+    from synaptic.agent_tools_v2 import deep_search_tool
+    from synaptic.agent_tools_structured import (
+        aggregate_nodes_tool, filter_nodes_tool, join_related_tool,
+    )
+
+    if name == "deep_search":
+        r = await deep_search_tool(backend, session, args.get("query", ""),
+                                   category=args.get("category"))
+    elif name == "search":
+        r = await search_tool(backend, session, args.get("query", ""))
+    elif name == "filter_nodes":
+        r = await filter_nodes_tool(backend, session, table=args.get("table", ""),
+                                     property=args["property"], op=args["op"], value=args["value"])
+    elif name == "aggregate_nodes":
+        r = await aggregate_nodes_tool(backend, session, table=args.get("table", ""),
+                                        group_by=args["group_by"], metric=args.get("metric", "count"))
+    elif name == "join_related":
+        r = await join_related_tool(backend, session, from_value=args["from_value"],
+                                     fk_property=args["fk_property"], target_table=args["target_table"])
+    elif name == "get_document":
+        r = await get_document_tool(backend, session, args["doc_id"],
+                                    query=args.get("query", ""))
+    else:
+        return {"error": f"unknown: {name}"}
+    return r.to_dict()
+
+
+async def run_agent_benchmark(
+    cfg: DatasetConfig,
+    api_key: str,
+    model: str = "gpt-4o-mini",
+    max_turns: int = 3,
+) -> RunResult:
+    """Run multi-turn agent on a custom dataset's hard queries."""
+    if not cfg.query_path or not cfg.query_path.exists():
+        return RunResult(name=cfg.name + " (agent)", error="queries not found")
+    if not cfg.path.exists():
+        return RunResult(name=cfg.name + " (agent)", error="graph not found")
+
+    import os
+    os.environ["OPENAI_API_KEY"] = api_key
+
+    from openai import AsyncOpenAI
+    from synaptic.backends.sqlite_graph import SqliteGraphBackend
+    from synaptic.search_session import SearchSession, build_graph_context
+
+    client = AsyncOpenAI()
+    backend = SqliteGraphBackend(str(cfg.path))
+    await backend.connect()
+
+    graph_ctx = await build_graph_context(backend)
+    system = AGENT_SYSTEM + "\n\n" + graph_ctx
+
+    with open(cfg.query_path, encoding="utf-8") as f:
+        gt = json.load(f)
+    queries = gt.get("queries", [])
+    id_field = gt.get("id_field", "doc_id")
+
+    solved = 0
+    total = 0
+    total_turns = 0
+    total_calls = 0
+    t0 = time.time()
+
+    for q in queries:
+        query_text = q.get("query", "")
+        relevant = set(q.get("relevant_docs", []))
+        if not relevant or not query_text:
+            continue
+        total += 1
+
+        session = SearchSession(budget_tool_calls=max_turns * 3)
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": query_text},
+        ]
+
+        found_ids: set[str] = set()
+        turns_used = 0
+
+        for turn in range(max_turns):
+            turns_used = turn + 1
+            try:
+                resp = await client.chat.completions.create(
+                    model=model, messages=messages,
+                    tools=AGENT_TOOLS, max_tokens=2048,
+                )
+            except Exception:
+                break
+
+            msg = resp.choices[0].message
+            if msg.tool_calls:
+                messages.append(msg.model_dump())
+                for tc in msg.tool_calls:
+                    fn = tc.function.name
+                    try:
+                        fn_args = json.loads(tc.function.arguments)
+                    except json.JSONDecodeError:
+                        fn_args = {}
+                    result = await _agent_dispatch(fn, fn_args, backend, session)
+                    total_calls += 1
+                    # Extract doc_ids from result
+                    data = result.get("data", {})
+                    for key in ("evidence", "results", "merged_evidence"):
+                        for item in data.get(key, []):
+                            props = item.get("properties", {})
+                            did = props.get("doc_id", "")
+                            if did:
+                                found_ids.add(did)
+                            title = item.get("title", "")
+                            if title:
+                                found_ids.add(title)
+                    messages.append({
+                        "role": "tool", "tool_call_id": tc.id,
+                        "content": json.dumps(result, ensure_ascii=False)[:5000],
+                    })
+            else:
+                break
+
+        total_turns += turns_used
+        if found_ids & relevant:
+            solved += 1
+
+    elapsed = time.time() - t0
+    await backend.close()
+
+    return RunResult(
+        name=cfg.name + " (agent)",
+        corpus_size=total,
+        mrr=solved / total if total > 0 else 0,
+        p_at_k=0,
+        r_at_k=0,
+        ndcg=0,
+        hit_rate=f"{solved}/{total}",
+        elapsed=elapsed,
+    )
+
+
 # --- Report ---
 
 def print_table(results: list[RunResult], baseline: dict | None = None):
@@ -394,6 +590,10 @@ def _parse_args():
     p.add_argument("--embed-url", default=None, help="Embedding API URL (enables vector cascade)")
     p.add_argument("--embed-model", default="qwen3-embedding:4b")
     p.add_argument("--reranker-url", default=None, help="TEI reranker URL (enables cross-encoder)")
+    p.add_argument("--agent", action="store_true", help="Run multi-turn agent benchmark (requires OpenAI key)")
+    p.add_argument("--openai-key", default=None, help="OpenAI API key (or set OPENAI_API_KEY env)")
+    p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
+    p.add_argument("--agent-max-turns", type=int, default=3, help="Max turns per agent query")
     return p.parse_args()
 
 
@@ -436,6 +636,30 @@ async def main():
         except Exception as exc:
             results.append(RunResult(name=cfg.name, error=str(exc)[:80]))
             print(f"❌ {exc}")
+
+    # Agent benchmark (optional, requires OpenAI key)
+    if args.agent:
+        api_key = args.openai_key or os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            print("  ⚠ --agent requires --openai-key or OPENAI_API_KEY env")
+        else:
+            agent_datasets = [d for d in CUSTOM_DATASETS if "Hard" in d.name]
+            for cfg in agent_datasets:
+                print(f"  {cfg.name} (agent, max {args.agent_max_turns} turns)...", end=" ", flush=True)
+                try:
+                    r = await run_agent_benchmark(
+                        cfg, api_key,
+                        model=args.agent_model,
+                        max_turns=args.agent_max_turns,
+                    )
+                    results.append(r)
+                    if r.error:
+                        print(f"❌ {r.error}")
+                    else:
+                        print(f"solved={r.hit_rate} ({r.elapsed:.1f}s)")
+                except Exception as exc:
+                    results.append(RunResult(name=cfg.name + " (agent)", error=str(exc)[:80]))
+                    print(f"❌ {exc}")
 
     print_table(results, baseline)
     save_results(results, args.save)
