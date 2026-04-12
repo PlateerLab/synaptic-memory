@@ -688,6 +688,10 @@ from synaptic.agent_tools import (
     search_exact_tool,
     search_tool,
 )
+from synaptic.agent_tools_v2 import (
+    compare_search_tool,
+    deep_search_tool,
+)
 from synaptic.search_session import SessionStore
 
 _session_store = SessionStore()
@@ -940,6 +944,53 @@ async def agent_session_info(session_id: str = "") -> dict[str, Any]:
         "ok": True,
         "session": session.summary(),
     }
+
+
+@server.tool()
+async def agent_deep_search(
+    query: str,
+    session_id: str = "",
+    limit: int = 5,
+    category: str = "",
+) -> dict[str, Any]:
+    """Deep search — search + expand + read documents in ONE call.
+
+    This is the recommended tool for most questions. It internally
+    chains search → expand → get_document so you get evidence,
+    neighbours, AND document excerpts in a single turn instead of 3-5.
+
+    Use ``category`` to narrow the search when you know the topic area.
+    """
+    backend = await _ensure_backend()
+    session = await _session(session_id)
+    result = await deep_search_tool(
+        backend, session, query,
+        limit=limit,
+        category=category or None,
+        embedder=_embedder,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_compare_search(
+    query: str,
+    session_id: str = "",
+) -> dict[str, Any]:
+    """Compare search — decompose multi-topic query and search in parallel.
+
+    For questions like "A와 B의 관계" or "X 및 Y 비교", this tool
+    automatically splits into sub-queries, searches each independently
+    (possibly with different category filters), and merges results.
+
+    One turn instead of 4-6 for cross-document questions.
+    """
+    backend = await _ensure_backend()
+    session = await _session(session_id)
+    result = await compare_search_tool(
+        backend, session, query, embedder=_embedder
+    )
+    return result.to_dict()
 
 
 def main() -> None:

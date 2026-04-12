@@ -47,6 +47,10 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from synaptic.agent_tools_v2 import (  # noqa: E402
+    compare_search_tool,
+    deep_search_tool,
+)
 from synaptic.agent_tools import (  # noqa: E402
     count_tool,
     expand_tool,
@@ -57,7 +61,7 @@ from synaptic.agent_tools import (  # noqa: E402
     search_tool,
 )
 from synaptic.backends.sqlite_graph import SqliteGraphBackend  # noqa: E402
-from synaptic.search_session import SearchSession  # noqa: E402
+from synaptic.search_session import SearchSession, build_graph_context  # noqa: E402
 
 
 # --- Anthropic tool schemas ---------------------------------------------------
@@ -250,6 +254,43 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["node_id", "edge_kind"],
         },
     },
+    {
+        "name": "deep_search",
+        "description": (
+            "RECOMMENDED for most questions. Searches, expands top hits, "
+            "and reads relevant document chunks — all in ONE call. "
+            "Returns evidence + expanded neighbours + document excerpts. "
+            "Use this instead of calling search → expand → get_document "
+            "separately. Set 'category' to narrow results."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "default": 5},
+                "category": {
+                    "type": "string",
+                    "description": "Category filter from graph metadata.",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "compare_search",
+        "description": (
+            "For multi-topic questions like 'A와 B의 관계' or 'X 및 Y'. "
+            "Automatically decomposes into sub-queries, searches each "
+            "in parallel, and merges results. One call instead of 4-6."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 
@@ -315,6 +356,17 @@ async def dispatch_tool(
             direction=tool_input.get("direction", "both"),
             limit=int(tool_input.get("limit", 20)),
         )
+    elif tool_name == "deep_search":
+        result = await deep_search_tool(
+            backend, session,
+            tool_input["query"],
+            limit=int(tool_input.get("limit", 5)),
+            category=tool_input.get("category") or None,
+        )
+    elif tool_name == "compare_search":
+        result = await compare_search_tool(
+            backend, session, tool_input["query"],
+        )
     else:
         return {"ok": False, "error": f"unknown_tool: {tool_name}"}
 
@@ -344,27 +396,25 @@ Category → Document → Chunk. Your job is to answer the user's question
 by iteratively calling the provided tools. You must not guess — every
 claim in your final answer should be grounded in a tool result.
 
-## Search strategy (follow this order)
+## Preferred tools (use these first)
 
-### Pass 1: Direct search
-1. Call `search` with the user's query keywords.
-2. If results are relevant → done, answer.
+- ``deep_search(query, category?)`` — BEST for most questions.
+  Internally chains search → expand → get_document in ONE call.
+  Returns evidence + neighbours + document excerpts.
+- ``compare_search(query)`` — for multi-topic questions ("A와 B의 관계").
+  Auto-decomposes and searches in parallel.
 
-### Pass 2: Category-guided search (if Pass 1 fails or is insufficient)
-3. Call `list_categories` to see what topics exist.
-4. Identify which category(ies) the question relates to.
-5. Call `search` again with `category` filter set to the relevant category.
-6. Try alternative keywords — the user's phrasing may differ from
-   document titles. Rephrase: use synonyms, official terms, shorter keywords.
+Only fall back to atomic tools (search, expand, get_document) when
+deep_search doesn't return what you need.
 
-### Pass 3: Graph expansion (if Pass 2 still insufficient)
-7. From the best result so far, call `expand` to find neighboring documents.
-8. Or call `follow(edge_kind="part_of")` to find sibling documents in
-   the same category.
+## Strategy
 
-### Pass 4: Deep read (for absence/detail questions)
-9. Call `get_document(query="...")` with the original query to read the
-   most relevant chunks of a specific document.
+1. Check the graph metadata below to pick the right category.
+2. Call ``deep_search(query, category=...)`` with category filter.
+3. If insufficient, try ``deep_search`` with rephrased query or
+   different category.
+4. For comparison/cross-document: use ``compare_search``.
+5. Maximum 3 tool calls per question. Be efficient.
 
 ## Key principles
 - ALWAYS try rephrasing before giving up. If "말 복지" returns nothing,
@@ -396,7 +446,14 @@ async def run_agent(
 ) -> AgentRun:
     """Run one multi-turn Claude conversation over the graph tools."""
     run = AgentRun(query=question)
-    session = SearchSession(budget_tool_calls=max_turns * 2)
+    session = SearchSession(budget_tool_calls=max_turns * 3)
+
+    # Inject graph metadata into system prompt so the agent doesn't
+    # need to call list_categories (saves 1-2 turns per session)
+    graph_ctx = await build_graph_context(backend)
+    full_system = SYSTEM_PROMPT
+    if graph_ctx:
+        full_system += "\n\n" + graph_ctx
 
     messages: list[dict[str, Any]] = [
         {"role": "user", "content": question},
@@ -416,7 +473,7 @@ async def run_agent(
                 response = await client.messages.create(
                     model=model,
                     max_tokens=4096,
-                    system=SYSTEM_PROMPT,
+                    system=full_system,
                     tools=TOOL_SCHEMAS,
                     messages=messages,
                 )

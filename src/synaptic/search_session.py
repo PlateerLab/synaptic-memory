@@ -199,6 +199,50 @@ class SearchSession:
         }
 
 
+async def build_graph_context(backend: object) -> str:
+    """Build a compact graph metadata string for system prompt injection.
+
+    Calling ``list_categories`` every session wastes 1-2 turns. This
+    function pre-builds the metadata once and injects it into the
+    system prompt so the agent already knows the graph structure.
+
+    Returns a string like:
+        [Graph metadata]
+        Categories (10): 규정 및 지침(235), 운영계획(315), ...
+        Total: 1,110 documents, 18,600 chunks
+        Node types: RULE, DECISION, OBSERVATION, ...
+    """
+    try:
+        from synaptic.models import EdgeKind, NodeKind
+
+        # Categories + doc counts
+        cats = await backend.list_nodes(kind=NodeKind.CONCEPT, limit=100)
+        cat_entries = []
+        for cat in cats:
+            if "category" not in (cat.tags or []):
+                continue
+            try:
+                edges = await backend.get_edges(cat.id, direction="incoming")
+                doc_count = sum(1 for e in edges if str(e.kind) == str(EdgeKind.PART_OF))
+            except Exception:
+                doc_count = 0
+            cat_entries.append(f"{cat.title}({doc_count})")
+
+        # Total counts
+        total_docs = await backend.count_nodes(kind=None)
+
+        lines = [
+            "[Graph metadata — use this instead of calling list_categories]",
+            f"Categories ({len(cat_entries)}): {', '.join(cat_entries)}",
+            f"Total nodes: {total_docs}",
+            "Use category names above as the 'category' parameter in search.",
+        ]
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning("build_graph_context failed: %s", exc)
+        return ""
+
+
 class SessionStore:
     """In-memory ``{session_id: SearchSession}`` map with TTL eviction.
 
