@@ -333,8 +333,16 @@ class KuzuBackend:
 
     # --- Search ---
 
-    async def _fetch_all_nodes(self, *, cap: int = 10_000) -> list[Node]:
-        """Return every node in the graph (used by shared Python scoring)."""
+    async def _fetch_all_nodes(self, *, cap: int = 1_000_000) -> list[Node]:
+        """Return every node in the graph (used by shared Python scoring).
+
+        The cap exists purely as a safety fuse for pathological corpora;
+        below it we want EVERY node scored so search recall is not silently
+        truncated. Dropping even a single candidate here becomes invisible
+        at the search layer — the missed node simply never appears in any
+        result. The previous 10,000 cap silently hid ~52% of nodes on
+        corpora above that threshold.
+        """
         result = await self._execute(
             "MATCH (n:Node) RETURN n.* LIMIT $limit",
             {"limit": int(cap)},

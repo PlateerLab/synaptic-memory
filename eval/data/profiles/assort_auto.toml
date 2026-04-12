@@ -1,0 +1,11 @@
+name = "assort_auto"
+locale = "ko"
+min_df = 3
+max_df_ratio = 0.3
+min_phrase_len = 3
+max_phrase_len = 20
+
+stopwords_extra = []
+metadata_strip_patterns = []
+reference_patterns = []
+entity_hint_patterns = []

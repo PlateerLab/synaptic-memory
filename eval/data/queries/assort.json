@@ -1,0 +1,98 @@
+{
+  "dataset": "assort",
+  "description": "패션 이커머스 정형 데이터 검색 GT (10 tables, ~13,900 nodes)",
+  "id_field": "node_title",
+  "note": "relevant_docs = 노드 title (table:pk 형식)",
+  "queries": [
+    {
+      "qid": "q001",
+      "query": "실크블렌드 가디건 상품 정보",
+      "description": "특정 상품명 검색 — 1개 정답",
+      "relevant_docs": ["products:12800000"]
+    },
+    {
+      "qid": "q002",
+      "query": "시폰 플리츠 롱 스커트",
+      "description": "동일 상품명 여러 시즌 — 복수 정답",
+      "relevant_docs": ["products:12800001", "products:12800007"]
+    },
+    {
+      "qid": "q003",
+      "query": "울 캐시미어 브이넥 니트",
+      "description": "소재+스타일 복합 검색",
+      "relevant_docs": ["products:12800004"]
+    },
+    {
+      "qid": "q004",
+      "query": "린넨 와이드 밴딩 슬랙스",
+      "description": "소재+디자인 검색",
+      "relevant_docs": ["products:12800009"]
+    },
+    {
+      "qid": "q005",
+      "query": "모달 레이스 트리밍 블라우스",
+      "description": "소재+디테일 검색",
+      "relevant_docs": ["products:12800005"]
+    },
+    {
+      "qid": "q006",
+      "query": "소라 색상 옵션",
+      "description": "색상 마스터 검색",
+      "relevant_docs": ["colors:1"]
+    },
+    {
+      "qid": "q007",
+      "query": "네이비 색상",
+      "description": "색상 검색",
+      "relevant_docs": ["colors:4"]
+    },
+    {
+      "qid": "q008",
+      "query": "55 사이즈",
+      "description": "사이즈 마스터 검색",
+      "relevant_docs": ["sizes:2"]
+    },
+    {
+      "qid": "q009",
+      "query": "입으면 날씬해 보여요 핏이 딱 맞아요",
+      "description": "리뷰 텍스트 검색",
+      "relevant_docs": ["reviews:259000003"]
+    },
+    {
+      "qid": "q010",
+      "query": "세탁해도 줄지 않고 마감이 깔끔해요",
+      "description": "리뷰 내용 직접 검색",
+      "relevant_docs": ["reviews:259000000"]
+    },
+    {
+      "qid": "q011",
+      "query": "엄마 선물로 구매했는데 너무 좋아하세요",
+      "description": "리뷰 내용 자연어 검색",
+      "relevant_docs": ["reviews:259000004"]
+    },
+    {
+      "qid": "q012",
+      "query": "LBL코리아 판매 파트너",
+      "description": "판매 파트너사 검색",
+      "relevant_docs": ["sales_partners:2"]
+    },
+    {
+      "qid": "q013",
+      "query": "OneTV MC 방송 채널",
+      "description": "판매 채널 검색",
+      "relevant_docs": ["sales_channels:1"]
+    },
+    {
+      "qid": "q014",
+      "query": "pgm_time 23:00-23:50 broadcast 12800000",
+      "description": "방송 시간+상품코드 속성 검색",
+      "relevant_docs": ["broadcasts:1"]
+    },
+    {
+      "qid": "q015",
+      "query": "데님 A라인 미디 스커트",
+      "description": "소재+디자인 복합 검색",
+      "relevant_docs": ["products:12800006"]
+    }
+  ]
+}

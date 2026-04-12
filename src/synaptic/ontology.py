@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 def _prop_list() -> list[PropertyDef]:
@@ -276,6 +278,44 @@ class OntologyRegistry:
                         )
                     )
         return registry
+
+    # --- TOML loader ---
+
+    @classmethod
+    def load(cls, path: Path | str) -> OntologyRegistry:
+        """Load a registry from a TOML file.
+
+        TOML schema uses array-of-tables for types and constraints::
+
+            [[types]]
+            name = "knowledge"
+            description = "Base type for all knowledge nodes"
+
+            [[types]]
+            name = "rule"
+            parent = "knowledge"
+            description = "Governing constraint or policy"
+
+            [[types.properties]]
+            name = "severity"
+            value_type = "str"
+            required = true
+            default = ""
+
+            [[constraints]]
+            edge_kind = "learned_from"
+            domain_types = ["lesson"]
+            range_types = ["outcome", "decision", "agent_activity"]
+
+        This is a thin wrapper around :meth:`from_dict` so the two
+        loaders share validation. Use ``load`` when your profile lives
+        next to a TOML config (``eval/data/profiles/``) or when you want
+        comments in your ontology; use ``from_dict`` when the registry
+        was serialized via :meth:`to_dict`.
+        """
+        with Path(path).open("rb") as f:
+            data = tomllib.load(f)
+        return cls.from_dict(data)
 
 
 def _check_type(name: str, value: str, expected: str) -> str:

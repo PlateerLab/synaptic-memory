@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -98,6 +99,8 @@ class SQLiteBackend:
 
     async def save_node(self, node: Node) -> None:
         db = self._db()
+        title = unicodedata.normalize("NFC", node.title) if node.title else node.title
+        content = unicodedata.normalize("NFC", node.content) if node.content else node.content
         await db.execute(
             """INSERT INTO syn_nodes
             (id, kind, title, content, tags_json, level, vitality,
@@ -111,8 +114,8 @@ class SQLiteBackend:
             (
                 node.id,
                 str(node.kind),
-                node.title,
-                node.content,
+                title,
+                content,
                 json.dumps(node.tags),
                 str(node.level),
                 node.vitality,
@@ -129,7 +132,7 @@ class SQLiteBackend:
         await db.execute("DELETE FROM syn_nodes_fts WHERE node_id = ?", (node.id,))
         await db.execute(
             "INSERT INTO syn_nodes_fts(node_id, title, content) VALUES (?, ?, ?)",
-            (node.id, node.title, node.content),
+            (node.id, title, content),
         )
         await db.commit()
 
@@ -143,14 +146,16 @@ class SQLiteBackend:
 
     async def update_node(self, node: Node) -> None:
         db = self._db()
+        title = unicodedata.normalize("NFC", node.title) if node.title else node.title
+        content = unicodedata.normalize("NFC", node.content) if node.content else node.content
         await db.execute(
             """UPDATE syn_nodes SET kind=?, title=?, content=?, tags_json=?, level=?,
             vitality=?, access_count=?, success_count=?, failure_count=?,
             source=?, properties_json=?, updated_at=? WHERE id=?""",
             (
                 str(node.kind),
-                node.title,
-                node.content,
+                title,
+                content,
                 json.dumps(node.tags),
                 str(node.level),
                 node.vitality,
@@ -167,7 +172,7 @@ class SQLiteBackend:
         await db.execute("DELETE FROM syn_nodes_fts WHERE node_id = ?", (node.id,))
         await db.execute(
             "INSERT INTO syn_nodes_fts(node_id, title, content) VALUES (?, ?, ?)",
-            (node.id, node.title, node.content),
+            (node.id, title, content),
         )
         await db.commit()
 
@@ -242,23 +247,68 @@ class SQLiteBackend:
 
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         db = self._db()
-        # Sanitize FTS query: wrap each term in quotes
         terms = query.strip().split()
         if not terms:
             return []
+
+        seen: dict[str, tuple[Node, float]] = {}
+
+        # Pass 1: FTS5 with title 3x boost.
+        # bm25(table, w0, w1, w2) — col0=node_id(0), col1=title(3.0), col2=content(1.0).
+        # FTS5 bm25 returns negative values; more negative = better match.
         fts_query = " OR ".join(f'"{t}"' for t in terms)
-        sql = """
-            SELECT n.* FROM syn_nodes_fts f
-            JOIN syn_nodes n ON n.id = f.node_id
+        fts_sql = """
+            SELECT n.*, bm25(syn_nodes_fts, 0, 3.0, 1.0) AS _bm25
+            FROM syn_nodes_fts
+            JOIN syn_nodes n ON n.id = syn_nodes_fts.node_id
             WHERE syn_nodes_fts MATCH ?
-            ORDER BY rank LIMIT ?
+            ORDER BY bm25(syn_nodes_fts, 0, 3.0, 1.0)
+            LIMIT ?
         """
         try:
-            async with db.execute(sql, (fts_query, limit)) as cur:
+            async with db.execute(fts_sql, (fts_query, limit * 2)) as cur:
                 rows = await cur.fetchall()
-            return [_row_to_node(r) for r in rows]
+            for r in rows:
+                node = _row_to_node(r)
+                bm25_val = r["_bm25"] or 0.0  # negative; lower = better
+                seen[node.id] = (node, bm25_val)
         except Exception:
-            return []
+            pass
+
+        # Pass 2: LIKE-based substring scan for terms FTS5 missed.
+        # Handles Korean compound words where tokenisation may not align.
+        if len(seen) < limit:
+            like_parts = " OR ".join(
+                "(title LIKE ? OR content LIKE ?)" for _ in terms
+            )
+            params: list[str | int] = []
+            for t in terms:
+                like = f"%{t}%"
+                params.extend([like, like])
+            params.append(limit * 2)
+            like_sql = (  # noqa: S608
+                f"SELECT * FROM syn_nodes WHERE {like_parts} LIMIT ?"
+            )
+            async with db.execute(like_sql, params) as cur:
+                rows2 = await cur.fetchall()
+            for r in rows2:
+                node = _row_to_node(r)
+                if node.id in seen:
+                    continue
+                title_lower = node.title.lower()
+                content_lower = node.content.lower()
+                sub = sum(
+                    3.0 if t.lower() in title_lower else 1.0
+                    for t in terms
+                    if t.lower() in title_lower or t.lower() in content_lower
+                )
+                if sub > 0:
+                    # Use large positive offset so substring hits sort after FTS5
+                    seen[node.id] = (node, 10000.0 - sub)
+
+        # Sort: FTS5 negatives first (ascending), then substring positives
+        ranked = sorted(seen.values(), key=lambda x: x[1])
+        return [n for n, _ in ranked[:limit]]
 
     async def search_fuzzy(
         self, query: str, *, limit: int = 20, threshold: float = 0.3

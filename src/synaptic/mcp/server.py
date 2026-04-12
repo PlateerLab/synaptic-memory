@@ -670,6 +670,266 @@ async def ontology_query_schema(
     }
 
 
+# --- Agent tool layer (v0.12) -----------------------------------------------
+#
+# The knowledge_* / agent_* tools above are the v0.5+ single-shot API. The
+# tools below are the v0.12 multi-turn agent layer: they share a
+# SearchSession so the LLM can explore the graph iteratively, paginate
+# through results, and ask structural questions (count, list, expand) the
+# old tools didn't support. Both APIs coexist — old tools for backward
+# compatibility, new tools for agentic use cases.
+
+from synaptic.agent_tools import (  # noqa: E402
+    count_tool,
+    expand_tool,
+    follow_tool,
+    get_document_tool,
+    list_categories_tool,
+    search_exact_tool,
+    search_tool,
+)
+from synaptic.search_session import SessionStore  # noqa: E402
+
+_session_store = SessionStore()
+
+
+async def _session(session_id: str | None) -> Any:
+    """Resolve (or create) a SearchSession from an agent-supplied id.
+
+    MCP tool calls come in with a session id as a plain string, so we
+    delegate to the store and let it handle both "new session" and
+    "continue existing session" in one call.
+    """
+    return _session_store.get_or_create(session_id=session_id or None)
+
+
+@server.tool()
+async def agent_search(
+    query: str,
+    session_id: str = "",
+    limit: int = 10,
+    category: str = "",
+    kind: str = "",
+    exclude_seen: bool = True,
+) -> dict[str, Any]:
+    """Multi-turn search — finds evidence for a natural-language query.
+
+    This is the primary agent entry point. It runs the 3rd-generation
+    retrieval pipeline (anchor extraction → graph expansion → hybrid
+    rerank → evidence aggregation) and returns a compact evidence list
+    plus follow-up hints.
+
+    The agent is expected to call this tool iteratively: read the
+    evidence, decide whether to refine the query, narrow by category,
+    or dive into a specific document with ``agent_get_document``, and
+    call again. The ``session_id`` threads state across calls so
+    already-seen nodes are filtered out automatically.
+
+    Args:
+        query: Natural-language query. Korean or English both work.
+        session_id: Session to continue. Omit to start a fresh session
+            (a new id will be returned in the response).
+        limit: Max evidence items per call. 5-12 is the typical range.
+        category: Optional category label filter ("규정 및 지침" etc.).
+        kind: Optional NodeKind filter ("rule", "chunk", ...).
+        exclude_seen: When True, results already returned in this
+            session are filtered out so the agent paginates.
+    """
+    await _ensure_graph()
+    session = await _session(session_id)
+    result = await search_tool(
+        _backend,
+        session,
+        query,
+        limit=limit,
+        category=category or None,
+        kind=kind or None,
+        exclude_seen=exclude_seen,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_expand(
+    node_id: str,
+    session_id: str = "",
+    limit: int = 10,
+    exclude_seen: bool = True,
+) -> dict[str, Any]:
+    """Walk one graph hop out from a specific node.
+
+    Use this when ``agent_search`` returned a promising result and you
+    want to see its neighbours — sibling chunks in the same document,
+    other documents in the same category, or the next chunk in a
+    sequence.
+
+    Args:
+        node_id: Id of the node to expand (from a previous tool result).
+        session_id: Session to continue.
+        limit: Max neighbours to return.
+        exclude_seen: Skip neighbours the agent has already seen.
+    """
+    await _ensure_graph()
+    session = await _session(session_id)
+    result = await expand_tool(
+        _backend,
+        session,
+        node_id,
+        limit=limit,
+        exclude_seen=exclude_seen,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_get_document(
+    doc_id: str,
+    session_id: str = "",
+    max_chunks: int = 50,
+) -> dict[str, Any]:
+    """Fetch a full document and all of its chunks in reading order.
+
+    Essential for proving absence ("is there really no refund exception
+    clause?") and for any question that needs the full surrounding
+    context, not just the top-k matched chunks.
+
+    Args:
+        doc_id: Document id — either the raw ``doc_id`` from a chunk's
+            properties, or the document node's own id.
+        session_id: Session to continue.
+        max_chunks: Safety fuse on how many chunks to fetch.
+    """
+    await _ensure_graph()
+    session = await _session(session_id)
+    result = await get_document_tool(
+        _backend, session, doc_id, max_chunks=max_chunks
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_list_categories(
+    session_id: str = "",
+    limit: int = 100,
+) -> dict[str, Any]:
+    """List all top-level categories in the knowledge graph.
+
+    Use this early in a session to build a mental map of what the
+    graph contains before searching. Each category comes with a
+    document count so the agent can judge where to look first.
+    """
+    await _ensure_graph()
+    session = await _session(session_id)
+    result = await list_categories_tool(_backend, session, limit=limit)
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_count(
+    session_id: str = "",
+    kind: str = "",
+    category: str = "",
+    year: int = 0,
+) -> dict[str, Any]:
+    """Count how many nodes match a filter without fetching them.
+
+    Use this to decide whether an "enumerate everything" question is
+    even feasible. If the count is small the agent can iterate; if it's
+    huge the agent needs a narrower filter first.
+
+    Args:
+        session_id: Session to continue.
+        kind: Optional NodeKind filter.
+        category: Optional category label filter.
+        year: Optional year filter. ``0`` means "no year filter".
+    """
+    await _ensure_graph()
+    session = await _session(session_id)
+    result = await count_tool(
+        _backend,
+        session,
+        kind=kind or None,
+        category=category or None,
+        year=year if year > 0 else None,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_search_exact(
+    identifier: str,
+    session_id: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Literal substring match for codes, IDs, or exact strings.
+
+    Use this when BM25 / FTS would dilute the search — e.g. error
+    codes ("E217"), SKUs ("SKU-1234"), function names, Jira keys,
+    or section numbers ("4.3.2"). Bypasses tokenisation entirely.
+
+    Args:
+        identifier: The exact string to search for.
+        session_id: Session to continue.
+        limit: Max matches to return.
+    """
+    await _ensure_graph()
+    session = await _session(session_id)
+    result = await search_exact_tool(_backend, session, identifier, limit=limit)
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_follow(
+    node_id: str,
+    edge_kind: str,
+    session_id: str = "",
+    direction: str = "both",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Walk a specific edge type from a starting node.
+
+    Surgical alternative to ``agent_expand`` when you know exactly
+    which relation you want to follow. Valid edge kinds include
+    ``contains``, ``part_of``, ``next_chunk``, ``mentions``,
+    ``related``, ``cites``.
+
+    Args:
+        node_id: Source node.
+        edge_kind: Edge kind to follow.
+        session_id: Session to continue.
+        direction: ``"outgoing"``, ``"incoming"``, or ``"both"``.
+        limit: Max neighbours to return.
+    """
+    await _ensure_graph()
+    session = await _session(session_id)
+    result = await follow_tool(
+        _backend,
+        session,
+        node_id,
+        edge_kind,
+        direction=direction,
+        limit=limit,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_session_info(session_id: str = "") -> dict[str, Any]:
+    """Inspect the current state of an agent session.
+
+    Returns how many tool calls have been used, budget remaining,
+    which categories have been explored, and the last few queries.
+    Use this when you want to reason about coverage or when you're
+    deciding whether to stop exploring and answer.
+    """
+    session = await _session(session_id)
+    return {
+        "tool": "session_info",
+        "ok": True,
+        "session": session.summary(),
+    }
+
+
 def main() -> None:
     """Entry point for synaptic-mcp command."""
     global _db_path, _dsn, _embed_url, _embed_model

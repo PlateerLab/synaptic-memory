@@ -1,0 +1,93 @@
+# KRRA (한국마사회) DomainProfile
+#
+# This profile is the only place in the repo that mentions KRRA-specific
+# terms (stopwords, metadata patterns, category → NodeKind mapping). Any
+# future corpus just needs its own profile TOML next to this one; the
+# ingester, entity linker, and eval scripts stay domain-agnostic.
+#
+# Loaded via:
+#
+#     DomainProfile.load("eval/data/profiles/krra.toml")
+#
+# The ontology_hints section doubles as the ingester's NodeKind
+# classifier — 운영계획 documents become DECISION nodes, 규정 및 지침
+# documents become RULE nodes, etc. This is what gives KRRA answers
+# ontology-grounded explanations (Phase F explainability story).
+
+name = "krra"
+locale = "ko"
+
+# Extraction tuning — calibrated to ~18,600 chunks across 10 categories
+min_df = 3
+max_df_ratio = 0.3
+min_phrase_len = 3
+max_phrase_len = 20
+
+# Domain stopwords layered on top of locale_default_stopwords("ko").
+# These are KRRA/metadata-schema specific. Keep the list narrow — general
+# Korean function words belong in the locale default, not here.
+stopwords_extra = [
+    # xgen-doc2chunk metadata schema bleed
+    "마지막",
+    "수정자",
+    "작성자",
+    "작성일",
+    "수정일",
+    "원천",
+    "기간",
+    "범위",
+    "산식",
+    "단위",
+    "분류번호",
+    "진단항목",
+    "점검기준",
+    "점검 기준",
+    # KRRA report boilerplate
+    "항목설명",
+    "추진체계",
+    "세부내역",
+    "단계별",
+]
+
+# Metadata blocks to strip BEFORE phrase extraction runs. Regex list.
+# Order matters only if patterns overlap; we use re.DOTALL so `.*?`
+# matches newlines. Tested on 300 real KRRA chunks — strips ~95% of
+# metadata pollution.
+metadata_strip_patterns = [
+    "<Document-Metadata>.*?</Document-Metadata>",
+]
+
+# Reference / citation patterns for future relation extraction (Phase F7).
+# Examples from KRRA docs: "예산지침에 따라", "이사회 결의에 의거"
+reference_patterns = [
+    "(.+?)에 따라",
+    "(.+?)에 의거",
+    "(.+?)을 근거로",
+    "(.+?)를 근거로",
+]
+
+# Optional extra entity patterns — enterprise/org name conventions.
+# `(주)X` corporate prefix, `(재)X` foundation prefix, etc.
+entity_hint_patterns = [
+    "\\((?:주|사|재|학|재단|사단)\\)([가-힣]+)",
+]
+
+# Category → NodeKind mapping.
+#
+# This is where "ontology as configuration" really pays off. The KRRA
+# folder structure uses these 10 Korean category names; each maps to a
+# NodeKind that the ingester applies to every document under that
+# category. Downstream search and explanation can then filter by kind
+# (e.g. "find me all RULEs about 인권영향평가") without any KRRA
+# knowledge in the library code.
+[ontology_hints]
+"규정 및 지침" = "RULE"
+"운영계획" = "DECISION"
+"조사 및 평가" = "OBSERVATION"
+"업무추진 및 실적" = "OUTCOME"
+"인권경영" = "RULE"
+"ESG 및 지속가능성" = "RULE"
+"복지 및 교육" = "DECISION"
+"경마산업관리" = "CONCEPT"
+"승마 행사 및 대회" = "CONCEPT"
+"정보기술 시스템" = "ARTIFACT"

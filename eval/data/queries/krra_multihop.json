@@ -1,0 +1,77 @@
+{
+  "dataset": "krra_multihop",
+  "description": "복합/교차 문서 검색 쿼리 — 3세대 파이프라인 검증용",
+  "note": "각 쿼리는 여러 카테고리 또는 여러 문서의 근거가 필요함. relevant_docs는 정답 doc_id 리스트.",
+  "queries": [
+    {
+      "qid": "m001",
+      "query": "인권경영 기본계획과 인권영향평가 결과를 종합하면 어떤 조치가 필요한가",
+      "description": "인권 계획(DECISION) + 영향평가(OBSERVATION) 교차",
+      "expected_categories": ["인권경영"],
+      "relevant_docs": ["7b891a6e2bfdb9a0", "d4e8e7e0de0bee24"]
+    },
+    {
+      "qid": "m002",
+      "query": "경마산업 운영계획 수립에서 윤리경영 기준이 어떻게 반영되는지",
+      "description": "운영계획(DECISION) + 윤리경영(RULE) 교차",
+      "expected_categories": ["운영계획", "인권경영"],
+      "relevant_docs": ["abf6b885cc56106c", "1d7a8c5b7cde9f12"]
+    },
+    {
+      "qid": "m003",
+      "query": "정보기술 시스템 구축과 관련된 예산 편성 및 집행지침",
+      "description": "정보기술(ARTIFACT) + 예산 지침(DECISION) 교차",
+      "expected_categories": ["정보기술 시스템", "운영계획"],
+      "relevant_docs": ["a3e51e3ccd5f7a45"]
+    },
+    {
+      "qid": "m004",
+      "query": "교배실적 현황과 경주마 국제 레이팅의 상관관계",
+      "description": "교배(OBSERVATION) + 레이팅(OBSERVATION) 동일 도메인 복합",
+      "expected_categories": ["조사 및 평가"],
+      "relevant_docs": ["b5c2f8e7a11b3290"]
+    },
+    {
+      "qid": "m005",
+      "query": "지사 방역관리와 고객입장 정책 개선 방안",
+      "description": "방역(RULE) + 고객 정책(DECISION) 교차",
+      "expected_categories": ["규정 및 지침", "운영계획"],
+      "relevant_docs": ["e2b4c1d7f5a3a908"]
+    },
+    {
+      "qid": "m006",
+      "query": "재활힐링승마 사업과 도심승마체험 시행계획의 공통점",
+      "description": "복수 사업 계획 비교",
+      "expected_categories": ["승마 행사 및 대회"],
+      "relevant_docs": ["f6a42e8c3b1d2f47", "9c3e7a1b5d6f8290"]
+    },
+    {
+      "qid": "m007",
+      "query": "인재개발 기본계획과 복지 교육 추진 현황을 연계한 방향",
+      "description": "인재(DECISION) + 복지교육(DECISION) 교차",
+      "expected_categories": ["복지 및 교육"],
+      "relevant_docs": ["c8f4e2d1a7b5c390"]
+    },
+    {
+      "qid": "m008",
+      "query": "내부경영평가제도 개선 방안과 ESG 지속가능성 보고",
+      "description": "내부평가(OBSERVATION) + ESG(RULE) 교차",
+      "expected_categories": ["조사 및 평가", "ESG 및 지속가능성"],
+      "relevant_docs": ["a1b2c3d4e5f67890"]
+    },
+    {
+      "qid": "m009",
+      "query": "예산 및 기금운용계획 집행지침에서 말산업 연구사업 지원 원칙",
+      "description": "예산지침(DECISION) + 말산업 연구(OBSERVATION) 교차",
+      "expected_categories": ["운영계획", "조사 및 평가"],
+      "relevant_docs": ["d7e9f1a3b5c79024"]
+    },
+    {
+      "qid": "m010",
+      "query": "KPC 개최계획과 관련된 인권경영 가이드 준수 사항",
+      "description": "KPC 계획(DECISION) + 인권 규정(RULE) 교차",
+      "expected_categories": ["승마 행사 및 대회", "인권경영"],
+      "relevant_docs": ["b8c2d4e6f8a1b024"]
+    }
+  ]
+}

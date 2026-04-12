@@ -1,0 +1,23 @@
+name = "krra_auto"
+locale = "multi"
+min_df = 3
+max_df_ratio = 0.3
+min_phrase_len = 3
+max_phrase_len = 20
+
+stopwords_extra = [
+    "border",
+    "document",
+    "kra",
+    "metadata",
+    "table",
+    "마지막",
+    "수정일",
+    "수정자",
+    "작성일",
+    "작성자",
+    "제목",
+]
+metadata_strip_patterns = []
+reference_patterns = []
+entity_hint_patterns = []

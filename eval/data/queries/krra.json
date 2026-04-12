@@ -1,0 +1,309 @@
+{
+  "version": "1.0",
+  "dataset": "krra",
+  "corpus_stats": {
+    "docs": 1110,
+    "chunks": 18600,
+    "categories": 10
+  },
+  "notes": "Seed queries auto-generated via title keyword matching. These are baseline sanity checks — Track 🅐 Day 1 deliverable. Manual review + expansion to 50 queries required before serious benchmarking. ⚠️ Source JSONL is NFD-encoded; GT uses NFC. Parser fix needed.",
+  "queries": [
+    {
+      "qid": "q001",
+      "query": "온실가스 감축 및 에너지 절약 계획은 어떻게 되어있나",
+      "query_type": "factoid",
+      "category": "ESG 및 지속가능성",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "8ff32e537262bfa2",
+        "d986946925263cee"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 온실가스 + 감축"
+    },
+    {
+      "qid": "q002",
+      "query": "재활힐링승마 사업 운영계획",
+      "query_type": "factoid",
+      "category": "복지 및 교육",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "9293b657686b140c",
+        "4c2beab48a4fa8ba",
+        "d3ab6e9ee63de321",
+        "75f6189810773545",
+        "ae69bf434db74361",
+        "e26613430bc0f1b8",
+        "844757da66c84d87"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 재활힐링승마"
+    },
+    {
+      "qid": "q003",
+      "query": "인재개발 기본계획",
+      "query_type": "factoid",
+      "category": "규정 및 지침",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "790f2015dc65b6e1",
+        "33ad8cb9e391ffb3"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 인재개발 + 기본계획"
+    },
+    {
+      "qid": "q004",
+      "query": "인권영향평가 결과",
+      "query_type": "factoid",
+      "category": "인권경영",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "0cf478ddca6e92d5",
+        "e507dc22077335c1",
+        "dd206af597e56188",
+        "005599102a43b8f4"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 인권영향평가"
+    },
+    {
+      "qid": "q005",
+      "query": "교배실적과 교배횟수",
+      "query_type": "aggregation",
+      "category": "경마산업관리",
+      "difficulty": "medium",
+      "relevant_docs": [
+        "2b77cb92e3b2e52e",
+        "6cdb3f17c1eafe48",
+        "bbe40d855e6cc165",
+        "72b1245e55ab96fc",
+        "57ae80a2b693d18f",
+        "43b8261fe9a4b3ca",
+        "e39b4656a5219700"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 교배"
+    },
+    {
+      "qid": "q006",
+      "query": "한국마사회 인권침해 구제절차 매뉴얼",
+      "query_type": "factoid",
+      "category": "인권경영",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "803aa364d8f1f722",
+        "e074f8fc80056924"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 인권침해 + 구제"
+    },
+    {
+      "qid": "q007",
+      "query": "이용자보호 추진계획",
+      "query_type": "factoid",
+      "category": "업무추진 및 실적",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "3b6b26357ad2ce21",
+        "24413d0baba3f505",
+        "d4d20ca93dfcd728",
+        "5d0dd8502b5a0cb8"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 이용자보호"
+    },
+    {
+      "qid": "q008",
+      "query": "한국 경주마 국제 레이팅 현황",
+      "query_type": "listing",
+      "category": "경마산업관리",
+      "difficulty": "medium",
+      "relevant_docs": [
+        "012dcbe84f52c595",
+        "2df376eb9253a430"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 국제 + 레이팅"
+    },
+    {
+      "qid": "q009",
+      "query": "윤리경영 기본계획과 사회적가치",
+      "query_type": "factoid",
+      "category": "ESG 및 지속가능성",
+      "difficulty": "medium",
+      "relevant_docs": [
+        "d13b5751987d7a60",
+        "d908c9b95b9e082a",
+        "8c423366bc12e4d4"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 윤리경영 + 기본계획"
+    },
+    {
+      "qid": "q010",
+      "query": "사업별 조직별 예산 계층구조",
+      "query_type": "listing",
+      "category": "운영계획",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "a4ed66c59a820e40",
+        "da8efb3618249a33",
+        "aa6aff98e2caa723"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 사업별 + 조직별 + 예산"
+    },
+    {
+      "qid": "q011",
+      "query": "예산 및 기금운용계획 집행지침",
+      "query_type": "factoid",
+      "category": "규정 및 지침",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "436d43261922a8da",
+        "4196a8bfffd7ea93"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 예산 + 기금운용 + 집행지침"
+    },
+    {
+      "qid": "q012",
+      "query": "내부경영평가제도 개선 방안",
+      "query_type": "factoid",
+      "category": "규정 및 지침",
+      "difficulty": "medium",
+      "relevant_docs": [
+        "27325f8e49d559f4",
+        "06ea8eb0c6498c61"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 내부경영평가"
+    },
+    {
+      "qid": "q013",
+      "query": "지사 고객입장 및 방역관리 방안",
+      "query_type": "factoid",
+      "category": "규정 및 지침",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "36f5479362d3d864"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 방역"
+    },
+    {
+      "qid": "q014",
+      "query": "스마트 사무환경 구축 및 망분리 개선",
+      "query_type": "factoid",
+      "category": "정보기술 시스템",
+      "difficulty": "medium",
+      "relevant_docs": [
+        "afd0f60cc9c978c0",
+        "9d226cce773a4434",
+        "993ad9a5e29994fc"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 스마트 + 망분리"
+    },
+    {
+      "qid": "q015",
+      "query": "재물조사 결과 내역",
+      "query_type": "listing",
+      "category": "조사 및 평가",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "c8ed7811592eac64",
+        "59854a9e60c7d3ab",
+        "6a278de5a7f63982",
+        "95765c577ef9e336"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 재물조사"
+    },
+    {
+      "qid": "q016",
+      "query": "2024년 정보화기기 교체 계획",
+      "query_type": "factoid",
+      "category": "정보기술 시스템",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "e4f72caaf5619284",
+        "7d016a8eb300196a"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 정보화기기 + 교체"
+    },
+    {
+      "qid": "q017",
+      "query": "도심승마체험 시행계획",
+      "query_type": "factoid",
+      "category": "승마 행사 및 대회",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "1dd7a41b6d49067a",
+        "68c173524cf22c47"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 도심승마"
+    },
+    {
+      "qid": "q018",
+      "query": "KPC 개최계획",
+      "query_type": "factoid",
+      "category": "승마 행사 및 대회",
+      "difficulty": "easy",
+      "relevant_docs": [
+        "a5a7f37b741bdeee",
+        "33640ab36a7a2b8c"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: KPC"
+    },
+    {
+      "qid": "q019",
+      "query": "말산업 연구사업 과제 목록",
+      "query_type": "listing",
+      "category": "경마산업관리",
+      "difficulty": "medium",
+      "relevant_docs": [
+        "dd534b8aff2c0b47",
+        "858311a17598e098",
+        "37d0fe4807f770c9",
+        "665c95e2452936a4",
+        "6498c34e04755c85",
+        "ca05784c3e5aac4f",
+        "9ef0a8ba81ba8b76",
+        "5751364a07bd6432",
+        "a327f99bb35ec842",
+        "72abd3a0e6e49e3b",
+        "7391433818c2aa29",
+        "fd1f3b6cb4f3c808",
+        "69aa111c4c3c9c4e",
+        "425d5a095aa05d99",
+        "530eee4771fc7f6a",
+        "3069278768910766",
+        "dce393b4643910d6",
+        "7b6883061d74991f",
+        "c7acbf436686b08b",
+        "f7f1618283b6dd00",
+        "a8177daf2da5e092",
+        "38bd220368aba4ab"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 말산업 + 연구"
+    },
+    {
+      "qid": "q020",
+      "query": "마주 경제적기준 연도별 현황",
+      "query_type": "listing",
+      "category": "경마산업관리",
+      "difficulty": "medium",
+      "relevant_docs": [
+        "157016074626f25d"
+      ],
+      "relevant_chunks": [],
+      "description": "Keyword seed: 마주 + 경제적기준"
+    }
+  ]
+}

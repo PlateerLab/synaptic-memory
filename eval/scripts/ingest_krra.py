@@ -1,16 +1,45 @@
-"""Ingest parsed KRRA chunks into a SynapticGraph (Kuzu backend).
+"""Ingest parsed KRRA chunks into a graph via the generic pipeline.
 
-Reads eval/data/parsed/krra/{documents,chunks}.jsonl and builds a graph
-with Document nodes, Chunk nodes, Category nodes, and edges.
+Phase E of the refactor — this script contains NO KRRA-specific logic.
+Everything domain-specific lives in ``eval/data/profiles/krra.toml``.
+The script just:
 
-Usage:
+1. Loads the KRRA ``DomainProfile`` from TOML
+2. Opens the requested backend (SQLite graph by default, Kuzu optional)
+3. Streams documents + chunks through the generic ``DocumentIngester``
+
+The same script template will work for any other corpus by pointing
+``--profile`` at a different TOML file and ``--docs`` / ``--chunks`` at
+different JSONL files.
+
+Usage::
+
+    # Default: SQLite graph backend (zero-install, file-based)
     uv run python eval/scripts/ingest_krra.py
+
+    # Explicit backend choice
+    uv run python eval/scripts/ingest_krra.py --backend sqlite
+    uv run python eval/scripts/ingest_krra.py --backend kuzu
+
+    # Override paths (for reuse with other corpora)
+    uv run python eval/scripts/ingest_krra.py \\
+        --profile eval/data/profiles/some_other.toml \\
+        --docs eval/data/parsed/other/documents.jsonl \\
+        --chunks eval/data/parsed/other/chunks.jsonl \\
+        --graph eval/data/other_graph.sqlite
+
+Prerequisites:
+    - ``eval/data/parsed/krra/{documents,chunks}.jsonl`` exists (from parse_krra.py)
+    - ``eval/data/profiles/krra.toml`` exists
+    - For sqlite backend: ``pip install synaptic-memory[sqlite]``
+    - For kuzu backend:   ``pip install synaptic-memory[kuzu]``
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
-import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -18,142 +47,156 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from synaptic.backends.kuzu import KuzuBackend  # noqa: E402
-from synaptic.graph import SynapticGraph  # noqa: E402
-from synaptic.models import EdgeKind, NodeKind  # noqa: E402
+from synaptic.extensions.document_ingester import (  # noqa: E402
+    DocumentIngester,
+    JsonlDocumentSource,
+)
+from synaptic.extensions.domain_profile import DomainProfile  # noqa: E402
 
-PARSED_DIR = REPO_ROOT / "eval" / "data" / "parsed" / "krra"
-GRAPH_DIR = REPO_ROOT / "eval" / "data" / "krra_graph.kuzu"
+DEFAULT_PROFILE = REPO_ROOT / "eval" / "data" / "profiles" / "krra.toml"
+DEFAULT_DOCS = REPO_ROOT / "eval" / "data" / "parsed" / "krra" / "documents.jsonl"
+DEFAULT_CHUNKS = REPO_ROOT / "eval" / "data" / "parsed" / "krra" / "chunks.jsonl"
+DEFAULT_SQLITE_GRAPH = REPO_ROOT / "eval" / "data" / "krra_graph.sqlite"
+DEFAULT_KUZU_GRAPH = REPO_ROOT / "eval" / "data" / "krra_graph.kuzu"
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "--backend",
+        choices=["sqlite", "kuzu"],
+        default="sqlite",
+        help="Graph backend to write to (default: sqlite)",
+    )
+    parser.add_argument("--profile", type=Path, default=DEFAULT_PROFILE)
+    parser.add_argument("--docs", type=Path, default=DEFAULT_DOCS)
+    parser.add_argument("--chunks", type=Path, default=DEFAULT_CHUNKS)
+    parser.add_argument(
+        "--graph",
+        type=Path,
+        default=None,
+        help="Graph file/dir path. Defaults depend on --backend.",
+    )
+    parser.add_argument(
+        "--merge",
+        choices=["skip", "replace"],
+        default="replace",
+        help="Merge strategy when doc_id already exists (default: replace)",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Delete the graph file/dir before ingesting (full rebuild)",
+    )
+    return parser.parse_args()
+
+
+def _clean_graph_path(path: Path) -> None:
+    """Remove a graph file or directory and any sibling WAL / lock files."""
+    if path.exists():
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    for sibling in path.parent.glob(f"{path.name}.*"):
+        try:
+            if sibling.is_dir():
+                shutil.rmtree(sibling)
+            else:
+                sibling.unlink()
+        except OSError:
+            pass
+
+
+async def _open_backend(backend_name: str, graph_path: Path):
+    """Instantiate and connect the chosen backend."""
+    if backend_name == "sqlite":
+        from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
+        backend = SqliteGraphBackend(str(graph_path))
+        await backend.connect()
+        return backend
+
+    if backend_name == "kuzu":
+        from synaptic.backends.kuzu import KuzuBackend
+
+        backend = KuzuBackend(str(graph_path))
+        await backend.connect()
+        return backend
+
+    msg = f"Unknown backend: {backend_name}"
+    raise ValueError(msg)
+
+
+def _rel(path: Path) -> str:
+    """Display path relative to repo root if inside it, absolute otherwise."""
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 async def main() -> int:
-    docs_path = PARSED_DIR / "documents.jsonl"
-    chunks_path = PARSED_DIR / "chunks.jsonl"
+    args = _parse_args()
 
-    if not docs_path.exists():
-        print(f"ERROR: {docs_path} not found. Run parse_krra.py first.")
+    if not args.docs.exists():
+        print(f"ERROR: {args.docs} not found. Run parse_krra.py first.")
+        return 1
+    if not args.profile.exists():
+        print(f"ERROR: profile {args.profile} not found.")
         return 1
 
-    # Load parsed data
-    docs: list[dict] = []
-    with open(docs_path, encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                docs.append(json.loads(line))
+    graph_path = args.graph or (
+        DEFAULT_SQLITE_GRAPH if args.backend == "sqlite" else DEFAULT_KUZU_GRAPH
+    )
 
-    chunks: list[dict] = []
-    with open(chunks_path, encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                chunks.append(json.loads(line))
+    if args.clean:
+        print(f"Cleaning existing graph at {_rel(graph_path)}...")
+        _clean_graph_path(graph_path)
 
-    print(f"Loaded {len(docs)} documents, {len(chunks)} chunks")
+    print(f"Loading profile: {_rel(args.profile)}")
+    profile = DomainProfile.load(args.profile)
+    print(f"  name={profile.name}  locale={profile.locale}")
+    print(f"  ontology_hints: {len(profile.ontology_hints)} categories")
 
-    # Build chunk lookup: doc_id → [chunk_dicts]
-    doc_chunks: dict[str, list[dict]] = {}
-    for c in chunks:
-        doc_chunks.setdefault(c["doc_id"], []).append(c)
+    print(f"Opening backend: {args.backend}  at {_rel(graph_path)}")
+    backend = await _open_backend(args.backend, graph_path)
 
-    # Create graph
-    import shutil
+    print(f"Source docs:   {_rel(args.docs)}")
+    print(f"Source chunks: {_rel(args.chunks)}")
+    source = JsonlDocumentSource(args.docs, args.chunks)
 
-    if GRAPH_DIR.exists():
-        shutil.rmtree(GRAPH_DIR)
-
-    backend = KuzuBackend(str(GRAPH_DIR))
-    await backend.connect()
-    graph = SynapticGraph(backend)  # no ontology constraints → 범용 데이터 허용
+    ingester = DocumentIngester(
+        profile=profile,
+        backend=backend,
+        merge_strategy=args.merge,
+    )
 
     start = time.time()
-
-    # Phase 1: Category nodes
-    categories = sorted({d["category"] for d in docs})
-    cat_ids: dict[str, str] = {}
-    for cat_name in categories:
-        node = await graph.add(
-            title=cat_name,
-            content=f"마사회 문서 카테고리: {cat_name}",
-            kind=NodeKind.CONCEPT,
-            tags=["category", "krra"],
-        )
-        cat_ids[cat_name] = node.id
-    print(f"  Created {len(categories)} category nodes")
-
-    # Phase 2: Document + Chunk nodes
-    total_doc_nodes = 0
-    total_chunk_nodes = 0
-
-    for i, doc in enumerate(docs):
-        if (i + 1) % 100 == 0:
-            elapsed = time.time() - start
-            print(f"  [{i+1}/{len(docs)}] {elapsed:.0f}s — docs={total_doc_nodes} chunks={total_chunk_nodes}")
-
-        # Document node
-        doc_node = await graph.add(
-            title=doc["title"],
-            content="",  # content is in chunks
-            kind=NodeKind.ENTITY,
-            tags=["document", "krra", doc.get("doc_type", "")],
-            source=doc["source_path"],
-            properties={
-                "doc_id": doc["doc_id"],
-                "doc_type": doc.get("doc_type", ""),
-                "year": str(doc["year"]) if doc.get("year") else "",
-                "category": doc.get("category", ""),
-                "original_filename": doc.get("metadata", {}).get("original_filename", ""),
-                "chunk_count": str(doc.get("chunk_count", 0)),
-            },
-        )
-        total_doc_nodes += 1
-
-        # Link to category
-        cat_id = cat_ids.get(doc.get("category", ""))
-        if cat_id:
-            await graph.link(doc_node.id, cat_id, kind=EdgeKind.PART_OF)
-
-        # Chunk nodes
-        doc_chunk_list = doc_chunks.get(doc["doc_id"], [])
-        prev_chunk_id: str | None = None
-
-        for chunk_data in sorted(doc_chunk_list, key=lambda x: x["index"]):
-            chunk_node = await graph.add(
-                title=f"{doc['title']} #{chunk_data['index']}",
-                content=chunk_data["text"],
-                kind=NodeKind.CHUNK,
-                tags=["chunk", "krra"],
-                source=doc["source_path"],
-                properties={
-                    "doc_id": doc["doc_id"],
-                    "chunk_index": str(chunk_data["index"]),
-                    "page_number": str(chunk_data.get("page_number") or ""),
-                },
-            )
-            total_chunk_nodes += 1
-
-            # Document → Chunk
-            await graph.link(doc_node.id, chunk_node.id, kind=EdgeKind.CONTAINS)
-
-            # Sequential chunk linking
-            if prev_chunk_id:
-                await graph.link(prev_chunk_id, chunk_node.id, kind=EdgeKind.NEXT_CHUNK)
-            prev_chunk_id = chunk_node.id
-
+    stats = await ingester.ingest(source)
     elapsed = time.time() - start
-    print(f"\n{'='*60}")
-    print(f"KRRA Ingest Complete — {elapsed:.1f}s")
-    print(f"  Categories:  {len(categories)}")
-    print(f"  Documents:   {total_doc_nodes}")
-    print(f"  Chunks:      {total_chunk_nodes}")
-    print(f"  Graph path:  {GRAPH_DIR.relative_to(REPO_ROOT)}")
-    print(f"{'='*60}")
 
-    # Quick test: search
-    print("\n[Quick search test]")
-    for q in ["경마 운영계획", "인권경영", "정보기술 시스템"]:
-        result = await graph.search(q, limit=3)
-        hits = len(result.nodes)
-        top = result.nodes[0].node.title if result.nodes else "-"
-        print(f"  '{q}' → {hits} hits, top: {top}")
+    print(f"\n{'=' * 60}")
+    print(f"Ingest complete — {elapsed:.1f}s")
+    print(f"  Documents ingested:  {stats.documents_ingested}")
+    print(f"  Documents skipped:   {stats.documents_skipped}")
+    print(f"  Chunks created:      {stats.chunks_created}")
+    print(f"  Categories created:  {stats.categories_created}")
+    print(f"  Edges created:       {stats.edges_created}")
+    print(f"  Graph path:          {_rel(graph_path)}")
+    print(f"{'=' * 60}")
+
+    # Quick sanity probe: a few known KRRA terms should return hits
+    if stats.documents_ingested > 0:
+        from synaptic.graph import SynapticGraph
+
+        graph = SynapticGraph(backend)
+        print("\n[Quick search probe]")
+        for q in ["경마 운영계획", "인권경영", "정보기술 시스템"]:
+            result = await graph.search(q, limit=3)
+            hits = len(result.nodes)
+            top = result.nodes[0].node.title[:60] if result.nodes else "-"
+            print(f"  '{q}' → {hits} hits, top: {top}")
 
     await backend.close()
     return 0

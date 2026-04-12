@@ -7,6 +7,10 @@ tmp/
 마사회/
 eval/data/raw/
 eval/data/parsed/
+eval/data/*.sqlite
+eval/data/*.kuzu
+eval/data/*.kuzu.*
 eval/results/
+temp/
 .DS_Store
 ~/

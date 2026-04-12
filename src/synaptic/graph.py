@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from difflib import SequenceMatcher
 from time import time
 from typing import TYPE_CHECKING
+
+
+def _nfc(s: str) -> str:
+    """NFC-normalize a string. macOS HFS+ stores Korean as NFD; without this,
+    substring/FTS matches silently fail when NFD content is queried with NFC."""
+    return unicodedata.normalize("NFC", s) if s else s
 
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
@@ -308,6 +315,18 @@ class SynapticGraph:
         embedding: list[float] | None = None,
         properties: dict[str, str] | None = None,
     ) -> Node:
+        # NFC-normalize all user-provided text. Korean on macOS HFS+ arrives
+        # as NFD, which breaks substring / FTS matching against NFC queries.
+        title = _nfc(title)
+        content = _nfc(content)
+        source = _nfc(source)
+        if tags:
+            tags = [_nfc(t) for t in tags]
+        if properties:
+            properties = {
+                k: _nfc(v) if isinstance(v, str) else v for k, v in properties.items()
+            }
+
         # Auto-classify kind if not specified
         if kind is None:
             if self._classifier is not None:
@@ -590,6 +609,8 @@ class SynapticGraph:
         limit: int = 10,
         embedding: list[float] | None = None,
     ) -> SearchResult:
+        # NFC-normalize query to match NFC-normalized stored content.
+        query = _nfc(query)
         # Auto-embed query for vector search
         if embedding is None and self._embedder is not None:
             embedding = await self._embedder.embed(query)

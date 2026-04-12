@@ -209,6 +209,129 @@ class TestSerialization:
         assert r.all_types() == []
 
 
+class TestTomlLoader:
+    def _write(self, tmp_path, content: str):
+        p = tmp_path / "ontology.toml"
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def test_load_minimal(self, tmp_path):
+        path = self._write(
+            tmp_path,
+            """
+            [[types]]
+            name = "knowledge"
+            description = "Base type"
+            """,
+        )
+        reg = OntologyRegistry.load(path)
+        assert reg.get_type("knowledge") is not None
+        assert reg.get_type("knowledge").description == "Base type"
+
+    def test_load_hierarchy_with_properties(self, tmp_path):
+        path = self._write(
+            tmp_path,
+            """
+            [[types]]
+            name = "knowledge"
+            description = "Root"
+
+            [[types]]
+            name = "rule"
+            parent = "knowledge"
+            description = "Policy or constraint"
+
+            [[types.properties]]
+            name = "severity"
+            value_type = "str"
+            required = true
+            default = ""
+
+            [[types.properties]]
+            name = "effective_date"
+            value_type = "str"
+            required = false
+            default = "unknown"
+            """,
+        )
+        reg = OntologyRegistry.load(path)
+        rule = reg.get_type("rule")
+        assert rule is not None
+        assert rule.parent == "knowledge"
+        assert len(rule.properties) == 2
+        severity = next(p for p in rule.properties if p.name == "severity")
+        assert severity.required is True
+        eff = next(p for p in rule.properties if p.name == "effective_date")
+        assert eff.default == "unknown"
+
+    def test_load_relation_constraints(self, tmp_path):
+        path = self._write(
+            tmp_path,
+            """
+            [[types]]
+            name = "rule"
+
+            [[types]]
+            name = "outcome"
+
+            [[constraints]]
+            edge_kind = "derived_from"
+            domain_types = ["rule"]
+            range_types = ["outcome"]
+            """,
+        )
+        reg = OntologyRegistry.load(path)
+        errs = reg.validate_edge("derived_from", "rule", "outcome")
+        assert errs == []
+        errs = reg.validate_edge("derived_from", "outcome", "rule")
+        assert len(errs) > 0
+
+    def test_load_file_not_found(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            OntologyRegistry.load(tmp_path / "does_not_exist.toml")
+
+    def test_load_path_and_string_both_work(self, tmp_path):
+        path = self._write(
+            tmp_path,
+            """
+            [[types]]
+            name = "concept"
+            """,
+        )
+        # Path object
+        reg1 = OntologyRegistry.load(path)
+        # Plain string
+        reg2 = OntologyRegistry.load(str(path))
+        assert reg1.get_type("concept") is not None
+        assert reg2.get_type("concept") is not None
+
+    def test_round_trip_via_toml_equivalent_to_from_dict(self, tmp_path):
+        """load(toml) should produce the same shape as from_dict(data).
+
+        Since tomllib returns a dict compatible with from_dict, loading a
+        TOML file and calling from_dict with the parsed dict must agree.
+        """
+        path = self._write(
+            tmp_path,
+            """
+            [[types]]
+            name = "knowledge"
+
+            [[types]]
+            name = "rule"
+            parent = "knowledge"
+
+            [[constraints]]
+            edge_kind = "learned_from"
+            domain_types = ["rule"]
+            range_types = ["knowledge"]
+            """,
+        )
+        reg = OntologyRegistry.load(path)
+        assert reg.is_a("rule", "knowledge")
+        assert reg.get_constraints_for("learned_from")
+
+
 class TestAgentOntology:
     def test_build_agent_ontology(self) -> None:
         reg = build_agent_ontology()

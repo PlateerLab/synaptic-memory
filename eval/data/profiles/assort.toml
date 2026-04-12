@@ -1,0 +1,24 @@
+name = "assort"
+locale = "ko"
+min_df = 2
+max_df_ratio = 0.5
+min_phrase_len = 2
+max_phrase_len = 30
+
+# 상품명, 리뷰 등에서 흔히 나오는 불용어
+stopwords_extra = [
+    "테이블", "행", "주문", "반품", "교환",
+    "있음", "없음", "입니다", "합니다",
+]
+
+[ontology_hints]
+"products"         = "ENTITY"
+"product_variants" = "ENTITY"
+"orders"           = "EVENT"
+"reviews"          = "OBSERVATION"
+"broadcasts"       = "EVENT"
+"sales_channels"   = "CONCEPT"
+"sales_partners"   = "CONCEPT"
+"colors"           = "CONCEPT"
+"sizes"            = "CONCEPT"
+"variant_sales"    = "OBSERVATION"

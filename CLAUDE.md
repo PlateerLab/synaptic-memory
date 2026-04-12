@@ -124,6 +124,29 @@ uv run python tests/benchmark/download_datasets.py
 | Mean nDCG@5 | 0.351 | 0.431 | **0.695** (+61%) |
 | Hit rate | 9/15 | 13/15 | **15/15** |
 
+### KRRA (eval/) 벤치마크 결과 — 2026-04-12 Day 1 baseline
+독립 eval harness (`eval/scripts/score_krra.py`), 20 seed 쿼리, k=10, FTS only.
+
+| 지표 | NFD graph | NFC graph | Δ |
+|------|-----------|-----------|---|
+| MRR | 0.525 | **0.650** | +23.8% |
+| Mean P@10 | 0.186 | **0.392** | +110.8% |
+| Mean R@10 | 0.417 | 0.453 | +8.6% |
+| Mean nDCG@10 | 0.431 | **0.503** | +16.7% |
+| Hit rate | 12/20 | 13/20 | +1 |
+| Avg latency | 728ms | **585ms** | -20% |
+
+**파이프라인**: `parse_krra.py` → `ingest_krra.py` (NFC 정규화 포함) → `score_krra.py` → `eval/results/krra_baseline_*.json`.
+**GT**: `eval/data/queries/krra.json` — 카테고리 분산 20개, title 키워드 매칭으로 doc_id 시드.
+**현재 그래프**: 구조적 ingestion만 (Category×10 + Document×1,110 + Chunk×18,600, 엔티티/관계 추출 미적용).
+**다음 단계 (Day 2)**: home Ollama `qwen3-embedding:4b` 주입해서 Baseline C (embedding cascade) 측정.
+
+### KRRA Day 1 발견 이슈
+- 🔴 **라이브러리 NFC/NFD 버그**: `graph.add()`, `graph.search()` 둘 다 Unicode 정규화 없음. Mac HFS+/zfs 소스 한글 데이터 → 검색 실패. 수정 위치: `graph.py:300` (add), `graph.py:586` (search). phrase_extractor.py에만 정규화 있음.
+- 🟡 **chunk granularity mismatch**: Document 노드 `content=""`로 FTS 약함. 본문 키워드 조합이 우연히 맞는 무관 청크가 정답 청크를 밀어냄. 7/20 zero-hit의 원인. 수정 옵션: (a) title 가중치 상향, (b) Document.content=title 복제, (c) chunk→doc score aggregation (HippoRAG2).
+- 🟡 **parse_krra.py year=null 전건**: NFD filename에서 `(\d{4})년도` 정규식 실패. 텍스트 필드만 NFC 정규화하고 `_doc_id()`는 NFD 유지 (GT 호환).
+- 🟢 **ingest_krra.py Kuzu 파일/디렉터리** (수정 완료): Kuzu 0.x 단일 파일, shutil.rmtree 실패 → 파일/디렉터리 + WAL sibling 처리 추가.
+
 ### Ablation Study 핵심 발견
 - S1 Ontology: 현재 graph.search()가 NodeKind를 랭킹에 미활용 → 효과 없음
 - S2 Relations: spreading activation이 노이즈 유입 (MRR -14~-32%)
