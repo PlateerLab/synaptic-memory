@@ -28,8 +28,8 @@
     },
     {
       "qid": "a005", "level": "L4", "type": "filter",
-      "query": "10만원 이상 고가 상품 목록",
-      "description": "selling_price >= 100000 필터",
+      "query": "9만원 이상 고가 상품 목록",
+      "description": "selling_price >= 90000 필터",
       "relevant_docs": ["products:12800001"]
     },
     {

@@ -692,6 +692,11 @@ from synaptic.agent_tools_v2 import (
     compare_search_tool,
     deep_search_tool,
 )
+from synaptic.agent_tools_structured import (
+    aggregate_nodes_tool,
+    filter_nodes_tool,
+    join_related_tool,
+)
 from synaptic.search_session import SessionStore
 
 _session_store = SessionStore()
@@ -989,6 +994,85 @@ async def agent_compare_search(
     session = await _session(session_id)
     result = await compare_search_tool(
         backend, session, query, embedder=_embedder
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_filter_nodes(
+    property: str,
+    op: str,
+    value: str,
+    table: str = "",
+    session_id: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Filter nodes by property value — for structured/tabular data.
+
+    Queries typed properties stored in the graph. Supports numeric
+    comparison (>=, <=, >, <, ==) and text containment.
+
+    Examples:
+      filter_nodes(property="selling_price", op=">=", value="90000")
+      filter_nodes(table="reviews", property="attribute_2_value", op="contains", value="타이트")
+      filter_nodes(property="broadcast_date", op="contains", value="2024-11")
+    """
+    backend = await _ensure_backend()
+    session = await _session(session_id)
+    result = await filter_nodes_tool(
+        backend, session, table=table or "",
+        property=property, op=op, value=value, limit=limit,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_aggregate_nodes(
+    group_by: str,
+    table: str = "",
+    metric: str = "count",
+    session_id: str = "",
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Aggregate nodes by property — GROUP BY + COUNT/SUM/AVG.
+
+    For questions like "색상별 상품 수" or "시즌별 매출 합계".
+
+    Examples:
+      aggregate_nodes(table="products", group_by="season", metric="count")
+      aggregate_nodes(table="product_variants", group_by="color_id", metric="count")
+    """
+    backend = await _ensure_backend()
+    session = await _session(session_id)
+    result = await aggregate_nodes_tool(
+        backend, session, table=table or "",
+        group_by=group_by, metric=metric, limit=limit,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_join_related(
+    from_value: str,
+    fk_property: str,
+    target_table: str,
+    session_id: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Follow a foreign key to find related records.
+
+    Like SQL JOIN: finds all nodes in target_table where
+    fk_property equals from_value.
+
+    Examples:
+      join_related(from_value="12800000", fk_property="product_code", target_table="reviews")
+      → all reviews for product 12800000
+    """
+    backend = await _ensure_backend()
+    session = await _session(session_id)
+    result = await join_related_tool(
+        backend, session, from_value=from_value,
+        fk_property=fk_property, target_table=target_table, limit=limit,
     )
     return result.to_dict()
 
