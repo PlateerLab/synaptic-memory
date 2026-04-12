@@ -61,18 +61,41 @@ def _load_resolver(graph_path: Path) -> dict[str, str]:
         ).fetchall()
         for r in rows:
             title = r["title"] or ""
-            content = (r["content"] or "")[:120].replace("\n", " ").strip()
-            summary = f"{title}  ▸  {content}" if content else title
+            raw_content = (r["content"] or "").replace("\n", " ").strip()
+
+            # Strip redundant "table_name: " prefix from structured content
+            # so the answer column is readable.
+            if ":" in title:
+                tbl = title.split(":", 1)[0]
+                prefix = f"{tbl}: "
+                if raw_content.startswith(prefix):
+                    raw_content = raw_content[len(prefix):]
+
+            # Cap content length for readability in Excel cells
+            content_snippet = raw_content[:150]
+            if len(raw_content) > 150:
+                content_snippet += "…"
+
+            # For structured nodes: title already shows "table:pk", so just
+            # show the content (which starts with the name). For document
+            # nodes: title is the doc/chunk title; prepend it.
+            try:
+                props = json.loads(r["properties_json"] or "{}")
+            except json.JSONDecodeError:
+                props = {}
+
+            is_structured = bool(props.get("_table_name"))
+            if is_structured:
+                summary = content_snippet or title
+            else:
+                # Document node — show title + content preview
+                summary = f"{title}  ▸  {content_snippet}" if content_snippet else title
 
             # Key by title (structured: "products:12800000")
             if title:
                 resolver[title] = summary
 
             # Key by properties.doc_id (documents: "0346542e...")
-            try:
-                props = json.loads(r["properties_json"] or "{}")
-            except json.JSONDecodeError:
-                props = {}
             did = props.get("doc_id", "")
             if did:
                 resolver[str(did)] = summary
@@ -101,7 +124,7 @@ def _flatten_query(q: dict, resolver: dict[str, str] | None = None) -> dict:
     # Resolve GT IDs to readable answers (title + content snippet)
     resolved_lines: list[str] = []
     if resolver is not None:
-        for rid in relevant[:20]:  # cap at 20 for readability
+        for i, rid in enumerate(relevant[:20], start=1):  # cap at 20 for readability
             key = str(rid)
             answer = resolver.get(key, "")
             if not answer:
@@ -109,9 +132,9 @@ def _flatten_query(q: dict, resolver: dict[str, str] | None = None) -> dict:
                 base = key.rsplit(" #", 1)[0]
                 answer = resolver.get(base, "")
             if answer:
-                resolved_lines.append(f"[{key}] {answer}")
+                resolved_lines.append(f"{i}. {answer}")
             else:
-                resolved_lines.append(f"[{key}] (not found in graph)")
+                resolved_lines.append(f"{i}. [{key}] (not found)")
         if len(relevant) > 20:
             resolved_lines.append(f"... +{len(relevant) - 20} more")
 
