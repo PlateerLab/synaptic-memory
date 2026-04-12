@@ -66,6 +66,7 @@ from synaptic.extensions.query_anchor import QueryAnchorExtractor, QueryAnchors
 if TYPE_CHECKING:
     from synaptic.extensions.embedder import EmbeddingProvider
     from synaptic.extensions.query_anchor import PhraseExtractorProtocol
+    from synaptic.extensions.reranker_cross import RerankerProtocol
     from synaptic.protocols import StorageBackend
 
 logger = logging.getLogger("evidence-search")
@@ -109,6 +110,7 @@ class EvidenceSearch:
         "_aggregator",
         "_anchor_extractor",
         "_backend",
+        "_cross_reranker",
         "_embedder",
         "_expander",
         "_expansion_budget",
@@ -120,6 +122,7 @@ class EvidenceSearch:
         *,
         backend: StorageBackend,
         embedder: EmbeddingProvider | None = None,
+        reranker: RerankerProtocol | None = None,
         phrase_extractor: PhraseExtractorProtocol | None = None,
         reranker_weights: RerankerWeights | None = None,
         expansion_budget: ExpansionBudget | None = None,
@@ -128,6 +131,7 @@ class EvidenceSearch:
     ) -> None:
         self._backend = backend
         self._embedder = embedder
+        self._cross_reranker = reranker
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -261,6 +265,29 @@ class EvidenceSearch:
             query_embedding=query_embedding,
             anchor_categories=anchor_category_set,
         )
+
+        # Step 4b — cross-encoder reranking (optional, highest quality).
+        # Takes the top candidates from the hybrid reranker and rescores
+        # each (query, content) pair jointly. This is what enables
+        # paraphrase matching ("말 복지" ↔ "재활힐링승마") that neither
+        # BM25 nor cosine can handle.
+        if self._cross_reranker is not None and scored:
+            top_n = min(20, len(scored))
+            top_candidates = scored[:top_n]
+            documents = [
+                f"{s.node.title}\n{s.node.content[:400]}" for s in top_candidates
+            ]
+            try:
+                rerank_scores = await self._cross_reranker.rerank(query, documents)
+                # Blend: 40% cross-encoder + 60% existing hybrid score
+                for i, s in enumerate(top_candidates):
+                    if i < len(rerank_scores):
+                        blended = 0.4 * rerank_scores[i] + 0.6 * s.total
+                        s.total = blended
+                scored[:top_n] = top_candidates
+                scored.sort(key=lambda s: s.total, reverse=True)
+            except Exception as exc:
+                logger.warning("cross-encoder rerank failed: %s", exc)
 
         # Step 5 — evidence aggregation with diversity
         evidence = self._aggregator.aggregate(
