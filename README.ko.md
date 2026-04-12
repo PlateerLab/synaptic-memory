@@ -20,24 +20,31 @@ from synaptic import SynapticGraph
 # 아무 데이터 → 지식 그래프 (CSV, JSONL, 디렉터리)
 graph = await SynapticGraph.from_data("./내_데이터/")
 
+# 또는 DB에서 바로 — SQLite / PostgreSQL / MySQL / Oracle / MSSQL
+graph = await SynapticGraph.from_database(
+    "postgresql://user:pass@host:5432/dbname"
+)
+
 # 검색
 result = await graph.search("내 질문")
 ```
 
-파일 형식 자동 감지, 온톨로지 프로파일 자동 생성, 인제스트, 인덱싱까지 전부 자동.
+파일 형식 또는 DB 스키마 자동 감지, 온톨로지 프로파일 자동 생성, 인제스트, 인덱싱, FK 엣지 구축까지 전부 자동.
 
 ---
 
 ## 이 라이브러리가 하는 일
 
 ```
-내 데이터 (CSV, JSONL, PDF 등)
-  ↓  형식 자동 감지 + DomainProfile 자동 생성
-  ↓  DocumentIngester (텍스트) / TableIngester (정형 데이터)
+내 데이터 (CSV, JSONL, PDF, SQL 데이터베이스)
+  ↓  형식 자동 감지 / DB 스키마+FK 자동 발견
+  ↓  DocumentIngester (텍스트) / TableIngester / DbIngester
   ↓
-지식 그래프 (Category → Document → Chunk)
+지식 그래프
+  ├─ 문서: Category → Document → Chunk
+  └─ 정형: 테이블 row → ENTITY 노드 + RELATED 엣지 (FK)
   ↓
-29개 MCP 도구 → LLM 에이전트가 멀티턴으로 탐색
+29개 MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
 ```
 
 **라이브러리가 하는 건 딱 두 가지:**
@@ -140,9 +147,9 @@ await ingester.ingest(source)
 ### 정형 데이터 도구
 | 도구 | 용도 |
 |------|------|
-| `filter_nodes` | 속성 필터 (>=, <=, contains) — SQL WHERE 대체 |
-| `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG |
-| `join_related` | FK 기반 관련 레코드 조회 — SQL JOIN 대체 |
+| `filter_nodes` | 속성 필터 (>=, <=, contains) — `{total, showing}` 반환으로 카운팅 정확 |
+| `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG/MAX/MIN + WHERE 사전 필터 |
+| `join_related` | FK 기반 관련 레코드 조회 — RELATED 엣지 순회 (O(degree)) |
 
 ### 탐색 도구
 | 도구 | 용도 |
@@ -176,24 +183,28 @@ await ingester.ingest(source)
 
 ## 벤치마크
 
-### 단일 검색 (single-shot)
+### 단일 검색 (EvidenceSearch + embed + reranker)
 
-| 데이터셋 | 유형 | 노드 | Easy MRR | Hard MRR |
-|---------|------|------|----------|----------|
-| KRRA (한국 공공기관) | 텍스트 문서 | 19,720 | **0.967** | 0.507 |
-| assort (패션 이커머스) | 정형 CSV | 13,909 | **0.880** | 0.127 |
+| 데이터셋 | 유형 | 노드 | MRR | Hit |
+|---------|------|------|-----|-----|
+| KRRA Easy | 한국어 문서 | 19,720 | **0.967** | 20/20 |
+| KRRA Hard | 한국어 문서 | 19,720 | **1.000** | 15/15 |
+| X2BEE Easy | PostgreSQL 이커머스 | 19,843 | **1.000** | 20/20 |
+| assort Easy | 패션 CSV | 13,909 | **0.867** | 13/15 |
+| HotPotQA-24 | 영어 multi-hop | 226 | **0.964** | 24/24 |
+| Allganize RAG-ko | 한국어 기업 문서 | 200 | **0.905** | — |
+| Allganize RAG-Eval | 금융/의료/법률 | 300 | **0.874** | — |
+| PublicHealthQA | 한국어 공중보건 | 77 | **0.600** | 56/77 |
 
-### 멀티턴 에이전트 (Claude Sonnet 4.6)
+### 멀티턴 에이전트 (GPT-4o-mini, 최대 5턴)
 
-| 쿼리 유형 | 예시 | 턴 수 | 결과 |
-|----------|------|-------|------|
-| 정확 매칭 | "인권영향평가 결과" | 6 | 상세 테이블 |
-| 교차 문서 | "운영계획과 인권경영" | 10 | 다중 출처 종합 |
-| 부재 증명 | "환불 예외 있나?" | 7 | 3가지 예외 조항 발견 |
-| 패러프레이즈 | "말 복지 프로그램" | 8 | 재활힐링승마 발견 |
-| **Hard (single-shot 실패)** | **4개 쿼리** | **6-10** | **4/4 해결** |
+| 데이터셋 | 결과 |
+|---------|------|
+| KRRA Hard agent | 10-13/15 (67-87%) |
+| **X2BEE Hard agent** | **17/19 (89%)** |
+| **assort Hard agent** | **12/15 (80%)** |
 
-Single-shot MRR 0.507 → 멀티턴 **100% 해결**.
+필터 / 집계 / FK 조인 / 카운팅 같은 정형 데이터 질의가 그래프 기반 도구로 end-to-end 동작합니다.
 
 ---
 

@@ -20,24 +20,31 @@ from synaptic import SynapticGraph
 # Any data → knowledge graph (CSV, JSONL, directory)
 graph = await SynapticGraph.from_data("./my_data/")
 
+# Or directly from a database — SQLite / PostgreSQL / MySQL / Oracle / MSSQL
+graph = await SynapticGraph.from_database(
+    "postgresql://user:pass@host:5432/dbname"
+)
+
 # Search
 result = await graph.search("my question")
 ```
 
-That's it. Auto-detects file format, generates ontology profile, ingests, indexes.
+That's it. Auto-detects file format or DB schema, generates ontology profile, ingests, indexes, builds FK edges.
 
 ---
 
 ## What it does
 
 ```
-Your data (CSV, JSONL, PDF, any format)
-  ↓  auto-detect format + auto-generate DomainProfile
-  ↓  DocumentIngester (text) / TableIngester (structured)
+Your data (CSV, JSONL, PDF, SQL database)
+  ↓  auto-detect format / auto-discover DB schema + FKs
+  ↓  DocumentIngester (text) / TableIngester / DbIngester
   ↓
-Knowledge Graph (Category → Document → Chunk)
+Knowledge Graph
+  ├─ Documents: Category → Document → Chunk
+  └─ Structured: table rows as ENTITY nodes + RELATED edges (FKs)
   ↓
-29 MCP tools → LLM agent explores via multi-turn tool use
+29 MCP tools → LLM agent explores via graph-aware multi-turn tool use
 ```
 
 **Two jobs, nothing else:**
@@ -140,9 +147,9 @@ No LLM at indexing. The graph is a search index, not a knowledge base.
 ### Structured data tools
 | Tool | Purpose |
 |------|---------|
-| `filter_nodes` | Property filter (>=, <=, contains) — like SQL WHERE |
-| `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG |
-| `join_related` | FK-based related record lookup — like SQL JOIN |
+| `filter_nodes` | Property filter (>=, <=, contains) — returns `{total, showing}` for accurate counting |
+| `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG/MAX/MIN with optional WHERE pre-filter |
+| `join_related` | FK-based related record lookup — walks RELATED edges (O(degree)) |
 
 ### Navigation tools
 | Tool | Purpose |
@@ -176,24 +183,28 @@ Result
 
 ## Benchmarks
 
-### Single-shot retrieval
+### Single-shot retrieval (EvidenceSearch + embed + reranker)
 
-| Dataset | Type | Nodes | Easy MRR | Hard MRR |
-|---------|------|-------|----------|----------|
-| KRRA (Korean public sector) | Text | 19,720 | **0.967** | 0.507 |
-| assort (fashion e-commerce) | CSV | 13,909 | **0.880** | 0.127 |
+| Dataset | Type | Nodes | MRR | Hit |
+|---------|------|-------|-----|-----|
+| KRRA Easy | Korean documents | 19,720 | **0.967** | 20/20 |
+| KRRA Hard | Korean documents | 19,720 | **1.000** | 15/15 |
+| X2BEE Easy | PostgreSQL (e-commerce) | 19,843 | **1.000** | 20/20 |
+| assort Easy | Fashion CSV | 13,909 | **0.867** | 13/15 |
+| HotPotQA-24 | English multi-hop | 226 | **0.964** | 24/24 |
+| Allganize RAG-ko | Korean enterprise | 200 | **0.905** | — |
+| Allganize RAG-Eval | Finance/medical/legal KO | 300 | **0.874** | — |
+| PublicHealthQA | Korean public health | 77 | **0.600** | 56/77 |
 
-### Multi-turn agent (Claude Sonnet 4.6)
+### Multi-turn agent (GPT-4o-mini, 5 turns max)
 
-| Query type | Example | Turns | Result |
-|-----------|---------|-------|--------|
-| Factoid | "인권영향평가 결과" | 6 | Detailed table |
-| Cross-document | "운영계획과 인권경영" | 10 | Multi-source synthesis |
-| Absence proof | "환불 예외 있나?" | 7 | Found 3 exception clauses |
-| Paraphrase | "말 복지 프로그램" | 8 | Found 재활힐링승마 |
-| **Hard (single-shot fails)** | **4 queries** | **6-10** | **4/4 solved** |
+| Dataset | Result |
+|---------|--------|
+| KRRA Hard agent | 10-13/15 (67-87%) |
+| **X2BEE Hard agent** | **17/19 (89%)** |
+| **assort Hard agent** | **12/15 (80%)** |
 
-Single-shot MRR 0.507 → Multi-turn **100% solved**.
+Structured data queries (filter / aggregate / FK join / count) work end-to-end through graph-aware tools.
 
 ---
 
