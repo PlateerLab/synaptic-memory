@@ -9,11 +9,35 @@ from collections.abc import Sequence
 from pathlib import Path
 
 
-# Korean particle suffixes to strip before FTS indexing. These cause
-# exact-term mismatches: "정보화기기를" ≠ "정보화기기". By stripping
-# particles at both index time and query time, FTS5 unicode61 tokenizer
-# can match stems consistently. We deliberately exclude 도/과 because
-# they form part of compound words (회계연도, 진단결과).
+# --- Korean FTS normalization ---
+#
+# Two tiers:
+# 1. kiwipiepy (optional) — morphological analysis. Splits compound nouns,
+#    extracts noun/verb stems, handles irregular verbs. Best quality.
+# 2. Regex fallback — strips common postposition particles. Good enough
+#    for the main case (정보화기기를 → 정보화기기) when Kiwi isn't installed.
+#
+# Both tiers are applied at index time (save_node FTS sync) AND query
+# time (search_fts) so the tokenization is consistent on both sides.
+
+_kiwi_instance = None
+_kiwi_available: bool | None = None  # None = not yet checked
+
+
+def _get_kiwi():
+    """Lazy-load Kiwi. Returns the instance or None if not installed."""
+    global _kiwi_instance, _kiwi_available
+    if _kiwi_available is None:
+        try:
+            from kiwipiepy import Kiwi
+            _kiwi_instance = Kiwi()
+            _kiwi_available = True
+        except ImportError:
+            _kiwi_available = False
+    return _kiwi_instance
+
+
+# Regex fallback for when Kiwi is not installed
 _KO_PARTICLE = re.compile(
     r"([가-힣]{2,}?)(에서|부터|까지|으로|에게|에는|에도|에서는|에서도"
     r"|으로서|으로써|이라|이며|이고|이나|이든|처럼|만큼"
@@ -21,14 +45,34 @@ _KO_PARTICLE = re.compile(
 )
 
 
-def _strip_particles(text: str) -> str:
-    """Strip Korean postposition particles for FTS normalization.
+def _normalize_korean(text: str) -> str:
+    """Normalize Korean text for FTS indexing/querying.
 
-    Applied to both the indexed content and the query so that a search
-    for "정보화기기" matches "정보화기기를" in the corpus.
+    With Kiwi: full morphological analysis → noun/verb stems + numbers.
+    "경마산업관리 규정" → "경마 산업 관리 규정"
+    "정보화기기를 교체하고" → "정보 기기 교체"
+
+    Without Kiwi: regex particle stripping only.
+    "정보화기기를" → "정보화기기"
     """
     if not text:
         return text
+
+    kiwi = _get_kiwi()
+    if kiwi is not None:
+        try:
+            tokens = kiwi.tokenize(text)
+            # Keep nouns (NN*), verbs (VV), adjectives (VA),
+            # foreign words (SL), numbers (SN)
+            stems = [
+                tk.form for tk in tokens
+                if tk.tag.startswith(("NN", "VV", "VA", "SL", "SN"))
+            ]
+            if stems:
+                return " ".join(stems)
+        except Exception:
+            pass  # fall through to regex
+
     return _KO_PARTICLE.sub(r"\1", text)
 
 from synaptic.models import (
@@ -162,8 +206,8 @@ class SQLiteBackend:
         )
         # FTS sync — strip Korean particles so "정보화기기를" indexes as
         # "정보화기기", matching queries for the bare stem.
-        fts_title = _strip_particles(title)
-        fts_content = _strip_particles(content)
+        fts_title = _normalize_korean(title)
+        fts_content = _normalize_korean(content)
         await db.execute("DELETE FROM syn_nodes_fts WHERE node_id = ?", (node.id,))
         await db.execute(
             "INSERT INTO syn_nodes_fts(node_id, title, content) VALUES (?, ?, ?)",
@@ -204,8 +248,8 @@ class SQLiteBackend:
             ),
         )
         # FTS sync — particle-stripped for Korean stem matching
-        fts_title = _strip_particles(title)
-        fts_content = _strip_particles(content)
+        fts_title = _normalize_korean(title)
+        fts_content = _normalize_korean(content)
         await db.execute("DELETE FROM syn_nodes_fts WHERE node_id = ?", (node.id,))
         await db.execute(
             "INSERT INTO syn_nodes_fts(node_id, title, content) VALUES (?, ?, ?)",
@@ -286,7 +330,7 @@ class SQLiteBackend:
         db = self._db()
         # Strip Korean particles from query terms so "정보화기기를"
         # matches the particle-stripped FTS index ("정보화기기").
-        query = _strip_particles(query)
+        query = _normalize_korean(query)
         terms = query.strip().split()
         if not terms:
             return []
