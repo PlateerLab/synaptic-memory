@@ -132,6 +132,7 @@ async def run_custom_dataset(
     embed_url: str | None = None,
     embed_model: str = "qwen3-embedding:4b",
     reranker_url: str | None = None,
+    use_flashrank: bool = False,
 ) -> RunResult:
     """Run a custom dataset against its pre-built SQLite graph.
 
@@ -160,6 +161,8 @@ async def run_custom_dataset(
         embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
 
     reranker = None
+    # FlashRank is English-only (ms-marco trained). For Korean datasets
+    # use TEI with bge-reranker-v2-m3 instead.
     if reranker_url:
         from synaptic.extensions.reranker_cross import TEIReranker
         reranker = TEIReranker(base_url=reranker_url)
@@ -590,6 +593,7 @@ def _parse_args():
     p.add_argument("--embed-url", default=None, help="Embedding API URL (enables vector cascade)")
     p.add_argument("--embed-model", default="qwen3-embedding:4b")
     p.add_argument("--reranker-url", default=None, help="TEI reranker URL (enables cross-encoder)")
+    p.add_argument("--flashrank", action="store_true", help="Use FlashRank CPU reranker (no GPU needed)")
     p.add_argument("--agent", action="store_true", help="Run multi-turn agent benchmark (requires OpenAI key)")
     p.add_argument("--openai-key", default=None, help="OpenAI API key (or set OPENAI_API_KEY env)")
     p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
@@ -625,6 +629,7 @@ async def main():
                     embed_url=args.embed_url,
                     embed_model=args.embed_model,
                     reranker_url=args.reranker_url,
+                    use_flashrank=args.flashrank,
                 )
             else:
                 r = await run_public_dataset(cfg)

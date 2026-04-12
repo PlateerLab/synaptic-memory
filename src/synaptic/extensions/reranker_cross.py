@@ -156,6 +156,48 @@ class TEIReranker:
         return scores
 
 
+class FlashRankReranker:
+    """CPU-only cross-encoder reranker via FlashRank.
+
+    No torch, no GPU required. 4MB model, ~30ms for 20 documents.
+    ``pip install flashrank``.
+
+    Usage::
+
+        reranker = FlashRankReranker()  # auto-downloads model
+        scores = await reranker.rerank("query", ["doc1", "doc2"])
+    """
+
+    __slots__ = ("_ranker",)
+
+    def __init__(
+        self,
+        model_name: str = "ms-marco-MultiBERT-L-12",
+        cache_dir: str = "/tmp/flashrank",
+    ) -> None:
+        try:
+            from flashrank import Ranker
+            self._ranker = Ranker(model_name=model_name, cache_dir=cache_dir)
+        except ImportError as exc:
+            msg = "pip install flashrank"
+            raise ImportError(msg) from exc
+
+    async def rerank(
+        self, query: str, documents: list[str]
+    ) -> list[float]:
+        if not documents:
+            return []
+        from flashrank import RerankRequest
+        req = RerankRequest(
+            query=query,
+            passages=[{"text": d} for d in documents],
+        )
+        results = self._ranker.rerank(req)
+        # FlashRank returns sorted by score — we need original order
+        score_map = {r["text"]: float(r["score"]) for r in results}
+        return [score_map.get(d, 0.0) for d in documents]
+
+
 class MockReranker:
     """Test double — returns scores proportional to document length."""
 
