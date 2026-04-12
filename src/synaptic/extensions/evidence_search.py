@@ -210,7 +210,41 @@ class EvidenceSearch:
             except Exception:
                 pass
 
-        all_seeds = list(fts_nodes) + vec_seeds
+        # Step 2c — Vector PRF (Pseudo Relevance Feedback).
+        # Refine the query vector using top FTS results' embeddings:
+        # q' = α*q + (1-α)*mean(top_k). This pulls the query vector
+        # toward the actual relevant region of the embedding space,
+        # improving recall on paraphrase / conversational queries.
+        prf_seeds: list = []
+        if query_embedding and fts_nodes:
+            top_embeddings = [
+                n.embedding for n in fts_nodes[:3]
+                if n.embedding and len(n.embedding) == len(query_embedding)
+            ]
+            if top_embeddings:
+                alpha = 0.7
+                dim = len(query_embedding)
+                mean_emb = [
+                    sum(e[i] for e in top_embeddings) / len(top_embeddings)
+                    for i in range(dim)
+                ]
+                prf_vec = [
+                    alpha * query_embedding[i] + (1 - alpha) * mean_emb[i]
+                    for i in range(dim)
+                ]
+                try:
+                    prf_nodes = await self._backend.search_vector(
+                        prf_vec, limit=fts_seed_limit // 2
+                    )
+                    seen_ids = fts_ids | {n.id for n in vec_seeds}
+                    for node in prf_nodes:
+                        if node.id not in seen_ids:
+                            prf_seeds.append(node)
+                            fts_scores[node.id] = 0.06
+                except Exception:
+                    pass
+
+        all_seeds = list(fts_nodes) + vec_seeds + prf_seeds
 
         # Step 3 — shallow graph expansion
         expanded = await self._expander.expand(

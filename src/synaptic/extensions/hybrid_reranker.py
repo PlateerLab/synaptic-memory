@@ -285,5 +285,27 @@ class HybridReranker:
                 )
             )
 
+        # --- Document-level MaxP + coverage bonus ---
+        # When multiple chunks from the same document score well, that
+        # document is likely more relevant than one with a single high
+        # chunk. We boost each chunk's score by the document's coverage
+        # signal: max(sibling scores) + α * log(sibling count + 1).
+        # This is the MaxP aggregation pattern from ColBERT / HippoRAG2.
+        doc_scores: dict[str, list[float]] = {}
+        doc_map: dict[str, str] = {}  # node_id → doc_id
+        for s in scored:
+            doc_id = (s.node.properties or {}).get("doc_id", "")
+            if doc_id:
+                doc_scores.setdefault(doc_id, []).append(s.total)
+                doc_map[s.node.id] = doc_id
+
+        for s in scored:
+            doc_id = doc_map.get(s.node.id, "")
+            if doc_id and doc_id in doc_scores:
+                siblings = doc_scores[doc_id]
+                if len(siblings) > 1:
+                    coverage = 0.05 * math.log(len(siblings) + 1)
+                    s.total = min(1.0, s.total + coverage)
+
         scored.sort(key=lambda s: s.total, reverse=True)
         return scored
