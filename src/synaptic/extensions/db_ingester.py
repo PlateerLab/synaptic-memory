@@ -695,7 +695,8 @@ class DbIngester:
         has_fk = [s for s in regular if s.foreign_keys]
 
         for schema in no_fk + has_fk:
-            rows = await row_reader(schema.name) if asyncio.iscoroutinefunction(row_reader) else row_reader(schema.name)
+            result = row_reader(schema.name)
+            rows = await result if asyncio.iscoroutine(result) else result
             if not rows:
                 continue
 
@@ -721,7 +722,8 @@ class DbIngester:
 
         # M:N join tables → direct edges (no intermediate nodes)
         for schema in join_tables:
-            rows = await row_reader(schema.name) if asyncio.iscoroutinefunction(row_reader) else row_reader(schema.name)
+            result = row_reader(schema.name)
+            rows = await result if asyncio.iscoroutine(result) else result
             if not rows:
                 continue
 
