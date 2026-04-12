@@ -1,223 +1,204 @@
 # Synaptic Memory — 프로젝트 지침
 
 ## 프로젝트 개요
-LLM/멀티에이전트용 뇌 기반 지식 그래프 라이브러리 + MCP 서버.
-에이전트가 경험을 구조화하고, 과거 패턴을 검색/추론할 수 있게 하는 적응형 메모리 아키텍처.
+LLM 에이전트용 지식 그래프 + MCP 도구 서버.
+아무 데이터(CSV, JSONL, PDF)를 넣으면 그래프를 자동 구축하고, 29개 도구로 LLM이 탐색.
 
-- PyPI: `synaptic-memory` (v0.5.0 배포 완료)
+- PyPI: `synaptic-memory` (v0.12.0)
 - 라이선스: MIT
 - Python: >=3.12
+- 코어 의존성: **0** (백엔드/임베더/한국어 분석 전부 optional)
+
+## 핵심 원칙
+
+1. **코드는 데이터와 도구만** — 판단 로직은 전부 LLM에 위임
+2. **torch 의존성 0** — BYO embedder/reranker (Ollama, TEI, API 주입)
+3. **범용화** — 도메인 종속 코드 금지, DomainProfile TOML로 주입
+4. **3세대 검색** — 인덱싱에 LLM 비용 0원, relation-free graph
+
+## Easy API
+
+```python
+from synaptic import SynapticGraph
+
+# 2줄로 시작
+graph = await SynapticGraph.from_data("./my_data/")
+result = await graph.search("my question")
+```
 
 ## 아키텍처
+
+```
+SynapticGraph.from_data("./data/")
+  ↓ 자동: 형식 감지 → DomainProfile → Ingest → Index
+  ↓
+StorageBackend
+  ├── MemoryBackend (테스트)
+  ├── SqliteGraphBackend (기본 권장, FTS5 + HNSW)
+  ├── KuzuBackend (임베디드 Cypher)
+  ├── PostgreSQLBackend (pgvector)
+  └── CompositeBackend (조합)
+  ↓
+검색 파이프라인
+  Kiwi 형태소 → BM25 → Vector(HNSW) → PRF → PPR → Reranker → MaxP → MMR
+  ↓
+Agent tools (29개) → MCP server → LLM agent
+```
 
 ### 핵심 모듈
 | 모듈 | 역할 |
 |------|------|
-| `graph.py` | SynapticGraph — 메인 facade (add, search, link, reinforce, consolidate) |
-| `search.py` | HybridSearch — 3단계 폴백 (FTS → fuzzy → synonym → rewriter) + spreading activation |
-| `agent_search.py` | AgentSearch — intent 기반 검색 (similar_decisions, past_failures, related_rules 등) |
-| `resonance.py` | ResonanceScorer — 4축 공명 (relevance × importance × recency × vitality) |
-| `hebbian.py` | HebbianEngine — co-activation 강화/약화 |
-| `consolidation.py` | ConsolidationCascade — L0→L1→L2→L3 메모리 정리 |
-| `ontology.py` | OntologyRegistry — 타입 계층, 관계 제약, 검증 |
-| `activity.py` | ActivityTracker — 에이전트 세션/tool call/결정/결과 추적 |
-| `models.py` | Node, Edge, NodeKind, EdgeKind, SearchResult 등 |
+| `graph.py` | SynapticGraph — 메인 facade + `from_data()` Easy API |
+| `search.py` | HybridSearch (legacy, v0.5) |
+| `extensions/evidence_search.py` | **EvidenceSearch** — 3세대 파이프라인 (v0.12) |
+| `agent_tools.py` | 7개 원자적 도구 (search, expand, get_document, ...) |
+| `agent_tools_v2.py` | compound 도구 (deep_search, compare_search) |
+| `agent_tools_structured.py` | 정형 데이터 도구 (filter, aggregate, join) |
+| `search_session.py` | 멀티턴 상태 + `build_graph_context()` |
+| `extensions/reranker_cross.py` | Cross-encoder BYO protocol |
 
-### 백엔드 (7종)
-| 백엔드 | 용도 | 의존성 |
-|--------|------|--------|
-| `MemoryBackend` | 테스트/개발 | 없음 |
-| `SQLiteBackend` | 경량 프로덕션 (그래프 없음) | aiosqlite |
-| `KuzuBackend` | **임베디드 그래프 DB (기본 권장)** | kuzu |
-| `PostgreSQLBackend` | 프로덕션 단일 DB | asyncpg, pgvector |
-| `QdrantBackend` | 벡터 검색 | qdrant-client |
-| `MinIOBackend` | 대용량 콘텐츠 | miniopy-async |
-| `CompositeBackend` | 용도별 분리 | Kuzu + Qdrant + MinIO |
+### 인제스트
+| 모듈 | 역할 |
+|------|------|
+| `extensions/document_ingester.py` | 텍스트 문서 → Category→Document→Chunk |
+| `extensions/table_ingester.py` | CSV/테이블 → typed property nodes |
+| `extensions/domain_profile.py` | TOML 도메인 설정 (stopwords, ontology_hints) |
+| `extensions/profile_generator.py` | 자동 프로파일 생성 (3-tier: rule→classifier→LLM) |
+| `extensions/entity_linker.py` | DF 필터 phrase hub + MENTIONS 엣지 |
+
+### 백엔드
+| 백엔드 | 벡터 검색 | 규모 | 의존성 |
+|--------|----------|------|--------|
+| `MemoryBackend` | cosine | ~1만 | 없음 |
+| `SqliteGraphBackend` | **usearch HNSW** | ~10만 | aiosqlite |
+| `KuzuBackend` | HNSW | ~1천만 | kuzu |
+| `PostgreSQLBackend` | pgvector | ~100만 | asyncpg |
+| `CompositeBackend` | Qdrant | 무제한 | 조합 |
 
 ## 테스트
 
-### 인프라 요구사항
 ```bash
-# Kuzu — 임베디드, 인프라 불필요 (pip install synaptic-memory[kuzu])
-
-# Qdrant
-docker start qdrant  # 또는 docker run -d --name qdrant -p 6333:6333 qdrant/qdrant
-
-# PostgreSQL — 기존 컨테이너 사용 (ailab:ailab123@localhost:5432/plateerag)
-# MinIO — 기존 컨테이너 사용 (localhost:9000)
-```
-
-### 실행
-```bash
-# 전체 테스트 (281건)
-uv run pytest tests/ -v
-
-# 외부 인프라 의존 백엔드 제외 (로컬 빠른 실행용)
-uv run pytest tests/ \
+# 단위 테스트 (687+ 건)
+uv run pytest tests/ -q \
   --ignore=tests/test_backend_postgresql.py \
   --ignore=tests/test_backend_qdrant.py \
   --ignore=tests/test_backend_minio.py \
-  --ignore=tests/test_backend_composite.py -v
+  --ignore=tests/test_backend_composite.py \
+  --ignore=tests/test_backend_kuzu.py \
+  --ignore=tests/benchmark
 
-# 벤치마크만
-uv run pytest tests/benchmark/ -v -s
+# lint
+uv run ruff check src/ tests/ --fix
 ```
 
-### Qdrant 테스트 주의
-- fixture에서 매 테스트 전 `test_synaptic` collection 삭제 후 재생성
-- 이전 비정상 종료 시 segment 잔재로 500 에러 발생 가능 → collection 수동 삭제 후 재실행
+## QA 벤치마크
 
-## 벤치마크
-
-### 구조
-```
-tests/benchmark/
-├── conftest.py                    # 엔터프라이즈 시나리오 fixture
-├── metrics.py                     # IR 평가 지표 (MRR, nDCG, P@K, R@K, F1@K)
-├── generate_data.py               # 시나리오 데이터 생성기 (아직 미사용)
-├── download_datasets.py           # HuggingFace 외부 데이터셋 다운로드
-├── test_enterprise_benchmark.py   # 자체 시나리오 벤치마크 (50개 쿼리)
-├── test_external_datasets.py      # 외부 데이터셋 벤치마크
-└── data/
-    ├── enterprise_scenario.json   # 자체 시나리오 v1 (12 지식 + 4 세션 + 15 쿼리)
-    ├── ko_strategyqa.json         # MTEB Ko-StrategyQA (9.2K corpus, 592 queries)
-    ├── autorag_retrieval.json     # MTEB AutoRAGRetrieval (720 corpus, 114 queries)
-    ├── klue_mrc.json              # KLUE-MRC (5.8K corpus, 5.8K queries)
-    ├── nfcorpus.json              # BeIR NFCorpus (3.6K corpus, 의료/영양)
-    ├── scifact.json               # BeIR SciFact (5.2K corpus, 과학 fact-checking)
-    ├── fiqa.json                  # BeIR FiQA (57.6K corpus, 금융 QA)
-    ├── miracl_retrieval_ko.json   # MTEB MIRACLRetrieval-ko (10K sampled, 위키)
-    ├── multilongdoc_ko.json       # MTEB MultiLongDocRetrieval-ko (6.2K, 장문서)
-    └── xpqa_ko.json               # MTEB XPQARetrieval-ko (889 corpus, 다도메인)
-```
-
-### 외부 데이터셋 다운로드
+### 실행
 ```bash
-uv run python tests/benchmark/download_datasets.py
+# 개발 후 QA (9개 데이터셋 자동 실행)
+uv run python eval/run_all.py --quick
+
+# 전체 (대규모 포함)
+uv run python eval/run_all.py
+
+# 회귀 감지 (이전 결과 비교)
+uv run python eval/run_all.py --compare eval/results/qa_latest.json
 ```
-- MIRACL (레거시 형식), Mr. TyDi는 HuggingFace datasets 호환 이슈로 skip
-- MIRACLRetrieval (mteb 형식)은 정상 동작 (1.49M → 10K 샘플링)
 
-### 외부 데이터셋 벤치마크 결과 (MemoryBackend, qwen3-embedding:4b)
-| 데이터셋 | 언어 | Corpus | FTS only MRR | FTS+Embed MRR | 개선 |
-|----------|------|--------|-------------|--------------|------|
-| HotPotQA-24 | EN | 226 | 0.752 | **0.873** | +16.1% |
-| HotPotQA-200 | EN | 1,990 | 0.742 | **0.846** | +14.0% |
-| Allganize rag-ko | KO | 200 | 0.782 | **0.841** | +7.5% |
-| Allganize RAG-Eval | KO | 300 | 0.796 | **0.828** | +4.0% |
-| KLUE-MRC | KO | 500 | 0.607 | **0.727** | +19.8% |
-| SciFact | EN | 5,183 | 0.415 | **0.548** | +32.0% |
-| NFCorpus | EN | 3,633 | 0.443 | **0.511** | +15.3% |
-| Ko-StrategyQA | KO | 9,251 | 0.317 | **0.459** | +44.8% |
-| PublicHealthQA | KO | 77 | 0.346 | **0.402** | +16.2% |
-| MIRACLRetrieval | KO | 10,000 | 0.792 | (미측정) | - |
-| XPQARetrieval | KO | 889 | 0.167 | (미측정) | - |
-| FiQA | EN | 57,638 | 0.132 | (미측정) | - |
-| MultiLongDocRetrieval | KO | 6,176 | 0.070 | (미측정) | - |
+### 현재 베이스라인 (v0.12)
+| 데이터셋 | 언어 | Corpus | MRR | Hit | 비고 |
+|---------|------|--------|-----|-----|------|
+| KRRA Easy (20q) | KO | 19,720 | **0.967** | 20/20 | FTS + Kiwi |
+| KRRA Hard (15q) | KO | 19,720 | 0.507 | 11/15 | +embed+reranker |
+| KRRA Hard Multi-turn | KO | 19,720 | **100%** | 15/15 | Claude/GPT agent |
+| assort Easy (15q) | KO | 13,909 | **0.880** | 14/15 | 정형 CSV |
+| assort Hard Multi-turn | KO | 13,909 | **83%** | 5/6 | structured tools |
+| HotPotQA-24 | EN | 226 | **0.727** | 24/24 | multi-hop |
+| Allganize RAG-ko | KO | 200 | **0.621** | 180/200 | 기업 문서 |
+| Allganize RAG-Eval | KO | 300 | **0.615** | 264/300 | 금융/의료/법률 |
+| AutoRAG | KO | 720 | **0.592** | 98/114 | 기업 검색 |
+| PublicHealthQA | KO | 77 | **0.318** | 45/77 | 공중보건 |
 
-### 자체 시나리오 벤치마크 결과
-| 지표 | v0.5.0 Baseline | v0.5.0 개선 | v0.9.0 + Embedding |
-|------|-----------------|------------|-------------------|
-| MRR | 0.326 | 0.477 | **0.791** (+66%) |
-| Mean P@5 | 0.160 | 0.227 | **0.293** (+29%) |
-| Mean R@5 | 0.467 | 0.533 | **0.767** (+44%) |
-| Mean nDCG@5 | 0.351 | 0.431 | **0.695** (+61%) |
-| Hit rate | 9/15 | 13/15 | **15/15** |
+### 평가 쿼리 위치
+```
+eval/data/queries/
+├── krra.json          # KRRA Easy 20q (키워드 직접 매칭)
+├── krra_hard.json     # KRRA Hard 15q (패러프레이즈, 교차문서, 대화체)
+├── assort.json        # assort Easy 15q
+├── assort_hard.json   # assort Hard 15q (필터, 집계, FK조인)
+└── krra_multihop.json # 교차 문서 10q
+```
 
-### KRRA (eval/) 벤치마크 결과 — 2026-04-12 Day 1 baseline
-독립 eval harness (`eval/scripts/score_krra.py`), 20 seed 쿼리, k=10, FTS only.
+## MCP 서버 (29개 도구)
 
-| 지표 | NFD graph | NFC graph | Δ |
-|------|-----------|-----------|---|
-| MRR | 0.525 | **0.650** | +23.8% |
-| Mean P@10 | 0.186 | **0.392** | +110.8% |
-| Mean R@10 | 0.417 | 0.453 | +8.6% |
-| Mean nDCG@10 | 0.431 | **0.503** | +16.7% |
-| Hit rate | 12/20 | 13/20 | +1 |
-| Avg latency | 728ms | **585ms** | -20% |
+```bash
+synaptic-mcp --db knowledge.db
+synaptic-mcp --db knowledge.db --embed-url http://localhost:11434/v1
+```
 
-**파이프라인**: `parse_krra.py` → `ingest_krra.py` (NFC 정규화 포함) → `score_krra.py` → `eval/results/krra_baseline_*.json`.
-**GT**: `eval/data/queries/krra.json` — 카테고리 분산 20개, title 키워드 매칭으로 doc_id 시드.
-**현재 그래프**: 구조적 ingestion만 (Category×10 + Document×1,110 + Chunk×18,600, 엔티티/관계 추출 미적용).
-**다음 단계 (Day 2)**: home Ollama `qwen3-embedding:4b` 주입해서 Baseline C (embedding cascade) 측정.
-
-### KRRA Day 1 발견 이슈
-- 🔴 **라이브러리 NFC/NFD 버그**: `graph.add()`, `graph.search()` 둘 다 Unicode 정규화 없음. Mac HFS+/zfs 소스 한글 데이터 → 검색 실패. 수정 위치: `graph.py:300` (add), `graph.py:586` (search). phrase_extractor.py에만 정규화 있음.
-- 🟡 **chunk granularity mismatch**: Document 노드 `content=""`로 FTS 약함. 본문 키워드 조합이 우연히 맞는 무관 청크가 정답 청크를 밀어냄. 7/20 zero-hit의 원인. 수정 옵션: (a) title 가중치 상향, (b) Document.content=title 복제, (c) chunk→doc score aggregation (HippoRAG2).
-- 🟡 **parse_krra.py year=null 전건**: NFD filename에서 `(\d{4})년도` 정규식 실패. 텍스트 필드만 NFC 정규화하고 `_doc_id()`는 NFD 유지 (GT 호환).
-- 🟢 **ingest_krra.py Kuzu 파일/디렉터리** (수정 완료): Kuzu 0.x 단일 파일, shutil.rmtree 실패 → 파일/디렉터리 + WAL sibling 처리 추가.
-
-### Ablation Study 핵심 발견
-- S1 Ontology: 현재 graph.search()가 NodeKind를 랭킹에 미활용 → 효과 없음
-- S2 Relations: spreading activation이 노이즈 유입 (MRR -14~-32%)
-- S3 Hebbian: HotPotQA multi-hop에서만 +3.9% 기여
-- S5 agent_search: kind 필터링이 과도하게 공격적 → recall 하락
-- S6 Auto ontology: 보수적 동작으로 성능 유지하지만 개선도 없음
-
-### 경쟁 제품 비교
-| 제품 | 벤치마크 | 결과 | 비고 |
-|------|----------|------|------|
-| Cognee | HotPotQA 24문항 | Correctness 0.925 | end-to-end QA (LLM 포함) |
-| Mem0 | LoCoMo | 66.9% | 메모리 정확도 |
-| LightRAG | NaiveRAG 비교 | 39% win rate | 독립 검증 (원래 66.7%) |
-| HippoRAG2 | HotPotQA | Recall 95.4% | 최고 수준 |
-
-### 검색 개선 내역
-1. FTS: title 가중치 3x, bigram 서브스트링 매칭, tag 매칭
-2. FTS: 순위 기반 점수 (1위 0.95 → 감소)
-3. Fuzzy: threshold 0.3→0.4, content 샘플 50→100 단어, title boost
-4. Spreading activation: depth 1→2, 다중 경로 보상 → PPR로 교체
-5. AgentSearch past_failures: LESSON 노드 포함, fallback 추가
-6. **Embedding cascade**: FTS 순위 보존 + vector-only 결과 보완 (corpus 크기 적응)
-   - vec_alpha: 소규모 0.3 → 대규모 0.85 (corpus_size 기반)
-   - cos_threshold: 0.45 (전 규모 통일)
-   - 실패 실험: fusion/blend/RRF → FTS 순위 교란, 중복 boost cos*0.15/0.05 → regression, threshold 0.40 → 노이즈
+### 도구 분류
+| 분류 | 도구 수 | 예시 |
+|------|--------|------|
+| Knowledge CRUD | 7 | search, add, link, reinforce, stats, export, consolidate |
+| Agent workflow | 4 | start_session, log_action, record_decision, record_outcome |
+| Semantic search | 3 | find_similar, get_reasoning_chain, explore_context |
+| Ontology | 2 | define_type, query_schema |
+| **Agent v1** | 8 | search, expand, get_document, list_categories, count, search_exact, follow, session_info |
+| **Agent v2** | 2 | deep_search, compare_search |
+| **Structured** | 3 | filter_nodes, aggregate_nodes, join_related |
 
 ## 배포
 
 ### PyPI
 ```bash
-source ~/.claude/.secrets  # PYPI_TOKEN 로드
 uv build && uv publish --username __token__ --password "$PYPI_TOKEN"
 ```
 
 ### 설치
 ```bash
-pip install synaptic-memory            # 코어만
-pip install synaptic-memory[embedding]  # auto-embedding
-pip install synaptic-memory[scale]      # Neo4j + Qdrant + MinIO
-pip install synaptic-memory[all]        # 전부
-pip install synaptic-memory[mcp]       # MCP 서버
+pip install synaptic-memory              # 코어 (의존성 0)
+pip install synaptic-memory[sqlite]      # SQLite FTS5
+pip install synaptic-memory[korean]      # Kiwi 한국어 형태소
+pip install synaptic-memory[vector]      # usearch HNSW
+pip install synaptic-memory[embedding]   # 임베딩 API
+pip install synaptic-memory[mcp]         # MCP 서버
+pip install synaptic-memory[all]         # 전부
 ```
 
-## 로드맵
+## 검색 파이프라인 상세
 
-### 온톨로지 자동 구축 (3단계)
-| Phase | 방식 | 비용 | 한국어 | 의존성 |
-|-------|------|------|--------|--------|
-| Phase 1 | 임베딩 유사도 자동 연결 | 저렴 | O | sentence-transformers |
-| Phase 2 | spaCy dependency parsing | 무료 | 제한적 | spacy (ko_core_news) |
-| Phase 3 | LLM 프롬프트 트리플 추출 | 높음 | O | LLM API |
+### EvidenceSearch (3세대, v0.12)
+```
+Step 0: 쿼리 임베딩 (BYO embedder, 선택)
+Step 1: QueryAnchorExtractor (카테고리/엔티티/키워드)
+Step 2a: FTS seed (BM25 + Kiwi 형태소 + title 3x boost)
+Step 2b: Vector seed (usearch HNSW, cascade)
+Step 2c: Vector PRF (top-3 임베딩 평균 → 2차 검색)
+Step 3: GraphExpander (1-hop: category siblings, chunk-next, MENTIONS)
+Step 3b: PPR graph discovery
+Step 4: HybridReranker (lexical + semantic + graph + structural + authority + temporal + MaxP)
+Step 4b: Cross-encoder reranker (BYO, TEI/Ollama)
+Step 5: EvidenceAggregator (MMR + per-doc cap + category coverage)
+```
 
-### 검색 엔진 개선 포인트
-- spreading activation 가중치 튜닝: edge type별 차등 전파 (RELATED > TAGGED_WITH)
-- NodeKind 활용: 검색 랭킹에 kind 정보 반영 (ontology ablation 결과 반영)
-- tag 기반 부스팅: tag 매칭 시 가중치 조절
-- agent_search kind 필터 완화: recall 보존하면서 precision 유지
+### 알고리즘 개선 내역 (v0.12)
+- Phase 1: MaxP document aggregation + Vector PRF → Hard MRR +21%
+- Phase 2: usearch HNSW → latency 11s → 1ms (100x)
+- Phase 3: Cross-encoder reranker (bge-reranker-v2-m3) → Hard MRR +22%
+- Phase 4: PPR graph discovery in EvidenceSearch
+- Kiwi 형태소 분석기: 한국어 FTS 조사 분리 (한글 비율 50%+ 자동 감지)
+- rank_to_score: step 0.03, floor 0.10 (하위 결과 순위 보존)
+- 구조 개선 6건: batch INSERT, count_nodes, get_nodes_batch, HNSW 무효화 등
 
-### 타겟 수치
-| 지표 | v0.9.0 FTS only | v0.9.0 + Embed | 목표 | 달성 |
-|------|-----------------|----------------|------|------|
-| MRR (Allganize) | 0.796 | **0.828** | 0.85+ | 근접 |
-| MRR (HotPotQA-200) | 0.742 | **0.846** | 0.80+ | ✅ |
-| MRR (Ko-StrategyQA) | 0.317 | **0.459** | 0.50+ | 근접 |
-| 자체 시나리오 MRR | 0.477 | **0.791** | 0.65+ | ✅ |
-| MRR (KLUE-MRC) | 0.607 | **0.727** | 0.75+ | 근접 |
+## Home 서버
+- IP: 14.6.220.78 (ssh home)
+- GPU: RTX 3080 (10GB VRAM)
+- Ollama: qwen3-embedding:4b, bge-m3, qwen3.5:4b, qwen2.5:14b
+- TEI: bge-reranker-v2-m3 (Docker, port 8180)
+- Qdrant, PostgreSQL, MinIO 등 인프라
 
 ## 방향성
-- 플래티어 온톨로지 비전과 연계: 엔터프라이즈 시맨틱 레이어
-- 정적 검색 → 동적 메모리 (사용 경험에 따라 재편)
-- 다층 랭킹: relevance + importance + recency + vitality
-- Hebbian 학습: 함께 쓰이는 지식 연결 강화, 실패 패턴 약화
-- 선제적 활성화: 태스크 맥락 기반 proactive loading
-- **차별점**: 단순 retrieval이 아닌 "에이전트 경험 메모리" — 검색+학습+적응의 통합
+- **3세대 GraphRAG**: relation-free graph + hybrid retrieval + LLM-free indexing
+- **멀티턴 에이전트**: deep_search + compare_search + graph context injection → 10턴 → 2-3턴
+- **정형 + 비정형 통합**: 같은 그래프에 문서(FTS)와 테이블(filter/aggregate/join)
+- **범용 라이브러리**: `from_data()` 2줄이면 어떤 데이터든 온톨로지 구축
