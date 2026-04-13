@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Live database CDC (Change Data Capture)
+
+- **`SynapticGraph.from_database(mode="cdc")`** — opt-in deterministic
+  node IDs derived from `(source_url, table, primary_key)`. Re-running
+  the same source against the same graph file is now a true upsert;
+  random-UUID `mode="full"` is preserved as the default for one-shot
+  exports.
+- **`SynapticGraph.sync_from_database(dsn)`** — incremental sync.
+  Tables with an `updated_at`-style column use a `WHERE col >= watermark`
+  filter; tables without one fall back to per-row content hashing.
+  Both strategies share delete detection (TEMP TABLE + LEFT JOIN, no
+  Python set diff) and FK edge re-computation.
+- **`mode="auto"`** — uses prior CDC state when the graph file has
+  one, otherwise falls back to `mode="full"`.
+- **Supported dialects**: SQLite, PostgreSQL, MySQL/MariaDB.
+  Oracle / MSSQL still use the legacy full-reload path.
+- **Self-contained graph files**: CDC bookkeeping (`syn_cdc_state`,
+  `syn_cdc_pk_index`) lives inside the same SQLite file as the graph,
+  so a single `.db` round-trips cleanly.
+- **Search regression test** locks in that `mode="cdc"` returns the
+  same top-k results as `mode="full"` — CDC only changes node
+  identification, never search algorithms.
+
 ## [0.13.0] - 2026-04-13
 
 ### Added — Graph-aware agent search + structured data tools

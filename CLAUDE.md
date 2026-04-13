@@ -61,10 +61,24 @@ Agent tools (29개) → MCP server → LLM agent
 | 모듈 | 역할 |
 |------|------|
 | `extensions/document_ingester.py` | 텍스트 문서 → Category→Document→Chunk |
-| `extensions/table_ingester.py` | CSV/테이블 → typed property nodes |
+| `extensions/table_ingester.py` | CSV/테이블 → typed property nodes (`source_url=`로 deterministic ID 활성화) |
+| `extensions/db_ingester.py` | 5종 DB 자동 인제스트 + CDC 동기화 오케스트레이터 |
+| `extensions/cdc/` | Change Data Capture — 증분 동기화 (timestamp/hash 전략, 삭제 감지, FK 재계산) |
 | `extensions/domain_profile.py` | TOML 도메인 설정 (stopwords, ontology_hints) |
 | `extensions/profile_generator.py` | 자동 프로파일 생성 (3-tier: rule→classifier→LLM) |
 | `extensions/entity_linker.py` | DF 필터 phrase hub + MENTIONS 엣지 |
+
+### CDC (Live database sync)
+프로덕션 DB와 연동할 때 매번 전체 재빌드 대신 변경분만 반영.
+
+- **`from_database(mode="cdc")`** — 첫 호출은 deterministic ID로 풀로드 + sync state 기록
+- **`sync_from_database(dsn)`** — 두 번째 호출부터 증분 (added/updated/deleted)
+- **`mode="auto"`** — 기존 state 있으면 cdc, 없으면 full
+- **전략**: `updated_at`류 컬럼 있으면 timestamp (`WHERE col >= watermark`), 없으면 hash fallback (row content blake2b)
+- **삭제 감지**: TEMP TABLE + LEFT JOIN (메모리 부담 0)
+- **FK 재계산**: row의 FK가 바뀌면 RELATED 엣지 자동 rewire
+- **dialects**: SQLite, PostgreSQL, MySQL/MariaDB. Oracle/MSSQL은 legacy full-reload만.
+- **검색 품질 보장**: `mode="cdc"`와 `mode="full"`이 동일 top-k 반환 (regression test로 잠금)
 
 ### 백엔드
 | 백엔드 | 벡터 검색 | 규모 | 의존성 |

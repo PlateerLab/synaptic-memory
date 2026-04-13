@@ -25,6 +25,17 @@ graph = await SynapticGraph.from_database(
     "postgresql://user:pass@host:5432/dbname"
 )
 
+# Live database? Use CDC mode and only re-read what changed.
+graph = await SynapticGraph.from_database(
+    "postgresql://user:pass@host:5432/dbname",
+    db="knowledge.db",
+    mode="cdc",       # deterministic node IDs + sync state recorded
+)
+result = await graph.sync_from_database(
+    "postgresql://user:pass@host:5432/dbname"
+)
+print(result.added, result.updated, result.deleted)
+
 # Or bring your own chunker (LangChain, Unstructured, custom OCR, ...)
 chunks = my_parser.split("manual.pdf")
 graph = await SynapticGraph.from_chunks(chunks)
@@ -34,6 +45,14 @@ result = await graph.search("my question")
 ```
 
 That's it. Auto-detects file format or DB schema, generates ontology profile, ingests, indexes, builds FK edges.
+
+> **Live database sync (CDC)** — `mode="cdc"` enables incremental
+> updates: tables with an `updated_at`-style column are read with a
+> watermark filter, others fall back to per-row content hashing.
+> Deletes are detected via a TEMP TABLE LEFT JOIN; FK rewires
+> re-link the corresponding RELATED edges. Search results are
+> identical to a full reload (locked in by a regression test).
+> Supports SQLite, PostgreSQL, MySQL/MariaDB.
 
 > **Office files (PDF/DOCX/PPTX/XLSX/HWP)** are supported through the **optional** `xgen-doc2chunk` package. Install with `pip install synaptic-memory[docs]` or use `from_chunks()` with your own parser.
 
