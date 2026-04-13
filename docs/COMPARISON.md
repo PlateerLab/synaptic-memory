@@ -347,45 +347,85 @@ v0.11 대비 알고리즘 개선:
 
 ---
 
-## 5. 종합 비교 매트릭스
+## 5. 시스템별 강점과 약점
 
-| 능력 | HippoRAG | Zep | Mem0 | A-MEM | MAGMA | Letta | **Synaptic** |
-|------|:--------:|:---:|:----:|:-----:|:-----:|:-----:|:------------:|
-| Spreading Activation | ✅ PPR | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ PPR + BFS+weight |
-| Behavioral Learning | ✗ | ✗ | △ LLM | △ LLM | △ LLM | ✗ | ✅ Hebbian |
-| Memory Consolidation | ✗ | △ temporal | △ LRU | ✗ | ✗ | △ summarize | ✅ L0→L3 |
-| Principled Forgetting | ✗ | △ invalidate | ✗ | ✗ | ✗ | ✗ | ✅ TTL+decay |
-| Intent-based Search | ✗ | ✗ | ✗ | ✗ | △ partial | ✗ | ✅ 6 intents |
-| Ontology / Schema | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ TypeDef + DomainProfile |
-| Agent Activity Tracking | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ integrated |
-| **LLM-free Indexing** | ✗ OpenIE | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ relation-free |
-| **BYO Embedder/Reranker** (torch-free) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ HTTP protocol |
-| **Structured Data Tools** (filter/aggregate/join) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ 3 tools |
-| **Any-format Ingestion** (CSV/PDF/DB/JSONL) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ `from_data()` |
-| Storage Backend | in-mem | Neo4j | vector store | vector store | vector store | PG + files | SQLite/Kuzu/Postgres/Composite |
-| MCP Integration | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✅ **29 tools** |
+앞 섹션들은 Synaptic의 설계 원칙을 부각하기 위해 **"Synaptic이 해결했다고 주장하는 축"** 을 기준으로 정리했다. 균형을 위해 이 섹션에서는 각 시스템을 **자체 논문/문서가 내세우는 강점과 함께** 서술하고, Synaptic 의 한계도 솔직히 나열한다.
 
-**✅** = 완전 지원 / **△** = 부분 지원 또는 제한적 / **✗** = 미지원
+> 중요한 주의: 아래 서술은 **각자의 논문·공식 문서·코드 공개 범위에 근거한 질적 비교**다. 공통 데이터셋에서 동일 조건으로 head-to-head 측정한 결과가 아니다. HotPotQA 정도를 제외하면 평가 프로토콜·코퍼스·임베더가 달라서 숫자 비교에는 한계가 있다.
+
+### HippoRAG (NeurIPS 2024)
+**강점**: PPR 기반 spreading activation은 multi-hop QA에서 강력하다 — MuSiQue·2WikiMultiHopQA에서 경쟁력 있는 성능. 단일 retrieval 스텝으로 다중 홉을 근사한다는 점이 이론적으로 우아하며, 해마 이론에서 출발한 설계가 후속 연구에 영감을 주었다.
+**약점**: OpenIE 기반 KG 구축에 LLM 비용이 들고, 구축 이후 KG가 고정되어 사용 패턴으로 학습하지 않는다. 타입 시스템이 없고, 망각 메커니즘도 없어 스케일에서 hub-drift 문제가 보고됨.
+
+### Zep / Graphiti (2025)
+**강점**: bi-temporal(valid_at / invalid_at) 모델은 "언제 참이었는가"를 추적하는 가장 엄밀한 구현 중 하나. 상업 제품으로 운영 경험이 축적되어 있고, Neo4j 백엔드 기반으로 성숙한 그래프 쿼리 생태계를 활용할 수 있음. 관계 스키마를 structured output 으로 강제.
+**약점**: entity/relation 추출이 LLM에 의존 → 작은 모델에서 스키마 오류 보고. episode→entity→community 3계층이 고정이라 도메인 특화 타입 추가는 코드 수정 필요. 사용 빈도·성공률 기반 학습은 없음.
+
+### Mem0 / Mem0g (2025)
+**강점**: 단순하고 직관적인 extract-update 파이프라인으로 프로덕션 도입 문턱이 낮음. OpenAI·Anthropic 등 주요 에이전트 스택에 통합. retrieval 단계의 token 효율은 논문에서 강조되는 장점.
+**약점**: 논문에서 "consolidation is not fully automated" 라고 직접 인정. LLM에 conflict detection 을 의존해 메모리 1개 처리 지연이 비교 실험에서 1350.9초로 보고됨. 스키마가 없어 관계 제약을 걸 수 없음.
+
+### A-MEM (NeurIPS 2025)
+**강점**: Zettelkasten 기반 자기조직화로 메모리가 스스로 링크·태깅되는 구조가 신선함. LoCoMo 등 긴 대화 벤치마크에서 눈에 띄는 개선. "agentic memory" 개념을 구체화한 첫 시스템 중 하나.
+**약점**: 메모리 추가마다 LLM을 여러 번 호출해 비용·지연이 큼. Zettelkasten 은 본래 "버리지 않는" 방법론이라 망각이 없고, 규모가 커질수록 링크 그래프가 무거워짐.
+
+### MAGMA (2026)
+**강점**: semantic/temporal/causal/entity 4개 직교 그래프 분리는 이론적으로 가장 포괄적인 아키텍처. intent에 따라 다른 view를 선택하는 retrieval 은 Synaptic 의 intent 개념과 같은 방향성을 공유.
+**약점**: 4개 그래프를 동시에 유지·동기화하는 엔지니어링 비용이 큼. causal 추출이 LLM 의존이라 논문이 직접 "susceptible to extraction errors and hallucinations" 인정. 참조 구현·벤치마크가 제한적.
+
+### Letta / MemGPT (2023–)
+**강점**: "OS 메타포" 가 직관적이고 개발자 교육 비용이 낮음. 성숙한 오픈소스 제품으로 문서·예제·커뮤니티가 풍부. function calling 기반 메모리 관리는 기존 LLM 에이전트 루프와 잘 맞음.
+**약점**: core/archival/recall 은 저장 위치 계층이지 의미적 스키마가 아님. 요약 기반 archival 은 정보 손실이 불가피하고, context limit 초과 버그가 공개 이슈에서 반복 보고됨. 그래프 구조가 없어 다중 홉 추론에 약함.
+
+### Synaptic Memory (이 프로젝트)
+**강점**
+- 인덱싱 단계 LLM 호출 0회. OpenIE / relation extraction 없이 구조적·통계적 신호만으로 그래프 구축.
+- Hebbian learning + 4단계 consolidation + TTL decay 로 사용 패턴 기반 생명주기가 규칙 기반으로 작동.
+- 6개 intent × 5축 resonance 가중치로 검색 전략을 쿼리 시점에 전환.
+- OntologyRegistry(코드) + DomainProfile TOML(설정) 이라는 2-layer 스키마로 범용화.
+- 정형(CSV/DB) + 비정형(PDF/MD) 을 같은 그래프에 올리고 `filter_nodes / aggregate_nodes / join_related` 도구로 에이전트에 노출.
+- 코어 의존성 0, torch-free, BYO embedder/reranker (Ollama·TEI·API).
+- `from_data()` 2줄 API, 29개 MCP 도구, 9개 데이터셋 자동 평가 스크립트.
+
+**알려진 약점 및 미검증 영역**
+- **프로덕션 성숙도 낮음**. 단일 저자 오픈소스이며 대규모 운영 사례 없음. Zep·Letta·Mem0 는 상업·커뮤니티 경험이 훨씬 많음.
+- **공정한 head-to-head 벤치마크 부재**. 섹션 4의 숫자는 자체 재현 환경 기준. HippoRAG / Mem0 / Zep 과 동일 코퍼스·프로토콜에서 비교한 공개 결과는 아직 없음. 현재 HotPotQA 0.727 이 공통 비교 가능한 유일한 지점이며, 이것도 corpus 샘플링이 다르다.
+- **Hebbian / consolidation 의 실제 효과 미입증**. 설계는 합리적이지만 "이 메커니즘이 장기 운영에서 retrieval 품질을 유의미하게 개선하는가"는 정량화된 증거가 없다. 내부 시나리오 테스트만 존재.
+- **한국어 편중**. Kiwi 형태소, KRRA/assort/Allganize 등 평가 다수가 한국어. 영어 벤치마크는 HotPotQA / X2BEE 정도로 폭이 좁음.
+- **Kuzu 백엔드 아카이브 상태**. 2025-10 Apple 인수로 upstream 동결(0.11.3 고정). 현재 동작하지만 장기 지원 불확실. LadybugDB fork 는 검증 결과 drop-in 불가. 당분간 SQLite + Postgres 가 안전한 선택.
+- **인프라 부담은 사용자에게 전가**. torch-free 를 달성한 대가로 embedder/cross-encoder 서빙(Ollama, TEI 등) 을 사용자가 직접 운영해야 함. 완제품 SaaS 가 아님.
+- **통합·생태계 부족**. LangChain·LlamaIndex 등 주류 프레임워크 어댑터 미비. MCP 외 경로로는 수동 통합 필요.
+- **벤치마크의 자기평가 편향**. `eval/run_all.py` 는 자체 스크립트이며, 공개 리더보드(예: BEIR, MTEB, KILT) 등재 없음. 숫자는 참조 지표이지 공정한 비교가 아님.
 
 ---
 
-## 6. 포지셔닝
+## 6. 포지셔닝 — 어떤 경우에 Synaptic 이 맞고, 어떤 경우에 아닌가
 
-Synaptic Memory는 기존 연구의 개별 아이디어를 조합한 것이 아니라, **뇌의 작동 원리**와 **범용 검색 기질** 이라는 두 축을 일관되게 적용한 통합 시스템이다.
+Synaptic Memory 는 "가장 나은 에이전트 메모리" 를 주장하지 않는다. 대신 **설계 선택의 조합이 특정 시나리오에 잘 맞는다** 는 정도가 정직한 표현이다.
 
-**뇌 쪽 영감:**
-- **HippoRAG**에서 spreading activation의 가치를 확인했지만, "읽기 전용"이라는 한계를 넘어 **쓰기(활동 기록) + 학습(Hebbian) + 망각(consolidation)**을 추가
-- **Zep**에서 temporal KG의 가치를 확인했지만, 시간만 추적하는 한계를 넘어 **사용 패턴(access_count, success_rate) 기반 생명주기**를 구현
-- **MAGMA**에서 intent-aware retrieval의 가치를 확인했지만, 4개 그래프 유지 비용을 회피하고 **하나의 그래프에서 intent별 전략 전환**으로 해결
-- **시맨틱 웹**에서 온톨로지의 가치를 가져왔지만, OWL/RDF의 복잡도를 피하고 **Python dataclass + TOML DomainProfile 기반 경량 타입 시스템**으로 구현
+**설계 원칙의 계보:**
+- HippoRAG 의 spreading activation 이 multi-hop retrieval에 효과적이라는 관찰에서 출발하되, "읽기 전용 KG" 를 넘어 쓰기·학습·망각을 추가하려 함.
+- Zep 의 temporal KG 가 시간 축 유효성을 엄밀히 추적한다는 관찰에서 출발하되, "시간만으로는 유용성을 못 판단한다" 는 문제에 사용 패턴 기반 생명주기로 접근.
+- MAGMA 의 intent-aware retrieval 이 맞는 방향이라고 판단하되, 4-graph 유지 비용이 실전에서 부담이라는 가정에서 단일 그래프 + intent dispatch 로 단순화.
+- 시맨틱 웹 온톨로지의 타입 엄격성을 가져오되, OWL/RDF 의 복잡도 없이 Python dataclass + TOML 로 경량화.
+- GraphRAG 계열이 인덱싱에 LLM 을 쓰는 흐름에 반대로, BM25 + HNSW + MENTIONS phrase hub 로 LLM-free indexing 에 집중.
 
-**범용 기질 쪽:**
-- **GraphRAG 계열**이 문서 인덱싱에 LLM을 필수로 쓰는 것을 회피하고, BM25 + HNSW + MENTIONS phrase hub 로 **LLM-free indexing** 을 달성
-- **정형 + 비정형**을 같은 그래프에 올려서, 문서 검색과 SQL-like 연산을 같은 에이전트가 자연스럽게 사용할 수 있게 함
-- **BYO embedder/reranker** 로 torch 의존성을 제거, 코어를 가볍게 유지하면서도 Ollama·TEI·API 등 사용자가 고른 런타임을 그대로 쓰게 함
-- **`from_data()` 2줄** 로 진입 장벽을 낮추고, 복잡한 튜닝은 DomainProfile TOML 로 옵트인
+**Synaptic 을 고를 만한 경우**
+- 기업 내부 데이터(문서 + DB) 를 **로컬에서** 인덱싱해야 하고, 인덱싱 비용·프라이버시·재현성이 중요한 경우
+- 한국어 데이터가 비중 있고, Kiwi 형태소 기반 FTS 의 품질이 필요한 경우
+- `from_data()` 수준의 간단한 API 로 빠르게 PoC 를 만들고, 나중에 DomainProfile 로 튜닝할 여지를 원하는 경우
+- MCP 기반 에이전트 툴 사용이 중심이고, 29개 도구를 에이전트에 그대로 노출하고 싶은 경우
+- 정형 테이블(filter/aggregate/join) 과 비정형 문서 검색을 같은 그래프에서 다루고 싶은 경우
+- embedder/reranker 를 **본인이 골라서** 운영하는 것이 부담이 아니라 장점인 경우
 
-핵심 차별점은 **LLM 의존도**다. 기존 시스템들이 메모리의 핵심 연산(추출, 업데이트, 조직화)에 LLM을 필수로 사용하는 반면, Synaptic Memory는 **인덱싱에 LLM 비용 0원** 이다. LLM은 에이전트가 지식을 **사용**하는 시점(검색 결과 해석, 도구 호출, 답변 합성)에만 관여하고, 지식의 **관리**(학습, 정리, 검증, 인덱싱)는 규칙·통계 기반으로 작동한다.
+**Synaptic 을 고르면 안 되는 경우**
+- 즉시 프로덕션에 투입 가능한 "배터리 포함" 상업 제품이 필요하다면 → Zep, Letta, Mem0 의 managed 서비스가 더 안전
+- 영어 위주 대규모 공개 벤치마크 경쟁이 목표라면 → 자체 벤치마크의 대표성 한계 때문에 HippoRAG·GraphRAG 의 공개 결과를 직접 참고하는 편이 빠름
+- embedder/cross-encoder 를 별도로 운영할 여력이 없다면 → API 기반의 단순한 메모리 계층(Mem0 등)이 총비용이 낮을 수 있음
+- LangChain / LlamaIndex 생태계 안에서만 작업한다면 → 현재 어댑터가 없어 통합 비용이 추가됨
+- "검증된 대규모 운영 사례"가 도입 조건이라면 → 현 단계 Synaptic 은 해당 요건을 만족하지 않음
+
+핵심 주장은 단 하나: **인덱싱에서 LLM 을 뺄 수 있다면, 메모리의 관리 비용과 hallucination 위험을 동시에 줄일 수 있다**. Synaptic 은 그 가설 위에 만들어진 참조 구현이며, 이 가설이 당신의 시나리오와 맞는지가 결국 도입 여부를 결정한다.
 
 ---
 
