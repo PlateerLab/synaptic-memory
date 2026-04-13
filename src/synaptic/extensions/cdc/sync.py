@@ -106,6 +106,7 @@ class SyncResult:
 
 
 RowReader = Callable[..., Awaitable[list[dict[str, Any]]] | list[dict[str, Any]]]
+PkReader = Callable[[str, str], Awaitable[list[str]] | list[str]]
 
 
 class TimestampTableSyncer:
@@ -132,6 +133,65 @@ class TimestampTableSyncer:
         self._ingester = ingester
         self._store = store
         self._source_url = source_url
+
+    async def detect_deletes(
+        self,
+        graph: SynapticGraph,
+        schema: TableSchema,
+        pk_reader: PkReader,
+    ) -> int:
+        """Find PKs missing from the source DB and delete their nodes.
+
+        Streams every live PK from the source via ``pk_reader`` into
+        a SQLite ``TEMP TABLE``, then ``LEFT JOIN`` against
+        ``syn_cdc_pk_index`` returns the deleted rows. Each deleted
+        node is removed from the graph (which cascades to edges
+        thanks to the ``ON DELETE CASCADE`` on ``syn_edges``) and the
+        PK index entry is dropped.
+
+        Skipped on the very first sync — there is nothing to compare
+        against until the initial load has populated the PK index.
+        """
+        prior_state = await self._store.load_state(self._source_url, schema.name)
+        if prior_state is None:
+            return 0
+
+        live_result = pk_reader(schema.name, schema.primary_key)
+        if hasattr(live_result, "__await__"):
+            live_pks = await live_result  # type: ignore[misc]
+        else:
+            live_pks = live_result  # type: ignore[assignment]
+
+        deleted_rows = await self._store.find_deleted_pks(
+            self._source_url, schema.name, live_pks
+        )
+        if not deleted_rows:
+            return 0
+
+        for pk, node_id in deleted_rows:
+            try:
+                await graph.remove(node_id)
+            except Exception:  # pragma: no cover - best-effort node delete
+                logger.exception(
+                    "delete_node failed for %s pk=%s node_id=%s",
+                    schema.name,
+                    pk,
+                    node_id,
+                )
+            await self._store.delete_pk(self._source_url, schema.name, pk)
+
+        # Decrement row_count so save_state reflects reality on the
+        # next pass. We don't write state here — the timestamp
+        # sync_table call that follows will overwrite it anyway.
+        prior_state.row_count = max(0, prior_state.row_count - len(deleted_rows))
+        await self._store.save_state(prior_state)
+
+        logger.info(
+            "detect_deletes(%s): -%d nodes",
+            schema.name,
+            len(deleted_rows),
+        )
+        return len(deleted_rows)
 
     async def sync_table(
         self,

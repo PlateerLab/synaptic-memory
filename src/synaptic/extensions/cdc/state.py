@@ -396,3 +396,49 @@ class SyncStateStore:
         ) as cur:
             row = await cur.fetchone()
         return int(row[0]) if row else 0
+
+    async def find_deleted_pks(
+        self,
+        source_url: str,
+        table: str,
+        live_pks: Iterable[str],
+    ) -> list[tuple[str, str]]:
+        """Return ``(pk, node_id)`` rows that exist in the index but not in ``live_pks``.
+
+        Loads ``live_pks`` into a transient ``TEMP TABLE`` and runs a
+        ``LEFT JOIN`` so the diff stays inside SQLite — Python only
+        sees the result set, not the full PK universe. That keeps
+        memory flat for very large tables (the alternative would be
+        materialising both sides as Python sets).
+        """
+        # Use a deterministic temp-table name so concurrent calls on
+        # the same connection cannot collide. We DROP and recreate to
+        # force schema-fresh state — `IF NOT EXISTS` would let stale
+        # rows from a prior run leak through.
+        await self._conn.execute("DROP TABLE IF EXISTS cdc_current_pks")
+        await self._conn.execute(
+            "CREATE TEMP TABLE cdc_current_pks (pk TEXT PRIMARY KEY)"
+        )
+
+        payload = [(str(p),) for p in live_pks]
+        if payload:
+            await self._conn.executemany(
+                "INSERT OR IGNORE INTO cdc_current_pks (pk) VALUES (?)",
+                payload,
+            )
+
+        async with self._conn.execute(
+            """
+            SELECT idx.pk, idx.node_id
+              FROM syn_cdc_pk_index AS idx
+              LEFT JOIN cdc_current_pks AS cur ON cur.pk = idx.pk
+             WHERE idx.source_url = ?
+               AND idx.table_name = ?
+               AND cur.pk IS NULL
+            """,
+            (source_url, table),
+        ) as cur:
+            rows = await cur.fetchall()
+
+        await self._conn.execute("DROP TABLE IF EXISTS cdc_current_pks")
+        return [(r[0], r[1]) for r in rows]

@@ -141,6 +141,22 @@ def _sqlite_type_map(raw_type: str) -> str:
     return "str"
 
 
+def _read_sqlite_pks(db_path: str, table: str, pk_col: str) -> list[str]:
+    """Read just the primary key column from a SQLite table.
+
+    Used by CDC delete detection — we need every live PK to diff
+    against the stored PK index, but we don't need the row payload.
+    Pulls them as plain strings so the comparison is type-stable
+    regardless of the underlying column type.
+    """
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(f'SELECT "{pk_col}" FROM [{table}]').fetchall()
+    finally:
+        con.close()
+    return [str(r[0]) for r in rows if r[0] is not None]
+
+
 def _read_sqlite_rows(
     db_path: str,
     table: str,
@@ -1012,13 +1028,22 @@ class DbIngester:
             )
             return [_cast_row(r, _columns_for(schemas, table)) for r in rows_raw]
 
+        def _pk_reader(table: str, pk_col: str) -> list[str]:
+            return _read_sqlite_pks(db_path, table, pk_col)
+
         for schema in no_fk + has_fk:
             try:
+                deleted_count = await syncer.detect_deletes(
+                    graph,
+                    schema,
+                    _pk_reader,
+                )
                 stats = await syncer.sync_table(
                     graph,
                     schema,
                     _reader_coerce,
                 )
+                stats.deleted = deleted_count
             except Exception as exc:
                 logger.exception("sync_table(%s) failed", schema.name)
                 result.tables.append(TableSyncStats(table=schema.name, error=str(exc)))
