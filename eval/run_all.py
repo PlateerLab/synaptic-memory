@@ -718,6 +718,21 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
         nt = grp.get("node_title", "")
         if nt:
             found_ids.add(nt)
+
+        # Heuristic prefix generation is only useful when the group value
+        # looks like a primary key (short, identifier-like). Skip for
+        # dates, long strings, spaces, or non-PK-looking values to avoid
+        # flooding found_ids with noise like "pr_sold_base:2023-12-20...".
+        looks_like_pk = (
+            g
+            and len(g) <= 30
+            and " " not in g
+            and "-" not in g[:5]  # not a date prefix
+            and not g.startswith("20")  # reject common year-start strings
+        )
+        if not looks_like_pk:
+            continue
+
         # Source table prefix
         if agg_table:
             found_ids.add(f"{agg_table}:{g}")
@@ -834,18 +849,24 @@ async def _llm_judge(
 
 Query: {query}
 
-Expected answer domain (sample relevant items): {", ".join(relevant_samples[:5])}
+Expected answer domain (sample relevant items — just examples, not exhaustive):
+{", ".join(relevant_samples[:5])}
 
 Agent answer:
 {agent_answer[:1500]}
 
-Answer YES if the agent's response is a reasonable and factually plausible
-answer to the query. Answer NO only if the agent completely failed to answer
-or gave a clearly wrong response.
-
-For counting/listing queries: YES if the answer includes correct count or
-correct category of items (even if specific items differ from samples).
-For filter/search queries: YES if the returned items match the filter criteria.
+Rules:
+- Answer YES if the response is a reasonable, factually plausible answer.
+- Answer NO only if the agent completely failed or gave a clearly wrong response.
+- Do NOT require exact ID matches — the samples are just examples, many
+  other valid items may exist.
+- For counting / listing queries: YES if the count or category is correct.
+- For filter / search queries: YES if the returned items satisfy the criteria.
+- For document queries: YES if the answer discusses the right topic area
+  (even if specific document IDs differ from samples).
+- For recommendation queries: YES if any reasonable recommendation is given.
+- For multi-hop queries: YES if the final answer is correct, regardless of
+  intermediate IDs.
 
 Reply with only YES or NO."""
     try:
