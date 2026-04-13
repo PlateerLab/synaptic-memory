@@ -509,7 +509,9 @@ claude mcp add synaptic -- synaptic-mcp --db store.db
 
 ## 5. 문서 데이터도 함께
 
-CSV/DB가 아니라 문서(마크다운, PDF, JSONL)를 인제스트하려면:
+문서를 인제스트하는 3가지 경로가 있습니다:
+
+### 5-1. JSONL로 직접 작성 (의존성 0)
 
 ```python
 # documents.jsonl — 각 줄이 하나의 문서
@@ -518,9 +520,37 @@ CSV/DB가 아니라 문서(마크다운, PDF, JSONL)를 인제스트하려면:
 graph = await SynapticGraph.from_data("documents.jsonl")
 ```
 
-자동으로:
+### 5-2. PDF/DOCX/PPTX 파일 직접 (선택 패키지)
+
+```bash
+pip install synaptic-memory[docs]   # xgen-doc2chunk 설치
+```
+
+```python
+graph = await SynapticGraph.from_data("manual.pdf")
+graph = await SynapticGraph.from_data("./contracts/")   # 폴더 안의 모든 .pdf/.docx/...
+```
+
+지원 형식: PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, HWP, HWPX, MD, TXT, RTF.
+xgen-doc2chunk가 chunking + 표 보존을 자동 처리합니다.
+
+### 5-3. 자체 파서가 만든 청크 직접 전달 (의존성 0)
+
+LangChain text splitter, Unstructured, 자체 OCR 등을 이미 쓰고 있다면
+청크 dict 리스트를 그대로 넘길 수 있습니다:
+
+```python
+# 어떤 파서든 (LangChain, Unstructured, 자체 코드)
+chunks = my_parser.split("manual.pdf")  # → list[dict]
+
+# 각 dict는 최소 'content' 필드만 있으면 됨.
+# 선택: title, doc_id, category, source, chunk_index, page
+graph = await SynapticGraph.from_chunks(chunks)
+```
+
+위 3가지 모두 자동으로:
 - 카테고리 CONCEPT 노드 생성
-- 문서를 청크로 분할
+- 청크 노드 생성 + NFC 정규화
 - CONTAINS/PART_OF/NEXT_CHUNK 엣지 구축
 
 검색은 동일한 `deep_search`로:

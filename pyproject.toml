@@ -63,6 +63,7 @@ vector = ["usearch>=2.0", "numpy>=1.26"]
 reranker = ["flashrank>=0.2"]
 rag = ["spacy>=3.7", "aiohttp>=3.9"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
+docs = ["xgen-doc2chunk==0.2.26"]
 scale = [
     "kuzu>=0.11.0",
     "qdrant-client>=1.12",
@@ -88,7 +89,7 @@ dev = [
 eval = [
     "deepeval>=2.0",
     "openai>=1.0",
-    "python-dotenv>=1.2.2",
+    "python-dotenv>=1.2.1",
 ]
 
 [tool.hatch.build.targets.sdist]

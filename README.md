@@ -25,18 +25,24 @@ graph = await SynapticGraph.from_database(
     "postgresql://user:pass@host:5432/dbname"
 )
 
+# Or bring your own chunker (LangChain, Unstructured, custom OCR, ...)
+chunks = my_parser.split("manual.pdf")
+graph = await SynapticGraph.from_chunks(chunks)
+
 # Search
 result = await graph.search("my question")
 ```
 
 That's it. Auto-detects file format or DB schema, generates ontology profile, ingests, indexes, builds FK edges.
 
+> **Office files (PDF/DOCX/PPTX/XLSX/HWP)** are supported through the **optional** `xgen-doc2chunk` package. Install with `pip install synaptic-memory[docs]` or use `from_chunks()` with your own parser.
+
 ---
 
 ## What it does
 
 ```
-Your data (CSV, JSONL, PDF, SQL database)
+Your data (CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL database)
   ↓  auto-detect format / auto-discover DB schema + FKs
   ↓  DocumentIngester (text) / TableIngester / DbIngester
   ↓
@@ -250,6 +256,7 @@ Agent tools (29) → MCP server → LLM agent
 | `embedding` | aiohttp for embedding API calls |
 | `mcp` | MCP server for Claude Desktop/Code |
 | `sqlite` | aiosqlite backend |
+| `docs` | xgen-doc2chunk for PDF/DOCX/PPTX/XLSX/HWP loading |
 
 ---
 

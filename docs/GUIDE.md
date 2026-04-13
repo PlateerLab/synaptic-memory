@@ -209,9 +209,14 @@ graph = await SynapticGraph.from_data(
 ```python
 from synaptic import SynapticGraph
 
-graph = await SynapticGraph.from_data("./data/")          # 파일
+graph = await SynapticGraph.from_data("./data/")             # 파일 (CSV/JSONL/PDF/DOCX/...)
 graph = await SynapticGraph.from_database("postgres://...")  # DB
+graph = await SynapticGraph.from_chunks(my_chunks)           # 직접 청킹한 결과
 ```
+
+> **PDF/DOCX/PPTX/XLSX/HWP** 같은 오피스 파일은 선택 패키지 `xgen-doc2chunk`로
+> 처리합니다. `pip install synaptic-memory[docs]`로 활성화하거나, 자체 파서로
+> 청크를 만들어 `from_chunks()`에 넘겨도 됩니다.
 
 ### 29개 에이전트 도구
 

@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 LLM 에이전트용 지식 그래프 + MCP 도구 서버.
-아무 데이터(CSV, JSONL, PDF)를 넣으면 그래프를 자동 구축하고, 29개 도구로 LLM이 탐색.
+아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 29개 도구로 LLM이 탐색.
 
 - PyPI: `synaptic-memory` (v0.12.0)
 - 라이선스: MIT
@@ -105,33 +105,57 @@ uv run python eval/run_all.py
 uv run python eval/run_all.py --compare eval/results/qa_latest.json
 ```
 
-### 현재 베이스라인 (v0.12)
+### 현재 베이스라인 (v0.13.0, 2026-04-13 기준)
+
+#### 단일 검색 (single-shot — EvidenceSearch + embed + reranker)
 | 데이터셋 | 언어 | Corpus | MRR | Hit | 비고 |
 |---------|------|--------|-----|-----|------|
-| KRRA Easy (20q) | KO | 19,720 | **0.975** | 20/20 | FTS + Kiwi + embed |
-| KRRA Hard (15q) | KO | 19,720 | **0.933** | 15/15 | +embed+reranker |
-| KRRA Hard Multi-turn | KO | 19,720 | **80%** | 12/15 | GPT-4o-mini agent |
-| assort Easy (15q) | KO | 13,909 | **0.889** | 14/15 | 정형 CSV |
-| assort Hard Multi-turn | KO | 13,909 | **27%** | 4/15 | structured tools + agent |
-| HotPotQA-24 | EN | 226 | **0.727** | 24/24 | multi-hop |
-| Allganize RAG-ko | KO | 200 | **0.621** | 180/200 | 기업 문서 |
-| Allganize RAG-Eval | KO | 300 | **0.615** | 264/300 | 금융/의료/법률 |
-| AutoRAG | KO | 720 | **0.592** | 98/114 | 기업 검색 |
-| PublicHealthQA | KO | 77 | **0.318** | 45/77 | 공중보건 |
-| X2BEE Easy (20q) | EN | 19,843 | **1.000** | 20/20 | DB→온톨로지 (FTS) |
-| X2BEE Hard (19q) | EN/KO | 19,843 | 0.379 | 8/19 | 패러프레이즈+필터+집계 |
-| X2BEE Hard Multi-turn | EN/KO | 19,843 | **42%** | 8/19 | structured tools + agent |
+| KRRA Easy (20q) | KO | 19,720 | **0.967** | 20/20 | FTS + Kiwi + embed |
+| KRRA Hard (15q) | KO | 19,720 | **0.875~1.000** | 15/15 | reranker (variance) |
+| assort Easy (15q) | KO | 13,909 | **0.817~0.889** | 13~14/15 | 정형 CSV |
+| assort Hard (15q) | KO | 13,909 | 0.000 | 0/15 | structured-only — 단일검색 불가 (agent 필요) |
+| X2BEE Easy (20q) | EN | 19,843 | **1.000** | 20/20 | DB→온톨로지 |
+| X2BEE Hard (20q) | EN/KO | 19,843 | 0.379 | 8/20 | 패러프레이즈+필터+집계 |
+| KRRA Conv (30q) | KO | 19,720 | 0.150 | 9/30 | conv은 single-shot 어려움 |
+| assort Conv (30q) | KO | 13,909 | 0.329 | 11/30 | 동상 |
+| X2BEE Conv (30q) | EN/KO | 19,843 | 0.167 | 7/30 | 동상 |
+
+#### 멀티턴 에이전트 (GPT-4o-mini, 5턴, LLM-judge)
+| 데이터셋 | 결과 | 비고 |
+|---------|------|------|
+| **KRRA Hard agent** | **11/15 (73%)** | 멀티홉/패러프레이즈 |
+| **assort Hard agent** | **13/15 (87%)** | structured tools + judge |
+| **X2BEE Hard agent** | **17/19 (89%)** | 그래프 + structured 통합 |
+| **KRRA Conv agent** | **21/30 (70%)** | 자동 GT 좁음 영향 |
+| **assort Conv agent** | **20/24 (83%)** | judge 효과 큼 |
+| **X2BEE Conv agent** | **22/27 (81%)** | 멀티홉 다수 해결 |
+| **합계** | **103/130 (79%)** | 시작 ~35% → 79% |
+
+#### 공개 데이터셋 (EvidenceSearch + embed + reranker)
+| 데이터셋 | 언어 | Corpus | MRR |
+|---------|------|--------|-----|
+| HotPotQA-24 | EN | 226 | **0.964** |
+| Allganize RAG-ko | KO | 200 | **0.905** |
+| Allganize RAG-Eval | KO | 300 | **0.874** |
+| PublicHealthQA | KO | 77 | **0.600** |
+| AutoRAG | KO | 720 | **0.675** |
 
 ### 평가 쿼리 위치
 ```
 eval/data/queries/
-├── krra.json          # KRRA Easy 20q (키워드 직접 매칭)
-├── krra_hard.json     # KRRA Hard 15q (패러프레이즈, 교차문서, 대화체)
-├── assort.json        # assort Easy 15q
-├── assort_hard.json   # assort Hard 15q (필터, 집계, FK조인)
-├── krra_multihop.json # 교차 문서 10q
-├── x2bee.json         # X2BEE Easy 20q (DB→온톨로지 키워드 검색)
-└── x2bee_hard.json    # X2BEE Hard 20q (패러프레이즈, 필터, 집계, 멀티홉)
+├── krra.json                  # KRRA Easy 20q (키워드 직접 매칭)
+├── krra_hard.json             # KRRA Hard 15q (패러프레이즈, 교차문서, 대화체)
+├── krra_multihop.json         # KRRA 교차 문서 10q
+├── krra_conversational.json   # KRRA 복합/대화형 30q (auto-GT)
+├── assort.json                # assort Easy 15q
+├── assort_hard.json           # assort Hard 15q (필터, 집계, FK조인)
+├── assort_conversational.json # assort 복합/대화형 30q
+├── x2bee.json                 # X2BEE Easy 20q (DB→온톨로지 키워드 검색)
+├── x2bee_hard.json            # X2BEE Hard 20q (패러프레이즈, 필터, 집계, 멀티홉)
+└── x2bee_conversational.json  # X2BEE 복합/대화형 30q
+
+# 통합 엑셀 (정답 포함, 11 sheets, 200 queries)
+eval/data/gt_datasets.xlsx
 ```
 
 ## MCP 서버 (29개 도구)

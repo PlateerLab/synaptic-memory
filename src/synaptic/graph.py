@@ -287,9 +287,14 @@ class SynapticGraph:
         and optionally embeds. Returns a ready-to-search graph.
 
         Supports:
-        - Directory of files → scans for CSV, JSONL
+        - Directory of files → scans for CSV, JSONL, and (optionally)
+          office documents
         - Single CSV → TableIngester
         - Single JSONL → DocumentIngester
+        - Single office file (PDF / DOCX / PPTX / XLSX / HWP / TXT / MD)
+          → DocumentIngester via xgen-doc2chunk (**optional dependency**;
+          install with ``pip install xgen-doc2chunk`` or pre-chunk
+          yourself and call :meth:`from_chunks` instead)
         - Glob pattern (``*.csv``) → batch ingest
 
         Example::
@@ -302,6 +307,10 @@ class SynapticGraph:
                 "./data.csv",
                 embed_url="http://localhost:11434/v1",
             )
+
+            # Bring your own chunker (no xgen-doc2chunk needed)
+            chunks = my_parser.split("manual.pdf")
+            graph = await SynapticGraph.from_chunks(chunks)
         """
         from pathlib import Path
 
@@ -317,13 +326,20 @@ class SynapticGraph:
         backend = SqliteGraphBackend(db)
         await backend.connect()
 
-        # Detect data type and ingest
+        # Detect data type and ingest. Document loader handles a wide
+        # range of office formats (PDF, DOCX, PPTX, XLSX, HWP, MD, …)
+        # — see synaptic.extensions.doc_loader.SUPPORTED_EXTENSIONS.
+        from synaptic.extensions.doc_loader import (
+            SUPPORTED_EXTENSIONS as _DOC_EXTS,
+        )
+
+        _accepted = {".csv", ".jsonl", ".json", *_DOC_EXTS}
         files: list[Path] = []
         if path.is_dir():
             files = sorted(
                 p
                 for p in path.rglob("*")
-                if p.suffix in (".csv", ".jsonl", ".json") and not p.name.startswith(".")
+                if p.suffix.lower() in _accepted and not p.name.startswith(".")
             )
         elif path.is_file():
             files = [path]
@@ -364,6 +380,17 @@ class SynapticGraph:
                         cat = d.get("category", "")
                         if cat:
                             categories.append(str(cat))
+            elif f.suffix.lower() in _DOC_EXTS:
+                try:
+                    from synaptic.extensions.doc_loader import load_document
+
+                    doc_chunks = load_document(f)
+                    for d in doc_chunks[:20]:
+                        samples.append(str(d.get("content", ""))[:500])
+                    if doc_chunks and doc_chunks[0].get("category"):
+                        categories.append(str(doc_chunks[0]["category"]))
+                except ImportError:
+                    pass  # xgen-doc2chunk is optional
 
         gen = ProfileGenerator()
         profile = await gen.generate(
@@ -401,6 +428,36 @@ class SynapticGraph:
                 )
                 doc_ingester = DocumentIngester(profile=profile, backend=backend)
                 await doc_ingester.ingest(source)
+            elif f.suffix.lower() in _DOC_EXTS:
+                # PDF/DOCX/PPTX/XLSX/HWP/… → chunk records (xgen-doc2chunk
+                # already handles chunking + table preservation) → temp
+                # JSONL → DocumentIngester. Using JSONL as a transit
+                # format keeps the document pipeline (NFC, profile hints,
+                # embeddings, FTS) uniform regardless of input file type.
+                from synaptic.extensions.doc_loader import load_document
+
+                doc_chunks = load_document(f)
+                if not doc_chunks:
+                    continue
+
+                import json as _json
+                import tempfile
+
+                tmp = tempfile.NamedTemporaryFile(
+                    mode="w",
+                    suffix=".jsonl",
+                    delete=False,
+                    encoding="utf-8",
+                )
+                try:
+                    for doc in doc_chunks:
+                        tmp.write(_json.dumps(doc, ensure_ascii=False) + "\n")
+                    tmp.close()
+                    source = JsonlDocumentSource(tmp.name, None)
+                    doc_ingester = DocumentIngester(profile=profile, backend=backend)
+                    await doc_ingester.ingest(source)
+                finally:
+                    Path(tmp.name).unlink(missing_ok=True)
 
         # Optional: embed all nodes
         if embed_url:
@@ -423,6 +480,141 @@ class SynapticGraph:
 
         graph_obj = cls(backend)
         return graph_obj
+
+    @classmethod
+    async def from_chunks(
+        cls,
+        chunks: list[dict],
+        *,
+        db: str = "synaptic.db",
+        profile: object | None = None,
+        embed_url: str | None = None,
+        embed_model: str = "qwen3-embedding:4b",
+    ) -> SynapticGraph:
+        """Ingest pre-parsed / pre-chunked documents directly.
+
+        Use this when you already have chunks from your own document
+        parser (LangChain splitters, Unstructured, custom OCR, etc.)
+        and don't want to depend on the optional xgen-doc2chunk loader.
+
+        Each chunk dict should provide at minimum a ``content`` field.
+        Recognised keys:
+
+        ====================  =======================================
+        ``content`` (req)     The chunk text — what gets indexed
+        ``title``             Display title; auto-derived from first
+                              line if missing
+        ``doc_id``            Stable identifier; auto-generated if
+                              missing
+        ``category``          Category label for ontology routing
+        ``source``            Original file path / URL (kept as a
+                              property)
+        ``chunk_index``       Position within the source document
+        ``page``              Page number for paginated sources
+        ====================  =======================================
+
+        Args:
+            chunks: List of chunk dicts (see field reference above).
+            db: SQLite path for the new graph.
+            profile: Optional DomainProfile. When omitted, a profile
+                is auto-generated from the first 20 chunks.
+            embed_url: OpenAI-compatible endpoint to embed nodes after
+                ingest. Skipped when None.
+            embed_model: Embedder model name.
+
+        Example::
+
+            # From your own parser (e.g. LangChain RecursiveCharacterTextSplitter)
+            chunks = [
+                {"content": "...", "title": "Page 1", "category": "manual"},
+                {"content": "...", "title": "Page 2", "category": "manual"},
+            ]
+            graph = await SynapticGraph.from_chunks(chunks)
+            result = await graph.search("my question")
+        """
+        if not chunks:
+            msg = "from_chunks() requires at least one chunk"
+            raise ValueError(msg)
+
+        # Lazy imports — keep top-level synaptic import light.
+        from pathlib import Path as _Path
+
+        from synaptic.backends.sqlite_graph import SqliteGraphBackend
+        from synaptic.extensions.document_ingester import (
+            DocumentIngester,
+            JsonlDocumentSource,
+        )
+        from synaptic.extensions.profile_generator import ProfileGenerator
+
+        backend = SqliteGraphBackend(db)
+        await backend.connect()
+
+        # Auto-generate a profile from the first 20 chunks if the
+        # caller didn't supply one. Same path as from_data().
+        if profile is None:
+            samples = [str(c.get("content", ""))[:500] for c in chunks[:20]]
+            categories = [str(c.get("category", "")) for c in chunks if c.get("category")]
+            gen = ProfileGenerator()
+            profile = await gen.generate(
+                name="from_chunks",
+                samples=samples,
+                categories=list(dict.fromkeys(categories)) if categories else None,
+            )
+
+        # Materialise chunks into a temp JSONL so they flow through
+        # the same DocumentIngester path that JSONL files use — keeps
+        # NFC, FTS indexing, edge construction, and embedder hooks
+        # consistent regardless of input shape.
+        import json as _json
+        import tempfile
+        import uuid as _uuid
+
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, encoding="utf-8")
+        try:
+            for i, c in enumerate(chunks):
+                content = str(c.get("content") or "").strip()
+                if not content:
+                    continue
+                doc_id = c.get("doc_id") or f"chunk_{_uuid.uuid4().hex[:12]}"
+                title = c.get("title") or content.split("\n", 1)[0][:80] or doc_id
+                record = {
+                    "doc_id": doc_id,
+                    "title": title,
+                    "content": content,
+                    "category": c.get("category", ""),
+                    "source": c.get("source", ""),
+                    "chunk_index": c.get("chunk_index", i),
+                }
+                if c.get("page") is not None:
+                    record["page"] = c["page"]
+                tmp.write(_json.dumps(record, ensure_ascii=False) + "\n")
+            tmp.close()
+
+            source = JsonlDocumentSource(tmp.name, None)
+            doc_ingester = DocumentIngester(profile=profile, backend=backend)
+            await doc_ingester.ingest(source)
+        finally:
+            _Path(tmp.name).unlink(missing_ok=True)
+
+        # Optional embedding pass — same logic as from_data().
+        if embed_url:
+            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
+            embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
+            nodes = await backend.list_nodes(kind=None, limit=100_000)
+            for i in range(0, len(nodes), 32):
+                batch = nodes[i : i + 32]
+                texts = [f"{n.title}\n{(n.content or '')[:300]}" for n in batch]
+                try:
+                    vecs = await embedder.embed_batch(texts)
+                    for n, v in zip(batch, vecs):
+                        if v:
+                            n.embedding = v
+                            await backend.save_node(n)
+                except Exception:
+                    pass
+
+        return cls(backend)
 
     @classmethod
     async def from_database(

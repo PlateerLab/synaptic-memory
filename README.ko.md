@@ -25,18 +25,24 @@ graph = await SynapticGraph.from_database(
     "postgresql://user:pass@host:5432/dbname"
 )
 
+# 또는 직접 청킹한 문서 전달 (LangChain, Unstructured, 자체 OCR 등)
+chunks = my_parser.split("manual.pdf")
+graph = await SynapticGraph.from_chunks(chunks)
+
 # 검색
 result = await graph.search("내 질문")
 ```
 
 파일 형식 또는 DB 스키마 자동 감지, 온톨로지 프로파일 자동 생성, 인제스트, 인덱싱, FK 엣지 구축까지 전부 자동.
 
+> **오피스 파일(PDF/DOCX/PPTX/XLSX/HWP)** 은 **선택 패키지** `xgen-doc2chunk`를 통해 지원합니다. `pip install synaptic-memory[docs]`로 설치하거나, 자체 파서로 청킹한 결과를 `from_chunks()`로 넘기세요.
+
 ---
 
 ## 이 라이브러리가 하는 일
 
 ```
-내 데이터 (CSV, JSONL, PDF, SQL 데이터베이스)
+내 데이터 (CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL 데이터베이스)
   ↓  형식 자동 감지 / DB 스키마+FK 자동 발견
   ↓  DocumentIngester (텍스트) / TableIngester / DbIngester
   ↓
@@ -250,6 +256,7 @@ StorageBackend (Protocol)
 | `embedding` | 임베딩 API 호출용 aiohttp |
 | `mcp` | Claude Desktop/Code MCP 서버 |
 | `sqlite` | aiosqlite 백엔드 |
+| `docs` | PDF/DOCX/PPTX/XLSX/HWP 문서 로더 (xgen-doc2chunk) |
 
 ---
 
