@@ -41,20 +41,34 @@ class Store:
         level: ConsolidationLevel = ConsolidationLevel.L0_RAW,
         embedding: list[float] | None = None,
         properties: dict[str, str] | None = None,
+        node_id: str | None = None,
     ) -> Node:
+        """Create a node and save it via the backend.
+
+        Args:
+            node_id: Optional explicit node ID. When omitted, a random
+                UUID is generated (the historical behaviour). CDC and
+                deterministic-row-id paths pass an explicit ID so that
+                re-ingesting the same source row produces the same
+                node — this enables ``ON CONFLICT(id) DO UPDATE`` to
+                work as upsert across runs.
+        """
         if tags is None and self._tag_extractor is not None:
             tags = self._tag_extractor.extract(f"{title} {content}")
 
-        node = Node(
-            kind=kind,
-            title=title,
-            content=content,
-            tags=tags or [],
-            level=level,
-            embedding=embedding or [],
-            properties=properties or {},
-            source=source,
-        )
+        node_kwargs: dict[str, object] = {
+            "kind": kind,
+            "title": title,
+            "content": content,
+            "tags": tags or [],
+            "level": level,
+            "embedding": embedding or [],
+            "properties": properties or {},
+            "source": source,
+        }
+        if node_id is not None:
+            node_kwargs["id"] = node_id
+        node = Node(**node_kwargs)  # type: ignore[arg-type]
         await self._backend.save_node(node)
         return node
 

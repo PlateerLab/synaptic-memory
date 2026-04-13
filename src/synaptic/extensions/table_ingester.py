@@ -157,6 +157,7 @@ class TableIngester:
         primary_key: str = "id",
         tags: list[str] | None = None,
         source: str = "",
+        source_url: str = "",
     ) -> list[Node]:
         """Ingest a table into the graph.
 
@@ -169,6 +170,11 @@ class TableIngester:
             primary_key: Primary key column name.
             tags: Additional tags for all nodes.
             source: Source identifier.
+            source_url: When non-empty, switches to **deterministic node IDs**
+                derived from ``(source_url, table_name, pk_value)`` so that
+                re-ingesting the same row produces the same node ID. Required
+                for CDC / incremental sync. Leave empty for the legacy
+                random-UUID behaviour (current default for one-shot ingest).
 
         Returns:
             List of created ENTITY nodes.
@@ -179,6 +185,11 @@ class TableIngester:
 
         # Step 1: Register table schema in ontology (if available)
         self._register_schema(graph, table_name, columns)
+
+        # Lazy import — avoid circular dep with synaptic.extensions.cdc
+        deterministic = bool(source_url)
+        if deterministic:
+            from synaptic.extensions.cdc.ids import deterministic_row_id
 
         # Step 2: Create nodes for each row
         nodes: list[Node] = []
@@ -192,6 +203,13 @@ class TableIngester:
             properties: dict[str, str] = {str(k): str(v) for k, v in row.items() if v is not None}
             properties["_table_name"] = table_name
             properties["_primary_key"] = primary_key
+            if source_url:
+                properties["_source_url"] = source_url
+
+            pk_val = row.get(primary_key)
+            node_id: str | None = None
+            if deterministic and pk_val is not None:
+                node_id = deterministic_row_id(source_url, table_name, pk_val)
 
             node = await graph.add(
                 title=title,
@@ -200,11 +218,11 @@ class TableIngester:
                 tags=list(base_tags),
                 source=source,
                 properties=properties,
+                node_id=node_id,
             )
             nodes.append(node)
 
             # Cache for FK resolution
-            pk_val = row.get(primary_key)
             if pk_val is not None:
                 self._node_cache[(table_name, str(pk_val))] = node.id
 
@@ -221,6 +239,11 @@ class TableIngester:
 
                 target_key = (target_table, str(fk_val))
                 target_node_id = self._node_cache.get(target_key)
+                # CDC mode: even if the target is in a different ingest
+                # call (different TableIngester instance), we can still
+                # reach it because the deterministic ID is derivable.
+                if target_node_id is None and deterministic:
+                    target_node_id = deterministic_row_id(source_url, target_table, fk_val)
 
                 if target_node_id is not None:
                     await graph.link(

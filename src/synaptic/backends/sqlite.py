@@ -10,6 +10,10 @@ import unicodedata
 logger = logging.getLogger("sqlite-backend")
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from synaptic.extensions.cdc.state import SyncStateStore
 
 # --- Korean FTS normalization ---
 #
@@ -157,6 +161,31 @@ class SQLiteBackend:
         # cached signature so we can detect stale on-disk artifacts:
         # {"count": int, "max_updated_at": float, "ndim": int}
         self._hnsw_meta: dict[str, object] = {}
+
+    # --- CDC support ---
+
+    async def ensure_cdc_tables(self) -> None:
+        """Create the CDC sync-state tables if they don't exist.
+
+        Called lazily by ``SyncStateStore`` (via the graph layer) when
+        the user opts into CDC mode. Idempotent — every CREATE uses
+        ``IF NOT EXISTS`` so existing graph files transparently gain
+        CDC support without a migration step.
+        """
+        from synaptic.extensions.cdc.state import SyncStateStore
+
+        await SyncStateStore.install_schema(self._db())
+
+    def cdc_state_store(self) -> SyncStateStore:
+        """Return a :class:`SyncStateStore` bound to this backend's connection.
+
+        The returned store shares the same ``aiosqlite`` connection so
+        sync writes and ``save_node`` writes serialise inside a single
+        transaction context — no risk of "database is locked".
+        """
+        from synaptic.extensions.cdc.state import SyncStateStore
+
+        return SyncStateStore(self._db())
 
     # --- HNSW disk persistence helpers ---
 

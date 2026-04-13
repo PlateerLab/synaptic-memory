@@ -754,6 +754,7 @@ class SynapticGraph:
         source: str = "",
         embedding: list[float] | None = None,
         properties: dict[str, str] | None = None,
+        node_id: str | None = None,
     ) -> Node:
         # NFC-normalize all user-provided text. Korean on macOS HFS+ arrives
         # as NFD, which breaks substring / FTS matching against NFC queries.
@@ -814,6 +815,7 @@ class SynapticGraph:
             source=source,
             embedding=embedding,
             properties=properties,
+            node_id=node_id,
         )
         self._cache.put(node)
         self._corpus_size += 1
