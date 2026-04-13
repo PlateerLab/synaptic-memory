@@ -189,7 +189,15 @@ class TableIngester:
         # Lazy import — avoid circular dep with synaptic.extensions.cdc
         deterministic = bool(source_url)
         if deterministic:
-            from synaptic.extensions.cdc.ids import deterministic_row_id
+            from synaptic.extensions.cdc.ids import (
+                canonical_pk,
+                deterministic_row_id,
+            )
+        else:
+            # Fallback so the legacy random-UUID path still has a
+            # consistent cache-key normaliser. Importing here keeps
+            # the module's own dependency graph unchanged.
+            from synaptic.extensions.cdc.ids import canonical_pk
 
         # Step 2: Create nodes for each row
         nodes: list[Node] = []
@@ -224,7 +232,7 @@ class TableIngester:
 
             # Cache for FK resolution
             if pk_val is not None:
-                self._node_cache[(table_name, str(pk_val))] = node.id
+                self._node_cache[(table_name, canonical_pk(pk_val))] = node.id
 
             # Register in chunk-entity index
             if chunk_entity_index is not None:
@@ -237,7 +245,7 @@ class TableIngester:
                 if fk_val is None:
                     continue
 
-                target_key = (target_table, str(fk_val))
+                target_key = (target_table, canonical_pk(fk_val))
                 target_node_id = self._node_cache.get(target_key)
                 # CDC mode: even if the target is in a different ingest
                 # call (different TableIngester instance), we can still

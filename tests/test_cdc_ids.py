@@ -12,7 +12,10 @@ Phase 1 of the CDC implementation. Validates:
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from synaptic.extensions.cdc.ids import (
+    canonical_pk,
     deterministic_row_id,
     normalize_source_url,
 )
@@ -49,6 +52,41 @@ class TestNormalizeSourceURL:
 
     def test_handles_empty(self):
         assert normalize_source_url("") == ""
+
+
+class TestCanonicalPK:
+    def test_int(self):
+        assert canonical_pk(1) == "1"
+        assert canonical_pk(0) == "0"
+
+    def test_str(self):
+        assert canonical_pk("abc") == "abc"
+        assert canonical_pk("1") == "1"
+
+    def test_integer_valued_float_collapses(self):
+        assert canonical_pk(1.0) == "1"
+        assert canonical_pk(0.0) == "0"
+        assert canonical_pk(-5.0) == "-5"
+
+    def test_fractional_float_preserved(self):
+        assert canonical_pk(1.5) != "1"
+        assert canonical_pk(1.5) == repr(1.5)
+
+    def test_integer_valued_decimal_collapses(self):
+        assert canonical_pk(Decimal("1")) == "1"
+        assert canonical_pk(Decimal("1.0")) == "1"
+        assert canonical_pk(Decimal("0")) == "0"
+
+    def test_fractional_decimal_preserved(self):
+        # Non-integer Decimal should not be lossy.
+        assert canonical_pk(Decimal("1.50")) == "1.50"
+
+    def test_none(self):
+        assert canonical_pk(None) == ""
+
+    def test_bool(self):
+        assert canonical_pk(True) == "True"
+        assert canonical_pk(False) == "False"
 
 
 class TestDeterministicRowID:
@@ -92,6 +130,24 @@ class TestDeterministicRowID:
         node_id = deterministic_row_id("postgres://h/d", "products", "P001", digest_size=12)
         assert len(node_id) == 24
         assert all(c in "0123456789abcdef" for c in node_id)
+
+    def test_pk_type_collapse_int_vs_float(self):
+        # Bug found in X2BEE prod validation: the PK reader returned
+        # `Decimal('1')` (→ '1') while the row reader returned
+        # `float(1.0)` (→ '1.0'), so the LEFT JOIN in
+        # find_deleted_pks never matched and every row flapped.
+        a = deterministic_row_id("postgres://h/d", "products", 1)
+        b = deterministic_row_id("postgres://h/d", "products", 1.0)
+        c = deterministic_row_id("postgres://h/d", "products", Decimal("1"))
+        d = deterministic_row_id("postgres://h/d", "products", Decimal("1.0"))
+        e = deterministic_row_id("postgres://h/d", "products", "1")
+        assert a == b == c == d == e
+
+    def test_pk_fractional_float_unchanged(self):
+        # Non-integer floats should NOT be coerced.
+        a = deterministic_row_id("postgres://h/d", "products", 1.5)
+        b = deterministic_row_id("postgres://h/d", "products", 1)
+        assert a != b
 
     def test_no_collision_synthetic_50k(self):
         """Smoke test: 50k synthetic PKs should produce 50k unique IDs.

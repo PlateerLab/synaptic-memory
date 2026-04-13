@@ -35,6 +35,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from synaptic.extensions.cdc.ids import canonical_pk
+
 if TYPE_CHECKING:
     import aiosqlite
 
@@ -226,7 +228,7 @@ class SyncStateStore:
             (
                 source_url,
                 table,
-                str(pk),
+                canonical_pk(pk),
                 node_id,
                 row_hash,
                 json.dumps(fk_edges, ensure_ascii=False) if fk_edges else None,
@@ -250,7 +252,7 @@ class SyncStateStore:
             (
                 source_url,
                 table,
-                str(pk),
+                canonical_pk(pk),
                 node_id,
                 row_hash,
                 json.dumps(fk_edges, ensure_ascii=False) if fk_edges else None,
@@ -283,7 +285,7 @@ class SyncStateStore:
             SELECT node_id FROM syn_cdc_pk_index
              WHERE source_url = ? AND table_name = ? AND pk = ?
             """,
-            (source_url, table, str(pk)),
+            (source_url, table, canonical_pk(pk)),
         ) as cur:
             row = await cur.fetchone()
         return row[0] if row else None
@@ -300,7 +302,7 @@ class SyncStateStore:
             SELECT fk_edges FROM syn_cdc_pk_index
              WHERE source_url = ? AND table_name = ? AND pk = ?
             """,
-            (source_url, table, str(pk)),
+            (source_url, table, canonical_pk(pk)),
         ) as cur:
             row = await cur.fetchone()
         if not row or not row[0]:
@@ -322,7 +324,7 @@ class SyncStateStore:
             SELECT row_hash FROM syn_cdc_pk_index
              WHERE source_url = ? AND table_name = ? AND pk = ?
             """,
-            (source_url, table, str(pk)),
+            (source_url, table, canonical_pk(pk)),
         ) as cur:
             row = await cur.fetchone()
         return row[0] if row else None
@@ -339,7 +341,7 @@ class SyncStateStore:
             DELETE FROM syn_cdc_pk_index
              WHERE source_url = ? AND table_name = ? AND pk = ?
             """,
-            (source_url, table, str(pk)),
+            (source_url, table, canonical_pk(pk)),
         )
 
     async def delete_pk_batch(
@@ -349,7 +351,7 @@ class SyncStateStore:
         pks: Iterable[str],
     ) -> int:
         """Bulk version of :meth:`delete_pk`. Returns count deleted."""
-        items = [(source_url, table, str(p)) for p in pks]
+        items = [(source_url, table, canonical_pk(p)) for p in pks]
         if not items:
             return 0
         await self._conn.executemany(
@@ -420,7 +422,7 @@ class SyncStateStore:
             "CREATE TEMP TABLE cdc_current_pks (pk TEXT PRIMARY KEY)"
         )
 
-        payload = [(str(p),) for p in live_pks]
+        payload = [(canonical_pk(p),) for p in live_pks]
         if payload:
             await self._conn.executemany(
                 "INSERT OR IGNORE INTO cdc_current_pks (pk) VALUES (?)",

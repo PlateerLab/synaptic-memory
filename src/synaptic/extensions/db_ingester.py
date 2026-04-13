@@ -58,6 +58,14 @@ class TableSchema:
     columns: list[ColumnInfo] = field(default_factory=list)
     primary_key: str = ""
     foreign_keys: list[ForeignKey] = field(default_factory=list)
+    # ``primary_key`` falls back to ``columns[0]`` for tables that
+    # have none in the source schema. CDC needs to know the
+    # difference because tracking such a table is unsafe — the
+    # fallback column may have duplicate values, collapsing rows
+    # to one node and leading to spurious update churn on every
+    # sync. Set to ``True`` only when the source actually declared
+    # a primary key.
+    has_explicit_pk: bool = False
 
 
 @dataclass(slots=True)
@@ -123,6 +131,7 @@ def _read_sqlite_schema(db_path: str) -> list[TableSchema]:
                 columns=columns,
                 primary_key=pk or (columns[0].name if columns else "id"),
                 foreign_keys=fks,
+                has_explicit_pk=bool(pk),
             )
         )
 
@@ -146,15 +155,21 @@ def _read_sqlite_pks(db_path: str, table: str, pk_col: str) -> list[str]:
 
     Used by CDC delete detection — we need every live PK to diff
     against the stored PK index, but we don't need the row payload.
-    Pulls them as plain strings so the comparison is type-stable
-    regardless of the underlying column type.
+    PKs are normalised via :func:`canonical_pk` so values that
+    arrived through different read paths (asyncpg Decimal vs the
+    cast-row float pipeline) collapse to a single canonical
+    string. Without this, an integer-valued numeric PK would
+    appear as ``'1.0'`` in the index but ``'1'`` here, making the
+    LEFT JOIN delete every row on every sync.
     """
+    from synaptic.extensions.cdc.ids import canonical_pk
+
     con = sqlite3.connect(db_path)
     try:
         rows = con.execute(f'SELECT "{pk_col}" FROM [{table}]').fetchall()
     finally:
         con.close()
-    return [str(r[0]) for r in rows if r[0] is not None]
+    return [canonical_pk(r[0]) for r in rows if r[0] is not None]
 
 
 def _read_sqlite_rows(
@@ -241,6 +256,7 @@ async def _read_pg_schema(dsn: str) -> list[TableSchema]:
         """,
             table_name,
         )
+        has_explicit_pk_pg = bool(pk_raw)
         pk = pk_raw[0]["attname"] if pk_raw else (columns[0].name if columns else "id")
 
         # Foreign keys
@@ -272,6 +288,7 @@ async def _read_pg_schema(dsn: str) -> list[TableSchema]:
                 columns=columns,
                 primary_key=pk,
                 foreign_keys=fks,
+                has_explicit_pk=has_explicit_pk_pg,
             )
         )
 
@@ -325,13 +342,21 @@ async def _read_pg_rows(
 
 
 async def _read_pg_pks(dsn: str, table: str, pk_col: str) -> list[str]:
-    """PK-only reader for PostgreSQL CDC delete detection."""
+    """PK-only reader for PostgreSQL CDC delete detection.
+
+    Normalises every PK via :func:`canonical_pk` so the LEFT JOIN
+    against ``syn_cdc_pk_index`` matches rows whose PK is a
+    ``numeric`` column (asyncpg returns ``Decimal`` here, while
+    the cast-row pipeline coerces the same value to ``float``).
+    """
     import asyncpg
+
+    from synaptic.extensions.cdc.ids import canonical_pk
 
     con = await asyncpg.connect(dsn)
     try:
         rows = await con.fetch(f'SELECT "{pk_col}" FROM "{table}"')
-        return [str(r[0]) for r in rows if r[0] is not None]
+        return [canonical_pk(r[0]) for r in rows if r[0] is not None]
     finally:
         await con.close()
 
@@ -474,6 +499,7 @@ async def _read_mysql_schema(dsn: str) -> list[TableSchema]:
                 columns=columns,
                 primary_key=pk or (columns[0].name if columns else "id"),
                 foreign_keys=fks,
+                has_explicit_pk=bool(pk),
             )
         )
 
@@ -541,6 +567,8 @@ async def _read_mysql_pks(dsn: str, table: str, pk_col: str) -> list[str]:
 
     import aiomysql
 
+    from synaptic.extensions.cdc.ids import canonical_pk
+
     parsed = urlparse(dsn)
     con = await aiomysql.connect(
         host=parsed.hostname or "localhost",
@@ -554,7 +582,7 @@ async def _read_mysql_pks(dsn: str, table: str, pk_col: str) -> list[str]:
         try:
             await cur.execute(f"SELECT `{pk_col}` FROM `{table}`")
             rows = await cur.fetchall()
-            return [str(r[0]) for r in rows if r[0] is not None]
+            return [canonical_pk(r[0]) for r in rows if r[0] is not None]
         finally:
             await cur.close()
     finally:
@@ -1250,6 +1278,25 @@ class DbIngester:
             return [_cast_row(r, _columns_for(schemas, table)) for r in rows_raw]
 
         for schema in no_fk + has_fk:
+            if not schema.has_explicit_pk:
+                # Tables without a real primary key cannot be CDC-tracked
+                # safely: deterministic node IDs would collide on the
+                # fallback PK column (often a non-unique status field),
+                # collapsing rows and producing endless update churn.
+                # Skip with an explicit error entry — the user can
+                # still ingest such tables in legacy `mode="full"`.
+                logger.warning(
+                    "skipping CDC sync for %s: no primary key in source schema",
+                    schema.name,
+                )
+                result.tables.append(
+                    TableSyncStats(
+                        table=schema.name,
+                        error="no primary key in source schema",
+                    )
+                )
+                continue
+
             syncer = _pick_syncer(schema)
             try:
                 deleted_count = await syncer.detect_deletes(

@@ -33,7 +33,47 @@ This module is intentionally tiny so it can be imported anywhere
 from __future__ import annotations
 
 import hashlib
+from decimal import Decimal
 from urllib.parse import urlparse, urlunparse
+
+
+def canonical_pk(pk: object) -> str:
+    """Return a stable string form of a primary-key value.
+
+    The same logical PK can arrive through different read paths
+    with different Python types — typically an asyncpg row gives
+    you a ``Decimal('1')`` while the cast-row path coerces the
+    same column to ``float(1.0)``. Naive ``str()`` would then
+    produce ``'1'`` vs ``'1.0'``, and the syn_cdc_pk_index ``LEFT
+    JOIN`` would silently never match.
+
+    Rules:
+
+    - ``None`` → empty string. Callers should already filter
+      None PKs but we don't want a TypeError if one slips through.
+    - Integer-valued ``float`` / ``Decimal`` → integer string
+      (``1.0`` → ``'1'``).
+    - Everything else → ``str(pk)``.
+
+    The function is intentionally tiny and has zero dependencies
+    so it can be called from every dialect path without import
+    cycles.
+    """
+    if pk is None:
+        return ""
+    if isinstance(pk, bool):
+        # bool is a subclass of int; str(True) is fine but be
+        # explicit so future readers don't think this is missing.
+        return str(pk)
+    if isinstance(pk, float):
+        if pk.is_integer():
+            return str(int(pk))
+        return repr(pk)
+    if isinstance(pk, Decimal):
+        if pk == pk.to_integral_value():
+            return str(int(pk))
+        return str(pk)
+    return str(pk)
 
 
 def normalize_source_url(url: str) -> str:
@@ -117,5 +157,6 @@ def deterministic_row_id(
         hashing.
     """
     canonical = normalize_source_url(source_url)
-    key = f"{canonical}::{table}::{pk}".encode()
+    pk_str = canonical_pk(pk)
+    key = f"{canonical}::{table}::{pk_str}".encode()
     return hashlib.blake2b(key, digest_size=digest_size).hexdigest()

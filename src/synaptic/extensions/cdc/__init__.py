@@ -29,6 +29,7 @@ Public API surface lives on :class:`synaptic.SynapticGraph`:
 """
 
 from synaptic.extensions.cdc.ids import (
+    canonical_pk,
     deterministic_row_id,
     normalize_source_url,
 )
@@ -36,6 +37,7 @@ from synaptic.extensions.cdc.state import SyncStateStore
 
 __all__ = [
     "SyncStateStore",
+    "canonical_pk",
     "deterministic_row_id",
     "normalize_source_url",
 ]

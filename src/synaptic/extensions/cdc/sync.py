@@ -23,7 +23,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from synaptic.extensions.cdc.ids import deterministic_row_id
+from synaptic.extensions.cdc.ids import canonical_pk, deterministic_row_id
 from synaptic.extensions.cdc.state import SyncStateStore, TableSyncState
 
 if TYPE_CHECKING:
@@ -273,7 +273,7 @@ class TimestampTableSyncer:
             if pk_val is None:
                 row_is_new.append(False)
                 continue
-            pk_str = str(pk_val)
+            pk_str = canonical_pk(pk_val)
             existing = await self._store.get_node_id(
                 self._source_url, schema.name, pk_str
             )
@@ -314,7 +314,7 @@ class TimestampTableSyncer:
                 pk_val = row.get(schema.primary_key)
                 if pk_val is None:
                     continue
-                prior = prior_fks.get(str(pk_val), {})
+                prior = prior_fks.get(canonical_pk(pk_val), {})
                 for col in fk_map:
                     new_target = row.get(col)
                     if new_target is None:
@@ -340,7 +340,7 @@ class TimestampTableSyncer:
                     for col in fk_map
                     if row.get(col) is not None
                 }
-            pk_batch.append((str(pk_val), node_id, None, fk_snapshot))
+            pk_batch.append((canonical_pk(pk_val), node_id, None, fk_snapshot))
 
             change_val = row.get(change_col)
             if change_val is not None:
@@ -531,7 +531,7 @@ class HashTableSyncer:
             pk_val = row.get(schema.primary_key)
             if pk_val is None:
                 continue
-            pk_str = str(pk_val)
+            pk_str = canonical_pk(pk_val)
             new_hash = row_hash(row)
             new_hashes[pk_str] = new_hash
 
@@ -596,7 +596,7 @@ class HashTableSyncer:
                 pk_val = row.get(schema.primary_key)
                 if pk_val is None:
                     continue
-                prior = prior_fks.get(str(pk_val), {})
+                prior = prior_fks.get(canonical_pk(pk_val), {})
                 for col in fk_map:
                     new_target = row.get(col)
                     if new_target is None:
@@ -610,7 +610,7 @@ class HashTableSyncer:
             pk_val = row.get(schema.primary_key)
             if pk_val is None:
                 continue
-            pk_str = str(pk_val)
+            pk_str = canonical_pk(pk_val)
             node_id = deterministic_row_id(
                 self._source_url, schema.name, pk_val
             )
