@@ -138,11 +138,6 @@ class EvidenceSearch:
             phrase_extractor=phrase_extractor,
         )
         self._expander = GraphExpander(backend=backend)
-        # EvidenceSearch defaults to RRF fusion (rank-based, robust to
-        # score-scale mismatch). Callers that want the legacy weighted
-        # min-max sum can pass an explicit ``RerankerWeights(fusion="weighted")``.
-        if reranker_weights is None:
-            reranker_weights = RerankerWeights(fusion="rrf")
         self._reranker = HybridReranker(weights=reranker_weights)
         self._aggregator = EvidenceAggregator(
             mmr_lambda=mmr_lambda,

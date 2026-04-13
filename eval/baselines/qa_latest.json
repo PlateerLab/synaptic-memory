@@ -1,23 +1,23 @@
 {
   "KRRA Easy": {
     "mrr": 0.9667,
-    "p_at_k": 0.5032,
+    "p_at_k": 0.5162,
     "r_at_k": 0.8934,
-    "ndcg": 0.9008,
+    "ndcg": 0.8931,
     "corpus_size": 20
   },
   "KRRA Hard": {
-    "mrr": 1.0,
-    "p_at_k": 0.5655,
-    "r_at_k": 0.2901,
-    "ndcg": 0.6239,
+    "mrr": 0.875,
+    "p_at_k": 0.6054,
+    "r_at_k": 0.2585,
+    "ndcg": 0.5263,
     "corpus_size": 15
   },
   "assort Easy": {
-    "mrr": 0.8667,
+    "mrr": 0.8167,
     "p_at_k": 0.0867,
     "r_at_k": 0.8333,
-    "ndcg": 0.8409,
+    "ndcg": 0.8029,
     "corpus_size": 15
   },
   "assort Hard": {
@@ -31,77 +31,35 @@
     "mrr": 1.0,
     "p_at_k": 0.125,
     "r_at_k": 0.8417,
-    "ndcg": 0.8676,
+    "ndcg": 0.8706,
     "corpus_size": 20
   },
   "X2BEE Hard": {
-    "mrr": 0.2344,
-    "p_at_k": 0.0982,
-    "r_at_k": 0.3328,
-    "ndcg": 0.2616,
+    "mrr": 0.3789,
+    "p_at_k": 0.1509,
+    "r_at_k": 0.3813,
+    "ndcg": 0.3838,
     "corpus_size": 20
   },
   "KRRA Conv": {
-    "mrr": 0.167,
-    "p_at_k": 0.0556,
-    "r_at_k": 0.0867,
-    "ndcg": 0.0855,
+    "mrr": 0.15,
+    "p_at_k": 0.0577,
+    "r_at_k": 0.0733,
+    "ndcg": 0.0744,
     "corpus_size": 30
   },
   "assort Conv": {
-    "mrr": 0.2563,
-    "p_at_k": 0.0625,
-    "r_at_k": 0.3438,
-    "ndcg": 0.2645,
+    "mrr": 0.3292,
+    "p_at_k": 0.0667,
+    "r_at_k": 0.4062,
+    "ndcg": 0.3424,
     "corpus_size": 30
   },
   "X2BEE Conv": {
-    "mrr": 0.1498,
-    "p_at_k": 0.0593,
-    "r_at_k": 0.2407,
-    "ndcg": 0.1716,
+    "mrr": 0.1667,
+    "p_at_k": 0.0556,
+    "r_at_k": 0.2037,
+    "ndcg": 0.1748,
     "corpus_size": 30
-  },
-  "KRRA Hard (agent)": {
-    "mrr": 0.7333,
-    "p_at_k": 0,
-    "r_at_k": 0,
-    "ndcg": 0,
-    "corpus_size": 15
-  },
-  "assort Hard (agent)": {
-    "mrr": 0.8667,
-    "p_at_k": 0,
-    "r_at_k": 0,
-    "ndcg": 0,
-    "corpus_size": 15
-  },
-  "X2BEE Hard (agent)": {
-    "mrr": 0.8421,
-    "p_at_k": 0,
-    "r_at_k": 0,
-    "ndcg": 0,
-    "corpus_size": 19
-  },
-  "KRRA Conv (agent)": {
-    "mrr": 0.7,
-    "p_at_k": 0,
-    "r_at_k": 0,
-    "ndcg": 0,
-    "corpus_size": 30
-  },
-  "assort Conv (agent)": {
-    "mrr": 0.8333,
-    "p_at_k": 0,
-    "r_at_k": 0,
-    "ndcg": 0,
-    "corpus_size": 24
-  },
-  "X2BEE Conv (agent)": {
-    "mrr": 0.8148,
-    "p_at_k": 0,
-    "r_at_k": 0,
-    "ndcg": 0,
-    "corpus_size": 27
   }
 }
