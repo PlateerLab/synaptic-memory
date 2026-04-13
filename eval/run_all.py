@@ -114,6 +114,27 @@ CUSTOM_DATASETS = [
         is_custom=True,
         quick=True,
     ),
+    DatasetConfig(
+        name="KRRA Conv",
+        path=EVAL_DIR / "data" / "krra_graph.sqlite",
+        query_path=EVAL_DIR / "data" / "queries" / "krra_conversational.json",
+        is_custom=True,
+        quick=True,
+    ),
+    DatasetConfig(
+        name="assort Conv",
+        path=EVAL_DIR / "data" / "assort_graph.sqlite",
+        query_path=EVAL_DIR / "data" / "queries" / "assort_conversational.json",
+        is_custom=True,
+        quick=True,
+    ),
+    DatasetConfig(
+        name="X2BEE Conv",
+        path=EVAL_DIR / "data" / "x2bee_graph.sqlite",
+        query_path=EVAL_DIR / "data" / "queries" / "x2bee_conversational.json",
+        is_custom=True,
+        quick=True,
+    ),
 ]
 
 # Public datasets (in-memory, from benchmark JSON)
@@ -1130,7 +1151,7 @@ async def main():
         if not api_key:
             print("  ⚠ --agent requires --openai-key or OPENAI_API_KEY env")
         else:
-            agent_datasets = [d for d in CUSTOM_DATASETS if "Hard" in d.name]
+            agent_datasets = [d for d in CUSTOM_DATASETS if "Hard" in d.name or "Conv" in d.name]
             for cfg in agent_datasets:
                 print(
                     f"  {cfg.name} (agent, max {args.agent_max_turns} turns)...",

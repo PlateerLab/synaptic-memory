@@ -3,14 +3,14 @@
     "mrr": 0.9667,
     "p_at_k": 0.5032,
     "r_at_k": 0.8934,
-    "ndcg": 0.9012,
+    "ndcg": 0.9008,
     "corpus_size": 20
   },
   "KRRA Hard": {
     "mrr": 1.0,
-    "p_at_k": 0.5683,
-    "r_at_k": 0.2901,
-    "ndcg": 0.6239,
+    "p_at_k": 0.6099,
+    "r_at_k": 0.2957,
+    "ndcg": 0.6312,
     "corpus_size": 15
   },
   "assort Easy": {
@@ -41,15 +41,36 @@
     "ndcg": 0.2616,
     "corpus_size": 20
   },
+  "KRRA Conv": {
+    "mrr": 0.167,
+    "p_at_k": 0.0564,
+    "r_at_k": 0.0867,
+    "ndcg": 0.0855,
+    "corpus_size": 30
+  },
+  "assort Conv": {
+    "mrr": 0.2563,
+    "p_at_k": 0.0625,
+    "r_at_k": 0.3438,
+    "ndcg": 0.2645,
+    "corpus_size": 30
+  },
+  "X2BEE Conv": {
+    "mrr": 0.1498,
+    "p_at_k": 0.0593,
+    "r_at_k": 0.2407,
+    "ndcg": 0.1716,
+    "corpus_size": 30
+  },
   "KRRA Hard (agent)": {
-    "mrr": 0.6667,
+    "mrr": 0.5333,
     "p_at_k": 0,
     "r_at_k": 0,
     "ndcg": 0,
     "corpus_size": 15
   },
   "assort Hard (agent)": {
-    "mrr": 0.8,
+    "mrr": 0.6667,
     "p_at_k": 0,
     "r_at_k": 0,
     "ndcg": 0,
@@ -61,5 +82,26 @@
     "r_at_k": 0,
     "ndcg": 0,
     "corpus_size": 19
+  },
+  "KRRA Conv (agent)": {
+    "mrr": 0.5,
+    "p_at_k": 0,
+    "r_at_k": 0,
+    "ndcg": 0,
+    "corpus_size": 30
+  },
+  "assort Conv (agent)": {
+    "mrr": 0.7917,
+    "p_at_k": 0,
+    "r_at_k": 0,
+    "ndcg": 0,
+    "corpus_size": 24
+  },
+  "X2BEE Conv (agent)": {
+    "mrr": 0.7407,
+    "p_at_k": 0,
+    "r_at_k": 0,
+    "ndcg": 0,
+    "corpus_size": 27
   }
 }

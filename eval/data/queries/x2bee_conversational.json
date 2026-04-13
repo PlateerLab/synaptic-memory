@@ -1,0 +1,255 @@
+{
+  "dataset": "x2bee_conversational",
+  "description": "X2BEE 이커머스 데이터에 대한 복합·대화형 질문 30개 — 멀티홉 추론, 조건부 집계, 자연어 필터, 비교, 추천 쿼리",
+  "id_field": "node_title",
+  "queries": [
+    {
+      "qid": "c001",
+      "level": "L3",
+      "type": "multi_hop",
+      "query": "iPhone 15 Pro의 총 판매량이 얼마나 되나요?",
+      "description": "상품 → 판매이력 집계 (join + sum)",
+      "relevant_docs": ["pr_goods_base:G00007"]
+    },
+    {
+      "qid": "c002",
+      "level": "L3",
+      "type": "multi_hop",
+      "query": "Shin Ramyun의 평균 리뷰 평점을 알려줘",
+      "description": "상품 → 피드백 조인 + 평균",
+      "relevant_docs": ["pr_goods_base:G00005"]
+    },
+    {
+      "qid": "c003",
+      "level": "L4",
+      "type": "filter",
+      "query": "2023년 12월 판매된 상품 건수는 몇 건이야?",
+      "description": "sold_dtm 범위 필터 + count",
+      "relevant_docs": ["pr_goods_sold_hist:SH0003377"]
+    },
+    {
+      "qid": "c004",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "월별 매출 추이를 보여줘",
+      "description": "sold_dtm 월별 그룹화",
+      "relevant_docs": ["pr_goods_sold_hist:SH0003377"]
+    },
+    {
+      "qid": "c005",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "1만원 이상 와인 상품 중에서 리뷰가 10개 넘는 것은?",
+      "description": "와인 + 가격 필터 + 리뷰 카운트 조건",
+      "relevant_docs": ["pr_goods_base:G00751"]
+    },
+    {
+      "qid": "c006",
+      "level": "L7",
+      "type": "conversational",
+      "query": "손님이 \"매운 한국 라면 있어?\" 라고 물으면 뭐라고 답해?",
+      "description": "패러프레이즈 → Shin Ramyun 발견 + 추천",
+      "relevant_docs": ["pr_goods_base:G00005"]
+    },
+    {
+      "qid": "c007",
+      "level": "L7",
+      "type": "conversational",
+      "query": "전자제품 중에 제일 비싼 거 뭐야?",
+      "description": "iPhone 15 Pro 최고가 (1,600,000원)",
+      "relevant_docs": ["pr_goods_base:G00007"]
+    },
+    {
+      "qid": "c008",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "치즈 종류가 이 쇼핑몰에 몇 개나 있어?",
+      "description": "cheese 포함 상품 카운트 (34개)",
+      "relevant_docs": [
+        "pr_goods_base:G00020", "pr_goods_base:G00040", "pr_goods_base:G00083",
+        "pr_goods_base:G00158", "pr_goods_base:G00442"
+      ]
+    },
+    {
+      "qid": "c009",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "빵 제품이 몇 종류 있는지 확인해줘",
+      "description": "bread 포함 상품 카운트 (31개)",
+      "relevant_docs": ["pr_goods_base:G01005"]
+    },
+    {
+      "qid": "c010",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "평점 5점을 받은 상품 중 가장 저렴한 것은?",
+      "description": "리뷰 5점 + 상품 조인 + 최저가",
+      "relevant_docs": ["pr_goods_base:G00857"]
+    },
+    {
+      "qid": "c011",
+      "level": "L4",
+      "type": "filter",
+      "query": "1만원에서 5만원 사이 상품이 몇 개?",
+      "description": "가격 범위 필터 (between)",
+      "relevant_docs": ["pr_goods_base:G00001"]
+    },
+    {
+      "qid": "c012",
+      "level": "L6",
+      "type": "comparison",
+      "query": "판매량 TOP 3와 리뷰 수 TOP 3를 비교해줘",
+      "description": "두 개의 집계 결과 비교",
+      "relevant_docs": [
+        "pr_goods_base:G00001", "pr_goods_base:G00004", "pr_goods_base:G00007",
+        "pr_goods_base:G00751", "pr_goods_base:G00472", "pr_goods_base:G00389"
+      ]
+    },
+    {
+      "qid": "c013",
+      "level": "L7",
+      "type": "conversational",
+      "query": "친구 생일 선물로 뭐가 좋을까? 5만원 이하로 추천해줘",
+      "description": "가격 필터 + 추천 (리뷰 평점 고려)",
+      "relevant_docs": ["pr_goods_base:G00001"]
+    },
+    {
+      "qid": "c014",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "Cheese 카테고리에서 리뷰가 가장 많은 상품은?",
+      "description": "치즈 필터 + 리뷰 수 최대",
+      "relevant_docs": ["pr_goods_base:G00997"]
+    },
+    {
+      "qid": "c015",
+      "level": "L3",
+      "type": "cross_table",
+      "query": "Galaxy Book에 대한 리뷰 내용을 보여줘",
+      "description": "상품 → 리뷰 FK 조인",
+      "relevant_docs": ["pr_goods_base:G00003"]
+    },
+    {
+      "qid": "c016",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "유저당 평균 리뷰 작성 개수는?",
+      "description": "user_id 집계 + 평균",
+      "relevant_docs": []
+    },
+    {
+      "qid": "c017",
+      "level": "L4",
+      "type": "filter",
+      "query": "2023년 여름(6-8월)에 팔린 상품 목록",
+      "description": "날짜 범위 필터",
+      "relevant_docs": ["pr_goods_sold_hist:SH0003377"]
+    },
+    {
+      "qid": "c018",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "어떤 유저가 리뷰를 가장 많이 썼어?",
+      "description": "user_id GROUP BY + 최대",
+      "relevant_docs": []
+    },
+    {
+      "qid": "c019",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "판매량 10개 이상 팔린 상품은 몇 개야?",
+      "description": "sold_hist 집계 + HAVING count >= 10",
+      "relevant_docs": ["pr_goods_base:G00001"]
+    },
+    {
+      "qid": "c020",
+      "level": "L7",
+      "type": "conversational",
+      "query": "초록 치즈 파스타에 어울리는 와인 추천해줘",
+      "description": "패러프레이즈 + 조합 추천 (화이트 와인)",
+      "relevant_docs": ["pr_goods_base:G00077"]
+    },
+    {
+      "qid": "c021",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "가장 많이 팔린 상품의 리뷰 평균 점수는?",
+      "description": "판매량 1위 (G00001) → 리뷰 평균",
+      "relevant_docs": ["pr_goods_base:G00001"]
+    },
+    {
+      "qid": "c022",
+      "level": "L4",
+      "type": "filter",
+      "query": "70000원 정확히 인 상품 있어?",
+      "description": "가격 == 필터",
+      "relevant_docs": ["pr_goods_base:G00004"]
+    },
+    {
+      "qid": "c023",
+      "level": "L7",
+      "type": "conversational",
+      "query": "아이폰보다 저렴한 전자기기는?",
+      "description": "iPhone 가격 확인 후 비교 필터",
+      "relevant_docs": ["pr_goods_base:G00003"]
+    },
+    {
+      "qid": "c024",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "score 1점짜리 불만 리뷰는 몇 건?",
+      "description": "score==1 필터 + count",
+      "relevant_docs": []
+    },
+    {
+      "qid": "c025",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "1점 리뷰를 가장 많이 받은 상품이 뭐야?",
+      "description": "feedback where score=1 group by goods_no max",
+      "relevant_docs": ["pr_goods_base:G00751"]
+    },
+    {
+      "qid": "c026",
+      "level": "L7",
+      "type": "conversational",
+      "query": "아침 식사용으로 좋은 제품 3가지만 골라줘",
+      "description": "Bread/Muffin/Cheese/Coffee 카테고리",
+      "relevant_docs": ["pr_goods_base:G01005", "pr_goods_base:G00992", "pr_goods_base:G01009"]
+    },
+    {
+      "qid": "c027",
+      "level": "L4",
+      "type": "filter",
+      "query": "재고가 200개 이하인 상품",
+      "description": "sales_stock 필터",
+      "relevant_docs": ["pr_goods_base:G00007", "pr_goods_base:G00005"]
+    },
+    {
+      "qid": "c028",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "Beer 카테고리 상품 11개의 총 판매량 합계는?",
+      "description": "beer 필터 + 각 상품 판매량 집계 합산",
+      "relevant_docs": [
+        "pr_goods_base:G00270", "pr_goods_base:G00974"
+      ]
+    },
+    {
+      "qid": "c029",
+      "level": "L7",
+      "type": "conversational",
+      "query": "달달한 음료 찾고 있어. 뭐가 있을까?",
+      "description": "Cream Soda, Syrup, Liqueur 등 패러프레이즈",
+      "relevant_docs": ["pr_goods_base:G01007", "pr_goods_base:G01003"]
+    },
+    {
+      "qid": "c030",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "재고가 가장 적은 상품의 리뷰 개수는?",
+      "description": "최저 재고 → 상품 식별 → 리뷰 조인",
+      "relevant_docs": ["pr_goods_base:G00005"]
+    }
+  ]
+}

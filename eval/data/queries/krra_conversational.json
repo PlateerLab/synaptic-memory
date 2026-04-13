@@ -1,0 +1,427 @@
+{
+  "dataset": "krra_conversational",
+  "description": "KRRA 경마/말산업 문서에 대한 복합·대화형 질문 30개 — 패러프레이즈, 교차문서, 필터, 멀티홉",
+  "id_field": "doc_id",
+  "queries": [
+    {
+      "qid": "c001",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "경마 시행 운영 계획을 요약해줘",
+      "description": "keywords: ['경마시행', '운영계획']",
+      "relevant_docs": [
+        "06a77998947ddb80",
+        "0ac3271720f05406",
+        "0ac741faaa2da029",
+        "156fec294ba67ae4",
+        "1b3a2926650166e0"
+      ]
+    },
+    {
+      "qid": "c002",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "말 산업 장기 발전 방안은?",
+      "description": "keywords: ['말산업', '발전계획']",
+      "relevant_docs": [
+        "027e0c5f0f5686c0",
+        "1c2e14b3e46641c4",
+        "1dd7a41b6d49067a",
+        "2eaa8a7351dbfb3c",
+        "2eede8200e1e0db8"
+      ]
+    },
+    {
+      "qid": "c003",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "온라인 도박 단속 대응 방침",
+      "description": "keywords: ['불법경마', '사설경마']",
+      "relevant_docs": [
+        "27e3f288a3dda838",
+        "455c41ea7d950aff",
+        "4e67027b23247ea7",
+        "8170c85ae9a0a3cb",
+        "855606d43a06c210"
+      ]
+    },
+    {
+      "qid": "c004",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "탄소 중립을 위한 친환경 전략",
+      "description": "keywords: ['ESG', '지속가능', '탄소']",
+      "relevant_docs": [
+        "0f20c1821479c167",
+        "1002c0855b631621",
+        "123f03df3479517e",
+        "2c473c597114e075",
+        "329af5c7de78350a"
+      ]
+    },
+    {
+      "qid": "c005",
+      "level": "L2",
+      "type": "paraphrase",
+      "query": "직원 복리후생 개선 계획",
+      "description": "keywords: ['복지', '직원']",
+      "relevant_docs": [
+        "0346542e0be2b2ab",
+        "03e46e426c5e0a40",
+        "0ac741faaa2da029",
+        "0bffcf8f8dc55f5f",
+        "0fdd2b845b06532f"
+      ]
+    },
+    {
+      "qid": "c006",
+      "level": "L7",
+      "type": "conversational",
+      "query": "내년도 경마 대회 일정은 어떻게 돼?",
+      "description": "keywords: ['경마시행계획', '대회']",
+      "relevant_docs": [
+        "068eb0be1021da16",
+        "0ac3271720f05406",
+        "140155f6377c6ed1",
+        "1b3a2926650166e0",
+        "294a5acf52548d54"
+      ]
+    },
+    {
+      "qid": "c007",
+      "level": "L7",
+      "type": "conversational",
+      "query": "말 복지를 위해 어떤 프로그램을 운영하나요?",
+      "description": "keywords: ['말복지', '승마']",
+      "relevant_docs": [
+        "07c4de1cc000e7e8",
+        "133dd2fda4f7c41d",
+        "156fec294ba67ae4",
+        "1dd7a41b6d49067a",
+        "29c493103f7c509c"
+      ]
+    },
+    {
+      "qid": "c008",
+      "level": "L7",
+      "type": "conversational",
+      "query": "올해 예산은 어떻게 편성됐어요?",
+      "description": "keywords: ['예산', '편성']",
+      "relevant_docs": [
+        "0f9e1947b0221b27",
+        "2e907c84c2a15612",
+        "36f5479362d3d864",
+        "3d8c8292183997c8",
+        "3dd0576c06bdadd0"
+      ]
+    },
+    {
+      "qid": "c009",
+      "level": "L7",
+      "type": "conversational",
+      "query": "인권 경영 관련 자료 있어?",
+      "description": "keywords: ['인권경영', '인권']",
+      "relevant_docs": [
+        "005599102a43b8f4",
+        "0cf478ddca6e92d5",
+        "1002c0855b631621",
+        "2520e4f72ad580ae",
+        "329af5c7de78350a"
+      ]
+    },
+    {
+      "qid": "c010",
+      "level": "L7",
+      "type": "conversational",
+      "query": "경주마 국제 레이팅 현황을 알려줘",
+      "description": "keywords: ['레이팅', '경주마']",
+      "relevant_docs": [
+        "012dcbe84f52c595",
+        "05889d5822d0109f",
+        "110f8ff7eb5dbdc1",
+        "134ceaf0ae1ba751",
+        "1ff851c7c3ee9eb5"
+      ]
+    },
+    {
+      "qid": "c011",
+      "level": "L3",
+      "type": "cross_document",
+      "query": "경마 운영과 복지 프로그램의 연관성",
+      "description": "keywords: ['경마운영', '복지']",
+      "relevant_docs": [
+        "0346542e0be2b2ab",
+        "0fdd2b845b06532f",
+        "156fec294ba67ae4",
+        "2d94f6c769030bda",
+        "4f2b02c85a84bf0f"
+      ]
+    },
+    {
+      "qid": "c012",
+      "level": "L3",
+      "type": "cross_document",
+      "query": "마주 경제기준 변경과 경마시행의 관계",
+      "description": "keywords: ['마주', '경제', '경마시행']",
+      "relevant_docs": [
+        "012dcbe84f52c595",
+        "0346542e0be2b2ab",
+        "0a863b5949be411e",
+        "0ac3271720f05406",
+        "156fec294ba67ae4"
+      ]
+    },
+    {
+      "qid": "c013",
+      "level": "L3",
+      "type": "cross_document",
+      "query": "교배 실적과 생산 현황의 관계",
+      "description": "keywords: ['교배', '생산']",
+      "relevant_docs": [
+        "012dcbe84f52c595",
+        "05889d5822d0109f",
+        "08dbb848822964aa",
+        "0ac741faaa2da029",
+        "133dd2fda4f7c41d"
+      ]
+    },
+    {
+      "qid": "c014",
+      "level": "L3",
+      "type": "cross_document",
+      "query": "R&D 연구 과제와 중장기 발전 계획 연계",
+      "description": "keywords: ['R&D', '연구', '중장기']",
+      "relevant_docs": [
+        "027e0c5f0f5686c0",
+        "1c2e14b3e46641c4",
+        "1da3f1fef69b9b0e",
+        "230b3c89a0f6cfdc",
+        "23f259fe9f9c25d9"
+      ]
+    },
+    {
+      "qid": "c015",
+      "level": "L3",
+      "type": "cross_document",
+      "query": "승용마 번식 지원과 말산업 활성화",
+      "description": "keywords: ['승용마', '번식', '말산업']",
+      "relevant_docs": [
+        "027e0c5f0f5686c0",
+        "048a00f4ea8e90a9",
+        "08dbb848822964aa",
+        "133dd2fda4f7c41d",
+        "140155f6377c6ed1"
+      ]
+    },
+    {
+      "qid": "c016",
+      "level": "L4",
+      "type": "filter",
+      "query": "2023년에 수립된 추진 계획들",
+      "description": "keywords: ['2023년', '추진계획']",
+      "relevant_docs": [
+        "012dcbe84f52c595",
+        "0f9e1947b0221b27",
+        "134ceaf0ae1ba751",
+        "19fe4e04b9ae46af",
+        "20ce77daff008e50"
+      ]
+    },
+    {
+      "qid": "c017",
+      "level": "L4",
+      "type": "filter",
+      "query": "2024년 경마 시행 관련 문서",
+      "description": "keywords: ['2024년', '경마시행']",
+      "relevant_docs": [
+        "0ac3271720f05406",
+        "0f9e1947b0221b27",
+        "156fec294ba67ae4",
+        "19fe4e04b9ae46af",
+        "1ab7e770624479a7"
+      ]
+    },
+    {
+      "qid": "c018",
+      "level": "L4",
+      "type": "filter",
+      "query": "농림부 관련 대회 계획",
+      "description": "keywords: ['농림부', '대회']",
+      "relevant_docs": [
+        "140155f6377c6ed1",
+        "29c493103f7c509c",
+        "3426f5fdd6c93022",
+        "352b2e0ed9bd7c00",
+        "45d800cab99cab86"
+      ]
+    },
+    {
+      "qid": "c019",
+      "level": "L4",
+      "type": "filter",
+      "query": "제주 지역 경마 운영 문서",
+      "description": "keywords: ['제주', '경마']",
+      "relevant_docs": [
+        "016e887719433e3b",
+        "027e0c5f0f5686c0",
+        "0370e8a4dce03ce3",
+        "046a893e4b7fb53e",
+        "0b64f19639d9e665"
+      ]
+    },
+    {
+      "qid": "c020",
+      "level": "L7",
+      "type": "conversational",
+      "query": "불법 사설경마 대응 계획이 있나?",
+      "description": "keywords: ['불법사설', '대응']",
+      "relevant_docs": [
+        "2bd46b499bdcc01d",
+        "2d94f6c769030bda",
+        "2e907c84c2a15612",
+        "38bd220368aba4ab",
+        "512e17e7a4d429e6"
+      ]
+    },
+    {
+      "qid": "c021",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "말산업 발전 계획 관련 문서 목록",
+      "description": "keywords: ['말산업', '발전', '계획']",
+      "relevant_docs": [
+        "027e0c5f0f5686c0",
+        "0370e8a4dce03ce3",
+        "05889d5822d0109f",
+        "08dbb848822964aa",
+        "0f9e1947b0221b27"
+      ]
+    },
+    {
+      "qid": "c022",
+      "level": "L5",
+      "type": "aggregation",
+      "query": "공공혁신 추진 관련 자료 리스트",
+      "description": "keywords: ['공공혁신', '추진']",
+      "relevant_docs": [
+        "016e887719433e3b",
+        "027e0c5f0f5686c0",
+        "02f450763e85d3da",
+        "05889d5822d0109f",
+        "0f9e1947b0221b27"
+      ]
+    },
+    {
+      "qid": "c023",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "경마 시행 계획 + 경주마 생산 실적 통합 분석",
+      "description": "keywords: ['경마시행', '경주마', '생산']",
+      "relevant_docs": [
+        "012dcbe84f52c595",
+        "05889d5822d0109f",
+        "08dbb848822964aa",
+        "0ac3271720f05406",
+        "0ac741faaa2da029"
+      ]
+    },
+    {
+      "qid": "c024",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "마주 기준 + 레이팅 + 경주마 생산의 종합 현황",
+      "description": "keywords: ['마주', '레이팅', '생산']",
+      "relevant_docs": [
+        "012dcbe84f52c595",
+        "05889d5822d0109f",
+        "08dbb848822964aa",
+        "0ac741faaa2da029",
+        "110f8ff7eb5dbdc1"
+      ]
+    },
+    {
+      "qid": "c025",
+      "level": "L6",
+      "type": "multi_hop",
+      "query": "승마 복지 + 말 등록 + 발전 계획의 공통점",
+      "description": "keywords: ['승마복지', '말등록', '발전']",
+      "relevant_docs": [
+        "031374f12370d483",
+        "048a00f4ea8e90a9",
+        "08dbb848822964aa",
+        "134ceaf0ae1ba751",
+        "1a38e229b370f559"
+      ]
+    },
+    {
+      "qid": "c026",
+      "level": "L7",
+      "type": "conversational",
+      "query": "데이터 기반 행정 활성화는 어떻게 해?",
+      "description": "keywords: ['데이터', '행정', '활성화']",
+      "relevant_docs": [
+        "048a00f4ea8e90a9",
+        "10f09627fe81dec0",
+        "133dd2fda4f7c41d",
+        "17701730bc960da9",
+        "1c2e14b3e46641c4"
+      ]
+    },
+    {
+      "qid": "c027",
+      "level": "L7",
+      "type": "conversational",
+      "query": "청춘 블루밍 페스티벌이 뭔가요?",
+      "description": "keywords: ['청춘', '블루밍', '페스티벌']",
+      "relevant_docs": [
+        "054f2c421357db5b",
+        "06a77998947ddb80",
+        "1a0e5539ca61da40",
+        "21721806a5c11d88",
+        "517703ddbb49e0f6"
+      ]
+    },
+    {
+      "qid": "c028",
+      "level": "L7",
+      "type": "conversational",
+      "query": "말 등록 규정이 어떻게 개정됐지?",
+      "description": "keywords: ['말등록', '규정', '개정']",
+      "relevant_docs": [
+        "031374f12370d483",
+        "048a00f4ea8e90a9",
+        "07c4de1cc000e7e8",
+        "17701730bc960da9",
+        "1a38e229b370f559"
+      ]
+    },
+    {
+      "qid": "c029",
+      "level": "L7",
+      "type": "conversational",
+      "query": "워터 페스티벌 행사 계획 알려줘",
+      "description": "keywords: ['워터', '페스티벌']",
+      "relevant_docs": [
+        "054f2c421357db5b",
+        "06a77998947ddb80",
+        "1a0e5539ca61da40",
+        "21721806a5c11d88",
+        "517703ddbb49e0f6"
+      ]
+    },
+    {
+      "qid": "c030",
+      "level": "L7",
+      "type": "conversational",
+      "query": "건전화 추진 계획이 있으면 보여줘",
+      "description": "keywords: ['건전화', '추진']",
+      "relevant_docs": [
+        "016e887719433e3b",
+        "027e0c5f0f5686c0",
+        "05889d5822d0109f",
+        "0f9e1947b0221b27",
+        "10fb01568d0a958f"
+      ]
+    }
+  ]
+}
