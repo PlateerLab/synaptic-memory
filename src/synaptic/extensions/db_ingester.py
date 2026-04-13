@@ -983,9 +983,11 @@ class DbIngester:
         exists) and records the watermark for subsequent deltas.
         """
         from synaptic.extensions.cdc.sync import (
+            HashTableSyncer,
             SyncResult,
             TableSyncStats,
             TimestampTableSyncer,
+            detect_change_column,
         )
 
         t0 = time.time()
@@ -1004,8 +1006,21 @@ class DbIngester:
             raise RuntimeError(msg)
         store = backend.cdc_state_store()
 
-        syncer = TimestampTableSyncer(self._table_ingester, store, source_url)
+        ts_syncer = TimestampTableSyncer(self._table_ingester, store, source_url)
+        hash_syncer = HashTableSyncer(self._table_ingester, store, source_url)
         reader = _sqlite_row_reader(db_path, row_limit)
+
+        def _pick_syncer(schema: TableSchema):
+            """Decide which strategy a table should use.
+
+            Stored strategy wins over auto-detection so a table that
+            started in hash mode (because nobody renamed the column
+            after the first sync) does not silently flip to
+            timestamp on a later run that happens to detect one.
+            """
+            cols = [{"name": c.name, "type": c.type} for c in schema.columns]
+            cc = detect_change_column(cols)
+            return ts_syncer if cc else hash_syncer
 
         result = SyncResult(source_url=source_url)
 
@@ -1032,6 +1047,7 @@ class DbIngester:
             return _read_sqlite_pks(db_path, table, pk_col)
 
         for schema in no_fk + has_fk:
+            syncer = _pick_syncer(schema)
             try:
                 deleted_count = await syncer.detect_deletes(
                     graph,

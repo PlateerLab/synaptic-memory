@@ -384,76 +384,276 @@ class TimestampTableSyncer:
         rows: list[dict[str, Any]],
         prior_fks: dict[str, dict[str, str]],
     ) -> int:
-        """Delete FK edges whose target moved or was removed.
+        return await _prune_stale_fk_edges(
+            graph, schema, fk_map, rows, prior_fks, self._source_url
+        )
 
-        For each row we compare the prior FK snapshot against the
-        fresh row values. Any ``(fk_col, old_target_pk)`` that the
-        new row does not still point at gets the corresponding
-        graph edge deleted by endpoint match. New edges are added
-        by ``TableIngester.ingest`` itself (link calls are
-        idempotent under ``UNIQUE(source, target, kind)``), so the
-        only cleanup left is removal.
-        """
-        from synaptic.models import EdgeKind
 
-        removed = 0
-        # Cache outgoing-edge fetches per source node so a row with
-        # multiple FK changes only pays one round trip.
-        edge_cache: dict[str, list[Any]] = {}
+async def _prune_stale_fk_edges(
+    graph: SynapticGraph,
+    schema: TableSchema,
+    fk_map: dict[str, tuple[str, str]],
+    rows: list[dict[str, Any]],
+    prior_fks: dict[str, dict[str, str]],
+    source_url: str,
+) -> int:
+    """Delete FK edges whose target moved or was removed.
 
+    Module-level so both timestamp and hash syncers can share the
+    diffing logic. Caller supplies ``source_url`` since edge target
+    derivation needs the same canonicalisation as
+    :func:`deterministic_row_id`.
+    """
+    from synaptic.models import EdgeKind
+
+    removed = 0
+    edge_cache: dict[str, list[Any]] = {}
+
+    for row in rows:
+        pk_val = row.get(schema.primary_key)
+        if pk_val is None:
+            continue
+        pk_str = str(pk_val)
+        prior = prior_fks.get(pk_str)
+        if not prior:
+            continue
+
+        source_node = deterministic_row_id(source_url, schema.name, pk_val)
+
+        for col, old_target_pk in prior.items():
+            target_table = fk_map[col][0] if col in fk_map else None
+
+            new_val = row.get(col)
+            if new_val is not None and str(new_val) == old_target_pk:
+                continue
+            if target_table is None:
+                continue
+
+            old_target_node = deterministic_row_id(
+                source_url, target_table, old_target_pk
+            )
+
+            if source_node not in edge_cache:
+                edge_cache[source_node] = await graph.backend.get_edges(
+                    source_node, direction="outgoing"
+                )
+            for edge in edge_cache[source_node]:
+                if (
+                    edge.target_id == old_target_node
+                    and edge.kind == EdgeKind.RELATED
+                ):
+                    await graph.backend.delete_edge(edge.id)
+                    removed += 1
+                    edge_cache[source_node] = [
+                        e for e in edge_cache[source_node] if e.id != edge.id
+                    ]
+                    break
+
+    return removed
+
+
+class HashTableSyncer:
+    """Sync one table by content-hashing every row.
+
+    Used as a fallback for tables that lack an ``updated_at``-style
+    column. Reads every live row each sync, computes
+    :func:`row_hash`, and skips ingestion for rows whose hash
+    matches the prior snapshot in ``syn_cdc_pk_index.row_hash``.
+
+    Strictly more expensive than :class:`TimestampTableSyncer`
+    because it must always do a full table scan, but it is the
+    only correct strategy when the source schema offers no
+    monotonic change marker.
+    """
+
+    __slots__ = ("_ingester", "_source_url", "_store")
+
+    def __init__(
+        self,
+        ingester: TableIngester,
+        store: SyncStateStore,
+        source_url: str,
+    ) -> None:
+        self._ingester = ingester
+        self._store = store
+        self._source_url = source_url
+
+    async def detect_deletes(
+        self,
+        graph: SynapticGraph,
+        schema: TableSchema,
+        pk_reader: PkReader,
+    ) -> int:
+        # Hash strategy reuses the timestamp syncer's delete logic
+        # by routing through the same store call. Behaviour is
+        # identical: full PK diff via TEMP TABLE + LEFT JOIN.
+        return await TimestampTableSyncer(
+            self._ingester, self._store, self._source_url
+        ).detect_deletes(graph, schema, pk_reader)
+
+    async def sync_table(
+        self,
+        graph: SynapticGraph,
+        schema: TableSchema,
+        row_reader: RowReader,
+    ) -> TableSyncStats:
+        """Sync one table via per-row content hashing."""
+        from synaptic.extensions.cdc.hashing import row_hash
+
+        stats = TableSyncStats(table=schema.name, strategy="hash")
+        col_defs = [{"name": c.name, "type": c.type} for c in schema.columns]
+
+        # Hash mode always does a full read — there is no watermark
+        # to filter on. Pass `where_clause=None` so the SQLite
+        # reader still applies the LIMIT but skips the WHERE.
+        reader_result = row_reader(
+            schema.name, where_clause=None, where_params=()
+        )
+        if hasattr(reader_result, "__await__"):
+            rows = await reader_result  # type: ignore[misc]
+        else:
+            rows = reader_result  # type: ignore[assignment]
+
+        if not rows:
+            return stats
+
+        fk_map = {fk.column: (fk.ref_table, fk.ref_column) for fk in schema.foreign_keys}
+
+        # Bucket rows: which need ingest, which can be skipped.
+        # Doing the lookup row-by-row is fine for the typical
+        # "small table without updated_at" case (lookup tables,
+        # config rows). Phase 6+ can switch to a single batch SELECT
+        # if the per-row cost matters.
+        to_ingest: list[dict[str, Any]] = []
+        new_hashes: dict[str, str] = {}
+        prior_fks: dict[str, dict[str, str]] = {}
         for row in rows:
             pk_val = row.get(schema.primary_key)
             if pk_val is None:
                 continue
             pk_str = str(pk_val)
-            prior = prior_fks.get(pk_str)
-            if not prior:
-                continue
+            new_hash = row_hash(row)
+            new_hashes[pk_str] = new_hash
 
-            source_node = deterministic_row_id(
-                self._source_url, schema.name, pk_val
+            prior_hash = await self._store.get_row_hash(
+                self._source_url, schema.name, pk_str
+            )
+            existing_node = await self._store.get_node_id(
+                self._source_url, schema.name, pk_str
             )
 
-            for col, old_target_pk in prior.items():
-                if col not in fk_map:
-                    # Schema lost an FK column — still clean up.
-                    target_table = None
-                else:
-                    target_table = fk_map[col][0]
-
-                new_val = row.get(col)
-                if new_val is not None and str(new_val) == old_target_pk:
-                    continue  # unchanged
-
-                if target_table is None:
-                    continue  # nothing to compute target id from
-
-                old_target_node = deterministic_row_id(
-                    self._source_url, target_table, old_target_pk
-                )
-
-                if source_node not in edge_cache:
-                    edge_cache[source_node] = await graph.backend.get_edges(
-                        source_node, direction="outgoing"
+            if existing_node is None:
+                stats.added += 1
+                to_ingest.append(row)
+            elif prior_hash != new_hash:
+                stats.updated += 1
+                to_ingest.append(row)
+                if fk_map:
+                    snapshot = await self._store.get_fk_edges(
+                        self._source_url, schema.name, pk_str
                     )
-                for edge in edge_cache[source_node]:
-                    if (
-                        edge.target_id == old_target_node
-                        and edge.kind == EdgeKind.RELATED
-                    ):
-                        await graph.backend.delete_edge(edge.id)
-                        removed += 1
-                        # Refresh the cache so a second matching
-                        # FK column on the same row doesn't re-find
-                        # the just-deleted edge.
-                        edge_cache[source_node] = [
-                            e
-                            for e in edge_cache[source_node]
-                            if e.id != edge.id
-                        ]
-                        break
+                    if snapshot:
+                        prior_fks[pk_str] = snapshot
+            # else: unchanged — skip
 
-        return removed
+        if not to_ingest:
+            # Nothing changed; no state advance needed beyond the
+            # last_sync_at heartbeat for monitoring.
+            prior_state = await self._store.load_state(
+                self._source_url, schema.name
+            )
+            new_state = TableSyncState(
+                source_url=self._source_url,
+                table_name=schema.name,
+                strategy="hash",
+                change_col=None,
+                last_sync_at=time.time(),
+                last_watermark=None,
+                primary_key_col=schema.primary_key,
+                row_count=prior_state.row_count if prior_state else len(rows),
+                schema_fingerprint=_schema_fingerprint(schema),
+            )
+            await self._store.save_state(new_state)
+            return stats
+
+        await self._ingester.ingest(
+            graph,
+            schema.name,
+            col_defs,
+            to_ingest,
+            primary_key=schema.primary_key,
+            foreign_keys=fk_map if fk_map else None,
+            source_url=self._source_url,
+        )
+
+        if fk_map and prior_fks:
+            stats.fk_edges_removed += await _prune_stale_fk_edges(
+                graph, schema, fk_map, to_ingest, prior_fks, self._source_url
+            )
+
+        if fk_map:
+            for row in to_ingest:
+                pk_val = row.get(schema.primary_key)
+                if pk_val is None:
+                    continue
+                prior = prior_fks.get(str(pk_val), {})
+                for col in fk_map:
+                    new_target = row.get(col)
+                    if new_target is None:
+                        continue
+                    if prior.get(col) != str(new_target):
+                        stats.fk_edges_added += 1
+
+        # Persist new hashes + FK snapshots into the PK index.
+        pk_batch: list[tuple[str, str, str | None, dict[str, str] | None]] = []
+        for row in to_ingest:
+            pk_val = row.get(schema.primary_key)
+            if pk_val is None:
+                continue
+            pk_str = str(pk_val)
+            node_id = deterministic_row_id(
+                self._source_url, schema.name, pk_val
+            )
+            fk_snapshot: dict[str, str] | None = None
+            if fk_map:
+                fk_snapshot = {
+                    col: str(row[col])
+                    for col in fk_map
+                    if row.get(col) is not None
+                }
+            pk_batch.append(
+                (pk_str, node_id, new_hashes.get(pk_str), fk_snapshot)
+            )
+
+        await self._store.upsert_pk_batch(
+            self._source_url, schema.name, pk_batch
+        )
+
+        prior_state = await self._store.load_state(
+            self._source_url, schema.name
+        )
+        row_count = (prior_state.row_count if prior_state else 0) + stats.added
+        new_state = TableSyncState(
+            source_url=self._source_url,
+            table_name=schema.name,
+            strategy="hash",
+            change_col=None,
+            last_sync_at=time.time(),
+            last_watermark=None,
+            primary_key_col=schema.primary_key,
+            row_count=row_count,
+            schema_fingerprint=_schema_fingerprint(schema),
+        )
+        await self._store.save_state(new_state)
+
+        logger.info(
+            "sync_table_hash(%s): +%d ~%d (scanned %d)",
+            schema.name,
+            stats.added,
+            stats.updated,
+            len(rows),
+        )
+        return stats
 
 
 def _schema_fingerprint(schema: TableSchema) -> str:
