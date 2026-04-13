@@ -1004,16 +1004,20 @@ async def agent_filter_nodes(
     table: str = "",
     session_id: str = "",
     limit: int = 20,
+    from_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Filter nodes by property value — for structured/tabular data.
 
-    Queries typed properties stored in the graph. Supports numeric
-    comparison (>=, <=, >, <, ==) and text containment.
+    Supports numeric comparison (>=, <=, >, <, ==), text containment,
+    prefix matching (starts_with), and date ranges (date_range with
+    ``YYYY-MM-DD..YYYY-MM-DD``). Pass ``from_ids`` with node titles
+    from a previous step to chain multi-hop queries.
 
     Examples:
       filter_nodes(property="selling_price", op=">=", value="90000")
-      filter_nodes(table="reviews", property="attribute_2_value", op="contains", value="타이트")
-      filter_nodes(property="broadcast_date", op="contains", value="2024-11")
+      filter_nodes(property="sold_dtm", op="starts_with", value="2023-12")
+      filter_nodes(property="sold_dtm", op="date_range", value="2023-06-01..2023-08-31")
+      filter_nodes(from_ids=["products:12800000"], property="discount_rate", op=">", value="10")
     """
     backend = await _ensure_backend()
     session = await _session(session_id)
@@ -1025,6 +1029,7 @@ async def agent_filter_nodes(
         op=op,
         value=value,
         limit=limit,
+        from_ids=from_ids,
     )
     return result.to_dict()
 
@@ -1038,17 +1043,24 @@ async def agent_aggregate_nodes(
     where_property: str = "",
     where_op: str = "",
     where_value: str = "",
+    group_by_format: str = "",
     session_id: str = "",
     limit: int = 50,
+    from_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Aggregate nodes by property — GROUP BY + COUNT/SUM/AVG.
 
-    Supports optional WHERE pre-filter for conditional aggregation.
+    Supports optional WHERE pre-filter for conditional aggregation,
+    date bucketing via ``group_by_format``, and multi-hop chaining
+    via ``from_ids``.
 
     Examples:
       aggregate_nodes(table="products", group_by="season", metric="count")
       aggregate_nodes(table="feedback", group_by="goods_no", metric="count",
                       where_property="score", where_op="==", where_value="5")
+      aggregate_nodes(table="sold_hist", group_by="sold_dtm",
+                      group_by_format="YYYY-MM", metric="count")
+      aggregate_nodes(from_ids=top_products, group_by="category", metric="count")
     """
     backend = await _ensure_backend()
     session = await _session(session_id)
@@ -1062,27 +1074,31 @@ async def agent_aggregate_nodes(
         where_property=where_property,
         where_op=where_op,
         where_value=where_value,
+        group_by_format=group_by_format,
         limit=limit,
+        from_ids=from_ids,
     )
     return result.to_dict()
 
 
 @server.tool()
 async def agent_join_related(
-    from_value: str,
     fk_property: str,
     target_table: str,
+    from_value: str = "",
+    from_values: list[str] | None = None,
     session_id: str = "",
     limit: int = 20,
 ) -> dict[str, Any]:
     """Follow a foreign key to find related records.
 
-    Like SQL JOIN: finds all nodes in target_table where
-    fk_property equals from_value.
+    Accepts either ``from_value`` (single) or ``from_values`` (batch)
+    for multi-hop chaining. The IN-clause JOIN variant makes it easy
+    to pass aggregate top-K results directly.
 
     Examples:
       join_related(from_value="12800000", fk_property="product_code", target_table="reviews")
-      → all reviews for product 12800000
+      join_related(from_values=["G00001","G00007"], fk_property="goods_no", target_table="pr_goods_sold_hist")
     """
     backend = await _ensure_backend()
     session = await _session(session_id)
@@ -1090,6 +1106,7 @@ async def agent_join_related(
         backend,
         session,
         from_value=from_value,
+        from_values=from_values,
         fk_property=fk_property,
         target_table=target_table,
         limit=limit,

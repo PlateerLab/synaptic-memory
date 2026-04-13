@@ -41,7 +41,50 @@ _OPS = {
     "=": "=",
     "!=": "!=",
     "contains": "LIKE",
+    "date_range": "DATE_RANGE",  # value format: "YYYY-MM-DD..YYYY-MM-DD"
+    "starts_with": "STARTS_WITH",  # efficient prefix match (dates: "2023-12")
 }
+
+
+def _eval_op(op: str, raw_val: object, value: str) -> bool:
+    """Evaluate a comparison operator against a property value.
+
+    Handles numeric/string/date comparisons uniformly. Returns True when
+    the condition matches.
+    """
+    if raw_val is None:
+        return False
+    if op == "contains":
+        return value.lower() in str(raw_val).lower()
+    if op == "starts_with":
+        return str(raw_val).startswith(value)
+    if op == "date_range":
+        # value format: "YYYY-MM-DD..YYYY-MM-DD" (inclusive)
+        if ".." not in value:
+            return False
+        start, end = value.split("..", 1)
+        s = str(raw_val)[: len(start)]
+        return start <= s <= end
+
+    try:
+        cmp_a: float | str = float(raw_val)  # type: ignore[assignment]
+        cmp_b: float | str = float(value)  # type: ignore[assignment]
+    except (ValueError, TypeError):
+        cmp_a, cmp_b = str(raw_val), str(value)
+
+    if op == ">=":
+        return cmp_a >= cmp_b  # type: ignore[operator]
+    if op == "<=":
+        return cmp_a <= cmp_b  # type: ignore[operator]
+    if op == ">":
+        return cmp_a > cmp_b  # type: ignore[operator]
+    if op == "<":
+        return cmp_a < cmp_b  # type: ignore[operator]
+    if op in ("==", "="):
+        return cmp_a == cmp_b
+    if op == "!=":
+        return cmp_a != cmp_b
+    return False
 
 
 async def filter_nodes_tool(
@@ -53,24 +96,34 @@ async def filter_nodes_tool(
     op: str = "contains",
     value: str,
     limit: int = 20,
+    from_ids: list[str] | None = None,
 ) -> ToolResult:
     """Filter nodes by a typed property value.
 
-    Queries ``properties_json`` via SQLite ``json_extract``. Supports
-    numeric comparison (>=, <=, >, <, ==) and text containment.
+    Queries ``properties_json``. Supports numeric comparison
+    (>=, <=, >, <, ==), text containment, date ranges, and prefix
+    matching.
 
     Args:
         table: Optional table name filter (e.g. "products", "reviews").
             When empty, searches all nodes.
         property: Property key to filter on (e.g. "selling_price").
-        op: Comparison operator. One of: >=, <=, >, <, ==, !=, contains.
-        value: Value to compare against. Numbers are cast automatically.
+        op: One of ``>=``, ``<=``, ``>``, ``<``, ``==``, ``!=``,
+            ``contains``, ``starts_with``, ``date_range``.
+        value: Value to compare against. For ``date_range`` use
+            ``YYYY-MM-DD..YYYY-MM-DD``. For ``starts_with`` pass the
+            prefix (useful for month buckets: ``2023-12``).
         limit: Max results to return.
+        from_ids: Optional list of node titles/IDs to restrict the
+            search to — used for multi-hop chaining (pass previous
+            step's ``node_title`` or title values).
 
     Examples:
         - filter_nodes(property="selling_price", op=">=", value="100000")
         - filter_nodes(table="reviews", property="attribute_2_value", op="contains", value="타이트")
-        - filter_nodes(property="broadcast_date", op="contains", value="2024-11")
+        - filter_nodes(property="broadcast_date", op="starts_with", value="2024-11")
+        - filter_nodes(property="sold_dtm", op="date_range", value="2023-06-01..2023-08-31")
+        - filter_nodes(from_ids=["products:12800000","products:12800004"], property="discount_rate", op=">", value="30")
     """
     budget = _budget_check(session, "filter_nodes")
     if budget is not None:
@@ -118,33 +171,24 @@ async def filter_nodes_tool(
         # Full scan so we can report the accurate total count, not just
         # the limited sample — this matters for "how many X?" questions.
         all_nodes = await backend.list_nodes(kind=None, limit=200_000)
+
+        # Pre-filter by from_ids for multi-hop chaining
+        id_filter: set[str] | None = None
+        if from_ids:
+            id_filter = {str(fid) for fid in from_ids}
+
         matched_nodes: list[Any] = []
         for n in all_nodes:
             props = n.properties or {}
             if table and props.get("_table_name") != table:
                 continue
+            if id_filter is not None and n.title not in id_filter and n.id not in id_filter:
+                continue
             raw_val = props.get(property)
             if raw_val is None:
                 continue
-            if op == "contains":
-                if value.lower() in str(raw_val).lower():
-                    matched_nodes.append(n)
-            else:
-                try:
-                    cmp_a = float(raw_val)
-                    cmp_b = float(value)
-                except ValueError:
-                    cmp_a, cmp_b = str(raw_val), str(value)
-                matched = (
-                    (op in (">=",) and cmp_a >= cmp_b)
-                    or (op in ("<=",) and cmp_a <= cmp_b)
-                    or (op in (">",) and cmp_a > cmp_b)
-                    or (op in ("<",) and cmp_a < cmp_b)
-                    or (op in ("==", "=") and cmp_a == cmp_b)
-                    or (op in ("!=",) and cmp_a != cmp_b)
-                )
-                if matched:
-                    matched_nodes.append(n)
+            if _eval_op(op, raw_val, value):
+                matched_nodes.append(n)
 
         total = len(matched_nodes)
         nodes = matched_nodes[:limit]
@@ -186,7 +230,9 @@ async def aggregate_nodes_tool(
     where_property: str = "",
     where_op: str = "",
     where_value: str = "",
+    group_by_format: str = "",
     limit: int = 50,
+    from_ids: list[str] | None = None,
 ) -> ToolResult:
     """Aggregate nodes by a property — GROUP BY + COUNT/SUM/AVG/MAX/MIN.
 
@@ -197,14 +243,26 @@ async def aggregate_nodes_tool(
         metric_property: For sum/avg/max/min — the numeric property to
             aggregate. If empty, aggregates the group_by values themselves.
         where_property: Optional pre-filter property (e.g. "score").
-        where_op: Pre-filter operator (>=, <=, >, <, ==, !=, contains).
-        where_value: Pre-filter value (e.g. "5").
+        where_op: Pre-filter operator (>=, <=, >, <, ==, !=, contains,
+            starts_with, date_range).
+        where_value: Pre-filter value (e.g. "5", "2023-12",
+            "2023-06-01..2023-08-31").
+        group_by_format: Optional bucketing for date-like values.
+            ``"YYYY-MM"`` buckets by month, ``"YYYY"`` by year,
+            ``"YYYY-MM-DD"`` by day. Uses string prefix extraction so
+            works for ISO-format strings.
         limit: Max groups to return.
+        from_ids: Optional list of node titles/IDs to restrict the
+            aggregation to — used for multi-hop chaining (pass the
+            result of a previous filter/aggregate call).
 
     Examples:
         - aggregate_nodes(table="products", group_by="season", metric="count")
         - aggregate_nodes(table="feedback", group_by="goods_no", metric="count",
               where_property="score", where_op="==", where_value="5")
+        - aggregate_nodes(table="sold_hist", group_by="sold_dtm",
+              group_by_format="YYYY-MM", metric="count")  # monthly buckets
+        - aggregate_nodes(from_ids=prev_top_products, group_by="category", metric="count")
     """
     budget = _budget_check(session, "aggregate_nodes")
     if budget is not None:
@@ -246,43 +304,43 @@ async def aggregate_nodes_tool(
                 fk_target_table = tbl
                 break
 
-        # Pre-filter operator lookup
-        where_sql_op = _OPS.get(where_op) if where_op else None
+        # Pre-filter lookup for id_filter (multi-hop chaining)
+        id_filter: set[str] | None = None
+        if from_ids:
+            id_filter = {str(fid) for fid in from_ids}
+
+        # Bucketing length for date-format group_by
+        bucket_len = 0
+        if group_by_format:
+            bucket_len = {
+                "YYYY": 4,
+                "YYYY-MM": 7,
+                "YYYY-MM-DD": 10,
+                "YYYY-MM-DD HH": 13,
+            }.get(group_by_format, 0)
 
         for n in all_nodes:
             props = n.properties or {}
             if table and props.get("_table_name") != table:
                 continue
+            if id_filter is not None and n.title not in id_filter and n.id not in id_filter:
+                continue
 
             # Apply WHERE pre-filter
-            if where_property and where_sql_op:
+            if where_property and where_op:
                 raw_w = props.get(where_property)
                 if raw_w is None:
                     continue
-                if where_op == "contains":
-                    if where_value.lower() not in str(raw_w).lower():
-                        continue
-                else:
-                    try:
-                        cmp_a = float(raw_w)
-                        cmp_b = float(where_value)
-                    except (ValueError, TypeError):
-                        cmp_a, cmp_b = str(raw_w), str(where_value)  # type: ignore[assignment]
-                    passed = (
-                        (where_op in (">=",) and cmp_a >= cmp_b)
-                        or (where_op in ("<=",) and cmp_a <= cmp_b)
-                        or (where_op in (">",) and cmp_a > cmp_b)
-                        or (where_op in ("<",) and cmp_a < cmp_b)
-                        or (where_op in ("==", "=") and cmp_a == cmp_b)
-                        or (where_op in ("!=",) and cmp_a != cmp_b)
-                    )
-                    if not passed:
-                        continue
+                if not _eval_op(where_op, raw_w, where_value):
+                    continue
 
             grp_val = props.get(group_by)
             if grp_val is None:
                 continue
             grp_key = str(grp_val)
+            # Apply date/string bucketing when group_by_format is set
+            if bucket_len > 0:
+                grp_key = grp_key[:bucket_len]
 
             # Value for metric: use metric_property if provided
             if metric_property:
@@ -342,6 +400,8 @@ async def aggregate_nodes_tool(
                     if where_property
                     else {}
                 ),
+                **({"group_by_format": group_by_format} if group_by_format else {}),
+                **({"from_ids_count": len(from_ids)} if from_ids else {}),
             },
             "groups": groups,
             "total_groups": total_groups,
@@ -357,88 +417,74 @@ async def join_related_tool(
     backend: StorageBackend,
     session: SearchSession,
     *,
-    from_value: str,
+    from_value: str = "",
     fk_property: str,
     target_table: str,
     limit: int = 20,
+    from_values: list[str] | None = None,
 ) -> ToolResult:
     """Follow a foreign key relationship to find related nodes.
 
     Given a value (e.g. product_code="12800000"), finds all nodes in
     ``target_table`` that have the same value in ``fk_property``.
+    Accepts either a single ``from_value`` or a list of
+    ``from_values`` — useful for multi-hop chaining where the previous
+    step produced multiple IDs.
 
     This is the graph-tool equivalent of SQL JOIN:
-    ``SELECT * FROM reviews WHERE product_code = '12800000'``
+    ``SELECT * FROM reviews WHERE product_code IN (...)``
 
     Args:
-        from_value: The FK value to look up (e.g. "12800000").
+        from_value: Single FK value to look up (e.g. "12800000").
         fk_property: The property name that holds the FK
             (e.g. "product_code").
         target_table: The table to search in (e.g. "reviews").
         limit: Max results.
+        from_values: Optional list of FK values — pass multiple PK
+            values from a previous aggregate/filter result.
 
     Examples:
         - join_related(from_value="12800000", fk_property="product_code", target_table="reviews")
-          → all reviews for product 12800000
-        - join_related(from_value="1", fk_property="color_id", target_table="product_variants")
-          → all variants with color_id=1
+        - join_related(from_values=["G00001","G00007"], fk_property="goods_no", target_table="pr_goods_sold_hist")
     """
     budget = _budget_check(session, "join_related")
     if budget is not None:
         return budget
 
+    # Normalize to a set of target values (support single + batch).
+    # Strip "table:pk" prefixes so agents can pass raw node titles.
+    target_values: set[str] = set()
+    for raw in (from_values or []) + ([from_value] if from_value else []):
+        s = str(raw).strip()
+        if not s:
+            continue
+        # If value looks like a node title "table:pk_val", extract pk_val
+        if ":" in s and not s.replace("-", "").isdigit():
+            s = s.split(":", 1)[1]
+        target_values.add(s)
+
+    if not target_values:
+        return ToolResult(
+            tool="join_related",
+            ok=False,
+            data={},
+            session=session.summary(),
+            error="join_related requires from_value or from_values",
+        )
+
     try:
-        nodes = []
-
-        # Strategy 1: Graph edge traversal — find source node, follow RELATED edges.
-        # Much faster than full scan: O(degree) instead of O(N).
-        source_node = None
-        # Try to find the source node by title pattern (table:pk)
-        try:
-            # Guess source table: find a table where from_value is the PK
-            sample_nodes = await backend.list_nodes(kind=None, limit=1000)
-            for n in sample_nodes:
-                props = n.properties or {}
-                pk_col = props.get("_primary_key", "")
-                if pk_col == fk_property and str(props.get(fk_property, "")) == str(from_value):
-                    source_node = n
-                    break
-        except Exception:
-            pass
-
         matched_nodes: list[Any] = []
+        seen: set[str] = set()
 
-        if source_node:
-            from synaptic.models import EdgeKind
-
-            try:
-                edges = await backend.get_edges(source_node.id, direction="both")
-                for edge in edges:
-                    if edge.kind != EdgeKind.RELATED:
-                        continue
-                    other_id = (
-                        edge.target_id if edge.source_id == source_node.id else edge.source_id
-                    )
-                    other = await backend.get_node(other_id)
-                    if other is None:
-                        continue
-                    if target_table and (other.properties or {}).get("_table_name") != target_table:
-                        continue
-                    matched_nodes.append(other)
-            except Exception:
-                pass
-
-        # Strategy 2: Property scan fallback — always run to get accurate total.
-        # Full scan so we report the true count, not just edge-traversed subset.
-        seen = {n.id for n in matched_nodes}
+        # Full scan by property — robust for both single and batch lookups.
         all_nodes_list = await backend.list_nodes(kind=None, limit=200_000)
         for n in all_nodes_list:
             if n.id in seen:
                 continue
             props = n.properties or {}
-            if props.get("_table_name") != target_table:
+            if target_table and props.get("_table_name") != target_table:
                 continue
-            if str(props.get(fk_property, "")) == str(from_value):
+            if str(props.get(fk_property, "")) in target_values:
                 matched_nodes.append(n)
                 seen.add(n.id)
 
@@ -460,7 +506,8 @@ async def join_related_tool(
         ok=True,
         data={
             "join": {
-                "from_value": from_value,
+                "from_values": sorted(target_values)[:10],
+                "from_count": len(target_values),
                 "fk_property": fk_property,
                 "target_table": target_table,
             },

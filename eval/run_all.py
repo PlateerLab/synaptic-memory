@@ -476,6 +476,34 @@ Q: "5점 리뷰가 가장 많은 상품"
 Q: "스마트폰 제품 찾기"
 → filter_nodes(table="pr_goods_base", property="goods_nm", op="contains", value="phone")
 
+## Date queries — use starts_with or date_range or group_by_format
+Q: "2023년 12월 판매 건수"
+→ filter_nodes(table="sold_hist", property="sold_dtm", op="starts_with", value="2023-12")
+
+Q: "2023년 여름(6-8월) 판매"
+→ filter_nodes(table="sold_hist", property="sold_dtm", op="date_range", value="2023-06-01..2023-08-31")
+
+Q: "월별 매출 추이"
+→ aggregate_nodes(table="sold_hist", group_by="sold_dtm", group_by_format="YYYY-MM", metric="count")
+
+## Multi-hop chaining — pass previous step's node_titles or group values as from_ids
+Q: "판매량 1위 상품의 리뷰 평점 평균"
+Step 1: aggregate_nodes(table="sold_hist", group_by="goods_no", metric="sum", metric_property="sold_qunt")
+  → top groups include {"group": "G00001", "node_title": "pr_goods_base:G00001"}
+Step 2: aggregate_nodes(table="feedback", group_by="score", metric="count",
+                         where_property="goods_no", where_op="==", where_value="G00001")
+
+Q: "5점 리뷰 최다 상품 중 가장 저렴한 것"
+Step 1: aggregate_nodes(table="feedback", group_by="goods_no", metric="count",
+                         where_property="score", where_op="==", where_value="5")
+  → groups=[{node_title:"pr_goods_base:G00857"}, ...]
+Step 2: filter_nodes(from_ids=["pr_goods_base:G00857","pr_goods_base:G00472"],
+                      property="sales_prc", op=">=", value="0")
+  → then pick the cheapest from results
+
+Q: "iPhone과 Galaxy Book의 판매 이력"
+→ join_related(from_values=["G00007","G00003"], fk_property="goods_no", target_table="pr_goods_sold_hist")
+
 ## Language fallback
 - If data contains English product names, try English keywords when Korean search returns 0
 - Example: "치즈" returns 0 → try "cheese" instead
@@ -515,7 +543,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "filter_nodes",
-            "description": "Filter by property. Returns {total, showing, results}. Use total for counting questions.",
+            "description": "Filter by property. Returns {total, showing, results}. Supports multi-hop chaining via from_ids.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -524,11 +552,22 @@ AGENT_TOOLS = [
                         "description": "Table name from metadata e.g. pr_goods_base",
                     },
                     "property": {"type": "string", "description": "Column name e.g. sales_prc"},
-                    "op": {"type": "string", "description": ">=, <=, >, <, ==, !=, contains"},
-                    "value": {"type": "string"},
+                    "op": {
+                        "type": "string",
+                        "description": ">=, <=, >, <, ==, !=, contains, starts_with, date_range",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Value. For date_range: '2023-06-01..2023-08-31'. For starts_with: prefix like '2023-12'",
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Max results to return (default 20). Use higher for listings.",
+                    },
+                    "from_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: restrict to these node titles/IDs (multi-hop chaining from previous step's results)",
                     },
                 },
                 "required": ["property", "op", "value"],
@@ -539,7 +578,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "aggregate_nodes",
-            "description": "GROUP BY + COUNT/SUM/AVG/MAX/MIN. Supports optional WHERE pre-filter.",
+            "description": "GROUP BY + COUNT/SUM/AVG/MAX/MIN with WHERE pre-filter, date bucketing, and multi-hop chaining.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -554,9 +593,21 @@ AGENT_TOOLS = [
                         "type": "string",
                         "description": "Pre-filter column e.g. score",
                     },
-                    "where_op": {"type": "string", "description": "Pre-filter operator e.g. =="},
+                    "where_op": {
+                        "type": "string",
+                        "description": "==, !=, >=, <=, >, <, contains, starts_with, date_range",
+                    },
                     "where_value": {"type": "string", "description": "Pre-filter value e.g. 5"},
+                    "group_by_format": {
+                        "type": "string",
+                        "description": "Date bucket format: 'YYYY', 'YYYY-MM', 'YYYY-MM-DD'. Use for monthly/yearly aggregation on datetime columns.",
+                    },
                     "limit": {"type": "integer", "description": "Max groups (default 50)"},
+                    "from_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: restrict aggregation to these node titles/IDs (multi-hop chaining)",
+                    },
                 },
                 "required": ["group_by"],
             },
@@ -566,11 +617,16 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "join_related",
-            "description": "FK lookup — find related records. Returns {total, showing, results}.",
+            "description": "FK lookup — find related records. Accepts single from_value OR list of from_values for batch JOIN.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "from_value": {"type": "string", "description": "FK value e.g. G00001"},
+                    "from_value": {"type": "string", "description": "Single FK value e.g. G00001"},
+                    "from_values": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Multiple FK values for batch IN-clause JOIN (multi-hop chaining)",
+                    },
                     "fk_property": {"type": "string", "description": "FK column e.g. goods_no"},
                     "target_table": {
                         "type": "string",
@@ -578,7 +634,7 @@ AGENT_TOOLS = [
                     },
                     "limit": {"type": "integer", "description": "Max results (default 20)"},
                 },
-                "required": ["from_value", "fk_property", "target_table"],
+                "required": ["fk_property", "target_table"],
             },
         },
     },
@@ -801,6 +857,7 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             op=args.get("op", "contains"),
             value=args.get("value", ""),
             limit=int(args.get("limit", 20)),
+            from_ids=args.get("from_ids") or None,
         )
     elif name == "aggregate_nodes":
         r = await aggregate_nodes_tool(
@@ -813,13 +870,16 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             where_property=args.get("where_property", ""),
             where_op=args.get("where_op", ""),
             where_value=args.get("where_value", ""),
+            group_by_format=args.get("group_by_format", ""),
             limit=int(args.get("limit", 50)),
+            from_ids=args.get("from_ids") or None,
         )
     elif name == "join_related":
         r = await join_related_tool(
             backend,
             session,
             from_value=args.get("from_value", ""),
+            from_values=args.get("from_values") or None,
             fk_property=args.get("fk_property", ""),
             target_table=args.get("target_table", ""),
             limit=int(args.get("limit", 20)),
