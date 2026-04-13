@@ -118,12 +118,22 @@ class RerankerWeights:
             embedder is wired up this contribution is always zero.
         graph: Expansion-reason prior weight. Default ``0.20``.
         structural: Category / kind alignment weight. Default ``0.10``.
+        fusion: ``"weighted"`` (legacy min-max + weighted sum) or
+            ``"rrf"`` (Reciprocal Rank Fusion, Cormack & Clarke 2009).
+            RRF is robust to score-scale mismatches and is the default
+            in modern hybrid search engines (Vespa, Qdrant, ES). The
+            structural / graph weights still apply as additive boosts
+            on top of the RRF score.
+        rrf_k: RRF hyperparameter. Lower = more emphasis on the very
+            top of each ranking. ``60`` is the literature default.
     """
 
     lexical: float = 0.45
     semantic: float = 0.25
     graph: float = 0.20
     structural: float = 0.10
+    fusion: str = "weighted"  # backward-compat default; pass "rrf" to opt in
+    rrf_k: int = 60
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -159,6 +169,30 @@ def _normalise(scores: dict[str, float]) -> dict[str, float]:
         return {k: 1.0 for k in scores}
     span = hi - lo
     return {k: (v - lo) / span for k, v in scores.items()}
+
+
+def _rrf_scores(scores: dict[str, float], k: int = 60) -> dict[str, float]:
+    """Reciprocal Rank Fusion (RRF) — Cormack & Clarke 2009.
+
+    Converts raw scores into RRF-style rank scores ``1 / (k + rank)``.
+    The hyperparameter ``k=60`` is the literature default; smaller k
+    emphasises the very top of the ranking, larger k flattens it.
+
+    Why RRF instead of weighted sum:
+    - Robust to score-scale differences across signals (BM25 raw vs
+      cosine vs PageRank live in completely different ranges).
+    - No normalisation drift: the score depends only on the *position*,
+      not the magnitude.
+    - Used as the default in Vespa, Qdrant, Elasticsearch, OpenSearch.
+
+    Empty input returns an empty dict. Ties are broken by the dict
+    insertion order, which is fine for downstream weighted combination.
+    """
+    if not scores:
+        return {}
+    # Sort by score desc; rank starts at 1
+    ranked = sorted(scores.items(), key=lambda kv: -kv[1])
+    return {nid: 1.0 / (k + rank) for rank, (nid, _) in enumerate(ranked, start=1)}
 
 
 class HybridReranker:
@@ -211,12 +245,15 @@ class HybridReranker:
         if not expanded:
             return []
 
+        use_rrf = self._weights.fusion == "rrf"
+        rrf_k = self._weights.rrf_k
+
         # --- Lexical component ---
         if fts_scores is None:
             lex_raw = {ex.node.id: 1.0 for ex in expanded}
         else:
             lex_raw = {ex.node.id: fts_scores.get(ex.node.id, 0.0) for ex in expanded}
-        lex_norm = _normalise(lex_raw)
+        lex_norm = _rrf_scores(lex_raw, k=rrf_k) if use_rrf else _normalise(lex_raw)
 
         # --- Semantic component ---
         sem_raw: dict[str, float] = {}
@@ -224,13 +261,13 @@ class HybridReranker:
             for ex in expanded:
                 emb = ex.node.embedding
                 sem_raw[ex.node.id] = _cosine(query_embedding, emb) if emb else 0.0
-            sem_norm = _normalise(sem_raw)
+            sem_norm = _rrf_scores(sem_raw, k=rrf_k) if use_rrf else _normalise(sem_raw)
         else:
             sem_norm = {ex.node.id: 0.0 for ex in expanded}
 
         # --- Graph component ---
         graph_raw = {ex.node.id: _REASON_PRIOR.get(ex.reason, 0.3) for ex in expanded}
-        graph_norm = _normalise(graph_raw)
+        graph_norm = _rrf_scores(graph_raw, k=rrf_k) if use_rrf else _normalise(graph_raw)
 
         # --- Structural component ---
         category_set = {c.lower() for c in (anchor_categories or set())}
@@ -256,16 +293,34 @@ class HybridReranker:
             return min(score, 1.0)
 
         # --- Combine ---
+        # When using RRF, lex/sem/graph live in the 1/(k+rank) range
+        # (~0.001 to 0.016). Re-scale them back to [0, 1] *after* the
+        # weighted sum so they stay comparable with the structural score
+        # (which is computed in [0, 1] directly).
         w = self._weights
         scored: list[ScoredCandidate] = []
+        raw_totals: dict[str, float] = {}
+        per_signal: dict[str, tuple[float, float, float, float]] = {}
         for ex in expanded:
             nid = ex.node.id
             lex = lex_norm.get(nid, 0.0)
             sem = sem_norm.get(nid, 0.0)
             graph = graph_norm.get(nid, 0.0)
             struct = _structural_score(ex.node)
+            raw_totals[nid] = w.lexical * lex + w.semantic * sem + w.graph * graph
+            per_signal[nid] = (lex, sem, graph, struct)
 
-            total = w.lexical * lex + w.semantic * sem + w.graph * graph + w.structural * struct
+        if use_rrf:
+            # Rescale rrf-weighted sum into [0, 1] so structural can be
+            # added on top without being dwarfed by the tiny RRF scale.
+            max_raw = max(raw_totals.values()) if raw_totals else 1.0
+            if max_raw > 0:
+                raw_totals = {nid: v / max_raw for nid, v in raw_totals.items()}
+
+        for ex in expanded:
+            nid = ex.node.id
+            lex, sem, graph, struct = per_signal[nid]
+            total = raw_totals.get(nid, 0.0) + w.structural * struct
             scored.append(
                 ScoredCandidate(
                     node=ex.node,

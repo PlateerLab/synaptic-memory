@@ -818,7 +818,14 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
 
 
 async def _agent_dispatch(name, args, backend, session, *, embedder=None):
-    """Route agent tool calls to synaptic tools."""
+    """Route agent tool calls to synaptic tools.
+
+    Memoizes results within the session so repeat calls (same tool +
+    same args) don't re-scan the graph or burn the budget. The cache
+    only kicks in for read-only / pure tools (``search``, ``filter``,
+    ``aggregate``, ``join``, ``expand``, ``follow``, ``get_document``,
+    ``deep_search``) — every dispatch path here is one of those.
+    """
     from synaptic.agent_tools import (
         expand_tool,
         follow_tool,
@@ -831,6 +838,14 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
         join_related_tool,
     )
     from synaptic.agent_tools_v2 import deep_search_tool
+
+    # Memoization: skip the underlying tool entirely on a cache hit.
+    cache_key = session.cache_key(name, args)
+    cached = session.cache_get(cache_key)
+    if cached is not None:
+        # Mark as a cached response so debugging is easy.
+        cached_copy = {**cached, "from_cache": True}
+        return cached_copy
 
     if name == "deep_search":
         r = await deep_search_tool(
@@ -888,7 +903,12 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
         r = await get_document_tool(backend, session, args["doc_id"], query=args.get("query", ""))
     else:
         return {"error": f"unknown: {name}"}
-    return r.to_dict()
+
+    result = r.to_dict()
+    # Only cache successful tool results — errors should not be sticky.
+    if result.get("ok", True):
+        session.cache_put(cache_key, result)
+    return result
 
 
 async def _llm_judge(
