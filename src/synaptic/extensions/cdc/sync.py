@@ -262,19 +262,32 @@ class TimestampTableSyncer:
         pk_batch: list[tuple[str, str, str | None, dict[str, str] | None]] = []
 
         # Bucket add/update *before* ingest — after upsert_pk is
-        # called, every PK looks 'known'.
+        # called, every PK looks 'known'. While we're paying the
+        # round-trip we also fetch the prior FK snapshot so the
+        # post-ingest diff (Phase 4) can detect rewires without a
+        # second pass over the rows.
         row_is_new: list[bool] = []
+        prior_fks: dict[str, dict[str, str]] = {}
         for row in rows:
             pk_val = row.get(schema.primary_key)
             if pk_val is None:
                 row_is_new.append(False)
                 continue
+            pk_str = str(pk_val)
             existing = await self._store.get_node_id(
-                self._source_url, schema.name, str(pk_val)
+                self._source_url, schema.name, pk_str
             )
             row_is_new.append(existing is None)
+            if existing is not None and fk_map:
+                snapshot = await self._store.get_fk_edges(
+                    self._source_url, schema.name, pk_str
+                )
+                if snapshot:
+                    prior_fks[pk_str] = snapshot
 
-        # Ingest via TableIngester with deterministic IDs.
+        # Ingest via TableIngester with deterministic IDs. New FK
+        # edges are created here; stale edges (from a previous FK
+        # value) are pruned in the diff loop below.
         await self._ingester.ingest(
             graph,
             schema.name,
@@ -284,6 +297,30 @@ class TimestampTableSyncer:
             foreign_keys=fk_map if fk_map else None,
             source_url=self._source_url,
         )
+
+        # Phase 4 — FK diff: any (col, target_pk) that was in the
+        # prior snapshot but is gone or repointed in the new row is
+        # an edge we need to delete. New edges are already in place
+        # thanks to the ingest call above.
+        if fk_map and prior_fks:
+            stats.fk_edges_removed += await self._prune_stale_fk_edges(
+                graph, schema, fk_map, rows, prior_fks
+            )
+
+        # Count newly-added FK edges for observability — anything
+        # that wasn't in the prior snapshot but is in the new row.
+        if fk_map:
+            for row in rows:
+                pk_val = row.get(schema.primary_key)
+                if pk_val is None:
+                    continue
+                prior = prior_fks.get(str(pk_val), {})
+                for col in fk_map:
+                    new_target = row.get(col)
+                    if new_target is None:
+                        continue
+                    if prior.get(col) != str(new_target):
+                        stats.fk_edges_added += 1
 
         # Record the new PK index entries.
         for row, is_new in zip(rows, row_is_new):
@@ -338,6 +375,85 @@ class TimestampTableSyncer:
             new_watermark,
         )
         return stats
+
+    async def _prune_stale_fk_edges(
+        self,
+        graph: SynapticGraph,
+        schema: TableSchema,
+        fk_map: dict[str, tuple[str, str]],
+        rows: list[dict[str, Any]],
+        prior_fks: dict[str, dict[str, str]],
+    ) -> int:
+        """Delete FK edges whose target moved or was removed.
+
+        For each row we compare the prior FK snapshot against the
+        fresh row values. Any ``(fk_col, old_target_pk)`` that the
+        new row does not still point at gets the corresponding
+        graph edge deleted by endpoint match. New edges are added
+        by ``TableIngester.ingest`` itself (link calls are
+        idempotent under ``UNIQUE(source, target, kind)``), so the
+        only cleanup left is removal.
+        """
+        from synaptic.models import EdgeKind
+
+        removed = 0
+        # Cache outgoing-edge fetches per source node so a row with
+        # multiple FK changes only pays one round trip.
+        edge_cache: dict[str, list[Any]] = {}
+
+        for row in rows:
+            pk_val = row.get(schema.primary_key)
+            if pk_val is None:
+                continue
+            pk_str = str(pk_val)
+            prior = prior_fks.get(pk_str)
+            if not prior:
+                continue
+
+            source_node = deterministic_row_id(
+                self._source_url, schema.name, pk_val
+            )
+
+            for col, old_target_pk in prior.items():
+                if col not in fk_map:
+                    # Schema lost an FK column — still clean up.
+                    target_table = None
+                else:
+                    target_table = fk_map[col][0]
+
+                new_val = row.get(col)
+                if new_val is not None and str(new_val) == old_target_pk:
+                    continue  # unchanged
+
+                if target_table is None:
+                    continue  # nothing to compute target id from
+
+                old_target_node = deterministic_row_id(
+                    self._source_url, target_table, old_target_pk
+                )
+
+                if source_node not in edge_cache:
+                    edge_cache[source_node] = await graph.backend.get_edges(
+                        source_node, direction="outgoing"
+                    )
+                for edge in edge_cache[source_node]:
+                    if (
+                        edge.target_id == old_target_node
+                        and edge.kind == EdgeKind.RELATED
+                    ):
+                        await graph.backend.delete_edge(edge.id)
+                        removed += 1
+                        # Refresh the cache so a second matching
+                        # FK column on the same row doesn't re-find
+                        # the just-deleted edge.
+                        edge_cache[source_node] = [
+                            e
+                            for e in edge_cache[source_node]
+                            if e.id != edge.id
+                        ]
+                        break
+
+        return removed
 
 
 def _schema_fingerprint(schema: TableSchema) -> str:
