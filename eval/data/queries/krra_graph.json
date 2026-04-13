@@ -23,8 +23,18 @@
       "category": "A_aggregation",
       "query": "2020년부터 2024년까지 '인권영향평가'를 주제로 다루는 '규정 및 지침' 카테고리 문서는 연도별로 몇 개씩 있는가?",
       "expected_answer_type": "count_by_year",
-      "expected_answer_shape": {"2020": "N", "2021": "N", "2022": "N", "2023": "N", "2024": "N"},
-      "requires": ["entity_extraction(인권영향평가)", "year_property_fix(H3)", "category_filter"],
+      "expected_answer_shape": {
+        "2020": "N",
+        "2021": "N",
+        "2022": "N",
+        "2023": "N",
+        "2024": "N"
+      },
+      "requires": [
+        "entity_extraction(인권영향평가)",
+        "year_property_fix(H3)",
+        "category_filter"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "top-k returns documents but never a count or distribution. User must manually tally each year after reading every doc.",
       "verification_hint": "grep parsed title/chunks for '인권영향평가' within category='규정 및 지침', group by extracted year from filename prefix"
@@ -34,8 +44,18 @@
       "category": "A_aggregation",
       "query": "KRA의 예산 관련 문서('예산', '집행지침', '전용', '세부내역' 키워드 포함) 총 개수와 카테고리별 분포",
       "expected_answer_type": "count_with_breakdown",
-      "expected_answer_shape": {"total": "N", "by_category": {"운영계획": "N", "규정 및 지침": "N", "..." : "..."}},
-      "requires": ["phrase_cluster(budget_family)", "category_aggregation"],
+      "expected_answer_shape": {
+        "total": "N",
+        "by_category": {
+          "운영계획": "N",
+          "규정 및 지침": "N",
+          "...": "..."
+        }
+      },
+      "requires": [
+        "phrase_cluster(budget_family)",
+        "category_aggregation"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "No matter how many docs top-k returns, the cardinality + distribution must be computed externally.",
       "verification_hint": "Union of title-match against budget term set, groupby category"
@@ -45,8 +65,15 @@
       "category": "A_aggregation",
       "query": "전체 1,110개 문서 중 '평가' 개념이 포함된 문서(내부경영평가, 인권영향평가, 재물조사평가, ESG경영진단 등)의 비율은 얼마인가?",
       "expected_answer_type": "ratio",
-      "expected_answer_shape": {"evaluation_docs": "N", "total": 1110, "percentage": "X%"},
-      "requires": ["entity_clustering(평가_family)", "whole_corpus_scan"],
+      "expected_answer_shape": {
+        "evaluation_docs": "N",
+        "total": 1110,
+        "percentage": "X%"
+      },
+      "requires": [
+        "entity_clustering(평가_family)",
+        "whole_corpus_scan"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Ratios are impossible from top-k — you never see the denominator.",
       "verification_hint": "Count docs whose title contains any term in {평가, 진단, 조사, 감사}"
@@ -56,8 +83,18 @@
       "category": "B_set_ops",
       "query": "'2021년 윤리경영 기본계획'과 '인권경영 실행지침 일부 개정(안)'에서 공통으로 언급되는 위원회 또는 조직명은 무엇인가?",
       "expected_answer_type": "set_intersection",
-      "expected_answer_shape": {"common_entities": ["위원회명", "부서명", "..."]},
-      "requires": ["entity_extraction(organization)", "MENTIONS_edge", "set_op_on_neighbors"],
+      "expected_answer_shape": {
+        "common_entities": [
+          "위원회명",
+          "부서명",
+          "..."
+        ]
+      },
+      "requires": [
+        "entity_extraction(organization)",
+        "MENTIONS_edge",
+        "set_op_on_neighbors"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "top-k gives you both docs but not the intersection of their named entities.",
       "verification_hint": "Extract proper nouns ending in 위원회/본부/부/팀/센터 from both; manual intersect"
@@ -67,8 +104,18 @@
       "category": "B_set_ops",
       "query": "'사업별 조직별 예산 계층구조' 2020년 문서와 2023년 문서를 비교했을 때, 2020년에는 있었으나 2023년에 사라진 사업/조직은?",
       "expected_answer_type": "set_difference",
-      "expected_answer_shape": {"removed_in_2023": ["사업명1", "조직명2", "..."]},
-      "requires": ["entity_extraction(business_unit)", "year_comparison", "diff_op"],
+      "expected_answer_shape": {
+        "removed_in_2023": [
+          "사업명1",
+          "조직명2",
+          "..."
+        ]
+      },
+      "requires": [
+        "entity_extraction(business_unit)",
+        "year_comparison",
+        "diff_op"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Retrieval cannot compute set difference between two documents' entity lists.",
       "verification_hint": "Parse both predecessor/successor docs, extract organizational hierarchy, diff"
@@ -78,8 +125,18 @@
       "category": "B_set_ops",
       "query": "'경주마 국제 레이팅' 관련 문서들이 참조하는 등급 체계와 '대상경주 레이스 레이팅' 문서들이 참조하는 등급 체계의 합집합",
       "expected_answer_type": "set_union",
-      "expected_answer_shape": {"combined_rating_tiers": ["4등급 이상", "G1", "G2", "..."]},
-      "requires": ["entity_extraction(rating_tier)", "cross_topic_union"],
+      "expected_answer_shape": {
+        "combined_rating_tiers": [
+          "4등급 이상",
+          "G1",
+          "G2",
+          "..."
+        ]
+      },
+      "requires": [
+        "entity_extraction(rating_tier)",
+        "cross_topic_union"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Top-k returns related docs but the union of their internal taxonomies is not a ranking problem.",
       "verification_hint": "Extract all tier tokens from both doc groups"
@@ -89,8 +146,20 @@
       "category": "C_temporal",
       "query": "2020년 '지사 고객입장 및 방역관리 방안'(코로나 대응)이 2021~2024년 어떤 규정/계획 문서로 반영되거나 대체됐는가?",
       "expected_answer_type": "temporal_chain",
-      "expected_answer_shape": {"origin": "doc_id", "successor_chain": [{"year": "YYYY", "doc_id": "...", "relation": "derived_from|supersedes"}]},
-      "requires": ["temporal_edge_inference", "topic_similarity_across_years"],
+      "expected_answer_shape": {
+        "origin": "doc_id",
+        "successor_chain": [
+          {
+            "year": "YYYY",
+            "doc_id": "...",
+            "relation": "derived_from|supersedes"
+          }
+        ]
+      },
+      "requires": [
+        "temporal_edge_inference",
+        "topic_similarity_across_years"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "top-k finds related docs but not the *ordered chain of succession*. Time ordering + derivation relationship is graph-native.",
       "verification_hint": "Find 2020 방역 doc → look for 2021+ docs sharing 방역/안전/고객응대 terms → verify temporal chain"
@@ -100,8 +169,23 @@
       "category": "C_temporal",
       "query": "2020~2024년 '인재개발 기본계획' 연차별 문서 비교 — 매년 새로 추가된 교육 프로그램과 중단된 프로그램",
       "expected_answer_type": "temporal_diff",
-      "expected_answer_shape": {"by_year": {"2021": {"added": ["..."], "removed": ["..."]}}},
-      "requires": ["entity_extraction(program_name)", "year_indexed_entity_set", "year_diff_op"],
+      "expected_answer_shape": {
+        "by_year": {
+          "2021": {
+            "added": [
+              "..."
+            ],
+            "removed": [
+              "..."
+            ]
+          }
+        }
+      },
+      "requires": [
+        "entity_extraction(program_name)",
+        "year_indexed_entity_set",
+        "year_diff_op"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "All 5 years' docs fit in top-k easily, but the deltas between them require node-level diff.",
       "verification_hint": "Extract program list from each year's doc, compute yearwise add/remove"
@@ -111,8 +195,18 @@
       "category": "C_temporal",
       "query": "'내부경영평가제도'가 2020년 개선(안) 이후 몇 번 개정됐고 주요 변화점은 무엇인가?",
       "expected_answer_type": "revision_count_with_summary",
-      "expected_answer_shape": {"revision_count": "N", "major_changes": ["...", "..."]},
-      "requires": ["version_detection", "supersedes_edge", "text_diff"],
+      "expected_answer_shape": {
+        "revision_count": "N",
+        "major_changes": [
+          "...",
+          "..."
+        ]
+      },
+      "requires": [
+        "version_detection",
+        "supersedes_edge",
+        "text_diff"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Retrieving all versions ≠ knowing what changed between them.",
       "verification_hint": "Find all 내부경영평가 docs across years, compare chunk contents between versions"
@@ -122,8 +216,24 @@
       "category": "D_multi_hop",
       "query": "KPC 개최계획에 등장하는 '부서' 중에서, 같은 해 인권영향평가 대상 부서 목록에 포함된 부서는?",
       "expected_answer_type": "filtered_path_set",
-      "expected_answer_shape": {"matched_departments": ["부서명1", "부서명2"], "paths": [{"from": "KPC doc", "via_entity": "부서명", "to": "인권평가 doc"}]},
-      "requires": ["entity_extraction(부서)", "MENTIONS_edge", "2_hop_path_query"],
+      "expected_answer_shape": {
+        "matched_departments": [
+          "부서명1",
+          "부서명2"
+        ],
+        "paths": [
+          {
+            "from": "KPC doc",
+            "via_entity": "부서명",
+            "to": "인권평가 doc"
+          }
+        ]
+      },
+      "requires": [
+        "entity_extraction(부서)",
+        "MENTIONS_edge",
+        "2_hop_path_query"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Top-k on 'KPC 부서 인권영향평가' returns unrelated docs — the answer lives in the *intersection* of entity sets from two different doc groups, reached by 2-hop traversal.",
       "verification_hint": "Parse KPC doc for 부서 mentions → parse 인권평가 체크리스트 for 부서 list → intersect"
@@ -133,8 +243,23 @@
       "category": "D_multi_hop",
       "query": "2020년 '내부경영평가제도 개선(안)'에서 제안된 평가 항목 중, 실제로 이후 연도의 경영실적 보고서에 반영된 항목은 무엇인가?",
       "expected_answer_type": "chain_with_evidence",
-      "expected_answer_shape": {"adopted_items": [{"item": "...", "proposed_in": "2020 doc_id", "adopted_in": ["2021 doc_id", "2022 doc_id"]}]},
-      "requires": ["entity_extraction(evaluation_item)", "year_ordering", "DERIVED_FROM_edge"],
+      "expected_answer_shape": {
+        "adopted_items": [
+          {
+            "item": "...",
+            "proposed_in": "2020 doc_id",
+            "adopted_in": [
+              "2021 doc_id",
+              "2022 doc_id"
+            ]
+          }
+        ]
+      },
+      "requires": [
+        "entity_extraction(evaluation_item)",
+        "year_ordering",
+        "DERIVED_FROM_edge"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "This requires tracing ITEM nodes from a proposal doc forward in time through multiple implementation docs — a path problem, not a ranking problem.",
       "verification_hint": "Extract 평가항목 list from 2020 개선안 → check appearance in 2021+ 경영실적 docs"
@@ -144,8 +269,19 @@
       "category": "D_multi_hop",
       "query": "2024년 '정보화기기 교체 계획'이 참조하거나 근거로 삼은 예산 규정 및 집행지침은 무엇이며, 그 지침들의 상위 법적 근거 문서는?",
       "expected_answer_type": "chain_upward",
-      "expected_answer_shape": {"plan": "2024 doc_id", "rules_referenced": ["..."], "upper_basis": ["..."]},
-      "requires": ["CITES_edge", "hierarchical_rule_chain"],
+      "expected_answer_shape": {
+        "plan": "2024 doc_id",
+        "rules_referenced": [
+          "..."
+        ],
+        "upper_basis": [
+          "..."
+        ]
+      },
+      "requires": [
+        "CITES_edge",
+        "hierarchical_rule_chain"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Top-k may return the plan AND the rules, but not the *reference chain* connecting them.",
       "verification_hint": "Check 2024 정보화기기 doc for '~지침에 따라', '~규정에 의거' phrases → follow references"
@@ -155,8 +291,20 @@
       "category": "E_structural",
       "query": "KRRA 문서 네트워크에서 '다른 문서들이 가장 많이 참조하는 핵심 규정' top 5 (in-degree 기준)",
       "expected_answer_type": "ranked_by_centrality",
-      "expected_answer_shape": {"top5": [{"rank": 1, "doc_id": "...", "in_degree": "N", "title": "..."}]},
-      "requires": ["CITES_edge_inference", "in_degree_computation"],
+      "expected_answer_shape": {
+        "top5": [
+          {
+            "rank": 1,
+            "doc_id": "...",
+            "in_degree": "N",
+            "title": "..."
+          }
+        ]
+      },
+      "requires": [
+        "CITES_edge_inference",
+        "in_degree_computation"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Centrality is a whole-graph property. Top-k on a query returns candidates ranked by query relevance, never by network centrality.",
       "verification_hint": "For each doc, count occurrences of its title/short name in other docs' bodies; rank"
@@ -166,8 +314,19 @@
       "category": "E_structural",
       "query": "'규정 및 지침' 카테고리 내에서 상호 참조가 가장 밀집된 규정 묶음(community) 1개와 그에 속한 문서 목록",
       "expected_answer_type": "community",
-      "expected_answer_shape": {"community_size": "N", "docs": ["..."], "shared_topics": ["..."]},
-      "requires": ["community_detection(Louvain/Leiden)", "phrase_co_occurrence"],
+      "expected_answer_shape": {
+        "community_size": "N",
+        "docs": [
+          "..."
+        ],
+        "shared_topics": [
+          "..."
+        ]
+      },
+      "requires": [
+        "community_detection(Louvain/Leiden)",
+        "phrase_co_occurrence"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Community detection is algorithmic over the edge set — not expressible as a retrieval query.",
       "verification_hint": "Cluster docs by shared 10+ phrase overlap within category, pick densest cluster"
@@ -177,8 +336,21 @@
       "category": "F_constraint",
       "query": "2022년 이후 발간된 '인권경영' 카테고리 문서 중, 본문에 '위원회'가 3회 이상 등장하고 제목에 '개정' 또는 '지침'이 포함된 문서",
       "expected_answer_type": "filtered_list",
-      "expected_answer_shape": {"matches": [{"doc_id": "...", "title": "...", "위원회_mentions": "N"}]},
-      "requires": ["year_filter(H3)", "category_filter", "entity_count_filter", "title_predicate"],
+      "expected_answer_shape": {
+        "matches": [
+          {
+            "doc_id": "...",
+            "title": "...",
+            "위원회_mentions": "N"
+          }
+        ]
+      },
+      "requires": [
+        "year_filter(H3)",
+        "category_filter",
+        "entity_count_filter",
+        "title_predicate"
+      ],
       "current_answerable": false,
       "topk_inadequacy": "Top-k ranks by relevance, not by satisfying all 4 predicates simultaneously. Extra hits dilute precision for multi-predicate filters.",
       "verification_hint": "Year ≥ 2022 AND category='인권경영' AND count('위원회' in content) ≥ 3 AND (title~'개정' OR title~'지침')"
@@ -201,5 +373,8 @@
       "graph.centrality(metric, filter) — in-degree / PageRank over subset"
     ],
     "output_format_shift": "Current SearchResult returns list[Node]. Graph queries need typed results: Count, Set, Path, Chain, Community, RankedList."
-  }
+  },
+  "source": "한국마사회 (Korea Racing Authority)",
+  "source_url": "https://www.kra.co.kr/",
+  "source_description": "KRRA 그래프 검색 평가용 (카테고리 기반 탐색)."
 }

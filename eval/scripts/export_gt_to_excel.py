@@ -172,8 +172,20 @@ def _write_sheet(
     ws["B4"] = len(queries)
     ws["A5"] = "Answer resolved?"
     ws["B5"] = "YES — see relevant_answer column" if resolver else "NO graph found"
+    ws["A6"] = "Source"
+    ws["B6"] = meta.get("source", "(unknown)")
+    ws["A7"] = "Source URL"
+    src_url = meta.get("source_url", "")
+    ws["B7"] = src_url
+    if src_url:
+        ws["B7"].hyperlink = src_url
+        ws["B7"].font = Font(color="0563C1", underline="single")
+    ws["A8"] = "Source notes"
+    ws["B8"] = meta.get("source_description", "")
 
-    for row in range(1, 6):
+    for row in range(1, 9):
+        if row == 7 and src_url:
+            continue  # already styled as hyperlink
         ws[f"A{row}"].font = Font(bold=True)
 
     # Column headers
@@ -188,7 +200,7 @@ def _write_sheet(
         "relevant_answer",
         "relevant_docs",
     ]
-    header_row = 7
+    header_row = 10
     for i, col in enumerate(columns, start=1):
         cell = ws.cell(row=header_row, column=i, value=col)
         cell.fill = HEADER_FILL
@@ -230,14 +242,14 @@ def _write_summary(wb: Workbook, stats: list[dict]) -> None:
 
     ws["A1"] = "Synaptic Memory — Evaluation GT Datasets"
     ws["A1"].font = Font(bold=True, size=14)
-    ws.merge_cells("A1:E1")
+    ws.merge_cells("A1:G1")
 
     ws["A3"] = "Generated from"
     ws["B3"] = "eval/data/queries/*.json"
     ws["A3"].font = Font(bold=True)
 
     header_row = 5
-    headers = ["Dataset", "Description", "Queries", "id_field", "Language"]
+    headers = ["Dataset", "Description", "Queries", "id_field", "Lang", "Source", "Source URL"]
     for i, h in enumerate(headers, start=1):
         cell = ws.cell(row=header_row, column=i, value=h)
         cell.fill = HEADER_FILL
@@ -246,12 +258,16 @@ def _write_summary(wb: Workbook, stats: list[dict]) -> None:
 
     for r, s in enumerate(stats, start=header_row + 1):
         for c, key in enumerate(
-            ["dataset", "description", "queries", "id_field", "language"], start=1
+            ["dataset", "description", "queries", "id_field", "language", "source", "source_url"],
+            start=1,
         ):
             cell = ws.cell(row=r, column=c, value=s.get(key, ""))
             cell.alignment = Alignment(vertical="top", wrap_text=True)
+            if key == "source_url" and s.get("source_url"):
+                cell.hyperlink = s["source_url"]
+                cell.font = Font(color="0563C1", underline="single")
 
-    widths = {"A": 22, "B": 60, "C": 10, "D": 14, "E": 12}
+    widths = {"A": 22, "B": 50, "C": 10, "D": 14, "E": 8, "F": 50, "G": 40}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
@@ -296,6 +312,9 @@ def main() -> None:
         meta = {
             "description": data.get("description", ""),
             "id_field": data.get("id_field", "doc_id"),
+            "source": data.get("source", ""),
+            "source_url": data.get("source_url", ""),
+            "source_description": data.get("source_description", ""),
         }
 
         # Load resolver for this dataset's graph
@@ -316,6 +335,8 @@ def main() -> None:
                 "queries": len(queries),
                 "id_field": meta["id_field"],
                 "language": _guess_language(name, queries),
+                "source": meta.get("source", ""),
+                "source_url": meta.get("source_url", ""),
             }
         )
         resolved = " (with answers)" if resolver else ""

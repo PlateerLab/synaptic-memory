@@ -3,94 +3,164 @@
   "description": "패션 이커머스 정형 데이터 난이도별 평가 — L2~L7. node title 기반 GT.",
   "queries": [
     {
-      "qid": "a001", "level": "L2", "type": "paraphrase",
+      "qid": "a001",
+      "level": "L2",
+      "type": "paraphrase",
       "query": "봄 시즌 신상 니트웨어",
       "description": "25SS 울 캐시미어 니트를 시즌+카테고리로 패러프레이즈",
-      "relevant_docs": ["products:12800004"]
+      "relevant_docs": [
+        "products:12800004"
+      ]
     },
     {
-      "qid": "a002", "level": "L2", "type": "paraphrase",
+      "qid": "a002",
+      "level": "L2",
+      "type": "paraphrase",
       "query": "여름용 가볍고 시원한 하의",
       "description": "린넨 와이드 밴딩 슬랙스를 속성으로 검색",
-      "relevant_docs": ["products:12800009"]
+      "relevant_docs": [
+        "products:12800009"
+      ]
     },
     {
-      "qid": "a003", "level": "L3", "type": "cross_table",
+      "qid": "a003",
+      "level": "L3",
+      "type": "cross_table",
       "query": "가장 많이 팔린 상품의 리뷰",
       "description": "products(cumulative_sales) + reviews 교차",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
-      "qid": "a004", "level": "L3", "type": "cross_table",
+      "qid": "a004",
+      "level": "L3",
+      "type": "cross_table",
       "query": "방송 후 주문이 가장 많았던 상품",
       "description": "broadcasts + orders 교차",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
-      "qid": "a005", "level": "L4", "type": "filter",
+      "qid": "a005",
+      "level": "L4",
+      "type": "filter",
       "query": "9만원 이상 고가 상품 목록",
       "description": "selling_price >= 90000 필터",
-      "relevant_docs": ["products:12800001"]
+      "relevant_docs": [
+        "products:12800001"
+      ]
     },
     {
-      "qid": "a006", "level": "L4", "type": "filter",
+      "qid": "a006",
+      "level": "L4",
+      "type": "filter",
       "query": "할인율이 적용된 상품",
       "description": "discount_rate > 0 필터",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
-      "qid": "a007", "level": "L5", "type": "aggregation",
+      "qid": "a007",
+      "level": "L5",
+      "type": "aggregation",
       "query": "색상별 상품 변형 개수",
       "description": "product_variants GROUP BY color_id → count",
-      "relevant_docs": ["colors:1", "colors:4", "colors:5"]
+      "relevant_docs": [
+        "colors:1",
+        "colors:4",
+        "colors:5"
+      ]
     },
     {
-      "qid": "a008", "level": "L5", "type": "aggregation",
+      "qid": "a008",
+      "level": "L5",
+      "type": "aggregation",
       "query": "시즌별 상품 수",
       "description": "products GROUP BY season → count (25SS: 29, 24SS: 32, 24FW: 19)",
-      "relevant_docs": ["products:12800000", "products:12800001", "products:12800005"]
+      "relevant_docs": [
+        "products:12800000",
+        "products:12800001",
+        "products:12800005"
+      ]
     },
     {
-      "qid": "a009", "level": "L6", "type": "review_sentiment",
+      "qid": "a009",
+      "level": "L6",
+      "type": "review_sentiment",
       "query": "핏이 타이트하다는 불만이 있는 상품",
       "description": "attribute_2_value='타이트해요' 리뷰 검색",
-      "relevant_docs": ["reviews:259000002"]
+      "relevant_docs": [
+        "reviews:259000002"
+      ]
     },
     {
-      "qid": "a010", "level": "L6", "type": "review_sentiment",
+      "qid": "a010",
+      "level": "L6",
+      "type": "review_sentiment",
       "query": "착용감이 좋다는 후기가 많은 제품",
       "description": "attribute_4_value='아주편해요' 리뷰 검색",
-      "relevant_docs": ["reviews:259000000", "reviews:259000004"]
+      "relevant_docs": [
+        "reviews:259000000",
+        "reviews:259000004"
+      ]
     },
     {
-      "qid": "a011", "level": "L7", "type": "conversational",
+      "qid": "a011",
+      "level": "L7",
+      "type": "conversational",
       "query": "엄마 생일 선물로 괜찮은 옷 추천해줘. 편하고 품질 좋은 걸로",
       "description": "자연어 대화체 상품 추천",
-      "relevant_docs": ["products:12800000", "products:12800004"]
+      "relevant_docs": [
+        "products:12800000",
+        "products:12800004"
+      ]
     },
     {
-      "qid": "a012", "level": "L7", "type": "conversational",
+      "qid": "a012",
+      "level": "L7",
+      "type": "conversational",
       "query": "사이즈 55인데 이 브랜드 옷 넉넉한 편이야 작은 편이야?",
       "description": "리뷰 기반 사이즈 감 질문",
-      "relevant_docs": ["sizes:2"]
+      "relevant_docs": [
+        "sizes:2"
+      ]
     },
     {
-      "qid": "a013", "level": "L3", "type": "cross_table",
+      "qid": "a013",
+      "level": "L3",
+      "type": "cross_table",
       "query": "LBL코리아 파트너사가 판매하는 상품들",
       "description": "sales_partners + orders + products 3-hop 교차",
-      "relevant_docs": ["sales_partners:2"]
+      "relevant_docs": [
+        "sales_partners:2"
+      ]
     },
     {
-      "qid": "a014", "level": "L4", "type": "temporal",
+      "qid": "a014",
+      "level": "L4",
+      "type": "temporal",
       "query": "2024년 11월에 방송된 상품",
       "description": "broadcast_date 필터",
-      "relevant_docs": ["broadcasts:1"]
+      "relevant_docs": [
+        "broadcasts:1"
+      ]
     },
     {
-      "qid": "a015", "level": "L6", "type": "exhaustive",
+      "qid": "a015",
+      "level": "L6",
+      "type": "exhaustive",
       "query": "24FW 시즌 전체 상품 목록",
       "description": "season=24FW 전수 열거 (19개)",
-      "relevant_docs": ["products:12800005", "products:12800006"]
+      "relevant_docs": [
+        "products:12800005",
+        "products:12800006"
+      ]
     }
-  ]
+  ],
+  "source": "Plateer LBL 패션 이커머스 (사내 데이터)",
+  "source_url": "https://www.plateer.com/",
+  "source_description": "assort 동일 코퍼스. 필터/집계/FK조인/리뷰 감성 등 정형 데이터 고난도 평가."
 }

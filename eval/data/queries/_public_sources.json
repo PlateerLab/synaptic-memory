@@ -1,0 +1,42 @@
+{
+  "hotpotqa_24": [
+    "HotPotQA (Cognee comparison subset)",
+    "https://hotpotqa.github.io/",
+    "Wikipedia 기반 영어 multi-hop QA 데이터셋. Yang et al. 2018, EMNLP."
+  ],
+  "hotpotqa": [
+    "HotPotQA (full 200 sample)",
+    "https://hotpotqa.github.io/",
+    "HotPotQA 전체 데이터셋 일부."
+  ],
+  "allganize_rag_ko": [
+    "Allganize RAG-ko Benchmark",
+    "https://huggingface.co/datasets/allganize/RAG-Evaluation-Dataset-KO",
+    "한국어 기업 문서 RAG 평가 데이터셋."
+  ],
+  "allganize_rag_eval": [
+    "Allganize RAG Evaluation (금융/의료/법률)",
+    "https://huggingface.co/datasets/allganize/RAG-Evaluation-Dataset-KO",
+    "한국어 도메인 특화 RAG 평가."
+  ],
+  "publichealthqa_ko": [
+    "PublicHealthQA Korean",
+    "https://huggingface.co/datasets/xhluca/publichealth-qa",
+    "한국어 공중보건 Q&A 데이터셋."
+  ],
+  "autorag_retrieval": [
+    "AutoRAG Korean Benchmark",
+    "https://github.com/Marker-Inc-Korea/AutoRAG",
+    "Marker AI의 한국어 RAG 자동 평가 프레임워크."
+  ],
+  "klue_mrc": [
+    "KLUE-MRC (Machine Reading Comprehension)",
+    "https://klue-benchmark.com/",
+    "한국어 자연어이해 벤치마크."
+  ],
+  "ko_strategyqa": [
+    "Ko-StrategyQA",
+    "https://huggingface.co/datasets/heegyu/strategyqa-ko",
+    "한국어 multi-step strategy QA."
+  ]
+}

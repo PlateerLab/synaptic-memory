@@ -10,7 +10,10 @@
       "query": "이번 시즌(25SS)에 몇 벌이나 나왔어?",
       "description": "season = 25SS 카운트 (29개)",
       "relevant_docs": [
-        "products:12800000", "products:12800002", "products:12800008", "products:12800010"
+        "products:12800000",
+        "products:12800002",
+        "products:12800008",
+        "products:12800010"
       ]
     },
     {
@@ -19,7 +22,9 @@
       "type": "filter",
       "query": "10만원 이하 티셔츠 추천해줘",
       "description": "price <= 100000 + 티셔츠",
-      "relevant_docs": ["products:12800002"]
+      "relevant_docs": [
+        "products:12800002"
+      ]
     },
     {
       "qid": "c003",
@@ -27,7 +32,9 @@
       "type": "multi_hop",
       "query": "가장 판매량 많은 상품의 평균 리뷰 평점은?",
       "description": "cumulative_sales TOP + review 평균",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
       "qid": "c004",
@@ -43,7 +50,11 @@
       "type": "conversational",
       "query": "봄에 입기 좋은 니트 뭐가 있을까?",
       "description": "25SS + 니트 필터",
-      "relevant_docs": ["products:12800000", "products:12800004", "products:12800011"]
+      "relevant_docs": [
+        "products:12800000",
+        "products:12800004",
+        "products:12800011"
+      ]
     },
     {
       "qid": "c006",
@@ -51,7 +62,9 @@
       "type": "conversational",
       "query": "결혼식 하객으로 입기 좋은 원피스?",
       "description": "원피스 + 고가 제품 추천",
-      "relevant_docs": ["products:12800016"]
+      "relevant_docs": [
+        "products:12800016"
+      ]
     },
     {
       "qid": "c007",
@@ -59,7 +72,10 @@
       "type": "multi_hop",
       "query": "할인율 20% 이상 상품 중 누적 판매량 3000개 넘는 것",
       "description": "discount_rate + cumulative_sales 복합 필터",
-      "relevant_docs": ["products:12800000", "products:12800004"]
+      "relevant_docs": [
+        "products:12800000",
+        "products:12800004"
+      ]
     },
     {
       "qid": "c008",
@@ -67,7 +83,11 @@
       "type": "aggregation",
       "query": "색상별로 몇 개의 상품 variant이 있어?",
       "description": "product_variants GROUP BY color_id",
-      "relevant_docs": ["colors:1", "colors:2", "colors:3"]
+      "relevant_docs": [
+        "colors:1",
+        "colors:2",
+        "colors:3"
+      ]
     },
     {
       "qid": "c009",
@@ -75,7 +95,9 @@
       "type": "cross_table",
       "query": "실크블렌드 가디건의 모든 사이즈 버전",
       "description": "products → product_variants 조인",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
       "qid": "c010",
@@ -83,7 +105,9 @@
       "type": "conversational",
       "query": "55사이즈로 예쁜 거 뭐 있어?",
       "description": "size=55 variant + product 조인",
-      "relevant_docs": ["sizes:2"]
+      "relevant_docs": [
+        "sizes:2"
+      ]
     },
     {
       "qid": "c011",
@@ -99,7 +123,10 @@
       "type": "aggregation",
       "query": "어느 시즌 상품이 가장 많이 팔려?",
       "description": "season GROUP BY + SUM cumulative_sales",
-      "relevant_docs": ["products:12800000", "products:12800001"]
+      "relevant_docs": [
+        "products:12800000",
+        "products:12800001"
+      ]
     },
     {
       "qid": "c013",
@@ -107,7 +134,11 @@
       "type": "filter",
       "query": "5만원 미만 상품 전부 보여줘",
       "description": "selling_price < 50000",
-      "relevant_docs": ["products:12800002", "products:12800003", "products:12800010"]
+      "relevant_docs": [
+        "products:12800002",
+        "products:12800003",
+        "products:12800010"
+      ]
     },
     {
       "qid": "c014",
@@ -115,7 +146,9 @@
       "type": "multi_hop",
       "query": "방송 판매된 상품 중 가장 누적 매출이 큰 것은?",
       "description": "broadcasts 조인 + cumulative_amount 최대",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
       "qid": "c015",
@@ -123,7 +156,11 @@
       "type": "conversational",
       "query": "엄마 선물로 괜찮은 블라우스 있을까?",
       "description": "블라우스 + 고가(품질) 추천",
-      "relevant_docs": ["products:12800005", "products:12800013", "products:12800015"]
+      "relevant_docs": [
+        "products:12800005",
+        "products:12800013",
+        "products:12800015"
+      ]
     },
     {
       "qid": "c016",
@@ -139,7 +176,9 @@
       "type": "multi_hop",
       "query": "핑크 색상 variant이 있는 상품은?",
       "description": "colors:핑크 → variant → product",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
       "qid": "c018",
@@ -155,7 +194,10 @@
       "type": "filter",
       "query": "24SS 시즌 상품 중에 가장 비싼 것",
       "description": "season=24SS + max price",
-      "relevant_docs": ["products:12800001", "products:12800009"]
+      "relevant_docs": [
+        "products:12800001",
+        "products:12800009"
+      ]
     },
     {
       "qid": "c020",
@@ -163,7 +205,9 @@
       "type": "conversational",
       "query": "이번주 홈쇼핑 방송 예정 상품 있어?",
       "description": "broadcasts 최신 + 상품",
-      "relevant_docs": ["broadcasts:1"]
+      "relevant_docs": [
+        "broadcasts:1"
+      ]
     },
     {
       "qid": "c021",
@@ -179,7 +223,9 @@
       "type": "multi_hop",
       "query": "30% 이상 할인 중인 상품 중 25SS 신상은?",
       "description": "discount + season 복합 필터",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
       "qid": "c023",
@@ -187,7 +233,9 @@
       "type": "cross_table",
       "query": "12800000 상품에 대해 알려진 모든 정보",
       "description": "product + variants + reviews + broadcasts + sales 통합",
-      "relevant_docs": ["products:12800000"]
+      "relevant_docs": [
+        "products:12800000"
+      ]
     },
     {
       "qid": "c024",
@@ -195,7 +243,11 @@
       "type": "conversational",
       "query": "스커트 종류 뭐가 있어?",
       "description": "product_name contains 스커트",
-      "relevant_docs": ["products:12800001", "products:12800003", "products:12800006"]
+      "relevant_docs": [
+        "products:12800001",
+        "products:12800003",
+        "products:12800006"
+      ]
     },
     {
       "qid": "c025",
@@ -203,7 +255,9 @@
       "type": "aggregation",
       "query": "블랙 컬러가 들어간 variant 개수는?",
       "description": "colors:블랙 → variant 카운트",
-      "relevant_docs": ["colors:5"]
+      "relevant_docs": [
+        "colors:5"
+      ]
     },
     {
       "qid": "c026",
@@ -219,7 +273,10 @@
       "type": "conversational",
       "query": "가성비 좋은 걸로 3개만 추천해줘",
       "description": "가격 저렴 + 판매량 많음 조합",
-      "relevant_docs": ["products:12800002", "products:12800003"]
+      "relevant_docs": [
+        "products:12800002",
+        "products:12800003"
+      ]
     },
     {
       "qid": "c028",
@@ -227,7 +284,9 @@
       "type": "multi_hop",
       "query": "FREE 사이즈 상품은 몇 가지 색상이 있어?",
       "description": "sizes:FREE → variant → color 집계",
-      "relevant_docs": ["sizes:6"]
+      "relevant_docs": [
+        "sizes:6"
+      ]
     },
     {
       "qid": "c029",
@@ -235,7 +294,11 @@
       "type": "filter",
       "query": "24FW 가을/겨울 신상품 목록",
       "description": "season = 24FW",
-      "relevant_docs": ["products:12800005", "products:12800006", "products:12800016"]
+      "relevant_docs": [
+        "products:12800005",
+        "products:12800006",
+        "products:12800016"
+      ]
     },
     {
       "qid": "c030",
@@ -243,7 +306,13 @@
       "type": "conversational",
       "query": "오늘 뭘 사면 좋을지 추천해줄래?",
       "description": "cumulative_sales 상위 + 할인 조합",
-      "relevant_docs": ["products:12800000", "products:12800004"]
+      "relevant_docs": [
+        "products:12800000",
+        "products:12800004"
+      ]
     }
-  ]
+  ],
+  "source": "Plateer LBL 패션 이커머스 (사내 데이터)",
+  "source_url": "https://www.plateer.com/",
+  "source_description": "assort 대화형 쇼핑 추천/사이즈/시즌 복합 질의 30개."
 }

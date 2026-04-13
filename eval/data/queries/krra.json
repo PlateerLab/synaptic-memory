@@ -305,5 +305,8 @@
       "relevant_chunks": [],
       "description": "Keyword seed: 마주 + 경제적기준"
     }
-  ]
+  ],
+  "source": "한국마사회 (Korea Racing Authority) 공공 문서",
+  "source_url": "https://www.kra.co.kr/",
+  "source_description": "한국 경마/말산업 운영 공공기관 내부 문서. 경마시행계획, 말산업 발전계획, 경주마 등록, 인권경영 등 18,600개 청크."
 }
