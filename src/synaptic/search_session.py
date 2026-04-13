@@ -109,13 +109,6 @@ class SearchSession:
     categories_explored: set[str] = field(default_factory=set)
     expanded_nodes: set[str] = field(default_factory=set)
     facts: dict[str, Any] = field(default_factory=dict)
-    # Per-session memoization of (tool, args) → result. Caps redundant
-    # API/tool calls when the agent re-issues the same request, and
-    # cheaply detects accidental loops (same call hash 3+ times in a
-    # row signals trouble — caller can short-circuit). Values are kept
-    # as the raw ``ToolResult`` dicts so they can be served back to the
-    # LLM without re-running the underlying scan.
-    tool_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
 
     # --- Mutation helpers ---
@@ -164,35 +157,6 @@ class SearchSession:
     def set_fact(self, key: str, value: Any) -> None:
         """Stash a small bit of derived state keyed by tool convention."""
         self.facts[key] = value
-
-    def cache_key(self, tool_name: str, args: dict[str, Any]) -> str:
-        """Compute a stable hash for a (tool, args) pair.
-
-        Used by the dispatcher / agent loop to memoize tool results
-        within a session. Keys are deterministic across runs so a
-        replayed session sees the same caching behaviour. ``None``
-        and falsy values are dropped from the args before hashing so
-        ``filter(table='', limit=None)`` and ``filter()`` collide.
-        """
-        import hashlib
-        import json as _json
-
-        clean = {k: v for k, v in (args or {}).items() if v not in (None, "", [], {})}
-        payload = _json.dumps([tool_name, clean], sort_keys=True, ensure_ascii=False)
-        return hashlib.md5(payload.encode("utf-8")).hexdigest()
-
-    def cache_get(self, key: str) -> dict[str, Any] | None:
-        """Return a cached tool result for ``key`` or ``None``."""
-        return self.tool_cache.get(key)
-
-    def cache_put(self, key: str, result: dict[str, Any]) -> None:
-        """Store a tool result under ``key`` for later memoized lookup."""
-        # Cap cache size to prevent unbounded growth in long sessions.
-        if len(self.tool_cache) >= 256:
-            # Drop the oldest 64 entries (insertion-order in py3.7+ dict)
-            for stale_key in list(self.tool_cache.keys())[:64]:
-                del self.tool_cache[stale_key]
-        self.tool_cache[key] = result
 
     # --- Query helpers ---
 
