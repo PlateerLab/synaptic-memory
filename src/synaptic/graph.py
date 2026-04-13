@@ -716,16 +716,39 @@ class SynapticGraph:
 
         # Route incremental SQLite through the CDC sync orchestrator —
         # first call seeds state, subsequent calls are deltas.
-        if effective_mode == "cdc" and connection_string.startswith("sqlite"):
-            db_path = _parse_sqlite_url(connection_string)
-            await ingester.sync_from_sqlite(
-                db_path,
-                graph,
-                source_url=connection_string,
-                tables=tables,
-                row_limit=row_limit,
-            )
-            return graph
+        if effective_mode == "cdc":
+            if connection_string.startswith("sqlite"):
+                db_path = _parse_sqlite_url(connection_string)
+                await ingester.sync_from_sqlite(
+                    db_path,
+                    graph,
+                    source_url=connection_string,
+                    tables=tables,
+                    row_limit=row_limit,
+                )
+                return graph
+            if connection_string.startswith("postgresql"):
+                await ingester.sync_from_postgres(
+                    connection_string,
+                    graph,
+                    source_url=connection_string,
+                    tables=tables,
+                    row_limit=row_limit,
+                )
+                return graph
+            if connection_string.startswith("mysql") or connection_string.startswith(
+                "mariadb"
+            ):
+                await ingester.sync_from_mysql(
+                    connection_string,
+                    graph,
+                    source_url=connection_string,
+                    tables=tables,
+                    row_limit=row_limit,
+                )
+                return graph
+            # Other dialects fall through to the legacy ingest_from_*
+            # path with deterministic IDs (no incremental sync yet).
 
         if connection_string.startswith("sqlite"):
             # sqlite:///path or sqlite:path
@@ -815,11 +838,29 @@ class SynapticGraph:
                 tables=tables,
                 row_limit=row_limit,
             )
+        if connection_string.startswith("postgresql"):
+            return await ingester.sync_from_postgres(
+                connection_string,
+                self,
+                source_url=connection_string,
+                tables=tables,
+                row_limit=row_limit,
+            )
+        if connection_string.startswith("mysql") or connection_string.startswith(
+            "mariadb"
+        ):
+            return await ingester.sync_from_mysql(
+                connection_string,
+                self,
+                source_url=connection_string,
+                tables=tables,
+                row_limit=row_limit,
+            )
 
         msg = (
-            f"sync_from_database currently only supports sqlite:// URLs "
-            f"(got {connection_string.split(':', maxsplit=1)[0]}://...). "
-            "Other dialects land in Phase 6 of the CDC roadmap."
+            f"sync_from_database does not yet support "
+            f"{connection_string.split(':', maxsplit=1)[0]}:// — "
+            "currently sqlite, postgresql, and mysql are wired."
         )
         raise NotImplementedError(msg)
 

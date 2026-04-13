@@ -292,14 +292,92 @@ def _pg_type_map(raw_type: str) -> str:
     return "str"
 
 
-async def _read_pg_rows(dsn: str, table: str, limit: int = 500_000) -> list[dict]:
+async def _read_pg_rows(
+    dsn: str,
+    table: str,
+    limit: int = 500_000,
+    *,
+    where_clause: str | None = None,
+    where_params: tuple = (),
+) -> list[dict]:
+    """Read rows from a PostgreSQL table.
+
+    The ``where_clause`` uses ``?`` placeholders for portability;
+    they are translated to PG-native ``$N`` form here so the
+    timestamp syncer can stay dialect-agnostic.
+    """
     import asyncpg
 
     con = await asyncpg.connect(dsn)
-    rows = await con.fetch(f'SELECT * FROM "{table}" LIMIT $1', limit)
-    result = [dict(r) for r in rows]
-    await con.close()
-    return result
+    try:
+        sql = f'SELECT * FROM "{table}"'
+        params: list = []
+        if where_clause:
+            translated = _translate_placeholders(where_clause, "pg")
+            sql += f" WHERE {translated}"
+            params.extend(where_params)
+        sql += f" LIMIT ${len(params) + 1}"
+        params.append(limit)
+        rows = await con.fetch(sql, *params)
+        return [dict(r) for r in rows]
+    finally:
+        await con.close()
+
+
+async def _read_pg_pks(dsn: str, table: str, pk_col: str) -> list[str]:
+    """PK-only reader for PostgreSQL CDC delete detection."""
+    import asyncpg
+
+    con = await asyncpg.connect(dsn)
+    try:
+        rows = await con.fetch(f'SELECT "{pk_col}" FROM "{table}"')
+        return [str(r[0]) for r in rows if r[0] is not None]
+    finally:
+        await con.close()
+
+
+def _pg_row_reader(dsn: str, row_limit: int):
+    """Bind a PG row reader closure for the CDC orchestrator."""
+
+    async def reader(
+        table: str, *, where_clause: str | None = None, where_params: tuple = ()
+    ):
+        return await _read_pg_rows(
+            dsn,
+            table,
+            limit=row_limit,
+            where_clause=where_clause,
+            where_params=where_params,
+        )
+
+    return reader
+
+
+def _translate_placeholders(clause: str, dialect: str) -> str:
+    """Translate ``?`` placeholders to a dialect-native form.
+
+    The CDC syncer always emits ``?`` because that is what SQLite
+    speaks natively. PG and MySQL need different markers — we do
+    a single-pass replace here so the orchestrator never has to
+    know about dialect quirks.
+
+    - ``pg``  → ``$1, $2, ...``
+    - ``mysql`` → ``%s``
+    - anything else → unchanged (sqlite, mssql)
+    """
+    if dialect == "pg":
+        out = []
+        idx = 1
+        for ch in clause:
+            if ch == "?":
+                out.append(f"${idx}")
+                idx += 1
+            else:
+                out.append(ch)
+        return "".join(out)
+    if dialect == "mysql":
+        return clause.replace("?", "%s")
+    return clause
 
 
 # --- MySQL/MariaDB schema reader ---
@@ -417,7 +495,14 @@ def _mysql_type_map(raw_type: str) -> str:
     return "str"
 
 
-async def _read_mysql_rows(dsn: str, table: str, limit: int = 500_000) -> list[dict]:
+async def _read_mysql_rows(
+    dsn: str,
+    table: str,
+    limit: int = 500_000,
+    *,
+    where_clause: str | None = None,
+    where_params: tuple = (),
+) -> list[dict]:
     from urllib.parse import urlparse
 
     import aiomysql
@@ -430,12 +515,67 @@ async def _read_mysql_rows(dsn: str, table: str, limit: int = 500_000) -> list[d
         password=parsed.password or "",
         db=parsed.path.lstrip("/"),
     )
-    cur = await con.cursor(aiomysql.DictCursor)
-    await cur.execute(f"SELECT * FROM `{table}` LIMIT %s", (limit,))
-    rows = await cur.fetchall()
-    await cur.close()
-    con.close()
-    return [dict(r) for r in rows]
+    try:
+        cur = await con.cursor(aiomysql.DictCursor)
+        try:
+            sql = f"SELECT * FROM `{table}`"
+            params: list = []
+            if where_clause:
+                translated = _translate_placeholders(where_clause, "mysql")
+                sql += f" WHERE {translated}"
+                params.extend(where_params)
+            sql += " LIMIT %s"
+            params.append(limit)
+            await cur.execute(sql, tuple(params))
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            await cur.close()
+    finally:
+        con.close()
+
+
+async def _read_mysql_pks(dsn: str, table: str, pk_col: str) -> list[str]:
+    """PK-only reader for MySQL/MariaDB CDC delete detection."""
+    from urllib.parse import urlparse
+
+    import aiomysql
+
+    parsed = urlparse(dsn)
+    con = await aiomysql.connect(
+        host=parsed.hostname or "localhost",
+        port=parsed.port or 3306,
+        user=parsed.username or "root",
+        password=parsed.password or "",
+        db=parsed.path.lstrip("/"),
+    )
+    try:
+        cur = await con.cursor()
+        try:
+            await cur.execute(f"SELECT `{pk_col}` FROM `{table}`")
+            rows = await cur.fetchall()
+            return [str(r[0]) for r in rows if r[0] is not None]
+        finally:
+            await cur.close()
+    finally:
+        con.close()
+
+
+def _mysql_row_reader(dsn: str, row_limit: int):
+    """Bind a MySQL row reader closure for the CDC orchestrator."""
+
+    async def reader(
+        table: str, *, where_clause: str | None = None, where_params: tuple = ()
+    ):
+        return await _read_mysql_rows(
+            dsn,
+            table,
+            limit=row_limit,
+            where_clause=where_clause,
+            where_params=where_params,
+        )
+
+    return reader
 
 
 # --- Oracle schema reader ---
@@ -971,16 +1111,95 @@ class DbIngester:
         tables: list[str] | None = None,
         row_limit: int = 500_000,
     ):
-        """Incrementally sync a SQLite database into the graph.
+        """Incrementally sync a SQLite database into the graph."""
+        schemas = _read_sqlite_schema(db_path)
+        if tables:
+            schemas = [s for s in schemas if s.name in tables]
+        reader = _sqlite_row_reader(db_path, row_limit)
 
-        Only tables with a detected change column (``updated_at`` and
-        friends) are synced — the rest are skipped with an error entry
-        in the returned :class:`SyncResult`. The hash-based fallback
-        for tables without a change column lands in Phase 5.
+        def _pk_reader(table: str, pk_col: str) -> list[str]:
+            return _read_sqlite_pks(db_path, table, pk_col)
 
-        First call on a fresh graph behaves as a full initial load
-        (TimestampTableSyncer reads everything when no prior state
-        exists) and records the watermark for subsequent deltas.
+        return await self._run_sync(
+            graph,
+            source_url=source_url,
+            schemas=schemas,
+            row_reader=reader,
+            pk_reader=_pk_reader,
+        )
+
+    async def sync_from_postgres(
+        self,
+        dsn: str,
+        graph: SynapticGraph,
+        source_url: str,
+        *,
+        tables: list[str] | None = None,
+        row_limit: int = 500_000,
+    ):
+        """Incrementally sync a PostgreSQL database into the graph.
+
+        Same orchestration as the SQLite path; only the dialect of
+        the row + PK readers differs. Requires
+        ``pip install synaptic-memory[postgresql]``.
+        """
+        schemas = await _read_pg_schema(dsn)
+        if tables:
+            schemas = [s for s in schemas if s.name in tables]
+        reader = _pg_row_reader(dsn, row_limit)
+
+        async def _pk_reader(table: str, pk_col: str) -> list[str]:
+            return await _read_pg_pks(dsn, table, pk_col)
+
+        return await self._run_sync(
+            graph,
+            source_url=source_url,
+            schemas=schemas,
+            row_reader=reader,
+            pk_reader=_pk_reader,
+        )
+
+    async def sync_from_mysql(
+        self,
+        dsn: str,
+        graph: SynapticGraph,
+        source_url: str,
+        *,
+        tables: list[str] | None = None,
+        row_limit: int = 500_000,
+    ):
+        """Incrementally sync a MySQL/MariaDB database into the graph."""
+        schemas = await _read_mysql_schema(dsn)
+        if tables:
+            schemas = [s for s in schemas if s.name in tables]
+        reader = _mysql_row_reader(dsn, row_limit)
+
+        async def _pk_reader(table: str, pk_col: str) -> list[str]:
+            return await _read_mysql_pks(dsn, table, pk_col)
+
+        return await self._run_sync(
+            graph,
+            source_url=source_url,
+            schemas=schemas,
+            row_reader=reader,
+            pk_reader=_pk_reader,
+        )
+
+    async def _run_sync(
+        self,
+        graph: SynapticGraph,
+        *,
+        source_url: str,
+        schemas: list[TableSchema],
+        row_reader,
+        pk_reader,
+    ):
+        """Shared orchestration for every CDC dialect.
+
+        Picks a syncer per table (timestamp / hash), runs delete
+        detection + sync, and aggregates per-table stats into a
+        :class:`SyncResult`. Per-table failures are isolated so
+        one bad schema does not abort the entire run.
         """
         from synaptic.extensions.cdc.sync import (
             HashTableSyncer,
@@ -991,13 +1210,6 @@ class DbIngester:
         )
 
         t0 = time.time()
-        schemas = _read_sqlite_schema(db_path)
-        if tables:
-            schemas = [s for s in schemas if s.name in tables]
-
-        # Ensure the bookkeeping tables exist and grab a store bound
-        # to the graph's SQLite connection so sync writes share the
-        # same transaction context as save_node writes.
         backend = graph.backend
         if hasattr(backend, "ensure_cdc_tables"):
             await backend.ensure_cdc_tables()
@@ -1008,24 +1220,14 @@ class DbIngester:
 
         ts_syncer = TimestampTableSyncer(self._table_ingester, store, source_url)
         hash_syncer = HashTableSyncer(self._table_ingester, store, source_url)
-        reader = _sqlite_row_reader(db_path, row_limit)
 
         def _pick_syncer(schema: TableSchema):
-            """Decide which strategy a table should use.
-
-            Stored strategy wins over auto-detection so a table that
-            started in hash mode (because nobody renamed the column
-            after the first sync) does not silently flip to
-            timestamp on a later run that happens to detect one.
-            """
             cols = [{"name": c.name, "type": c.type} for c in schema.columns]
             cc = detect_change_column(cols)
             return ts_syncer if cc else hash_syncer
 
         result = SyncResult(source_url=source_url)
 
-        # Skip join tables for now — FK re-computation (Phase 4) will
-        # handle bridge rows with proper edge diffing.
         regular = [s for s in schemas if not _is_join_table(s)]
         no_fk = [s for s in regular if not s.foreign_keys]
         has_fk = [s for s in regular if s.foreign_keys]
@@ -1036,15 +1238,16 @@ class DbIngester:
             where_clause: str | None = None,
             where_params: tuple = (),
         ) -> list[dict]:
-            rows_raw = reader(
+            reader_result = row_reader(
                 table,
                 where_clause=where_clause,
                 where_params=where_params,
             )
+            if hasattr(reader_result, "__await__"):
+                rows_raw = await reader_result
+            else:
+                rows_raw = reader_result
             return [_cast_row(r, _columns_for(schemas, table)) for r in rows_raw]
-
-        def _pk_reader(table: str, pk_col: str) -> list[str]:
-            return _read_sqlite_pks(db_path, table, pk_col)
 
         for schema in no_fk + has_fk:
             syncer = _pick_syncer(schema)
@@ -1052,7 +1255,7 @@ class DbIngester:
                 deleted_count = await syncer.detect_deletes(
                     graph,
                     schema,
-                    _pk_reader,
+                    pk_reader,
                 )
                 stats = await syncer.sync_table(
                     graph,
@@ -1072,7 +1275,8 @@ class DbIngester:
 
         result.elapsed_ms = (time.time() - t0) * 1000.0
         logger.info(
-            "sync_from_sqlite: +%d ~%d -%d in %.0fms",
+            "sync %s: +%d ~%d -%d in %.0fms",
+            source_url,
             result.added,
             result.updated,
             result.deleted,
