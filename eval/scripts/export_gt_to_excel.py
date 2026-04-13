@@ -35,10 +35,13 @@ GRAPH_MAP = {
     "krra_hard": "krra_graph.sqlite",
     "krra_graph": "krra_graph.sqlite",
     "krra_multihop": "krra_graph.sqlite",
+    "krra_conversational": "krra_graph.sqlite",
     "assort": "assort_graph.sqlite",
     "assort_hard": "assort_graph.sqlite",
+    "assort_conversational": "assort_graph.sqlite",
     "x2bee": "x2bee_graph.sqlite",
     "x2bee_hard": "x2bee_graph.sqlite",
+    "x2bee_conversational": "x2bee_graph.sqlite",
 }
 
 
