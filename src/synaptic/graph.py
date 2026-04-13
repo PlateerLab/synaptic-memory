@@ -15,6 +15,29 @@ def _nfc(s: str) -> str:
     return unicodedata.normalize("NFC", s) if s else s
 
 
+def _parse_sqlite_url(conn: str) -> str:
+    """Extract the filesystem path from a SQLite URL.
+
+    SQLAlchemy-style:
+
+    - ``sqlite:///relative/path.db`` → ``relative/path.db``
+    - ``sqlite:////abs/path.db``     → ``/abs/path.db``
+    - ``sqlite:path.db``             → ``path.db``
+
+    The legacy ``rsplit("///")`` parser this replaces failed on
+    absolute paths because four consecutive slashes are ambiguous
+    under rsplit — we always want to strip exactly the three-slash
+    prefix.
+    """
+    if conn.startswith("sqlite:///"):
+        return conn[len("sqlite:///") :]
+    if conn.startswith("sqlite://"):
+        return conn[len("sqlite://") :]
+    if conn.startswith("sqlite:"):
+        return conn[len("sqlite:") :]
+    return conn
+
+
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
 from synaptic.consolidation import ConsolidationCascade
@@ -624,6 +647,7 @@ class SynapticGraph:
         db: str = "synaptic.db",
         tables: list[str] | None = None,
         row_limit: int = 500_000,
+        mode: str = "full",
     ) -> SynapticGraph:
         """ONE-LINE graph construction from a relational database.
 
@@ -637,13 +661,29 @@ class SynapticGraph:
         - ``oracle://user:pass@host:port/service_name``
         - ``mssql://connection_string``
 
+        Modes:
+
+        - ``"full"`` (default): current behavior — random UUIDs, no
+          sync state recorded. Use for one-shot exports.
+        - ``"cdc"``: deterministic node IDs keyed on
+          ``(connection_string, table, pk)`` + sync state recorded.
+          Subsequent :meth:`sync_from_database` calls do incremental
+          deltas only. Phase 2 supports SQLite for the incremental
+          path; other dialects still do a full deterministic reload
+          until Phase 6.
+        - ``"auto"``: if a prior CDC state exists in the graph file
+          for this source URL, behave like ``"cdc"`` (incremental);
+          otherwise fall back to ``"full"``.
+
         Example::
 
             graph = await SynapticGraph.from_database("sqlite:///shop.db")
             graph = await SynapticGraph.from_database("postgresql://user:pass@localhost/mydb")
             graph = await SynapticGraph.from_database("mysql://root:pass@localhost/shop")
 
-            result = await graph.search("high price products")
+            # Incremental sync mode
+            graph = await SynapticGraph.from_database("sqlite:///shop.db", mode="cdc")
+            result = await graph.sync_from_database("sqlite:///shop.db")
         """
         from synaptic.backends.sqlite_graph import SqliteGraphBackend
         from synaptic.extensions.db_ingester import DbIngester
@@ -653,18 +693,49 @@ class SynapticGraph:
         graph = cls(backend)
         ingester = DbIngester()
 
+        if mode not in ("full", "cdc", "auto"):
+            msg = f"Unknown mode={mode!r}; expected 'full', 'cdc', or 'auto'"
+            raise ValueError(msg)
+
+        # 'auto' collapses to 'cdc' when prior sync state exists.
+        effective_mode = mode
+        if mode == "auto":
+            await backend.ensure_cdc_tables()
+            store = backend.cdc_state_store()
+            # If ANY table already has prior state for this source URL,
+            # we treat the call as incremental.
+            async with backend._db().execute(
+                "SELECT 1 FROM syn_cdc_state WHERE source_url = ? LIMIT 1",
+                (connection_string,),
+            ) as cur:
+                existing = await cur.fetchone()
+            effective_mode = "cdc" if existing else "full"
+            del store  # silence unused
+
+        source_url_arg = connection_string if effective_mode == "cdc" else ""
+
+        # Route incremental SQLite through the CDC sync orchestrator —
+        # first call seeds state, subsequent calls are deltas.
+        if effective_mode == "cdc" and connection_string.startswith("sqlite"):
+            db_path = _parse_sqlite_url(connection_string)
+            await ingester.sync_from_sqlite(
+                db_path,
+                graph,
+                source_url=connection_string,
+                tables=tables,
+                row_limit=row_limit,
+            )
+            return graph
+
         if connection_string.startswith("sqlite"):
             # sqlite:///path or sqlite:path
-            db_path = (
-                connection_string.rsplit("///", maxsplit=1)[-1]
-                if "///" in connection_string
-                else connection_string.rsplit(":", maxsplit=1)[-1]
-            )
+            db_path = _parse_sqlite_url(connection_string)
             stats = await ingester.ingest_from_sqlite(
                 db_path,
                 graph,
                 tables=tables,
                 row_limit=row_limit,
+                source_url=source_url_arg,
             )
         elif connection_string.startswith("postgresql"):
             stats = await ingester.ingest_from_postgres(
@@ -708,6 +779,49 @@ class SynapticGraph:
             stats.elapsed_seconds,
         )
         return graph
+
+    async def sync_from_database(
+        self,
+        connection_string: str,
+        *,
+        tables: list[str] | None = None,
+        row_limit: int = 500_000,
+    ):
+        """Incrementally sync this graph with a live database.
+
+        Detects tables with ``updated_at``-style columns, reads only
+        rows whose change column is at or above the last watermark,
+        and upserts them via deterministic node IDs. Tables without
+        a change column are skipped with an error entry in the
+        returned :class:`SyncResult` (Phase 5 adds a hash fallback).
+
+        Must be called on a graph created with
+        ``from_database(..., mode="cdc")`` or ``mode="auto"`` — the
+        sync state tables rely on the sync run having seeded them
+        during the initial load.
+
+        Currently only ``sqlite://`` URLs are supported for the
+        incremental path; other dialects land in Phase 6.
+        """
+        from synaptic.extensions.db_ingester import DbIngester
+
+        ingester = DbIngester()
+        if connection_string.startswith("sqlite"):
+            db_path = _parse_sqlite_url(connection_string)
+            return await ingester.sync_from_sqlite(
+                db_path,
+                self,
+                source_url=connection_string,
+                tables=tables,
+                row_limit=row_limit,
+            )
+
+        msg = (
+            f"sync_from_database currently only supports sqlite:// URLs "
+            f"(got {connection_string.split(':', maxsplit=1)[0]}://...). "
+            "Other dialects land in Phase 6 of the CDC roadmap."
+        )
+        raise NotImplementedError(msg)
 
     @property
     def backend(self) -> StorageBackend:

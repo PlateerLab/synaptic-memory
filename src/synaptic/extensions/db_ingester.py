@@ -141,10 +141,30 @@ def _sqlite_type_map(raw_type: str) -> str:
     return "str"
 
 
-def _read_sqlite_rows(db_path: str, table: str, limit: int = 500_000) -> list[dict]:
+def _read_sqlite_rows(
+    db_path: str,
+    table: str,
+    limit: int = 500_000,
+    *,
+    where_clause: str | None = None,
+    where_params: tuple = (),
+) -> list[dict]:
+    """Read rows from a SQLite table with optional ``WHERE`` filter.
+
+    The ``where_clause`` must use ``?`` placeholders. CDC sync uses
+    this to apply ``"updated_at" >= ?`` filters without having to
+    fetch the whole table every run.
+    """
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
-    rows = con.execute(f"SELECT * FROM [{table}] LIMIT ?", (limit,)).fetchall()
+    sql = f"SELECT * FROM [{table}]"
+    params: tuple = ()
+    if where_clause:
+        sql += f" WHERE {where_clause}"
+        params = tuple(where_params)
+    sql += " LIMIT ?"
+    params = (*params, limit)
+    rows = con.execute(sql, params).fetchall()
     result = [dict(r) for r in rows]
     con.close()
     return result
@@ -706,8 +726,15 @@ class DbIngester:
         *,
         tables: list[str] | None = None,
         row_limit: int = 500_000,
+        source_url: str = "",
     ) -> DbIngestStats:
-        """Ingest from a SQLite database file."""
+        """Ingest from a SQLite database file.
+
+        When ``source_url`` is set, nodes get **deterministic IDs**
+        derived from ``(source_url, table, pk)`` and the CDC PK index
+        is populated — that is the entry point for ``mode="cdc"``
+        initial loads.
+        """
         t0 = time.time()
         schemas = _read_sqlite_schema(db_path)
         if tables:
@@ -715,8 +742,9 @@ class DbIngester:
         return await self._ingest_schemas(
             schemas,
             graph,
-            row_reader=lambda tbl: _read_sqlite_rows(db_path, tbl, limit=row_limit),
+            row_reader=_sqlite_row_reader(db_path, row_limit),
             t0=t0,
+            source_url=source_url,
         )
 
     async def ingest_from_mysql(
@@ -786,11 +814,14 @@ class DbIngester:
         *,
         row_reader,
         t0: float,
+        source_url: str = "",
     ) -> DbIngestStats:
         """Shared ingestion logic for all DB types.
 
         Handles M:N join tables as edges and processes large tables
-        in batches.
+        in batches. ``source_url`` opts the ingester into deterministic
+        node IDs and causes the CDC PK index to be populated (used by
+        ``from_database(mode="cdc")``).
         """
         stats = DbIngestStats(tables_discovered=len(schemas))
 
@@ -809,7 +840,7 @@ class DbIngester:
         has_fk = [s for s in regular if s.foreign_keys]
 
         for schema in no_fk + has_fk:
-            result = row_reader(schema.name)
+            result = _invoke_reader(row_reader, schema.name)
             rows = await result if asyncio.iscoroutine(result) else result
             if not rows:
                 continue
@@ -829,6 +860,7 @@ class DbIngester:
                     cast_batch,
                     primary_key=schema.primary_key,
                     foreign_keys=fk_map if fk_map else None,
+                    source_url=source_url,
                 )
                 total_nodes += len(nodes)
 
@@ -839,7 +871,7 @@ class DbIngester:
 
         # M:N join tables → direct edges (no intermediate nodes)
         for schema in join_tables:
-            result = row_reader(schema.name)
+            result = _invoke_reader(row_reader, schema.name)
             rows = await result if asyncio.iscoroutine(result) else result
             if not rows:
                 continue
@@ -848,6 +880,7 @@ class DbIngester:
             fk_b = schema.foreign_keys[1]
             edge_count = 0
 
+            from synaptic.extensions.cdc.ids import deterministic_row_id
             from synaptic.models import EdgeKind
 
             for row in rows:
@@ -861,6 +894,15 @@ class DbIngester:
                 key_b = (fk_b.ref_table, val_b)
                 node_a_id = self._table_ingester._node_cache.get(key_a)
                 node_b_id = self._table_ingester._node_cache.get(key_b)
+
+                # In CDC mode we can derive the target ID even if the
+                # referenced tables were ingested by a different
+                # TableIngester instance.
+                if source_url:
+                    if node_a_id is None:
+                        node_a_id = deterministic_row_id(source_url, fk_a.ref_table, val_a)
+                    if node_b_id is None:
+                        node_b_id = deterministic_row_id(source_url, fk_b.ref_table, val_b)
 
                 if node_a_id and node_b_id:
                     await graph.link(
@@ -903,6 +945,136 @@ class DbIngester:
             row_reader=lambda tbl: _read_pg_rows(dsn, tbl, limit=row_limit),
             t0=t0,
         )
+
+    async def sync_from_sqlite(
+        self,
+        db_path: str,
+        graph: SynapticGraph,
+        source_url: str,
+        *,
+        tables: list[str] | None = None,
+        row_limit: int = 500_000,
+    ):
+        """Incrementally sync a SQLite database into the graph.
+
+        Only tables with a detected change column (``updated_at`` and
+        friends) are synced — the rest are skipped with an error entry
+        in the returned :class:`SyncResult`. The hash-based fallback
+        for tables without a change column lands in Phase 5.
+
+        First call on a fresh graph behaves as a full initial load
+        (TimestampTableSyncer reads everything when no prior state
+        exists) and records the watermark for subsequent deltas.
+        """
+        from synaptic.extensions.cdc.sync import (
+            SyncResult,
+            TableSyncStats,
+            TimestampTableSyncer,
+        )
+
+        t0 = time.time()
+        schemas = _read_sqlite_schema(db_path)
+        if tables:
+            schemas = [s for s in schemas if s.name in tables]
+
+        # Ensure the bookkeeping tables exist and grab a store bound
+        # to the graph's SQLite connection so sync writes share the
+        # same transaction context as save_node writes.
+        backend = graph.backend
+        if hasattr(backend, "ensure_cdc_tables"):
+            await backend.ensure_cdc_tables()
+        else:  # pragma: no cover - defensive, CDC requires SQLite graph backend
+            msg = "sync_from_database requires a SQLite-backed graph (ensure_cdc_tables missing)"
+            raise RuntimeError(msg)
+        store = backend.cdc_state_store()
+
+        syncer = TimestampTableSyncer(self._table_ingester, store, source_url)
+        reader = _sqlite_row_reader(db_path, row_limit)
+
+        result = SyncResult(source_url=source_url)
+
+        # Skip join tables for now — FK re-computation (Phase 4) will
+        # handle bridge rows with proper edge diffing.
+        regular = [s for s in schemas if not _is_join_table(s)]
+        no_fk = [s for s in regular if not s.foreign_keys]
+        has_fk = [s for s in regular if s.foreign_keys]
+
+        async def _reader_coerce(
+            table: str,
+            *,
+            where_clause: str | None = None,
+            where_params: tuple = (),
+        ) -> list[dict]:
+            rows_raw = reader(
+                table,
+                where_clause=where_clause,
+                where_params=where_params,
+            )
+            return [_cast_row(r, _columns_for(schemas, table)) for r in rows_raw]
+
+        for schema in no_fk + has_fk:
+            try:
+                stats = await syncer.sync_table(
+                    graph,
+                    schema,
+                    _reader_coerce,
+                )
+            except Exception as exc:
+                logger.exception("sync_table(%s) failed", schema.name)
+                result.tables.append(TableSyncStats(table=schema.name, error=str(exc)))
+                continue
+
+            result.tables.append(stats)
+            result.added += stats.added
+            result.updated += stats.updated
+            result.deleted += stats.deleted
+
+        result.elapsed_ms = (time.time() - t0) * 1000.0
+        logger.info(
+            "sync_from_sqlite: +%d ~%d -%d in %.0fms",
+            result.added,
+            result.updated,
+            result.deleted,
+            result.elapsed_ms,
+        )
+        return result
+
+
+def _columns_for(schemas: list[TableSchema], table: str) -> list[ColumnInfo]:
+    for s in schemas:
+        if s.name == table:
+            return s.columns
+    return []
+
+
+def _invoke_reader(row_reader, table: str):
+    """Call a row reader, tolerating both legacy and CDC signatures.
+
+    Legacy readers accept just ``(table)`` — CDC readers add
+    ``where_clause=`` / ``where_params=``. Try the full signature
+    first, fall back to the single-arg one on TypeError so unmodified
+    DB-specific readers (PG/MySQL/Oracle/MSSQL in Phase 6) keep
+    working until they are upgraded.
+    """
+    try:
+        return row_reader(table, where_clause=None, where_params=())
+    except TypeError:
+        return row_reader(table)
+
+
+def _sqlite_row_reader(db_path: str, row_limit: int):
+    """Bind a SQLite row reader closure for use by both legacy and CDC paths."""
+
+    def reader(table: str, *, where_clause: str | None = None, where_params: tuple = ()):
+        return _read_sqlite_rows(
+            db_path,
+            table,
+            limit=row_limit,
+            where_clause=where_clause,
+            where_params=where_params,
+        )
+
+    return reader
 
 
 def _cast_row(row: dict, columns: list[ColumnInfo]) -> dict:
