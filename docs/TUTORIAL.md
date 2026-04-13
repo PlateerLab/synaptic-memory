@@ -199,6 +199,82 @@ graph = await SynapticGraph.from_database(
 PostgreSQL의 `information_schema`를 읽어서 **FK 관계까지 자동 감지**하고
 RELATED 엣지를 만듭니다.
 
+### 2-3b. 라이브 DB는 CDC 모드로 (변경분만 동기화)
+
+위 호출은 매번 모든 행을 다시 읽습니다. 한 번 만들고 끝나는 데모/분석에는
+괜찮지만, 매 시간 / 매 분 동기화해야 하는 라이브 DB라면 CDC 모드로 바꾸는
+게 정석입니다.
+
+```python
+# 첫 번째 호출 — deterministic 노드 ID로 풀로드 + sync state 시드
+graph = await SynapticGraph.from_database(
+    "postgresql://user:pass@host:5432/dbname",
+    db="knowledge.db",      # 그래프 SQLite 파일
+    mode="cdc",
+)
+
+# N번째 호출 — 변경된 행만 다시 읽기
+result = await graph.sync_from_database(
+    "postgresql://user:pass@host:5432/dbname"
+)
+print(f"+{result.added} ~{result.updated} -{result.deleted}  ({result.elapsed_ms:.0f}ms)")
+
+for table_stats in result.tables:
+    print(f"  {table_stats.table}: strategy={table_stats.strategy}"
+          f"  +{table_stats.added} ~{table_stats.updated} -{table_stats.deleted}")
+```
+
+동작 원리:
+
+1. **첫 호출 (`mode="cdc"`)**: 모든 행을 읽지만 노드 ID를
+   `deterministic_row_id(source_url, table, primary_key)`로 만듭니다.
+   같은 행은 다음 호출에서도 같은 ID를 얻으므로 upsert로 동작합니다.
+   동시에 그래프 SQLite 안의 `syn_cdc_state` / `syn_cdc_pk_index`
+   테이블에 워터마크와 PK 인덱스를 기록합니다.
+
+2. **두 번째 호출부터 (`sync_from_database`)**:
+   - `updated_at` 같은 컬럼이 있으면 **timestamp 전략** —
+     `WHERE updated_at >= last_watermark` 로 변경분만 읽습니다.
+   - 없으면 **hash 전략** — 모든 행을 읽되 row content hash가
+     이전과 같은 행은 ingest를 건너뜁니다.
+   - 두 전략 모두 **삭제 감지**가 동일하게 동작합니다 (TEMP TABLE
+     LEFT JOIN으로 missing PK 찾기).
+   - **FK가 바뀐 행**은 옛 RELATED 엣지를 삭제하고 새 엣지를 만듭니다.
+
+3. **`mode="auto"`**: 그래프 파일에 prior CDC 상태가 있으면
+   `mode="cdc"`처럼, 없으면 `mode="full"`처럼 동작합니다. 배포
+   파이프라인에서 "처음이면 풀로드, 아니면 증분"을 분기 없이
+   처리하기 좋습니다.
+
+```python
+# 한 줄로 처리 (배포 파이프라인 예시)
+graph = await SynapticGraph.from_database(dsn, db="kb.db", mode="auto")
+result = await graph.sync_from_database(dsn)
+```
+
+#### 검증된 성능 (X2BEE 프로덕션 PostgreSQL, 19,843행)
+
+| | Time |
+|---|---|
+| Initial CDC load | 51초 |
+| Full reload baseline | 35초 |
+| **Idempotent re-sync (변경 없음)** | **6초** |
+| Search top-1 일치 (vs `mode="full"`) | 4/4 ✓ |
+
+`mode="cdc"`와 `mode="full"`이 동일한 검색 결과를 반환한다는 사실은
+`tests/test_cdc_search_regression.py`가 매 PR마다 잠그고 있습니다.
+
+#### 주의: PRIMARY KEY 없는 테이블
+
+소스 스키마에 진짜 PRIMARY KEY가 없는 테이블 (AWS DMS 검증 테이블, 임시
+로그 테이블 등) 은 CDC 모드에서 명시적으로 skip됩니다. PK 없이는 행을
+안전하게 추적할 수 없기 때문입니다 (`columns[0]`로 fallback하면 unique가
+아닐 수 있고 → 같은 노드 ID로 collapse → 행 손실 + 매 동기화마다 churn).
+
+skip된 테이블은 `result.tables`에 `error="no primary key in source schema"`
+항목으로 들어갑니다. 검색에 필요한 테이블이라면 ALTER TABLE로 PK를
+추가하세요.
+
 ### 2-4. 그래프 기반 조인
 
 정형 데이터 도구를 직접 호출해 봅시다:

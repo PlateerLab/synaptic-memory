@@ -459,13 +459,174 @@ TOML로 도메인 특화.
 
 ---
 
-## 10. 한계와 향후 방향
+## 10. CDC: 라이브 데이터베이스 동기화
+
+> 프로덕션 DB와 연결할 때 매번 전체 재빌드 대신 변경분만 그래프에 반영합니다.
+
+### 왜 필요한가
+
+`from_database()`는 한 줄로 그래프를 만들어 주지만, 호출할 때마다 모든 행을
+다시 읽고 다시 인제스트합니다. 19,843행짜리 X2BEE 프로덕션 DB로 35초.
+100만 행이면 한 시간 단위가 됩니다. 라이브 DB라면 매 시간 또는 분 단위로
+동기화해야 하는데, 이걸 풀로드로 처리할 수 없습니다.
+
+CDC(Change Data Capture)는 이전 동기화 이후 **변경된 행만** 읽어 그래프에
+반영합니다.
+
+### 가장 큰 블로커: 노드 ID
+
+기본 동작에서 `Node.id`는 `uuid4().hex[:16]` — 매 인제스트마다 새 ID가
+생성됩니다. 같은 행을 두 번 읽으면 그래프에 두 개의 노드가 생기고 검색
+중복이 발생합니다.
+
+CDC는 이걸 **deterministic ID**로 해결합니다:
+
+```python
+deterministic_row_id(source_url, table, primary_key)
+  = blake2b("{normalized_url}::{table}::{canonical_pk}", digest_size=8)
+  → 16 hex chars (기존 UUID 너비와 동일)
+```
+
+같은 (source_url, table, pk) 조합은 항상 같은 노드 ID를 만들어 내고,
+SQLite 백엔드의 `ON CONFLICT(id) DO UPDATE SET`이 즉시 upsert로 동작합니다.
+
+### 두 개의 bookkeeping 테이블
+
+CDC 상태는 그래프 SQLite 파일 안에 저장돼서 그래프 파일 하나로 자체
+완결됩니다:
+
+```sql
+CREATE TABLE syn_cdc_state (
+    source_url, table_name, strategy, change_col,
+    last_sync_at, last_watermark, primary_key_col,
+    row_count, schema_fingerprint,
+    PRIMARY KEY (source_url, table_name)
+);
+
+CREATE TABLE syn_cdc_pk_index (
+    source_url, table_name, pk,
+    node_id, row_hash, fk_edges,  -- fk_edges는 JSON
+    PRIMARY KEY (source_url, table_name, pk)
+);
+```
+
+`syn_cdc_state`는 테이블별 워터마크와 전략을, `syn_cdc_pk_index`는 모든
+소스 행의 (pk → node_id) 매핑과 FK 스냅샷을 가지고 있습니다.
+
+### 두 개의 변경 감지 전략
+
+| 전략 | 조건 | 비용 |
+|---|---|---|
+| **timestamp** (선호) | `updated_at` 같은 단조 증가 컬럼 존재 | O(변경 행 수) |
+| **hash** (fallback) | 단조 컬럼 없음 | O(전체 행 수) — 매번 풀스캔 + blake2b |
+
+자동 선택입니다. `detect_change_column()`이 컬럼 이름을 보고
+`updated_at`, `modified_at`, `mtime` 등을 찾아내면 timestamp 전략, 못
+찾으면 hash 전략으로 떨어집니다. 사용자가 손댈 필요 없습니다.
+
+### 삭제 감지 — TEMP TABLE + LEFT JOIN
+
+매 동기화마다 소스의 모든 PK를 읽어와서 transient `cdc_current_pks`
+TEMP TABLE에 bulk insert한 다음 한 번의 LEFT JOIN으로 끝냅니다:
+
+```sql
+SELECT idx.pk, idx.node_id
+  FROM syn_cdc_pk_index AS idx
+  LEFT JOIN cdc_current_pks AS cur ON cur.pk = idx.pk
+ WHERE idx.source_url = ? AND idx.table_name = ?
+   AND cur.pk IS NULL
+```
+
+Python 쪽에서 set diff를 만들지 않으니 1M행짜리 테이블도 메모리가 평탄.
+삭제된 노드는 `graph.remove()`로 처리되고 `ON DELETE CASCADE`가 엣지를
+자동 정리합니다.
+
+### FK 엣지 재계산
+
+`syn_cdc_pk_index.fk_edges`에 각 행의 FK 값 스냅샷을 JSON으로 저장합니다:
+
+```json
+{"category_id": "C1", "vendor_id": "V42"}
+```
+
+행이 업데이트되면 prior 스냅샷과 새 FK 값을 diff해서 바뀐 컬럼만 옛
+RELATED 엣지를 삭제하고 새 엣지를 만듭니다. 신규 엣지는
+`TableIngester.ingest`가 이미 idempotent (UNIQUE source/target/kind)로
+삽입하므로 별도 처리 없이 동작합니다.
+
+### PK 없는 테이블은 명시적으로 skip
+
+소스 스키마에 진짜 PRIMARY KEY가 없는 테이블 (AWS DMS 검증 테이블,
+임시 로그 테이블 등)은 CDC 모드에서 skip합니다. 이유:
+
+`columns[0]`로 fallback할 경우 그 컬럼이 unique가 아니면 (예: `TASK_NAME`
+1개 distinct value) 모든 행이 동일한 deterministic ID로 collapse돼서
+46개 행 중 45개가 사라지고 매 동기화마다 churn이 발생합니다.
+`TableSchema.has_explicit_pk = False`인 테이블은 `SyncResult.tables`에
+명시적 에러 항목으로 들어갑니다 — 이런 테이블은 `mode="full"`로만
+인제스트하라는 신호입니다.
+
+### API
+
+```python
+# 첫 번째 호출 — deterministic ID로 풀로드 + sync state 시드
+graph = await SynapticGraph.from_database(
+    "postgresql://user:pass@host/db",
+    db="knowledge.db",
+    mode="cdc",
+)
+
+# N번째 호출 — 변경분만
+result = await graph.sync_from_database(
+    "postgresql://user:pass@host/db"
+)
+print(result.added, result.updated, result.deleted)
+
+# 자동 모드 — prior state 있으면 cdc, 없으면 full
+graph = await SynapticGraph.from_database(dsn, mode="auto")
+```
+
+### 검색 품질에 미치는 영향
+
+**없습니다**. CDC는 노드 ID 생성 방식만 바꿀 뿐 검색 알고리즘 (BM25,
+Vector, PRF, PPR, Reranker, MMR)을 전혀 건드리지 않습니다.
+`tests/test_cdc_search_regression.py`가 동일 데이터를 `mode="full"`과
+`mode="cdc"`로 빌드해서 top-k가 일치하는지 매 PR마다 검증합니다.
+
+X2BEE 프로덕션 검증 결과 (19,843행 PostgreSQL):
+
+| 지표 | 값 |
+|---|---|
+| Initial CDC load | 51초 |
+| Full reload baseline | 35초 |
+| **Idempotent re-sync** | **6초** (~6× 빠름) |
+| Search top-1 일치 | 4/4 ✓ |
+
+### 지원되는 dialects
+
+| DB | CDC 모드 | Notes |
+|---|---|---|
+| SQLite | ✅ | 1차 타깃 |
+| PostgreSQL | ✅ | asyncpg 필요 |
+| MySQL/MariaDB | ✅ | aiomysql 필요 |
+| Oracle | legacy full-reload만 | Phase 6 follow-up |
+| MSSQL | legacy full-reload만 | Phase 6 follow-up |
+
+dialect별 placeholder 차이 (`?` vs `$1` vs `%s`)는 `_translate_placeholders`가
+한 번에 처리합니다. 신규 dialect 추가는 row_reader / pk_reader 두 함수만
+구현하면 됩니다.
+
+---
+
+## 11. 한계와 향후 방향
 
 ### 현재 한계
-- **인크리멘털 업데이트 없음**: 새 데이터가 오면 전체 재빌드 권장
 - **멀티홉 질의 불안정**: GPT-4o-mini 같은 작은 모델은 2-3홉부터 오판
 - **패러프레이즈**: 데이터에 없는 개념어는 임베딩으로도 한계
 - **평가 방식**: ID 매칭 기반 GT는 집계 쿼리에 부정확 (LLM-as-Judge 보완)
+- **CDC Oracle/MSSQL**: 아직 legacy full-reload만 (Phase 6 follow-up)
+- **CDC PK 없는 테이블**: 안전을 위해 skip — 실 데이터 테이블이라면
+  보통 PK가 있으므로 큰 제약은 아님
 
 ### 로드맵 (ROADMAP.md)
 - CDC 기반 인크리멘털 인덱싱

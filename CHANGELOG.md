@@ -28,6 +28,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Search regression test** locks in that `mode="cdc"` returns the
   same top-k results as `mode="full"` — CDC only changes node
   identification, never search algorithms.
+- **Production validation** against X2BEE PostgreSQL (19,843 rows,
+  7 tables): initial CDC load 51s, idempotent re-sync **6s** (~6×
+  faster than full reload), 4/4 user queries return identical
+  top-1 results vs `mode="full"`.
+
+### Fixed — CDC bugs caught by production validation
+
+- **Canonical PK normalization** (`canonical_pk()` in
+  `extensions/cdc/ids.py`): the row-read path went through
+  `_cast_row` (numeric → `float(1.0)` → `'1.0'`) while the PK-read
+  path used raw asyncpg (`Decimal('1')` → `'1'`). The `LEFT JOIN`
+  in `find_deleted_pks` therefore matched none of the rows, and
+  every sync flapped the table by re-deleting + re-inserting
+  every row. Integer-valued floats / Decimals now collapse to a
+  single canonical string used everywhere a PK is hashed,
+  stored, looked up, or compared.
+- **Skip CDC sync for tables without a real primary key**
+  (`TableSchema.has_explicit_pk` propagated by every schema
+  reader): falling back to `columns[0]` collapses rows whose
+  fallback column isn't unique (e.g. an AWS DMS validation
+  table with 47 rows but only 1 distinct `TASK_NAME`) into a
+  single deterministic node ID, losing 46 rows and producing
+  endless update churn. Such tables are now skipped with a
+  clear warning + error entry in the `SyncResult`; users can
+  still ingest them via legacy `mode="full"`.
 
 ## [0.13.0] - 2026-04-13
 
