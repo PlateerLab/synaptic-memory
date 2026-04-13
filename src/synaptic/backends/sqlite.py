@@ -146,13 +146,47 @@ CREATE INDEX IF NOT EXISTS idx_syn_nodes_kind_level ON syn_nodes(kind, level);
 class SQLiteBackend:
     """SQLite backend with FTS5 full-text search and CTE graph traversal."""
 
-    __slots__ = ("_conn", "_hnsw_id_map", "_hnsw_index", "_path")
+    __slots__ = ("_conn", "_hnsw_id_map", "_hnsw_index", "_hnsw_meta", "_path")
 
     def __init__(self, path: str | Path = ":memory:") -> None:
         self._path = str(path)
         self._conn: aiosqlite.Connection | None = None
-        self._hnsw_index: object | None = None  # None=not built, False=skip (too few), Index=ready
+        # in-memory state — None=not loaded, False=skip (too few), Index=ready
+        self._hnsw_index: object | None = None
         self._hnsw_id_map: dict[int, str] = {}  # hnsw key → node_id
+        # cached signature so we can detect stale on-disk artifacts:
+        # {"count": int, "max_updated_at": float, "ndim": int}
+        self._hnsw_meta: dict[str, object] = {}
+
+    # --- HNSW disk persistence helpers ---
+
+    @property
+    def _hnsw_index_path(self) -> str:
+        """Sidecar file storing the usearch binary index."""
+        return f"{self._path}.hnsw"
+
+    @property
+    def _hnsw_meta_path(self) -> str:
+        """Sidecar file storing the id-map and validity signature."""
+        return f"{self._path}.hnsw.meta.json"
+
+    async def _hnsw_signature(self) -> tuple[int, float]:
+        """Return ``(node_count, max_updated_at)`` for embedding nodes.
+
+        Used to validate the on-disk HNSW cache. If either changes,
+        the cache is stale and must be rebuilt — node was added,
+        removed, or re-embedded.
+        """
+        db = self._db()
+        async with db.execute(
+            """
+            SELECT COUNT(*) AS cnt, COALESCE(MAX(updated_at), 0) AS mu
+              FROM syn_nodes
+             WHERE embedding_json != '[]'
+            """
+        ) as cur:
+            row = await cur.fetchone()
+        return (int(row["cnt"]), float(row["mu"]))
 
     async def connect(self) -> None:
         self._conn = await aiosqlite.connect(self._path)
@@ -230,6 +264,11 @@ class SQLiteBackend:
             (node.id, fts_title, fts_content),
         )
         await db.commit()
+        # Embedding may have changed → in-memory HNSW is now stale. The
+        # on-disk sidecar will be revalidated by signature on next search,
+        # so we don't delete it here.
+        if node.embedding:
+            self._hnsw_index = None
 
     async def get_node(self, node_id: str) -> Node | None:
         db = self._db()
@@ -278,6 +317,9 @@ class SQLiteBackend:
         await db.execute("DELETE FROM syn_nodes WHERE id = ?", (node_id,))
         await db.execute("DELETE FROM syn_nodes_fts WHERE node_id = ?", (node_id,))
         await db.commit()
+        # Embedding node may have been deleted — drop in-memory HNSW cache.
+        # Disk sidecar will be revalidated by signature on next search.
+        self._hnsw_index = None
 
     async def list_nodes(
         self,
@@ -515,69 +557,191 @@ class SQLiteBackend:
         return [n for n, _ in scored[:limit]]
 
     async def _search_vector_hnsw(self, embedding: list[float], limit: int) -> list[Node] | None:
-        """HNSW search via usearch. Returns None if usearch unavailable."""
+        """HNSW search via usearch.
+
+        Resolution order (each step is O(ms) when warm):
+
+        1. **In-memory cache** — index already loaded this process.
+        2. **Disk sidecar** — load ``{db}.hnsw`` + ``{db}.hnsw.meta.json``
+           and validate its signature against the current node table.
+        3. **Build from DB** — read every embedding, build a fresh
+           index, save it to disk for next time.
+
+        Returns ``None`` when usearch isn't installed or there are too
+        few vectors for HNSW to beat a brute-force scan.
+        """
         try:
             import numpy as np
             from usearch.index import Index
         except ImportError:
             return None
 
-        # Lazy-build the index on first call. Only use HNSW for 100+
-        # vectors — below that brute-force is faster and exact.
         if self._hnsw_index is False:
             return None
+
+        # 1. In-memory cache
         if self._hnsw_index is None:
-            db = self._db()
-            async with db.execute(
-                "SELECT id, embedding_json FROM syn_nodes WHERE embedding_json != '[]'"
-            ) as cur:
-                rows = await cur.fetchall()
-            if not rows or len(rows) < 100:
-                # Too few vectors for HNSW to be worthwhile
-                self._hnsw_index = False
-                return None
-
-            # Detect dimension from first non-empty embedding
-            first_emb = json.loads(rows[0]["embedding_json"])
-            if not first_emb:
-                return []
-            ndim = len(first_emb)
-
-            idx = Index(ndim=ndim, metric="cos")
-            vectors = []
-            keys = []
-            id_map: dict[int, str] = {}
-            for i, r in enumerate(rows):
-                emb = json.loads(r["embedding_json"])
-                if len(emb) == ndim:
-                    vectors.append(emb)
-                    keys.append(i)
-                    id_map[i] = r["id"]
-
-            if vectors:
-                arr = np.array(vectors, dtype=np.float32)
-                karr = np.array(keys, dtype=np.int64)
-                idx.add(karr, arr)
-
-            self._hnsw_index = idx
-            self._hnsw_id_map = id_map
-            logger.info(
-                "sqlite: built HNSW index with %d vectors (dim=%d)",
-                len(vectors),
-                ndim,
-            )
+            # 2. Try disk sidecar
+            loaded = await self._try_load_hnsw_from_disk(Index)
+            if loaded:
+                logger.info(
+                    "sqlite: loaded HNSW from disk (%s, %d vectors)",
+                    self._hnsw_index_path,
+                    len(self._hnsw_id_map),
+                )
+            else:
+                # 3. Build from scratch + persist
+                built = await self._build_and_persist_hnsw(Index, np)
+                if not built:
+                    return None
 
         # Search
+        if self._hnsw_index is False or self._hnsw_index is None:
+            return None
         q = np.array(embedding, dtype=np.float32)
-        results = self._hnsw_index.search(q, limit)
-
+        results = self._hnsw_index.search(q, limit)  # type: ignore[union-attr]
         node_ids = [self._hnsw_id_map[int(k)] for k in results.keys if int(k) in self._hnsw_id_map]
         return await self.get_nodes_batch(node_ids)
 
+    async def _try_load_hnsw_from_disk(self, index_cls: type) -> bool:
+        """Attempt to load index + meta from disk. Returns True on success."""
+        from pathlib import Path as _P
+
+        idx_path = _P(self._hnsw_index_path)
+        meta_path = _P(self._hnsw_meta_path)
+        if not idx_path.exists() or not meta_path.exists():
+            return False
+
+        try:
+            with meta_path.open("r", encoding="utf-8") as f:
+                meta = json.load(f)
+            disk_count = int(meta.get("count", 0))
+            disk_mu = float(meta.get("max_updated_at", 0))
+            disk_ndim = int(meta.get("ndim", 0))
+            disk_id_map = {int(k): str(v) for k, v in meta.get("id_map", {}).items()}
+
+            # Validate signature against current DB state
+            cur_count, cur_mu = await self._hnsw_signature()
+            if disk_count != cur_count or abs(disk_mu - cur_mu) > 1e-6:
+                logger.info(
+                    "sqlite: HNSW disk cache stale (count %d→%d, mu %f→%f) — rebuilding",
+                    disk_count,
+                    cur_count,
+                    disk_mu,
+                    cur_mu,
+                )
+                return False
+
+            # Load the binary usearch index
+            idx = index_cls(ndim=disk_ndim, metric="cos")
+            idx.load(str(idx_path))
+            self._hnsw_index = idx
+            self._hnsw_id_map = disk_id_map
+            self._hnsw_meta = {
+                "count": cur_count,
+                "max_updated_at": cur_mu,
+                "ndim": disk_ndim,
+            }
+            return True
+        except Exception as exc:
+            logger.warning("sqlite: failed to load HNSW disk cache: %s", exc)
+            return False
+
+    async def _build_and_persist_hnsw(self, index_cls: type, np_module) -> bool:
+        """Build HNSW from DB and persist to disk. Returns True on success."""
+        db = self._db()
+        async with db.execute(
+            "SELECT id, embedding_json, updated_at FROM syn_nodes WHERE embedding_json != '[]'"
+        ) as cur:
+            rows = await cur.fetchall()
+        if not rows or len(rows) < 100:
+            # Too few vectors for HNSW to be worthwhile
+            self._hnsw_index = False
+            return False
+
+        # Detect dimension from first non-empty embedding
+        first_emb = json.loads(rows[0]["embedding_json"])
+        if not first_emb:
+            self._hnsw_index = False
+            return False
+        ndim = len(first_emb)
+
+        idx = index_cls(ndim=ndim, metric="cos")
+        vectors: list[list[float]] = []
+        keys: list[int] = []
+        id_map: dict[int, str] = {}
+        max_mu = 0.0
+        for i, r in enumerate(rows):
+            emb = json.loads(r["embedding_json"])
+            if len(emb) == ndim:
+                vectors.append(emb)
+                keys.append(i)
+                id_map[i] = r["id"]
+                mu = float(r["updated_at"] or 0)
+                if mu > max_mu:
+                    max_mu = mu
+
+        if vectors:
+            arr = np_module.array(vectors, dtype=np_module.float32)
+            karr = np_module.array(keys, dtype=np_module.int64)
+            idx.add(karr, arr)
+
+        self._hnsw_index = idx
+        self._hnsw_id_map = id_map
+        self._hnsw_meta = {
+            "count": len(vectors),
+            "max_updated_at": max_mu,
+            "ndim": ndim,
+        }
+        logger.info(
+            "sqlite: built HNSW index with %d vectors (dim=%d)",
+            len(vectors),
+            ndim,
+        )
+
+        # Persist to disk so the next process starts warm.
+        try:
+            idx.save(self._hnsw_index_path)
+            with open(self._hnsw_meta_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "count": len(vectors),
+                        "max_updated_at": max_mu,
+                        "ndim": ndim,
+                        "id_map": {str(k): v for k, v in id_map.items()},
+                    },
+                    f,
+                )
+            logger.info("sqlite: saved HNSW disk cache → %s", self._hnsw_index_path)
+        except Exception as exc:
+            logger.warning("sqlite: failed to persist HNSW disk cache: %s", exc)
+
+        return True
+
     def invalidate_vector_index(self) -> None:
-        """Drop the HNSW cache. Call after bulk embedding updates."""
+        """Drop the in-memory HNSW cache.
+
+        The on-disk sidecar is left alone; it will be revalidated by
+        signature on the next search. Call this after bulk embedding
+        updates to force the next search to rebuild from scratch.
+        """
         self._hnsw_index = None
         self._hnsw_id_map = {}
+        self._hnsw_meta = {}
+
+    def delete_hnsw_disk_cache(self) -> None:
+        """Remove the on-disk HNSW sidecar files.
+
+        Use after migrating embedding models or when you know the
+        cached vectors are no longer compatible with the current index.
+        """
+        from pathlib import Path as _P
+
+        for path in (self._hnsw_index_path, self._hnsw_meta_path):
+            try:
+                _P(path).unlink(missing_ok=True)
+            except Exception as exc:
+                logger.warning("sqlite: failed to delete %s: %s", path, exc)
 
     # --- Graph traversal (recursive CTE) ---
 

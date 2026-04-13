@@ -145,6 +145,12 @@ ignore = ["S101", "E501", "PLC0415", "S110", "S311", "S106", "RUF005", "F841", "
 # from_data() / from_database() do file-system discovery during
 # ingestion — path.is_dir()/rglob()/glob() are intentional.
 "src/synaptic/graph.py" = ["ASYNC240"]
+# SQLite backend persists HNSW sidecar files via sync I/O during
+# index build/load — this happens once per cold start, not per query.
+"src/synaptic/backends/sqlite.py" = ["ASYNC230", "ASYNC240"]
+# Test fixtures use pathlib.Path.exists() inside async tests, which
+# is fine for unit testing — no event-loop perf concern.
+"tests/**" = ["ASYNC230", "ASYNC240"]
 
 [tool.pyright]
 pythonVersion = "3.12"
