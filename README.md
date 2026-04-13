@@ -253,6 +253,17 @@ Agent tools (29) → MCP server → LLM agent
 
 ---
 
+## Documentation
+
+| Doc | What it is |
+|-----|-----------|
+| [docs/GUIDE.md](docs/GUIDE.md) | Friendly intro — what/why/how, zero jargon |
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | 30-minute hands-on walkthrough |
+| [docs/CONCEPTS.md](docs/CONCEPTS.md) | 3rd-gen GraphRAG + pipeline internals |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Original neural-inspired design |
+| [docs/COMPARISON.md](docs/COMPARISON.md) | vs GraphRAG / LightRAG / LazyGraphRAG |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Future plans |
+
 ## Dev
 
 ```bash

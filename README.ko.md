@@ -253,6 +253,17 @@ StorageBackend (Protocol)
 
 ---
 
+## 문서
+
+| 문서 | 내용 |
+|------|------|
+| [docs/GUIDE.md](docs/GUIDE.md) | 친절한 전체 안내서 (처음 접하는 사람용) |
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | 30분 단계별 실습 |
+| [docs/CONCEPTS.md](docs/CONCEPTS.md) | 3세대 GraphRAG + 파이프라인 심화 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 신경망 영감 초기 설계 |
+| [docs/COMPARISON.md](docs/COMPARISON.md) | GraphRAG/LightRAG와 비교 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 향후 로드맵 |
+
 ## 개발
 
 ```bash
