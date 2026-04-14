@@ -4,7 +4,7 @@
 LLM 에이전트용 지식 그래프 + MCP 도구 서버.
 아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 35개 도구로 LLM이 탐색.
 
-- PyPI: `synaptic-memory` (v0.12.0)
+- PyPI: `synaptic-memory` (v0.14.0)
 - 라이선스: MIT
 - Python: >=3.12
 - 코어 의존성: **0** (백엔드/임베더/한국어 분석 전부 optional)
@@ -193,7 +193,7 @@ synaptic-mcp --db knowledge.db --source-dsn postgresql://user:pw@host/db
 | **Agent v2** | 2 | deep_search, compare_search |
 | **Structured** | 3 | filter_nodes, aggregate_nodes, join_related |
 
-### Ingest / CDC 도구 (v0.13.1+)
+### Ingest / CDC 도구 (v0.14.0+)
 에이전트가 대화 중에 직접 지식 베이스를 업데이트할 수 있게 하는 6개 도구.
 기존에는 CLI 스크립트로만 가능했던 인제스트를 MCP tool call로 수행 가능.
 
