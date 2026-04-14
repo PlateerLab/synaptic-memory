@@ -44,6 +44,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from datetime import UTC
+
 from synaptic.backends.memory import MemoryBackend
 from synaptic.graph import SynapticGraph
 from tests.benchmark.metrics import BenchmarkResult
@@ -1129,7 +1131,63 @@ def print_table(results: list[RunResult], baseline: dict | None = None):
 
 
 def save_results(results: list[RunResult], path: Path):
-    data = {}
+    """Persist baseline metrics with a `_meta` block.
+
+    The `_meta` block lets future readers verify quickly whether
+    a saved baseline matches the corpus + code they are running
+    against. Stale baselines were a real source of phantom
+    "regressions" during the v0.14.x release cycle — having
+    snapshot hashes inline makes the mismatch obvious.
+
+    Underscore prefix keeps `_meta` from being mistaken for a
+    dataset name by older readers that iterate `data.values()`.
+    """
+    import hashlib
+    from datetime import datetime
+
+    try:
+        from synaptic import __version__ as _synaptic_version
+    except Exception:
+        _synaptic_version = "unknown"
+
+    def _md5(p: Path) -> str:
+        try:
+            with p.open("rb") as f:
+                return hashlib.md5(f.read()).hexdigest()
+        except OSError:
+            return "missing"
+
+    # Capture corpus snapshots that the in-house bench depends
+    # on. Public datasets are downloaded fresh each run, so they
+    # don't need a hash.
+    corpus_paths = {
+        "krra_chunks_jsonl": EVAL_DIR / "data" / "parsed" / "krra" / "chunks.jsonl",
+        "krra_documents_jsonl": EVAL_DIR / "data" / "parsed" / "krra" / "documents.jsonl",
+        "assort_products_csv": EVAL_DIR / "data" / "raw" / "assort" / "products.csv",
+    }
+    corpus_md5 = {name: _md5(p) for name, p in corpus_paths.items()}
+
+    # Same for query files — augmenting a query set is a common
+    # source of "score moved" surprises.
+    query_files = list((EVAL_DIR / "data" / "queries").glob("*.json"))
+    query_md5 = {p.stem: _md5(p) for p in sorted(query_files)}
+
+    data: dict = {
+        "_meta": {
+            "synaptic_version": _synaptic_version,
+            "saved_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "corpus_md5": corpus_md5,
+            "query_md5": query_md5,
+            "note": (
+                "Baseline written by eval/run_all.py. The `_meta` block "
+                "captures corpus + query file hashes so phantom regressions "
+                "from drifting source data are easy to diagnose. If you see "
+                "a score change after a code-only PR, compare the hashes "
+                "first."
+            ),
+        }
+    }
+
     for r in results:
         if r.error:
             continue

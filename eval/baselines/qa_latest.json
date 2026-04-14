@@ -1,23 +1,48 @@
 {
+  "_meta": {
+    "synaptic_version": "0.14.4",
+    "saved_at_utc": "2026-04-14T16:37:41+00:00",
+    "mode": "fts-only (no --embed-url, no --reranker-url)",
+    "corpus_md5": {
+      "krra_chunks_jsonl": "d79eade08731a3b49fa3c871e53230d5",
+      "krra_documents_jsonl": "a2801efd299d789490eb862b49051d92",
+      "assort_products_csv": "136475587a359e2e779ef69db16c751c"
+    },
+    "query_md5": {
+      "_public_sources": "ec3efacbfa6d9cb79a85f170f7cc02c5",
+      "assort": "72f75f06e4cf69f2d4081e7f324f3c75",
+      "assort_conversational": "b7fae1f4c28d47de9367e5a8676de7e7",
+      "assort_hard": "905edf0690626daefaec1f062bfd6a7e",
+      "krra": "cf66228bcd778bc28ea7f2a2cb32ecbc",
+      "krra_conversational": "a0797c687ac4376bad3a5b19798538e2",
+      "krra_graph": "6d17554a89c20b9c6af892a0124b6810",
+      "krra_hard": "9310e2325fff3cb4289b35850073e710",
+      "krra_multihop": "678cbbe4840c2ef5fcb57abdea133240",
+      "x2bee": "784fb421cdd65f88ec396d3df02bcb8a",
+      "x2bee_conversational": "c77e2498d4e5efe535d9bde77077ecf0",
+      "x2bee_hard": "65adc5aa4ab9afa62895dbcd031657e0"
+    },
+    "note": "Baseline written by eval/run_all.py. The _meta block captures corpus + query file hashes so phantom regressions from drifting source data are easy to diagnose."
+  },
   "KRRA Easy": {
-    "mrr": 0.9667,
-    "p_at_k": 0.5162,
-    "r_at_k": 0.8934,
-    "ndcg": 0.8931,
+    "mrr": 0.45,
+    "p_at_k": 0.2256,
+    "r_at_k": 0.3508,
+    "ndcg": 0.3688,
     "corpus_size": 20
   },
   "KRRA Hard": {
-    "mrr": 0.875,
-    "p_at_k": 0.6054,
-    "r_at_k": 0.2585,
-    "ndcg": 0.5263,
-    "corpus_size": 15
+    "mrr": 0.3913,
+    "p_at_k": 0.2082,
+    "r_at_k": 0.132,
+    "ndcg": 0.1977,
+    "corpus_size": 40
   },
   "assort Easy": {
-    "mrr": 0.8167,
-    "p_at_k": 0.0867,
-    "r_at_k": 0.8333,
-    "ndcg": 0.8029,
+    "mrr": 0.8833,
+    "p_at_k": 0.0933,
+    "r_at_k": 0.9,
+    "ndcg": 0.8696,
     "corpus_size": 15
   },
   "assort Hard": {
@@ -25,7 +50,7 @@
     "p_at_k": 0.0,
     "r_at_k": 0.0,
     "ndcg": 0.0,
-    "corpus_size": 15
+    "corpus_size": 40
   },
   "X2BEE Easy": {
     "mrr": 1.0,
@@ -35,31 +60,66 @@
     "corpus_size": 20
   },
   "X2BEE Hard": {
-    "mrr": 0.3789,
-    "p_at_k": 0.1509,
-    "r_at_k": 0.3813,
-    "ndcg": 0.3838,
+    "mrr": 0.2632,
+    "p_at_k": 0.0684,
+    "r_at_k": 0.2632,
+    "ndcg": 0.2632,
     "corpus_size": 20
   },
   "KRRA Conv": {
-    "mrr": 0.15,
-    "p_at_k": 0.0577,
-    "r_at_k": 0.0733,
-    "ndcg": 0.0744,
+    "mrr": 0.1756,
+    "p_at_k": 0.0766,
+    "r_at_k": 0.08,
+    "ndcg": 0.0869,
     "corpus_size": 30
   },
   "assort Conv": {
-    "mrr": 0.3292,
-    "p_at_k": 0.0667,
-    "r_at_k": 0.4062,
-    "ndcg": 0.3424,
+    "mrr": 0.425,
+    "p_at_k": 0.075,
+    "r_at_k": 0.4444,
+    "ndcg": 0.4088,
     "corpus_size": 30
   },
   "X2BEE Conv": {
     "mrr": 0.1667,
-    "p_at_k": 0.0556,
-    "r_at_k": 0.2037,
-    "ndcg": 0.1748,
+    "p_at_k": 0.0519,
+    "r_at_k": 0.1852,
+    "ndcg": 0.17,
     "corpus_size": 30
+  },
+  "HotPotQA-24": {
+    "mrr": 0.7271,
+    "p_at_k": 0.1625,
+    "r_at_k": 0.8125,
+    "ndcg": 0.6767,
+    "corpus_size": 226
+  },
+  "Allganize RAG-ko": {
+    "mrr": 0.6213,
+    "p_at_k": 0.1088,
+    "r_at_k": 0.9,
+    "ndcg": 0.693,
+    "corpus_size": 200
+  },
+  "Allganize RAG-Eval": {
+    "mrr": 0.6154,
+    "p_at_k": 0.0951,
+    "r_at_k": 0.88,
+    "ndcg": 0.6838,
+    "corpus_size": 300
+  },
+  "PublicHealthQA": {
+    "mrr": 0.3177,
+    "p_at_k": 0.0622,
+    "r_at_k": 0.5844,
+    "ndcg": 0.3817,
+    "corpus_size": 77
+  },
+  "AutoRAG": {
+    "mrr": 0.5919,
+    "p_at_k": 0.086,
+    "r_at_k": 0.8596,
+    "ndcg": 0.6591,
+    "corpus_size": 720
   }
 }

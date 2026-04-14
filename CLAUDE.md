@@ -119,40 +119,51 @@ uv run python eval/run_all.py
 uv run python eval/run_all.py --compare eval/results/qa_latest.json
 ```
 
-### 현재 베이스라인 (v0.13.0, 2026-04-13 기준)
+### 현재 베이스라인 (v0.14.4, 2026-04-15 기준, FTS-only `--quick` 모드)
 
-#### 단일 검색 (single-shot — EvidenceSearch + embed + reranker)
-| 데이터셋 | 언어 | Corpus | MRR | Hit | 비고 |
+> **중요**: 아래 표는 `eval/run_all.py --quick` (embedder/reranker 없이 FTS only) 결과.
+> Embedder + cross-encoder reranker를 켜면 점수가 훨씬 올라가지만, 그 측정은
+> Home 서버(Ollama qwen3-embedding:4b + TEI bge-reranker-v2-m3) 기동이 필요해
+> CI/일상 검증에선 FTS-only가 디폴트. 임베더 모드 베이스라인은 별도 측정.
+>
+> Corpus 스냅샷 hash + 코드 버전은 `eval/baselines/qa_latest.json:_meta`에 인라인.
+> 다음 stale 의심 시 즉시 확인 가능.
+
+#### 단일 검색 — FTS only
+| 데이터셋 | 언어 | 쿼리 수 | MRR | Hit | 비고 |
 |---------|------|--------|-----|-----|------|
-| KRRA Easy (20q) | KO | 19,720 | **0.967** | 20/20 | FTS + Kiwi + embed |
-| KRRA Hard (15q) | KO | 19,720 | **0.875~1.000** | 15/15 | reranker (variance) |
-| assort Easy (15q) | KO | 13,909 | **0.817~0.889** | 13~14/15 | 정형 CSV |
-| assort Hard (15q) | KO | 13,909 | 0.000 | 0/15 | structured-only — 단일검색 불가 (agent 필요) |
-| X2BEE Easy (20q) | EN | 19,843 | **1.000** | 20/20 | DB→온톨로지 |
-| X2BEE Hard (20q) | EN/KO | 19,843 | 0.379 | 8/20 | 패러프레이즈+필터+집계 |
-| KRRA Conv (30q) | KO | 19,720 | 0.150 | 9/30 | conv은 single-shot 어려움 |
-| assort Conv (30q) | KO | 13,909 | 0.329 | 11/30 | 동상 |
-| X2BEE Conv (30q) | EN/KO | 19,843 | 0.167 | 7/30 | 동상 |
+| KRRA Easy | KO | 20q | **0.450** | 9/20 | krra chunks 재파싱 후 |
+| KRRA Hard | KO | 40q | **0.391** | 21/40 | v0.14.x 보강 후 (15→40q) |
+| assort Easy | KO | 15q | **0.883** | 14/15 | 정형 CSV |
+| assort Hard | KO | 40q | 0.000 | 0/40 | structured-only — agent 필요 (15→40q) |
+| X2BEE Easy | EN | 20q | **1.000** | 20/20 | DB→온톨로지 |
+| X2BEE Hard | EN/KO | 20q | 0.263 | 5/20 | 패러프레이즈+필터+집계 |
+| KRRA Conv | KO | 30q | 0.176 | 9/30 | conv는 single-shot 한계 |
+| assort Conv | KO | 30q | 0.425 | 11/30 | |
+| X2BEE Conv | EN/KO | 30q | 0.167 | 5/30 | |
 
-#### 멀티턴 에이전트 (GPT-4o-mini, 5턴, LLM-judge)
+#### 공개 데이터셋 — FTS only
+| 데이터셋 | 언어 | 쿼리 | MRR | Hit |
+|---------|------|------|-----|-----|
+| HotPotQA-24 | EN | 24q | **0.727** | 24/24 |
+| Allganize RAG-ko | KO | 200q | **0.621** | 180/200 |
+| Allganize RAG-Eval | KO | 300q | **0.615** | 264/300 |
+| PublicHealthQA | KO | 77q | 0.318 | 45/77 |
+| AutoRAG | KO | 720q | **0.592** | 98/114 |
+
+#### 멀티턴 에이전트 (GPT-4o-mini, 5턴, LLM-judge — 별도 측정 필요)
 | 데이터셋 | 결과 | 비고 |
 |---------|------|------|
-| **KRRA Hard agent** | **11/15 (73%)** | 멀티홉/패러프레이즈 |
-| **assort Hard agent** | **13/15 (87%)** | structured tools + judge |
-| **X2BEE Hard agent** | **17/19 (89%)** | 그래프 + structured 통합 |
-| **KRRA Conv agent** | **21/30 (70%)** | 자동 GT 좁음 영향 |
-| **assort Conv agent** | **20/24 (83%)** | judge 효과 큼 |
-| **X2BEE Conv agent** | **22/27 (81%)** | 멀티홉 다수 해결 |
-| **합계** | **103/130 (79%)** | 시작 ~35% → 79% |
+| **KRRA Hard agent** | **11/15 (73%)** | v0.13 측정값 — 보강 query set으로 재측정 필요 |
+| **assort Hard agent** | **13/15 (87%)** | 동상 |
+| **X2BEE Hard agent** | **17/19 (89%)** | 동상 |
+| **KRRA Conv agent** | **21/30 (70%)** | 동상 |
+| **assort Conv agent** | **20/24 (83%)** | 동상 |
+| **X2BEE Conv agent** | **22/27 (81%)** | 동상 |
 
-#### 공개 데이터셋 (EvidenceSearch + embed + reranker)
-| 데이터셋 | 언어 | Corpus | MRR |
-|---------|------|--------|-----|
-| HotPotQA-24 | EN | 226 | **0.964** |
-| Allganize RAG-ko | KO | 200 | **0.905** |
-| Allganize RAG-Eval | KO | 300 | **0.874** |
-| PublicHealthQA | KO | 77 | **0.600** |
-| AutoRAG | KO | 720 | **0.675** |
+> Agent 벤치마크 + Embedder/Reranker single-shot 둘 다 v0.13.0 시점 측정값. v0.14.x
+> 코드는 search 경로가 변경됐으므로 (HybridSearch threshold + EvidenceSearch
+> migration) 이 두 모드는 재측정 필요. follow-up task로 trace.
 
 ### 평가 쿼리 위치
 ```
