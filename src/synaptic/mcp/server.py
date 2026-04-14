@@ -120,19 +120,43 @@ async def knowledge_search(
     Use this to find relevant company knowledge before starting a task.
     Supports Korean and English queries with synonym expansion.
 
+    Routes through :class:`EvidenceSearch` (the same engine that
+    backs ``agent_search`` / ``agent_deep_search``) so semantic
+    queries that share no surface words with the source documents
+    still surface relevant hits. Replaces the legacy
+    ``graph.search()`` / ``HybridSearch`` path whose hardcoded
+    ``cos >= 0.45`` cutoff silently dropped most semantic-only
+    matches on OpenAI v3 / Cohere / MiniLM embedders.
+
     Args:
         query: Search query (Korean or English)
         limit: Maximum number of results to return
     """
     graph = await _ensure_graph()
-    result = await graph.search(query, limit=limit)
 
-    if not result.nodes:
-        return {"success": True, "message": "No knowledge found for this query.", "results": []}
+    # Lazy-import the modern pipeline so test fixtures and the
+    # legacy `graph.search` codepath stay independent.
+    from synaptic.extensions.evidence_search import EvidenceSearch
+
+    searcher = EvidenceSearch(backend=graph.backend, embedder=_embedder)
+    result = await searcher.search(
+        query,
+        k=limit,
+        # Over-fetch FTS seeds so the reranker has a richer pool to
+        # draw from — matters most when the embedder is wired up.
+        fts_seed_limit=max(20, limit * 3),
+    )
+
+    if not result.evidence:
+        return {
+            "success": True,
+            "message": "No knowledge found for this query.",
+            "results": [],
+        }
 
     results = []
-    for activated in result.nodes:
-        node = activated.node
+    for ev in result.evidence:
+        node = ev.node
         results.append(
             {
                 "id": node.id,
@@ -141,16 +165,21 @@ async def knowledge_search(
                 "content": node.content[:500],
                 "tags": node.tags,
                 "level": str(node.level),
-                "score": round(activated.resonance, 3),
+                "score": round(ev.score, 3),
+                "reason": ev.reason,
+                "category": ev.category,
             }
         )
 
     return {
         "success": True,
         "results": results,
-        "total_candidates": result.total_candidates,
-        "search_time_ms": round(result.search_time_ms, 1),
-        "stages_used": result.stages_used,
+        "total_candidates": len(result.scored),
+        "search_time_ms": round(result.elapsed_ms, 1),
+        "anchors": {
+            "categories": list(result.anchors.categories),
+            "entities": list(result.anchors.entities),
+        },
     }
 
 

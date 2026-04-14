@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synaptic-memory"
-version = "0.14.1"
+version = "0.14.2"
 description = "Knowledge graph + MCP tool server for LLM agents — 3rd-gen retrieval, graph-aware multi-turn exploration, structured data tools, DB→ontology one-liner."
 license = "MIT"
 requires-python = ">=3.12"

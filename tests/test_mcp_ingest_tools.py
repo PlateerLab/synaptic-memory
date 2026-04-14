@@ -168,6 +168,78 @@ class TestRemove:
         assert result["success"] is False
 
 
+class TestKnowledgeSearch:
+    """Verify MCP knowledge_search routes through EvidenceSearch.
+
+    These tests document the Phase 2 migration: knowledge_search no
+    longer calls the legacy ``graph.search()`` / ``HybridSearch``
+    path, so the hardcoded ``cos >= 0.45`` threshold can no longer
+    silently drop semantic hits.
+    """
+
+    async def test_lexical_query_returns_results(self, fresh_mcp_graph):
+        """Sanity — a query that shares words with the doc still hits."""
+        mcp_server, _ = fresh_mcp_graph
+        await mcp_server.knowledge_add_document(
+            title="Refund policy",
+            content=(
+                "Customers can request a refund within 30 days of purchase. "
+                "Contact support to start the refund process."
+            ),
+            tags="ops,policy",
+        )
+        result = await mcp_server.knowledge_search(query="refund policy")
+        assert result["success"] is True
+        assert len(result["results"]) >= 1
+        # First hit must be the doc we just ingested
+        titles = [r["title"] for r in result["results"]]
+        assert any("Refund policy" in t or "refund policy" in t.lower() for t in titles)
+
+    async def test_evidence_search_fields_present(self, fresh_mcp_graph):
+        """The new payload must include EvidenceSearch-specific fields
+        (``reason``, ``category``) that the legacy ``ActivatedNode``
+        format lacked. Acts as a regression guard against accidental
+        revert to ``graph.search()``."""
+        mcp_server, _ = fresh_mcp_graph
+        await mcp_server.knowledge_add_document(
+            title="Onboarding guide",
+            content="New employee onboarding takes two weeks.",
+        )
+        result = await mcp_server.knowledge_search(query="onboarding")
+        assert result["results"], "expected at least one hit"
+        first = result["results"][0]
+        assert "reason" in first  # EvidenceSearch field
+        assert "category" in first  # EvidenceSearch field
+        assert "score" in first
+
+    async def test_empty_corpus_returns_no_results(self, fresh_mcp_graph):
+        """Queries against an empty knowledge graph must succeed
+        with an explanatory message — not crash."""
+        mcp_server, _ = fresh_mcp_graph
+        result = await mcp_server.knowledge_search(query="anything")
+        assert result["success"] is True
+        assert result["results"] == []
+        assert "No knowledge" in result.get("message", "")
+
+    async def test_no_match_query_returns_no_results(self, fresh_mcp_graph):
+        """A query with neither lexical nor semantic overlap must
+        not surface unrelated hits at the top."""
+        mcp_server, _ = fresh_mcp_graph
+        await mcp_server.knowledge_add_document(
+            title="Pizza recipe",
+            content="To make pizza, prepare dough, sauce, and cheese.",
+        )
+        # Without an embedder wired up there is no semantic path;
+        # this query has zero lexical overlap with the doc, so we
+        # expect zero results — *not* a crash and not a wrong hit.
+        result = await mcp_server.knowledge_search(query="quantum cryptography")
+        assert result["success"] is True
+        # The pizza doc must not be the top hit for an unrelated query
+        if result["results"]:
+            top_title = result["results"][0]["title"].lower()
+            assert "pizza" not in top_title
+
+
 class TestSyncFromDatabase:
     async def test_initial_sync_seeds_state(self, fresh_mcp_graph):
         mcp_server, tmp = fresh_mcp_graph

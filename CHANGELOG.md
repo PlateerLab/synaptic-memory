@@ -6,6 +6,89 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-04-15
+
+### Changed — MCP `knowledge_search` routes through EvidenceSearch
+
+Phase 2 of the magic-number cleanup started in v0.14.1.
+
+`MCP knowledge_search` previously called `graph.search()`, which
+in turn called the legacy `HybridSearch` path. Even with v0.14.1's
+relative-threshold fix, that path still treats vector hits as a
+*supplement* to FTS via a hardcoded cascade. The deep tail of the
+positive distribution on low-cosine embedders (OpenAI v3 small/
+large, MiniLM) was still partially lost.
+
+This release wires `knowledge_search` directly to
+:class:`EvidenceSearch`, the same engine that already backs
+`agent_search`, `agent_deep_search`, `compare_search`, and the
+benchmark harness (`eval/run_all.py`). EvidenceSearch:
+
+- Uses **min-max normalised cosine** in its hybrid reranker, so
+  absolute cosine values disappear from the decision entirely.
+- Has **no threshold cutoff** — vector hits compete on relative
+  rank against lexical/graph/structural signals.
+- Adds `reason` ("top_score", "category_coverage", "document_quota")
+  and `category` fields to each hit so callers can see *why* the
+  aggregator picked a node.
+
+The knowledge_search response payload now includes:
+
+- `reason` (new) — aggregator decision tag per hit
+- `category` (new) — node category from properties
+- `anchors` (new) — ``{categories, entities}`` extracted from query
+- `total_candidates` — now reflects the EvidenceSearch reranker
+  pool size, not the legacy HybridSearch candidate set
+- `search_time_ms` — measured by EvidenceSearch end-to-end
+
+`stages_used` is no longer reported because EvidenceSearch always
+runs the full pipeline (FTS → vector → PRF → expand → rerank →
+aggregate); there is no per-call branching to surface.
+
+### Tests
+
+`tests/test_mcp_ingest_tools.py::TestKnowledgeSearch` (4 new):
+- Lexical query still hits the right document (sanity).
+- Response carries the new EvidenceSearch fields (`reason`,
+  `category`) — regression guard against accidental revert to
+  `graph.search()`.
+- Empty corpus returns ``{success: True, results: []}`` with an
+  explanatory message.
+- Unrelated query (no lexical or semantic overlap) does not put
+  an irrelevant doc at the top.
+
+Full suite: 791 passing.
+
+### Migration note
+
+The legacy `HybridSearch` and the v0.14.1 relative-threshold fix
+are still in place — they back `graph.search()` directly and
+`AgentSearch` (the intent-routed multi-query wrapper). Only
+`MCP knowledge_search` moved to EvidenceSearch in this release.
+
+If your code calls `graph.search()` (not the MCP tool), you are
+still on the legacy path and the v0.14.1 relative threshold
+applies. The legacy path is preserved for back-compat — no plan
+to delete it before v0.16.
+
+### Note on benchmark numbers
+
+While running `eval/run_all.py --quick` to validate this release we
+discovered that the committed `eval/baselines/qa_latest.json` (last
+updated under v0.13.0) is **stale** — the underlying
+`eval/data/parsed/krra/chunks.jsonl` was re-parsed on 2026-04-09
+and the corpus shape changed. Bisecting back to commit ``d1f229e``
+(the baseline source-of-truth) reproduces the *current* MRR
+numbers (KRRA Easy 0.450, X2BEE Hard 0.263), confirming there is
+**no code regression** between v0.13.0 and v0.14.2.
+
+The numbers in `CLAUDE.md` and the committed baseline JSON should
+be treated as historical until they are regenerated against the
+current corpus snapshot. v0.14.x search code is behaviourally
+identical to v0.13.0 on identical inputs (FTS-only path; the
+v0.14.1 relative threshold only fires when an embedder is wired,
+which `--quick` mode is not).
+
 ## [0.14.1] - 2026-04-15
 
 ### Fixed — Embedder-agnostic vector cascade threshold
