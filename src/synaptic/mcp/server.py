@@ -30,6 +30,7 @@ _embedder: Any = None
 _tracker: Any = None
 _db_path: str = "knowledge.db"
 _dsn: str = ""
+_source_dsn: str = ""  # Default source DB for CDC sync tools (optional)
 _embed_url: str = ""
 _embed_model: str = "default"
 
@@ -41,6 +42,7 @@ async def _ensure_graph() -> Any:
     if _graph is not None:
         return _graph
 
+    from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
     from synaptic.extensions.tagger_regex import RegexTagExtractor
     from synaptic.graph import SynapticGraph
     from synaptic.ontology import build_agent_ontology
@@ -63,11 +65,16 @@ async def _ensure_graph() -> Any:
         _embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
         logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
 
+    # A ChunkEntityIndex is required for `add_document` to produce
+    # nodes of NodeKind.CHUNK — without it chunks default to
+    # NodeKind.CONCEPT and the PART_OF validation constraint
+    # rejects the inter-chunk edges.
     _graph = SynapticGraph(
         _backend,
         tag_extractor=RegexTagExtractor(),
         ontology=build_agent_ontology(),
         embedder=_embedder,
+        chunk_entity_index=ChunkEntityIndex(),
     )
     logger.info("Knowledge graph initialized (backend=%s)", type(_backend).__name__)
     return _graph
@@ -287,6 +294,360 @@ async def knowledge_consolidate() -> dict[str, Any]:
         "nodes_created": len(result.nodes_created),
         "vitality_decayed": decayed,
         "edges_pruned": pruned,
+    }
+
+
+# --- Ingest Tools ---
+
+
+@server.tool()
+async def knowledge_add_document(
+    title: str,
+    content: str,
+    chunk_size: int = 1000,
+    chunk_overlap: int = 200,
+    tags: str = "",
+    source: str = "",
+) -> dict[str, Any]:
+    """Add a long document to the graph with automatic chunking.
+
+    Short documents become a single node; long documents are split at
+    sentence boundaries and connected with NEXT_CHUNK edges so the
+    search pipeline can surface context around a hit.
+
+    Args:
+        title: Document title (becomes the node title and a chunk prefix).
+        content: Full document text.
+        chunk_size: Max characters per chunk (default 1000).
+        chunk_overlap: Overlapping characters between adjacent chunks (default 200).
+        tags: Comma-separated tags.
+        source: Origin identifier (e.g. "manual:admin-guide", "url:https://...").
+    """
+    graph = await _ensure_graph()
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    nodes = await graph.add_document(
+        title=title,
+        content=content,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        tags=tag_list,
+        source=source,
+    )
+    return {
+        "success": True,
+        "title": title,
+        "chunks": len(nodes),
+        "first_node_id": nodes[0].id if nodes else None,
+    }
+
+
+@server.tool()
+async def knowledge_add_table(
+    table_name: str,
+    columns: list[dict[str, str]],
+    rows: list[dict[str, Any]],
+    primary_key: str = "id",
+    foreign_keys: dict[str, list[str]] | None = None,
+    tags: str = "",
+    source: str = "",
+) -> dict[str, Any]:
+    """Ingest a structured table into the graph.
+
+    Each row becomes an ENTITY node and foreign keys become RELATED
+    edges to the referenced table's rows. The table schema is
+    auto-registered in the ontology so downstream filter / aggregate /
+    join tools work immediately.
+
+    Args:
+        table_name: Logical table name (used for ontology type + node titles).
+        columns: Column definitions, e.g. ``[{"name": "id", "type": "int"}, ...]``.
+        rows: Row data, e.g. ``[{"id": 1, "name": "..."}, ...]``.
+        primary_key: Primary key column (default "id").
+        foreign_keys: Mapping ``{"col": ["target_table", "target_col"]}``.
+            JSON-friendly shape — ``["target_table", "target_col"]`` is
+            converted to a tuple internally.
+        tags: Comma-separated tags.
+        source: Origin identifier.
+    """
+    graph = await _ensure_graph()
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    fk_map: dict[str, tuple[str, str]] | None = None
+    if foreign_keys:
+        fk_map = {
+            col: (target[0], target[1]) if len(target) >= 2 else (target[0], "id")
+            for col, target in foreign_keys.items()
+        }
+    nodes = await graph.add_table(
+        table_name,
+        columns,
+        rows,
+        primary_key=primary_key,
+        foreign_keys=fk_map,
+        tags=tag_list,
+        source=source,
+    )
+    return {
+        "success": True,
+        "table_name": table_name,
+        "rows_ingested": len(nodes),
+        "fk_count": len(fk_map) if fk_map else 0,
+    }
+
+
+@server.tool()
+async def knowledge_add_chunks(
+    chunks: list[dict[str, Any]],
+    default_source: str = "",
+) -> dict[str, Any]:
+    """Ingest pre-chunked content (BYO-chunker workflow).
+
+    Use when you have already split a document with your own parser
+    (LangChain, Unstructured, custom OCR, ...) and want to hand the
+    chunks directly to the graph. Each chunk dict should contain:
+
+    - ``title`` (required): Node title for the chunk.
+    - ``content`` (required): Chunk text.
+    - ``tags`` (optional): List of tag strings.
+    - ``source`` (optional): Per-chunk source identifier. Falls back
+      to ``default_source`` when omitted.
+    - ``properties`` (optional): Extra string→string metadata.
+    """
+    graph = await _ensure_graph()
+    added = 0
+    errors: list[str] = []
+    first_id: str | None = None
+    for i, chunk in enumerate(chunks):
+        title = chunk.get("title")
+        content = chunk.get("content")
+        if not title or not content:
+            errors.append(f"chunk[{i}]: missing title or content")
+            continue
+        node = await graph.add(
+            title=title,
+            content=content,
+            tags=chunk.get("tags"),
+            source=chunk.get("source") or default_source,
+            properties=chunk.get("properties"),
+        )
+        if first_id is None:
+            first_id = node.id
+        added += 1
+    return {
+        "success": True,
+        "chunks_added": added,
+        "errors": errors,
+        "first_node_id": first_id,
+    }
+
+
+def _inspect_path(path: str) -> dict[str, Any]:
+    """Sync helper: classify a filesystem path for ingest routing.
+
+    Keeping the file-system touch in a sync function lets the async
+    tool body stay blocking-I/O-free (ruff ASYNC230/ASYNC240).
+    """
+    from pathlib import Path
+
+    p = Path(path)
+    if not p.exists():
+        return {"exists": False}
+    return {
+        "exists": True,
+        "is_file": p.is_file(),
+        "suffix": p.suffix.lower(),
+        "stem": p.stem,
+        "path": str(p),
+    }
+
+
+def _read_csv_rows(path: str) -> list[dict[str, str]]:
+    """Sync helper: read a CSV file into a list of dict rows."""
+    import csv
+    from pathlib import Path
+
+    with Path(path).open(encoding="utf-8") as f:
+        return [dict(r) for r in csv.DictReader(f)]
+
+
+def _read_jsonl_records(path: str) -> list[dict[str, Any]]:
+    """Sync helper: read a JSONL file into a list of record dicts."""
+    import json
+    from pathlib import Path
+
+    records: list[dict[str, Any]] = []
+    with Path(path).open(encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                records.append(json.loads(stripped))
+            except json.JSONDecodeError:
+                continue
+    return records
+
+
+def _read_text_file(path: str) -> str:
+    """Sync helper: read a text file with error-tolerant decoding."""
+    from pathlib import Path
+
+    return Path(path).read_text(encoding="utf-8", errors="replace")
+
+
+@server.tool()
+async def knowledge_ingest_path(
+    path: str,
+    source: str = "",
+) -> dict[str, Any]:
+    """Ingest a file from the local filesystem into the *current* graph.
+
+    Handles CSV, JSONL, and plain text files. For directories or
+    office files (PDF/DOCX/...), use ``SynapticGraph.from_data()``
+    from a CLI script and point synaptic-mcp at the resulting ``.db``.
+
+    The MCP server and the MCP client must share a filesystem for
+    this tool to be useful.
+
+    Args:
+        path: Absolute filesystem path.
+        source: Source identifier attached to every new node.
+    """
+    graph = await _ensure_graph()
+    info = _inspect_path(path)
+    if not info["exists"]:
+        return {"success": False, "error": f"path not found: {path}"}
+
+    if info["is_file"] and info["suffix"] == ".csv":
+        from synaptic.extensions.table_ingester import TableIngester
+
+        rows = _read_csv_rows(info["path"])
+        if not rows:
+            return {"success": True, "format": "csv", "rows": 0}
+        columns = [{"name": k, "type": "str"} for k in rows[0]]
+        ingester = TableIngester()
+        nodes = await ingester.ingest(
+            graph,
+            info["stem"],
+            columns,
+            rows,
+            source=source or info["path"],
+        )
+        return {
+            "success": True,
+            "format": "csv",
+            "table_name": info["stem"],
+            "rows": len(nodes),
+        }
+
+    if info["is_file"] and info["suffix"] == ".jsonl":
+        records = _read_jsonl_records(info["path"])
+        count = 0
+        for obj in records:
+            title = obj.get("title") or obj.get("id") or f"doc-{count}"
+            content = obj.get("content") or obj.get("text") or ""
+            if not content:
+                continue
+            await graph.add_document(
+                title=str(title),
+                content=str(content),
+                source=source or info["path"],
+            )
+            count += 1
+        return {"success": True, "format": "jsonl", "documents": count}
+
+    if info["is_file"]:
+        try:
+            text = _read_text_file(info["path"])
+        except (OSError, UnicodeDecodeError) as exc:
+            return {"success": False, "error": f"cannot read {path}: {exc}"}
+        if not text.strip():
+            return {"success": True, "format": "text", "documents": 0}
+        nodes = await graph.add_document(
+            title=info["stem"],
+            content=text,
+            source=source or info["path"],
+        )
+        return {
+            "success": True,
+            "format": "text",
+            "title": info["stem"],
+            "chunks": len(nodes),
+        }
+
+    return {
+        "success": False,
+        "error": (
+            "directory ingest not supported from MCP yet — "
+            "run a CLI job with SynapticGraph.from_data() and point "
+            "synaptic-mcp at the resulting .db file"
+        ),
+    }
+
+
+@server.tool()
+async def knowledge_remove(node_id: str) -> dict[str, Any]:
+    """Delete a single node and cascade-remove its edges.
+
+    Use when a node was ingested incorrectly or is stale. Bulk
+    deletion is intentionally not exposed — for large cleanups
+    drop the graph file and re-ingest.
+    """
+    graph = await _ensure_graph()
+    removed = await graph.remove(node_id)
+    return {"success": removed, "node_id": node_id}
+
+
+@server.tool()
+async def knowledge_sync_from_database(
+    connection_string: str = "",
+    tables: list[str] | None = None,
+) -> dict[str, Any]:
+    """Incrementally sync the graph with a live database (CDC).
+
+    First call on a fresh graph seeds the sync state and does a
+    deterministic full load; subsequent calls read only rows whose
+    change column advanced past the last watermark (or whose row
+    hash changed, for tables without an ``updated_at``-style
+    column). Tables without a primary key in the source schema are
+    skipped with a clear error entry.
+
+    Args:
+        connection_string: Source database DSN. Falls back to
+            ``--source-dsn`` passed on the command line when omitted.
+            Supports ``sqlite://``, ``postgresql://``, ``mysql://``.
+        tables: Optional allow-list of table names. Empty / null
+            means sync every table in the source schema.
+    """
+    graph = await _ensure_graph()
+    dsn = connection_string or _source_dsn
+    if not dsn:
+        return {
+            "success": False,
+            "error": (
+                "no source DSN — either pass connection_string or start "
+                "synaptic-mcp with --source-dsn"
+            ),
+        }
+    result = await graph.sync_from_database(dsn, tables=tables)
+    return {
+        "success": True,
+        "added": result.added,
+        "updated": result.updated,
+        "deleted": result.deleted,
+        "elapsed_ms": round(result.elapsed_ms, 1),
+        "tables": [
+            {
+                "table": t.table,
+                "strategy": t.strategy,
+                "added": t.added,
+                "updated": t.updated,
+                "deleted": t.deleted,
+                "fk_edges_added": t.fk_edges_added,
+                "fk_edges_removed": t.fk_edges_removed,
+                "error": t.error,
+            }
+            for t in result.tables
+        ],
     }
 
 
@@ -1116,7 +1477,7 @@ async def agent_join_related(
 
 def main() -> None:
     """Entry point for synaptic-mcp command."""
-    global _db_path, _dsn, _embed_url, _embed_model
+    global _db_path, _dsn, _source_dsn, _embed_url, _embed_model
 
     if "--version" in sys.argv:
         print(f"synaptic-mcp {__version__}")
@@ -1127,8 +1488,12 @@ def main() -> None:
             "Usage: synaptic-mcp [OPTIONS]\n"
             "\n"
             "Options:\n"
-            "  --db PATH          SQLite database path (default: knowledge.db)\n"
-            "  --dsn DSN          PostgreSQL connection string\n"
+            "  --db PATH          SQLite database path for the graph (default: knowledge.db)\n"
+            "  --dsn DSN          PostgreSQL backend for the graph itself\n"
+            "  --source-dsn DSN   Default source database for CDC sync tools\n"
+            "                     (sqlite://, postgresql://, mysql://). Optional —\n"
+            "                     the knowledge_sync_from_database tool accepts a\n"
+            "                     per-call connection_string too.\n"
             "  --embed-url URL    Embedding API base URL (OpenAI-compatible)\n"
             "                     Examples: http://localhost:8080/v1 (vLLM/llama.cpp)\n"
             "                              http://localhost:11434/v1 (Ollama)\n"
@@ -1144,6 +1509,8 @@ def main() -> None:
             _db_path = args[i + 1]
         elif arg == "--dsn" and i + 1 < len(args):
             _dsn = args[i + 1]
+        elif arg == "--source-dsn" and i + 1 < len(args):
+            _source_dsn = args[i + 1]
         elif arg == "--embed-url" and i + 1 < len(args):
             _embed_url = args[i + 1]
         elif arg == "--embed-model" and i + 1 < len(args):
@@ -1156,7 +1523,12 @@ def main() -> None:
         stream=sys.stderr,
     )
 
-    logger.info("Starting Synaptic Memory MCP server (db=%s, dsn=%s)", _db_path, _dsn or "none")
+    logger.info(
+        "Starting Synaptic Memory MCP server (db=%s, dsn=%s, source_dsn=%s)",
+        _db_path,
+        _dsn or "none",
+        _source_dsn or "none",
+    )
     if _embed_url:
         logger.info("Embedding: %s (model=%s)", _embed_url, _embed_model)
     server.run()

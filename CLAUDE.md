@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 LLM 에이전트용 지식 그래프 + MCP 도구 서버.
-아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 29개 도구로 LLM이 탐색.
+아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 35개 도구로 LLM이 탐색.
 
 - PyPI: `synaptic-memory` (v0.12.0)
 - 라이선스: MIT
@@ -42,7 +42,7 @@ StorageBackend
 검색 파이프라인
   Kiwi 형태소 → BM25 → Vector(HNSW) → PRF → PPR → Reranker → MaxP → MMR
   ↓
-Agent tools (29개) → MCP server → LLM agent
+Agent tools (35개) → MCP server → LLM agent
 ```
 
 ### 핵심 모듈
@@ -172,23 +172,38 @@ eval/data/queries/
 eval/data/gt_datasets.xlsx
 ```
 
-## MCP 서버 (29개 도구)
+## MCP 서버 (35개 도구)
 
 ```bash
 synaptic-mcp --db knowledge.db
 synaptic-mcp --db knowledge.db --embed-url http://localhost:11434/v1
+# CDC sync용 소스 DB를 미리 바인딩 (tool 호출 시 dsn 생략 가능)
+synaptic-mcp --db knowledge.db --source-dsn postgresql://user:pw@host/db
 ```
 
 ### 도구 분류
 | 분류 | 도구 수 | 예시 |
 |------|--------|------|
 | Knowledge CRUD | 7 | search, add, link, reinforce, stats, export, consolidate |
+| **Ingest / CDC** | 6 | add_document, add_table, add_chunks, ingest_path, remove, sync_from_database |
 | Agent workflow | 4 | start_session, log_action, record_decision, record_outcome |
 | Semantic search | 3 | find_similar, get_reasoning_chain, explore_context |
 | Ontology | 2 | define_type, query_schema |
 | **Agent v1** | 8 | search, expand, get_document, list_categories, count, search_exact, follow, session_info |
 | **Agent v2** | 2 | deep_search, compare_search |
 | **Structured** | 3 | filter_nodes, aggregate_nodes, join_related |
+
+### Ingest / CDC 도구 (v0.13.1+)
+에이전트가 대화 중에 직접 지식 베이스를 업데이트할 수 있게 하는 6개 도구.
+기존에는 CLI 스크립트로만 가능했던 인제스트를 MCP tool call로 수행 가능.
+
+- **`knowledge_add_document`** — 긴 텍스트를 자동 청킹해서 그래프에 추가
+- **`knowledge_add_table`** — 컬럼 정의 + 행 리스트를 받아 ENTITY 노드 + FK 엣지로 인제스트
+- **`knowledge_add_chunks`** — 이미 청킹된 결과(BYO-chunker)를 일괄 추가
+- **`knowledge_ingest_path`** — 로컬 파일(CSV/JSONL/TXT) 단일 파일 인제스트
+- **`knowledge_remove`** — 단건 노드 삭제 (엣지 cascade)
+- **`knowledge_sync_from_database`** — CDC 증분 동기화. 첫 호출은 풀 로드, 이후는
+  변경분만. `--source-dsn`로 기본 DSN을 바인딩하면 dsn 인자 생략 가능.
 
 ## 배포
 

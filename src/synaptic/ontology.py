@@ -438,6 +438,27 @@ def build_agent_ontology() -> OntologyRegistry:
         )
     )
 
+    # Document / chunk types — needed by DocumentIngester + the
+    # MCP `knowledge_add_document` tool. Without these the chunk →
+    # chunk PART_OF edge added by add_document() would be rejected
+    # by the `part_of` constraint below (validate_edge AND-s all
+    # matching constraints, so we can't just add a second one —
+    # both source and target domains need to list `chunk`).
+    registry.register_type(
+        TypeDef(
+            name="document",
+            parent="knowledge",
+            description="A parent document composed of chunks",
+        )
+    )
+    registry.register_type(
+        TypeDef(
+            name="chunk",
+            parent="knowledge",
+            description="A text chunk split from a document",
+        )
+    )
+
     # Relation constraints
     registry.register_constraint(
         RelationConstraint(
@@ -456,8 +477,14 @@ def build_agent_ontology() -> OntologyRegistry:
     registry.register_constraint(
         RelationConstraint(
             edge_kind="part_of",
-            domain_types=["agent_activity"],
-            range_types=["session"],
+            # Permissive union — a single constraint that covers both
+            # the agent-workflow use case (activity → session) and the
+            # document-ingest use case (chunk → chunk / document).
+            # validate_edge iterates and AND-s every matching
+            # constraint, so we cannot model this as two separate
+            # rules without blocking one of them.
+            domain_types=["agent_activity", "chunk", "document"],
+            range_types=["session", "chunk", "document"],
         )
     )
     registry.register_constraint(

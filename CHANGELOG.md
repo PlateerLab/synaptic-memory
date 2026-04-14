@@ -33,6 +33,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   faster than full reload), 4/4 user queries return identical
   top-1 results vs `mode="full"`.
 
+### Added — MCP ingest + CDC tools
+
+Brings knowledge-base maintenance into the MCP tool surface so
+Claude (or any MCP client) can ingest and sync from live data
+without dropping to a CLI. Tool count 29 → 35.
+
+- **`knowledge_add_document`** — wraps `graph.add_document()` with
+  automatic sentence-boundary chunking and the PART_OF /
+  NEXT_CHUNK edge scaffolding.
+- **`knowledge_add_table`** — wraps `graph.add_table()`: column
+  definitions + row list → typed ENTITY nodes, FK edges, and
+  auto-registration of the table schema in the ontology.
+- **`knowledge_add_chunks`** — BYO-chunker path. Accepts a list of
+  `{title, content, tags, source, properties}` dicts for users
+  whose upstream tooling (LangChain, Unstructured, custom OCR)
+  already produced chunks.
+- **`knowledge_ingest_path`** — ingest a single CSV / JSONL / text
+  file from the local filesystem into the current graph. Uses
+  sync helpers to keep the async tool body free of blocking I/O.
+- **`knowledge_remove`** — single-node deletion with edge cascade.
+  Bulk removal is intentionally not exposed.
+- **`knowledge_sync_from_database`** — CDC incremental sync from
+  MCP. First call seeds state, subsequent calls read only changed
+  rows. Accepts a per-call `connection_string` or falls back to
+  the new `--source-dsn` CLI flag.
+- **`--source-dsn` CLI flag** on `synaptic-mcp` for binding a
+  default CDC source.
+- MCP graph now uses a `ChunkEntityIndex` so `add_document`
+  produces nodes of `NodeKind.CHUNK` (required for the PART_OF
+  validation path).
+- `build_agent_ontology()` gains `document` / `chunk` types and
+  the existing `part_of` constraint is widened so chunk → chunk
+  edges validate alongside the existing agent_activity → session
+  rule. Required because `validate_edge` AND-s across every
+  matching constraint; a single permissive rule is the only way
+  to express an OR between two legal shapes.
+
 ### Fixed — CDC bugs caught by production validation
 
 - **Canonical PK normalization** (`canonical_pk()` in
