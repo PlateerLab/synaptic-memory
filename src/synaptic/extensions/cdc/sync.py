@@ -162,9 +162,7 @@ class TimestampTableSyncer:
         else:
             live_pks = live_result  # type: ignore[assignment]
 
-        deleted_rows = await self._store.find_deleted_pks(
-            self._source_url, schema.name, live_pks
-        )
+        deleted_rows = await self._store.find_deleted_pks(self._source_url, schema.name, live_pks)
         if not deleted_rows:
             return 0
 
@@ -274,14 +272,10 @@ class TimestampTableSyncer:
                 row_is_new.append(False)
                 continue
             pk_str = canonical_pk(pk_val)
-            existing = await self._store.get_node_id(
-                self._source_url, schema.name, pk_str
-            )
+            existing = await self._store.get_node_id(self._source_url, schema.name, pk_str)
             row_is_new.append(existing is None)
             if existing is not None and fk_map:
-                snapshot = await self._store.get_fk_edges(
-                    self._source_url, schema.name, pk_str
-                )
+                snapshot = await self._store.get_fk_edges(self._source_url, schema.name, pk_str)
                 if snapshot:
                     prior_fks[pk_str] = snapshot
 
@@ -335,11 +329,7 @@ class TimestampTableSyncer:
             node_id = deterministic_row_id(self._source_url, schema.name, pk_val)
             fk_snapshot: dict[str, str] | None = None
             if fk_map:
-                fk_snapshot = {
-                    col: str(row[col])
-                    for col in fk_map
-                    if row.get(col) is not None
-                }
+                fk_snapshot = {col: str(row[col]) for col in fk_map if row.get(col) is not None}
             pk_batch.append((canonical_pk(pk_val), node_id, None, fk_snapshot))
 
             change_val = row.get(change_col)
@@ -384,9 +374,7 @@ class TimestampTableSyncer:
         rows: list[dict[str, Any]],
         prior_fks: dict[str, dict[str, str]],
     ) -> int:
-        return await _prune_stale_fk_edges(
-            graph, schema, fk_map, rows, prior_fks, self._source_url
-        )
+        return await _prune_stale_fk_edges(graph, schema, fk_map, rows, prior_fks, self._source_url)
 
 
 async def _prune_stale_fk_edges(
@@ -429,19 +417,14 @@ async def _prune_stale_fk_edges(
             if target_table is None:
                 continue
 
-            old_target_node = deterministic_row_id(
-                source_url, target_table, old_target_pk
-            )
+            old_target_node = deterministic_row_id(source_url, target_table, old_target_pk)
 
             if source_node not in edge_cache:
                 edge_cache[source_node] = await graph.backend.get_edges(
                     source_node, direction="outgoing"
                 )
             for edge in edge_cache[source_node]:
-                if (
-                    edge.target_id == old_target_node
-                    and edge.kind == EdgeKind.RELATED
-                ):
+                if edge.target_id == old_target_node and edge.kind == EdgeKind.RELATED:
                     await graph.backend.delete_edge(edge.id)
                     removed += 1
                     edge_cache[source_node] = [
@@ -506,9 +489,7 @@ class HashTableSyncer:
         # Hash mode always does a full read — there is no watermark
         # to filter on. Pass `where_clause=None` so the SQLite
         # reader still applies the LIMIT but skips the WHERE.
-        reader_result = row_reader(
-            schema.name, where_clause=None, where_params=()
-        )
+        reader_result = row_reader(schema.name, where_clause=None, where_params=())
         if hasattr(reader_result, "__await__"):
             rows = await reader_result  # type: ignore[misc]
         else:
@@ -535,12 +516,8 @@ class HashTableSyncer:
             new_hash = row_hash(row)
             new_hashes[pk_str] = new_hash
 
-            prior_hash = await self._store.get_row_hash(
-                self._source_url, schema.name, pk_str
-            )
-            existing_node = await self._store.get_node_id(
-                self._source_url, schema.name, pk_str
-            )
+            prior_hash = await self._store.get_row_hash(self._source_url, schema.name, pk_str)
+            existing_node = await self._store.get_node_id(self._source_url, schema.name, pk_str)
 
             if existing_node is None:
                 stats.added += 1
@@ -549,9 +526,7 @@ class HashTableSyncer:
                 stats.updated += 1
                 to_ingest.append(row)
                 if fk_map:
-                    snapshot = await self._store.get_fk_edges(
-                        self._source_url, schema.name, pk_str
-                    )
+                    snapshot = await self._store.get_fk_edges(self._source_url, schema.name, pk_str)
                     if snapshot:
                         prior_fks[pk_str] = snapshot
             # else: unchanged — skip
@@ -559,9 +534,7 @@ class HashTableSyncer:
         if not to_ingest:
             # Nothing changed; no state advance needed beyond the
             # last_sync_at heartbeat for monitoring.
-            prior_state = await self._store.load_state(
-                self._source_url, schema.name
-            )
+            prior_state = await self._store.load_state(self._source_url, schema.name)
             new_state = TableSyncState(
                 source_url=self._source_url,
                 table_name=schema.name,
@@ -611,27 +584,15 @@ class HashTableSyncer:
             if pk_val is None:
                 continue
             pk_str = canonical_pk(pk_val)
-            node_id = deterministic_row_id(
-                self._source_url, schema.name, pk_val
-            )
+            node_id = deterministic_row_id(self._source_url, schema.name, pk_val)
             fk_snapshot: dict[str, str] | None = None
             if fk_map:
-                fk_snapshot = {
-                    col: str(row[col])
-                    for col in fk_map
-                    if row.get(col) is not None
-                }
-            pk_batch.append(
-                (pk_str, node_id, new_hashes.get(pk_str), fk_snapshot)
-            )
+                fk_snapshot = {col: str(row[col]) for col in fk_map if row.get(col) is not None}
+            pk_batch.append((pk_str, node_id, new_hashes.get(pk_str), fk_snapshot))
 
-        await self._store.upsert_pk_batch(
-            self._source_url, schema.name, pk_batch
-        )
+        await self._store.upsert_pk_batch(self._source_url, schema.name, pk_batch)
 
-        prior_state = await self._store.load_state(
-            self._source_url, schema.name
-        )
+        prior_state = await self._store.load_state(self._source_url, schema.name)
         row_count = (prior_state.row_count if prior_state else 0) + stats.added
         new_state = TableSyncState(
             source_url=self._source_url,

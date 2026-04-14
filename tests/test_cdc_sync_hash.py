@@ -142,9 +142,7 @@ class TestHashSync:
         # bind us to the digest function. Just make sure it changed.)
         from synaptic.extensions.cdc.hashing import row_hash as rh
 
-        assert new_hash == rh(
-            {"id": 1, "key": "theme", "value": "light"}
-        )
+        assert new_hash == rh({"id": 1, "key": "theme", "value": "light"})
 
     async def test_insert_propagates(self, graph_and_src):
         graph, conn_str, src_path = graph_and_src

@@ -364,9 +364,7 @@ async def _read_pg_pks(dsn: str, table: str, pk_col: str) -> list[str]:
 def _pg_row_reader(dsn: str, row_limit: int):
     """Bind a PG row reader closure for the CDC orchestrator."""
 
-    async def reader(
-        table: str, *, where_clause: str | None = None, where_params: tuple = ()
-    ):
+    async def reader(table: str, *, where_clause: str | None = None, where_params: tuple = ()):
         return await _read_pg_rows(
             dsn,
             table,
@@ -592,9 +590,7 @@ async def _read_mysql_pks(dsn: str, table: str, pk_col: str) -> list[str]:
 def _mysql_row_reader(dsn: str, row_limit: int):
     """Bind a MySQL row reader closure for the CDC orchestrator."""
 
-    async def reader(
-        table: str, *, where_clause: str | None = None, where_params: tuple = ()
-    ):
+    async def reader(table: str, *, where_clause: str | None = None, where_params: tuple = ()):
         return await _read_mysql_rows(
             dsn,
             table,

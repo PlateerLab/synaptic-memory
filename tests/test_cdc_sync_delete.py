@@ -89,9 +89,7 @@ class TestDeleteDetection:
 
         # PK index forgot the row.
         store = graph.backend.cdc_state_store()
-        assert (
-            await store.get_node_id(conn_str, "products", "1")
-        ) is None
+        assert (await store.get_node_id(conn_str, "products", "1")) is None
 
     async def test_other_rows_untouched(self, graph_and_src):
         graph, conn_str, src_path = graph_and_src

@@ -73,12 +73,8 @@ class TestSearchRegressionFullVsCDC:
             _seed(src_path)
             conn_str = f"sqlite:////{str(src_path).lstrip('/')}"
 
-            full_graph = await SynapticGraph.from_database(
-                conn_str, db=str(full_db), mode="full"
-            )
-            cdc_graph = await SynapticGraph.from_database(
-                conn_str, db=str(cdc_db), mode="cdc"
-            )
+            full_graph = await SynapticGraph.from_database(conn_str, db=str(full_db), mode="full")
+            cdc_graph = await SynapticGraph.from_database(conn_str, db=str(cdc_db), mode="cdc")
             yield full_graph, cdc_graph
             await full_graph.backend.close()
             await cdc_graph.backend.close()
@@ -98,13 +94,12 @@ class TestSearchRegressionFullVsCDC:
             assert cdc_top, f"cdc graph returned nothing for {query!r}"
             # Top-1 must agree on the same data point.
             assert full_top[0] == cdc_top[0], (
-                f"top result diverged for {query!r}: "
-                f"full={full_top[0]} cdc={cdc_top[0]}"
+                f"top result diverged for {query!r}: full={full_top[0]} cdc={cdc_top[0]}"
             )
 
     async def test_topk_set_matches(self, two_graphs):
         full_graph, cdc_graph = two_graphs
-        for query in ("운동",  "겨울", "정장"):
+        for query in ("운동", "겨울", "정장"):
             full_top = set(await _topk_titles(full_graph, query, k=5))
             cdc_top = set(await _topk_titles(cdc_graph, query, k=5))
             # The top-k *set* should match — internal ordering can
@@ -126,9 +121,7 @@ class TestSyncIdempotency:
             _seed(src_path)
             conn_str = f"sqlite:////{str(src_path).lstrip('/')}"
 
-            graph = await SynapticGraph.from_database(
-                conn_str, db=str(graph_db), mode="cdc"
-            )
+            graph = await SynapticGraph.from_database(conn_str, db=str(graph_db), mode="cdc")
             yield graph, conn_str
             await graph.backend.close()
 

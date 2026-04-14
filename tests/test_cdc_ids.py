@@ -23,8 +23,9 @@ from synaptic.extensions.cdc.ids import (
 
 class TestNormalizeSourceURL:
     def test_lowercases_scheme_and_host(self):
-        assert normalize_source_url("Postgres://user@HOST:5432/db") == \
-            normalize_source_url("postgresql://user@host:5432/db".replace("postgresql", "postgres"))
+        assert normalize_source_url("Postgres://user@HOST:5432/db") == normalize_source_url(
+            "postgresql://user@host:5432/db".replace("postgresql", "postgres")
+        )
 
     def test_strips_trailing_slash(self):
         a = normalize_source_url("postgres://user@host/db/")
@@ -155,8 +156,5 @@ class TestDeterministicRowID:
         Not a formal collision proof — just guards against regressions
         like hashing only the table name.
         """
-        ids = {
-            deterministic_row_id("postgres://h/d", "t", f"row_{i}")
-            for i in range(50_000)
-        }
+        ids = {deterministic_row_id("postgres://h/d", "t", f"row_{i}") for i in range(50_000)}
         assert len(ids) == 50_000

@@ -89,9 +89,7 @@ class TestFKReWiring:
 
         # Repoint product 1 from category 1 → category 3.
         con = sqlite3.connect(src_path)
-        con.execute(
-            "UPDATE products SET category_id = 3, updated_at = 5000 WHERE id = 1"
-        )
+        con.execute("UPDATE products SET category_id = 3, updated_at = 5000 WHERE id = 1")
         con.commit()
         con.close()
 

@@ -146,9 +146,7 @@ class TestIngestPath:
 
     async def test_missing_path(self, fresh_mcp_graph):
         mcp_server, tmp = fresh_mcp_graph
-        result = await mcp_server.knowledge_ingest_path(
-            path=str(tmp / "nope.csv")
-        )
+        result = await mcp_server.knowledge_ingest_path(path=str(tmp / "nope.csv"))
         assert result["success"] is False
         assert "not found" in result["error"]
 
@@ -190,9 +188,7 @@ class TestSyncFromDatabase:
         con.close()
 
         conn_str = f"sqlite:////{str(src).lstrip('/')}"
-        result = await mcp_server.knowledge_sync_from_database(
-            connection_string=conn_str
-        )
+        result = await mcp_server.knowledge_sync_from_database(connection_string=conn_str)
         assert result["success"] is True
         products = next(t for t in result["tables"] if t["table"] == "products")
         assert products["added"] == 2
@@ -219,9 +215,7 @@ class TestSyncFromDatabase:
         conn_str = f"sqlite:////{str(src).lstrip('/')}"
         await mcp_server.knowledge_sync_from_database(connection_string=conn_str)
         # Second run with no changes — added must stay 0.
-        second = await mcp_server.knowledge_sync_from_database(
-            connection_string=conn_str
-        )
+        second = await mcp_server.knowledge_sync_from_database(connection_string=conn_str)
         assert second["added"] == 0
 
     async def test_missing_dsn_errors_clearly(self, fresh_mcp_graph):

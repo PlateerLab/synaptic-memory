@@ -120,9 +120,7 @@ class TestTimestampSync:
         count_before = await graph.backend.count_nodes()
 
         con = sqlite3.connect(src_path)
-        con.execute(
-            "INSERT INTO products VALUES (4, '지갑D', 55000, 2000)"
-        )
+        con.execute("INSERT INTO products VALUES (4, '지갑D', 55000, 2000)")
         con.commit()
         con.close()
 

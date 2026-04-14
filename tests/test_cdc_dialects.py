@@ -16,10 +16,7 @@ class TestTranslatePlaceholders:
         assert _translate_placeholders('"updated_at" >= ?', "pg") == '"updated_at" >= $1'
 
     def test_pg_numbers_multiple(self):
-        assert (
-            _translate_placeholders('a = ? AND b = ?', "pg")
-            == 'a = $1 AND b = $2'
-        )
+        assert _translate_placeholders("a = ? AND b = ?", "pg") == "a = $1 AND b = $2"
 
     def test_mysql_uses_percent_s(self):
         assert _translate_placeholders('"col" >= ?', "mysql") == '"col" >= %s'
@@ -28,7 +25,7 @@ class TestTranslatePlaceholders:
         assert _translate_placeholders('"col" >= ?', "sqlite") == '"col" >= ?'
 
     def test_unknown_dialect_passthrough(self):
-        assert _translate_placeholders('? ? ?', "made-up") == '? ? ?'
+        assert _translate_placeholders("? ? ?", "made-up") == "? ? ?"
 
     def test_question_mark_only_in_placeholder_position(self):
         # `?` inside a literal would be a footgun in real SQL but

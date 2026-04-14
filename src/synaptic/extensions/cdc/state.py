@@ -418,9 +418,7 @@ class SyncStateStore:
         # force schema-fresh state — `IF NOT EXISTS` would let stale
         # rows from a prior run leak through.
         await self._conn.execute("DROP TABLE IF EXISTS cdc_current_pks")
-        await self._conn.execute(
-            "CREATE TEMP TABLE cdc_current_pks (pk TEXT PRIMARY KEY)"
-        )
+        await self._conn.execute("CREATE TEMP TABLE cdc_current_pks (pk TEXT PRIMARY KEY)")
 
         payload = [(canonical_pk(p),) for p in live_pks]
         if payload:

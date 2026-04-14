@@ -736,9 +736,7 @@ class SynapticGraph:
                     row_limit=row_limit,
                 )
                 return graph
-            if connection_string.startswith("mysql") or connection_string.startswith(
-                "mariadb"
-            ):
+            if connection_string.startswith("mysql") or connection_string.startswith("mariadb"):
                 await ingester.sync_from_mysql(
                     connection_string,
                     graph,
@@ -846,9 +844,7 @@ class SynapticGraph:
                 tables=tables,
                 row_limit=row_limit,
             )
-        if connection_string.startswith("mysql") or connection_string.startswith(
-            "mariadb"
-        ):
+        if connection_string.startswith("mysql") or connection_string.startswith("mariadb"):
             return await ingester.sync_from_mysql(
                 connection_string,
                 self,

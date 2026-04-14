@@ -174,9 +174,7 @@ class TestDeterministicReingest:
         source_url = "postgres://host/db"
 
         # First ingest
-        first = await TableIngester().ingest(
-            graph, "product", columns, rows, source_url=source_url
-        )
+        first = await TableIngester().ingest(graph, "product", columns, rows, source_url=source_url)
         first_ids = {n.properties["id"]: n.id for n in first}
 
         # Second ingest with a fresh instance — same IDs must come back
@@ -214,9 +212,7 @@ class TestDeterministicReingest:
         source_url = "postgres://host/db"
         cat_cols = [{"name": "id", "type": "int"}, {"name": "name", "type": "str"}]
         cat_rows = [{"id": 1, "name": "신발"}]
-        await TableIngester().ingest(
-            graph, "category", cat_cols, cat_rows, source_url=source_url
-        )
+        await TableIngester().ingest(graph, "category", cat_cols, cat_rows, source_url=source_url)
 
         # Separate TableIngester instance — normally its _node_cache would
         # be empty, but deterministic ID derivation lets FK edges resolve.
