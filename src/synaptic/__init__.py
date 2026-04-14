@@ -85,7 +85,7 @@ from synaptic.protocols import (
 )
 from synaptic.resonance import ResonanceWeights
 
-__version__ = "0.14.3"
+__version__ = "0.14.4"
 
 __all__ = [
     "ActivatedNode",

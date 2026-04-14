@@ -49,6 +49,7 @@ from synaptic.extensions.phrase_extractor import PhraseExtractor
 from synaptic.hebbian import HebbianEngine
 from synaptic.models import (
     ActivatedNode,
+    BackfillResult,
     ConsolidationLevel,
     DigestResult,
     Edge,
@@ -1439,6 +1440,171 @@ class SynapticGraph:
         decayed = await self.decay()
         pruned = await self.prune()
         return MaintenanceResult(consolidated=consolidated, decayed=decayed, pruned=pruned)
+
+    async def backfill(
+        self,
+        *,
+        embeddings: bool = True,
+        phrases: bool = True,
+        batch_size: int = 64,
+        max_nodes: int | None = None,
+    ) -> BackfillResult:
+        """Repair existing nodes that are missing embeddings or phrase hubs.
+
+        This is the recovery path for the silent-failure modes
+        documented in v0.14.x:
+
+        - **Empty embeddings.** A graph ingested without an embedder
+          stores ``Node.embedding = []``. Wiring an embedder later
+          does not retroactively embed those nodes — the HNSW
+          index stays empty and vector search degrades to "FTS only"
+          on the affected slice.
+
+        - **Missing phrase hubs.** A graph ingested without a
+          ``phrase_extractor`` (the default for the MCP server
+          before v0.14.3) has no cross-document bridges, because
+          no chunks ever got linked to shared ENTITY phrase hubs
+          via CONTAINS edges. PPR / GraphExpander then can't walk
+          across files.
+
+        Both gaps used to require a full re-ingest from source.
+        ``backfill()`` walks the existing graph in place and
+        repairs each node where the relevant signal is missing,
+        without touching nodes that are already healthy. It is
+        idempotent — running twice on the same graph produces
+        zero work on the second pass.
+
+        Args:
+            embeddings: If True (default) and an embedder is wired,
+                fill in empty embeddings batch-by-batch. No-op when
+                the graph has no embedder.
+            phrases: If True (default) and a phrase extractor is
+                wired, scan text-bearing nodes that have no
+                outgoing CONTAINS edge and run the extractor on
+                them so phrase hubs get created. No-op when the
+                graph has no phrase extractor.
+            batch_size: Embedding batch size handed to
+                ``embedder.embed_batch``. Phrase extraction is
+                already per-node so this only affects embeddings.
+            max_nodes: Optional cap on the total nodes scanned —
+                useful for incremental progress on huge graphs.
+                When ``None`` (default), every node is inspected.
+
+        Returns:
+            :class:`BackfillResult` with per-axis counts and any
+            per-node errors that were collected (best-effort —
+            one bad row never aborts the rest).
+        """
+        from time import time as _time
+
+        t0 = _time()
+        result = BackfillResult()
+
+        # Skip both passes early if neither would do anything —
+        # avoids touching the backend at all.
+        do_embeddings = embeddings and self._embedder is not None
+        do_phrases = phrases and self._phrase_extractor is not None
+        if not (do_embeddings or do_phrases):
+            return result
+
+        all_nodes = await self._backend.list_nodes(
+            limit=max_nodes if max_nodes is not None else 1_000_000
+        )
+
+        # ─── Pass 1 — embedding backfill ──────────────────────
+        # Two reasons to keep this in a separate pass from phrases:
+        #   1. Embedder API is batched — collecting a contiguous
+        #      list of "to embed" nodes is much faster than
+        #      one-call-per-node.
+        #   2. The phrase pass below will re-fetch the freshly
+        #      embedded nodes anyway (their tags may matter).
+        if do_embeddings:
+            assert self._embedder is not None
+            pending: list[tuple[Node, str]] = []
+            for node in all_nodes:
+                result.scanned += 1
+                if node.embedding:
+                    continue  # already embedded
+                text = f"{node.title} {node.content}".strip()
+                if not text:
+                    result.skipped_no_text += 1
+                    continue
+                pending.append((node, text))
+
+                if len(pending) >= batch_size:
+                    await self._flush_embedding_batch(pending, result)
+                    pending = []
+            if pending:
+                await self._flush_embedding_batch(pending, result)
+        else:
+            # Still need to count the scan even when not doing
+            # embeddings, so the caller's "scanned" reflects total
+            # graph size on a phrase-only run.
+            result.scanned += len(all_nodes)
+
+        # ─── Pass 2 — phrase hub backfill ─────────────────────
+        if do_phrases:
+            assert self._phrase_extractor is not None
+            # A node "needs" phrase backfill when it has text and
+            # no outgoing CONTAINS edge yet. Phrase hubs themselves
+            # (tagged ``_phrase``) are skipped because they ARE the
+            # bridge, not a candidate.
+            for node in all_nodes:
+                if node.tags and "_phrase" in node.tags:
+                    continue
+                text = f"{node.title} {node.content}".strip()
+                if not text:
+                    continue
+                outgoing = await self._backend.get_edges(node.id, direction="outgoing")
+                if any(e.kind == EdgeKind.CONTAINS for e in outgoing):
+                    continue  # already linked to phrase hubs
+                try:
+                    new_ids = await self._phrase_extractor.extract_and_link(
+                        self,
+                        node.id,
+                        node.title,
+                        node.content,
+                    )
+                except Exception as exc:
+                    result.errors.append(f"phrases:{node.id}: {exc}")
+                    continue
+                if new_ids:
+                    result.phrases_linked += len(new_ids)
+                    if self._chunk_entity_index is not None:
+                        # Mirror the registration path that add()
+                        # would normally do at ingest time.
+                        await self._register_chunk_entities(node)
+
+        result.elapsed_ms = (_time() - t0) * 1000.0
+        return result
+
+    async def _flush_embedding_batch(
+        self,
+        pending: list[tuple[Node, str]],
+        result: BackfillResult,
+    ) -> None:
+        """Embed a pending batch and persist the new embeddings.
+
+        Extracted from :meth:`backfill` to keep the main loop
+        readable. ``pending`` is consumed (never returned) so the
+        caller can simply reset its list and continue.
+        """
+        if self._embedder is None or not pending:
+            return
+        try:
+            embeddings = await self._embedder.embed_batch([text for _, text in pending])
+        except Exception as exc:
+            result.errors.append(f"embed_batch: {exc}")
+            return
+        for (node, _), vec in zip(pending, embeddings):
+            if not vec:
+                continue
+            node.embedding = vec
+            try:
+                await self._backend.update_node(node)
+                result.embeddings_filled += 1
+            except Exception as exc:
+                result.errors.append(f"update_node:{node.id}: {exc}")
 
     async def export_markdown(self, *, node_ids: list[str] | None = None) -> str:
         return await self._md_exporter.export(self._backend, node_ids=node_ids)

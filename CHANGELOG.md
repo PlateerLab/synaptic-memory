@@ -6,6 +6,90 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-04-15
+
+### Added — `graph.backfill()` + `knowledge_backfill` MCP tool
+
+Recovery path for the v0.14.x silent-failure modes that landed
+in v0.14.1 and v0.14.3 fixes. Two distinct gaps used to require
+a full re-ingest from source to repair:
+
+1. **Empty embeddings.** A graph ingested without an embedder
+   stores ``Node.embedding=[]``. Wiring an embedder afterwards
+   does not retroactively embed those nodes — the HNSW index
+   stays empty and vector search degrades to "FTS only" on the
+   affected slice.
+
+2. **Missing phrase hubs.** A graph ingested without a
+   ``phrase_extractor`` (the default for the MCP server before
+   v0.14.3 — see that release's note) has no cross-document
+   bridges, because no chunks ever got linked to shared ENTITY
+   phrase hubs via CONTAINS edges. PPR / GraphExpander then
+   cannot walk across files.
+
+`graph.backfill()` walks the existing graph in place and repairs
+each node where the relevant signal is missing, without touching
+nodes that are already healthy. Idempotent — running twice on the
+same graph produces zero work on the second pass.
+
+```python
+from synaptic import SynapticGraph
+
+graph = await SynapticGraph.from_data("./old_corpus/", embed_url="...")
+result = await graph.backfill()
+print(result.embeddings_filled, result.phrases_linked, result.elapsed_ms)
+```
+
+### MCP tool
+
+- ``knowledge_backfill(scope="all" | "embeddings" | "phrases",
+  batch_size=64, max_nodes=None)`` — wraps the graph method.
+  Tool count 35 → 36.
+
+### Implementation notes
+
+- Embedding pass batches via ``embedder.embed_batch`` for speed
+  (configurable ``batch_size``). Phrase pass is per-node since
+  the extractor is already per-passage.
+- Both passes are best-effort — a single failing row appends to
+  ``BackfillResult.errors`` but never aborts the rest of the run.
+- ``max_nodes`` lets you process huge graphs incrementally.
+- Skips already-healthy nodes:
+  - Embedding pass: ``if node.embedding: continue``
+  - Phrase pass: ``if any(e.kind == CONTAINS for e in outgoing): continue``
+- Phrase hubs themselves (tagged ``_phrase``) are never re-extracted
+  — that would create infinite hubs of hubs.
+
+### Tests
+
+`tests/test_backfill.py` (10 new):
+
+- `TestEmbeddingBackfill` (4): no-op without embedder, fills
+  missing embeddings, idempotent on healthy graph, skips
+  text-less nodes without crashing.
+- `TestPhraseBackfill` (4): no-op without extractor, creates
+  bridge after wiring extractor, idempotent on healthy graph,
+  skips phrase-hub nodes (no infinite recursion).
+- `TestCombinedBackfill` (2): default repairs both, ``max_nodes``
+  limit is respected.
+
+Full suite: 803 passing.
+
+### New `BackfillResult` dataclass
+
+```python
+@dataclass(slots=True)
+class BackfillResult:
+    scanned: int = 0
+    embeddings_filled: int = 0
+    phrases_linked: int = 0
+    skipped_no_text: int = 0
+    elapsed_ms: float = 0.0
+    errors: list[str] = field(default_factory=list)
+```
+
+Exported from `synaptic.models`.
+
 ## [0.14.3] - 2026-04-15
 
 ### Fixed — MCP graph now creates cross-document phrase-hub bridges

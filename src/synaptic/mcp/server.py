@@ -357,6 +357,63 @@ async def knowledge_consolidate() -> dict[str, Any]:
     }
 
 
+@server.tool()
+async def knowledge_backfill(
+    scope: str = "all",
+    batch_size: int = 64,
+    max_nodes: int | None = None,
+) -> dict[str, Any]:
+    """Repair existing nodes that are missing embeddings or phrase hubs.
+
+    Use this when a graph was ingested *before* an embedder was
+    wired up, or before the MCP server's PhraseExtractor wiring fix
+    in v0.14.3 — both situations leave the graph half-built and
+    silently degrade search. ``backfill`` walks the graph in place,
+    fills the missing signals, and is safe to run repeatedly
+    (idempotent: every pass that finds nothing to fix returns
+    ``{embeddings_filled: 0, phrases_linked: 0}``).
+
+    Args:
+        scope: One of:
+          - ``"all"`` (default) — run both embedding and phrase backfill.
+          - ``"embeddings"`` — only fill empty embeddings. Requires
+            an embedder; no-op without one.
+          - ``"phrases"`` — only re-run phrase extraction on nodes
+            that have no outgoing CONTAINS edge. Requires a phrase
+            extractor; no-op without one.
+        batch_size: Embedding batch size (passed to
+            ``embedder.embed_batch``). Phrase extraction is per-node
+            so this only affects the embedding pass.
+        max_nodes: Optional cap on nodes scanned, useful for
+            incremental progress on very large graphs. ``None``
+            (default) processes every node.
+    """
+    graph = await _ensure_graph()
+    do_emb = scope in ("all", "embeddings")
+    do_phrases = scope in ("all", "phrases")
+    if not do_emb and not do_phrases:
+        return {
+            "success": False,
+            "error": (f"unknown scope {scope!r} — expected one of 'all', 'embeddings', 'phrases'"),
+        }
+    result = await graph.backfill(
+        embeddings=do_emb,
+        phrases=do_phrases,
+        batch_size=batch_size,
+        max_nodes=max_nodes,
+    )
+    return {
+        "success": True,
+        "scope": scope,
+        "scanned": result.scanned,
+        "embeddings_filled": result.embeddings_filled,
+        "phrases_linked": result.phrases_linked,
+        "skipped_no_text": result.skipped_no_text,
+        "elapsed_ms": round(result.elapsed_ms, 1),
+        "errors": result.errors,
+    }
+
+
 # --- Ingest Tools ---
 
 

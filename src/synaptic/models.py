@@ -167,6 +167,41 @@ class MaintenanceResult:
         return count
 
 
+@dataclass(slots=True)
+class BackfillResult:
+    """Counts from one ``SynapticGraph.backfill()`` run.
+
+    ``backfill`` is the recovery path for the silent-failure modes
+    documented in v0.14.x: graphs ingested without an embedder or
+    without a phrase extractor end up missing data that downstream
+    search depends on, and there used to be no way to recover
+    short of re-ingesting the source.
+
+    Attributes:
+        scanned: Total nodes inspected (regardless of whether any
+            work was needed).
+        embeddings_filled: Nodes that gained an embedding because
+            ``embeddings=True`` was requested *and* their previous
+            embedding was empty.
+        phrases_linked: Phrase-hub CONTAINS edges newly created
+            by re-running the extractor on text-bearing nodes.
+            Only counts edges to *new* hubs, not duplicates.
+        skipped_no_text: Nodes skipped because they had no title
+            and no content to embed or phrase-extract.
+        elapsed_ms: Wall-clock time of the backfill call.
+        errors: Per-node error messages — empty when every node
+            processed cleanly. Backfill is best-effort: a single
+            failing row never aborts the rest of the batch.
+    """
+
+    scanned: int = 0
+    embeddings_filled: int = 0
+    phrases_linked: int = 0
+    skipped_no_text: int = 0
+    elapsed_ms: float = 0.0
+    errors: list[str] = field(default_factory=list)
+
+
 def _evidence_step_list() -> list["EvidenceStep"]:
     return []
 
