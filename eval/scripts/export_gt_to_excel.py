@@ -51,9 +51,27 @@ def _load_resolver(graph_path: Path) -> dict[str, str]:
     Keys cover both:
     - node title (for structured data like "products:12800000")
     - properties.doc_id (for document data with hash IDs)
+
+    Each value is a multi-line summary that includes a longer
+    content preview AND a compact dump of the row's domain
+    properties (price, season, color, etc. for structured rows;
+    category, year, doc_type for documents). The previous version
+    only showed a 150-char content snippet, which made it hard to
+    audit the GT in Excel.
     """
     if not graph_path.exists():
         return {}
+
+    # Synaptic-internal meta keys we don't want to show as "facts"
+    META_KEYS = {
+        "_table_name",
+        "_primary_key",
+        "_source_url",
+        "doc_id",
+        "chunk_index",
+        "total_chunks",
+        "parent_doc",
+    }
 
     resolver: dict[str, str] = {}
     try:
@@ -61,7 +79,7 @@ def _load_resolver(graph_path: Path) -> dict[str, str]:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT title, content, properties_json FROM syn_nodes").fetchall()
         for r in rows:
-            title = r["title"] or ""
+            title = (r["title"] or "").strip()
             raw_content = (r["content"] or "").replace("\n", " ").strip()
 
             # Strip redundant "table_name: " prefix from structured content
@@ -72,25 +90,53 @@ def _load_resolver(graph_path: Path) -> dict[str, str]:
                 if raw_content.startswith(prefix):
                     raw_content = raw_content[len(prefix) :]
 
-            # Cap content length for readability in Excel cells
-            content_snippet = raw_content[:150]
-            if len(raw_content) > 150:
+            # Wider content window than the old 150-char limit so
+            # human reviewers can actually evaluate the answer.
+            content_snippet = raw_content[:300]
+            if len(raw_content) > 300:
                 content_snippet += "…"
 
-            # For structured nodes: title already shows "table:pk", so just
-            # show the content (which starts with the name). For document
-            # nodes: title is the doc/chunk title; prepend it.
             try:
                 props = json.loads(r["properties_json"] or "{}")
             except json.JSONDecodeError:
                 props = {}
 
             is_structured = bool(props.get("_table_name"))
+
+            # Build a compact "facts" line listing the domain-level
+            # property values. For structured rows this is the meat
+            # of the answer (price, season, color, ...); for
+            # documents it shows category/year/doc_type.
+            fact_pairs: list[str] = []
+            for k in sorted(props):
+                if k in META_KEYS:
+                    continue
+                v = props[k]
+                if v is None or v == "":
+                    continue
+                v_str = str(v)
+                if len(v_str) > 60:
+                    v_str = v_str[:60] + "…"
+                fact_pairs.append(f"{k}={v_str}")
+            facts_line = " · ".join(fact_pairs) if fact_pairs else ""
+
             if is_structured:
-                summary = content_snippet or title
+                # Structured: title already encodes "table:pk", so
+                # facts and content are the readable parts.
+                pieces = [title]
+                if facts_line:
+                    pieces.append(f"  {facts_line}")
+                if content_snippet:
+                    pieces.append(f"  ▸ {content_snippet}")
+                summary = "\n".join(pieces)
             else:
-                # Document node — show title + content preview
-                summary = f"{title}  ▸  {content_snippet}" if content_snippet else title
+                # Document: title + meta facts + content preview
+                pieces = [title or "(no title)"]
+                if facts_line:
+                    pieces.append(f"  [{facts_line}]")
+                if content_snippet:
+                    pieces.append(f"  ▸ {content_snippet}")
+                summary = "\n".join(pieces)
 
             # Key by title (structured: "products:12800000")
             if title:
@@ -117,6 +163,17 @@ def _flatten_query(q: dict, resolver: dict[str, str] | None = None) -> dict:
 
     When ``resolver`` is provided, the `relevant_answer` column is
     populated with human-readable title+content for each GT ID.
+
+    New optional fields surfaced (added 2026-04-15 for assort/krra
+    augmentation):
+
+    - ``expected_answer`` — concrete answer string (e.g. "65개" for
+      a count, "12800056 (저지 랩 원피스)" for a doc, "여성 2112건
+      (85.4%), 남성 360건" for a group).
+    - ``answer_type`` — one of count, sum, avg, group, list, doc,
+      number. Lets graders sort queries by expected output shape.
+    - ``answer_explanation`` — pseudo-SQL or English description of
+      how the answer was computed, so a human can audit the GT.
     """
     relevant = q.get("relevant_docs") or q.get("answer_ids") or []
     if isinstance(relevant, dict):
@@ -146,6 +203,9 @@ def _flatten_query(q: dict, resolver: dict[str, str] | None = None) -> dict:
         "level": q.get("level", q.get("difficulty", "")),
         "category": q.get("category", ""),
         "description": q.get("description", ""),
+        "expected_answer": q.get("expected_answer", ""),
+        "answer_type": q.get("answer_type", ""),
+        "answer_explanation": q.get("answer_explanation", ""),
         "relevant_count": len(relevant),
         "relevant_answer": "\n".join(resolved_lines),
         "relevant_docs": "\n".join(str(x) for x in relevant),
@@ -188,12 +248,18 @@ def _write_sheet(
             continue  # already styled as hyperlink
         ws[f"A{row}"].font = Font(bold=True)
 
-    # Column headers
+    # Column headers — `expected_answer` / `answer_type` /
+    # `answer_explanation` are surfaced front-and-center so a
+    # human reviewer can audit the GT without scrolling to the
+    # right.
     columns = [
         "qid",
         "query",
         "type",
         "level",
+        "expected_answer",
+        "answer_type",
+        "answer_explanation",
         "category",
         "description",
         "relevant_count",
@@ -214,24 +280,27 @@ def _write_sheet(
             cell = ws.cell(row=r, column=c, value=flat.get(col, ""))
             cell.alignment = Alignment(vertical="top", wrap_text=True)
 
-    # Column widths — wider for answer column
+    # Column widths
     widths = {
-        "A": 8,
-        "B": 45,
-        "C": 18,
-        "D": 8,
-        "E": 22,
-        "F": 42,
-        "G": 14,
-        "H": 70,
-        "I": 45,
+        "A": 8,  # qid
+        "B": 42,  # query
+        "C": 20,  # type
+        "D": 8,  # level
+        "E": 38,  # expected_answer  ← new
+        "F": 16,  # answer_type      ← new
+        "G": 50,  # answer_explanation ← new
+        "H": 22,  # category
+        "I": 40,  # description
+        "J": 12,  # relevant_count
+        "K": 70,  # relevant_answer
+        "L": 32,  # relevant_docs
     }
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
     # Row heights (to accommodate wrap)
     for r in range(header_row + 1, header_row + 1 + len(queries)):
-        ws.row_dimensions[r].height = 80
+        ws.row_dimensions[r].height = 110
 
     # Freeze header
     ws.freeze_panes = f"A{header_row + 1}"

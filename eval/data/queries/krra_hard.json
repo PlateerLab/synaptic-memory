@@ -1,6 +1,6 @@
 {
   "dataset": "krra_hard",
-  "description": "난이도별 평가 쿼리 — L2(패러프레이즈) ~ L7(자연어). 실제 doc_id 기반 GT.",
+  "description": "마사회(KRRA) 문서 평가 — L2~L7. 기존 15개 + 메타데이터 집계/카테고리 시멘틱/다중 제약 보강 25개 = 총 40개. expected_answer 필드로 검증된 답을 명시.",
   "queries": [
     {
       "qid": "h001",
@@ -647,6 +647,514 @@
         "f3dc845fb6dbe8da",
         "f960b0c32b20eee5",
         "fbae0ee191a8631c"
+      ]
+    },
+    {
+      "qid": "h016",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "운영계획 카테고리에 속한 문서의 총 개수",
+      "description": "documents WHERE category='운영계획' COUNT",
+      "expected_answer": "315개",
+      "answer_type": "count",
+      "answer_explanation": "category='운영계획' 인 documents 행 개수",
+      "relevant_docs": [
+        "a984731a889c5a3b",
+        "a4ed66c59a820e40",
+        "5751364a07bd6432",
+        "da8efb3618249a33",
+        "aa6aff98e2caa723",
+        "05dbe5ea6c8d03fe",
+        "6d9c8c4c8a401327",
+        "47a4e4186fdbe1d8",
+        "4fdea9de7be2260f",
+        "9c30b7128e4e1947"
+      ]
+    },
+    {
+      "qid": "h017",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "2024년에 작성된 문서는 몇 건인가요",
+      "description": "documents WHERE year=2024 (파일명 기준)",
+      "expected_answer": "458건",
+      "answer_type": "count",
+      "answer_explanation": "source_path에서 4자리 연도 추출 → 2024",
+      "relevant_docs": [
+        "e634b59b94b6520d",
+        "858311a17598e098",
+        "4a8510e15b032621",
+        "e06085ab87c5e9da",
+        "762c83d98e1a04ca",
+        "658909313c076116",
+        "b8af468a3104065b",
+        "2eede8200e1e0db8",
+        "670404279a356f61",
+        "2eaa8a7351dbfb3c"
+      ]
+    },
+    {
+      "qid": "h018",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "ESG 및 지속가능성 카테고리 문서 수",
+      "description": "documents WHERE category='ESG 및 지속가능성'",
+      "expected_answer": "18건",
+      "answer_type": "count",
+      "answer_explanation": "category='ESG 및 지속가능성'",
+      "relevant_docs": [
+        "8ff32e537262bfa2",
+        "b1b444823f464103",
+        "d986946925263cee",
+        "d13b5751987d7a60",
+        "d908c9b95b9e082a",
+        "5cbc3a546cb3bcbe",
+        "3899cc22b412106f",
+        "9a0b16fa2c681045",
+        "123f03df3479517e",
+        "b920ef9abe96e1cb"
+      ]
+    },
+    {
+      "qid": "h019",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "엑셀(xlsx) 파일 형식의 문서는 몇 개인가요",
+      "description": "documents WHERE doc_type='xlsx'",
+      "expected_answer": "37개",
+      "answer_type": "count",
+      "answer_explanation": "doc_type='xlsx' (HWP 1070, xlsx 37, hwpx 1, pdf 1, xls 1)",
+      "relevant_docs": [
+        "2b77cb92e3b2e52e",
+        "157016074626f25d",
+        "012dcbe84f52c595",
+        "dd534b8aff2c0b47",
+        "2df376eb9253a430",
+        "858311a17598e098",
+        "6cdb3f17c1eafe48",
+        "110f8ff7eb5dbdc1",
+        "788bbf4ba82b5320",
+        "929899bce4b8ff3e"
+      ]
+    },
+    {
+      "qid": "h020",
+      "level": "L5",
+      "type": "aggregation_group",
+      "query": "가장 많은 문서를 보유한 카테고리는 어디인가요",
+      "description": "documents GROUP BY category COUNT MAX",
+      "expected_answer": "운영계획: 315건",
+      "answer_type": "group",
+      "answer_explanation": "documents GROUP BY category → MAX(count)",
+      "relevant_docs": [
+        "a984731a889c5a3b",
+        "a4ed66c59a820e40",
+        "5751364a07bd6432",
+        "da8efb3618249a33",
+        "aa6aff98e2caa723"
+      ]
+    },
+    {
+      "qid": "h021",
+      "level": "L5",
+      "type": "aggregation_group",
+      "query": "연도별 문서 분포는 어떻게 되나요",
+      "description": "documents GROUP BY year COUNT",
+      "expected_answer": "2019: 3건, 2020: 126건, 2021: 93건, 2022: 164건, 2023: 261건, 2024: 458건, 2025: 5건",
+      "answer_type": "group",
+      "answer_explanation": "source_path에서 연도 추출 후 GROUP BY",
+      "relevant_docs": []
+    },
+    {
+      "qid": "h022",
+      "level": "L4",
+      "type": "filter_compound",
+      "query": "2020년에 작성된 ESG 관련 문서들",
+      "description": "category='ESG 및 지속가능성' AND year=2020",
+      "expected_answer": "3건",
+      "answer_type": "list",
+      "answer_explanation": "ESG 카테고리 + 2020년 필터",
+      "relevant_docs": [
+        "8ff32e537262bfa2",
+        "b1b444823f464103",
+        "d986946925263cee"
+      ]
+    },
+    {
+      "qid": "h023",
+      "level": "L4",
+      "type": "filter_compound",
+      "query": "2024년 정보기술 시스템 카테고리에 등록된 문서들",
+      "description": "category='정보기술 시스템' AND year=2024",
+      "expected_answer": "35건",
+      "answer_type": "list",
+      "answer_explanation": "category='정보기술 시스템' AND 2024",
+      "relevant_docs": [
+        "a0be7ed96f53df37",
+        "7d016a8eb300196a",
+        "3dd0576c06bdadd0",
+        "26a727bd22cc0fb7",
+        "971f073ca06157f7",
+        "2965f2e46bcfa371",
+        "bd8ee64a43a7a05a",
+        "3688a6b8a7278d2d",
+        "398261a7eff235dd",
+        "db08712ff2bcf5d4"
+      ]
+    },
+    {
+      "qid": "h024",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "직장 내 차별 방지와 인권 보호를 위한 활동",
+      "description": "인권경영 카테고리 (인권영향평가, 이용자보호 등)",
+      "expected_answer": "인권경영 카테고리 39개 문서",
+      "answer_type": "list",
+      "answer_explanation": "category='인권경영'에 속한 문서 — 인권영향평가/이용자보호/차별 관련",
+      "relevant_docs": [
+        "0cf478ddca6e92d5",
+        "d4d20ca93dfcd728",
+        "5d0dd8502b5a0cb8",
+        "e507dc22077335c1",
+        "803aa364d8f1f722",
+        "499f2103edc5d6e1",
+        "6c8917aa77bbade5",
+        "ce96aa20866ebf02",
+        "cc7d5274ad7d9bde",
+        "0e968b715beb9e16",
+        "1002c0855b631621",
+        "de4ceb5c5c234bb5"
+      ]
+    },
+    {
+      "qid": "h025",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "환경 친화 정책 및 친환경 경영 활동",
+      "description": "ESG 카테고리 (온실가스, 친환경, 사회적 가치)",
+      "expected_answer": "ESG 및 지속가능성 카테고리 18개 문서",
+      "answer_type": "list",
+      "answer_explanation": "category='ESG 및 지속가능성'",
+      "relevant_docs": [
+        "8ff32e537262bfa2",
+        "b1b444823f464103",
+        "d986946925263cee",
+        "d13b5751987d7a60",
+        "d908c9b95b9e082a",
+        "5cbc3a546cb3bcbe",
+        "3899cc22b412106f",
+        "9a0b16fa2c681045",
+        "123f03df3479517e",
+        "b920ef9abe96e1cb",
+        "de015b57086a5f6e",
+        "848f72ccaa6e8c6f"
+      ]
+    },
+    {
+      "qid": "h026",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "직원 대상 교육 프로그램과 복지 제도",
+      "description": "복지 및 교육 카테고리",
+      "expected_answer": "복지 및 교육 카테고리 31개 문서",
+      "answer_type": "list",
+      "answer_explanation": "category='복지 및 교육'",
+      "relevant_docs": [
+        "6cdb3f17c1eafe48",
+        "33ad8cb9e391ffb3",
+        "9293b657686b140c",
+        "4c2beab48a4fa8ba",
+        "d3ab6e9ee63de321",
+        "c6c585f35b87c6b2",
+        "210e0e2db641965a",
+        "7ae8ccc6d06c98fe",
+        "086c202b51186b8d",
+        "6175239087875650",
+        "c1ebd6c13900514d",
+        "f70e39a796a540a1"
+      ]
+    },
+    {
+      "qid": "h027",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "공정한 경마 운영 및 경주마 관리 체계",
+      "description": "경마산업관리 카테고리 (공정성지수, 레이팅, 교배 등)",
+      "expected_answer": "경마산업관리 카테고리 100개 문서",
+      "answer_type": "list",
+      "answer_explanation": "category='경마산업관리'",
+      "relevant_docs": [
+        "2b77cb92e3b2e52e",
+        "157016074626f25d",
+        "012dcbe84f52c595",
+        "dd534b8aff2c0b47",
+        "2df376eb9253a430",
+        "858311a17598e098",
+        "85cd6adb3a898ae7",
+        "4797241159848584",
+        "fd08f6a4bcc0fa42",
+        "68dcd476cf90de0f",
+        "37d0fe4807f770c9",
+        "855606d43a06c210"
+      ]
+    },
+    {
+      "qid": "h028",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "내부 통제 강화 및 업무 지침 정비",
+      "description": "규정 및 지침 카테고리",
+      "expected_answer": "규정 및 지침 카테고리 235개 문서",
+      "answer_type": "list",
+      "answer_explanation": "category='규정 및 지침'",
+      "relevant_docs": [
+        "436d43261922a8da",
+        "27325f8e49d559f4",
+        "790f2015dc65b6e1",
+        "36f5479362d3d864",
+        "4d186c7392bcd0a1",
+        "529d27b941c8f7bf",
+        "d19e9d4655070510",
+        "d7a90f635c33307a",
+        "864c7ea3086114e0",
+        "6933abba91248418",
+        "61c9d3fe217811d8",
+        "9d5b56e85d791e6f"
+      ]
+    },
+    {
+      "qid": "h029",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "정보 보안과 IT 인프라 운영 현황",
+      "description": "정보기술 시스템 카테고리 (망분리, 정보화기기, 디지털 혁신 등)",
+      "expected_answer": "정보기술 시스템 카테고리 82개 문서",
+      "answer_type": "list",
+      "answer_explanation": "category='정보기술 시스템'",
+      "relevant_docs": [
+        "afd0f60cc9c978c0",
+        "e4f72caaf5619284",
+        "a0be7ed96f53df37",
+        "7d016a8eb300196a",
+        "8fc1fd50ececad5a",
+        "952e80d9a2872b7b",
+        "4ea12d12cdf8b23d",
+        "186beb4eff4ecf59",
+        "05889d5822d0109f",
+        "016e887719433e3b",
+        "5361b9fdc077a8e8",
+        "250e6a43a3e27464"
+      ]
+    },
+    {
+      "qid": "h030",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "승마 대회 및 대상경주 개최 계획",
+      "description": "승마 행사 및 대회 카테고리",
+      "expected_answer": "승마 행사 및 대회 카테고리 82개 문서",
+      "answer_type": "list",
+      "answer_explanation": "category='승마 행사 및 대회'",
+      "relevant_docs": [
+        "110f8ff7eb5dbdc1",
+        "788bbf4ba82b5320",
+        "929899bce4b8ff3e",
+        "1dd7a41b6d49067a",
+        "a5a7f37b741bdeee",
+        "1ff851c7c3ee9eb5",
+        "d4b7a6bde29aa0c2",
+        "4ffaa7c592baee77",
+        "9520303783fded99",
+        "fab9c70c3cdaf407",
+        "78ee15b767eea3bc",
+        "9392ab3b4cad9fb4"
+      ]
+    },
+    {
+      "qid": "h031",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "예산 편성 및 집행 관련 자료",
+      "description": "운영계획 + 업무추진 및 실적 — 예산 키워드 포함",
+      "expected_answer": "12건 (운영계획 315개, 업무추진 98개 중 예산 관련)",
+      "answer_type": "list",
+      "answer_explanation": "title에 '예산' 포함 + (운영계획 OR 업무추진 및 실적)",
+      "relevant_docs": [
+        "a4ed66c59a820e40",
+        "da8efb3618249a33",
+        "aa6aff98e2caa723",
+        "23f259fe9f9c25d9",
+        "a2e77e082f3def13",
+        "614db4c7ffd83e70",
+        "689924ae7204ddee",
+        "e8ede82492d082b9",
+        "8390d154aeb39727",
+        "7ccc44bab940565a",
+        "1c82399b98aebbba",
+        "257c21115efd0262"
+      ]
+    },
+    {
+      "qid": "h032",
+      "level": "L5",
+      "type": "keyword_retrieval",
+      "query": "온실가스 감축 및 에너지 절약 관련 자료",
+      "description": "title에 '온실가스' 또는 '에너지 절약' 포함",
+      "expected_answer": "2건",
+      "answer_type": "list",
+      "answer_explanation": "title LIKE '%온실가스%' OR title LIKE '%에너지 절약%'",
+      "relevant_docs": [
+        "8ff32e537262bfa2",
+        "d986946925263cee"
+      ]
+    },
+    {
+      "qid": "h033",
+      "level": "L5",
+      "type": "keyword_retrieval",
+      "query": "인권영향평가 보고서 및 체크리스트",
+      "description": "title에 '인권영향평가' 포함",
+      "expected_answer": "4건",
+      "answer_type": "list",
+      "answer_explanation": "title LIKE '%인권영향평가%'",
+      "relevant_docs": [
+        "0cf478ddca6e92d5",
+        "e507dc22077335c1",
+        "dd206af597e56188",
+        "005599102a43b8f4"
+      ]
+    },
+    {
+      "qid": "h034",
+      "level": "L5",
+      "type": "keyword_retrieval",
+      "query": "예산 집행 실적 및 결산 관련 자료",
+      "description": "category='업무추진 및 실적' + title LIKE '%집행%'",
+      "expected_answer": "3건",
+      "answer_type": "list",
+      "answer_explanation": "category='업무추진 및 실적' AND title LIKE '%집행%'",
+      "relevant_docs": [
+        "7ccc44bab940565a",
+        "1c82399b98aebbba",
+        "ec247b248c9db7eb"
+      ]
+    },
+    {
+      "qid": "h035",
+      "level": "L5",
+      "type": "keyword_retrieval",
+      "query": "정보화기기 도입 및 교체 계획",
+      "description": "category='정보기술 시스템' + 정보화기기 키워드",
+      "expected_answer": "15건",
+      "answer_type": "list",
+      "answer_explanation": "category='정보기술 시스템' AND title 키워드 ['정보화기기','스마트 사무환경','도입']",
+      "relevant_docs": [
+        "afd0f60cc9c978c0",
+        "e4f72caaf5619284",
+        "a0be7ed96f53df37",
+        "7d016a8eb300196a",
+        "016e887719433e3b",
+        "5361b9fdc077a8e8",
+        "d361707a1c1ecc2b",
+        "c927591ed6e1a1c6",
+        "0370e8a4dce03ce3",
+        "dfe3c3919f025823",
+        "6bde9872cc84f0fc",
+        "1bbaaf7f7d182cd3",
+        "027e0c5f0f5686c0",
+        "1271b550f8707c1f",
+        "9d226cce773a4434"
+      ]
+    },
+    {
+      "qid": "h036",
+      "level": "L5",
+      "type": "keyword_retrieval",
+      "query": "경주마 생산 및 교배 관련 데이터",
+      "description": "category='경마산업관리' + 경주마/교배/생산 키워드",
+      "expected_answer": "7건",
+      "answer_type": "list",
+      "answer_explanation": "category='경마산업관리' AND title 키워드 ['경주마','교배','생산']",
+      "relevant_docs": [
+        "2b77cb92e3b2e52e",
+        "012dcbe84f52c595",
+        "2df376eb9253a430",
+        "c8a5fac46012cbe5",
+        "9e0b5f9c2ae462c6",
+        "f416b3a944127f08",
+        "9f2b17d44d6964da"
+      ]
+    },
+    {
+      "qid": "h037",
+      "level": "L4",
+      "type": "filter_compound",
+      "query": "2023년에 작성된 인권 관련 보고서",
+      "description": "category='인권경영' AND year=2023",
+      "expected_answer": "10건",
+      "answer_type": "list",
+      "answer_explanation": "category='인권경영' AND year=2023",
+      "relevant_docs": [
+        "0cf478ddca6e92d5",
+        "4cab49368cf80ad5",
+        "995fccbf3f8edda6",
+        "e074f8fc80056924",
+        "ef9ad19bd6649f5f",
+        "9988239a29bad648",
+        "9ed21e12ecf68582",
+        "363c897a38703bf5",
+        "dd206af597e56188",
+        "8c423366bc12e4d4"
+      ]
+    },
+    {
+      "qid": "h038",
+      "level": "L4",
+      "type": "filter_compound",
+      "query": "2024년 사업 예산 계획 관련 문서",
+      "description": "category='운영계획' AND year=2024 AND title contains 예산/사업",
+      "expected_answer": "23건",
+      "answer_type": "list",
+      "answer_explanation": "category='운영계획' + 2024 + title 키워드 ['예산','사업']",
+      "relevant_docs": [
+        "027bba9993367777",
+        "d732cd7b3878cc6b",
+        "b8b398de319a0c9f",
+        "614db4c7ffd83e70",
+        "689924ae7204ddee",
+        "a0dc760109bdff72",
+        "9d549c3700cbd82e",
+        "0fdd2b845b06532f",
+        "7b6883061d74991f",
+        "c7acbf436686b08b"
+      ]
+    },
+    {
+      "qid": "h039",
+      "level": "L4",
+      "type": "filter_compound",
+      "query": "2022년 정보기술 시스템 구축 견적 관련 문서",
+      "description": "category='정보기술 시스템' AND year=2022 AND title LIKE '%견적%' OR '%구축%'",
+      "expected_answer": "3건",
+      "answer_type": "list",
+      "answer_explanation": "category='정보기술 시스템' + 2022 + title ['견적','구축']",
+      "relevant_docs": [
+        "afd0f60cc9c978c0",
+        "9d226cce773a4434",
+        "3fb6428d743036ee"
+      ]
+    },
+    {
+      "qid": "h040",
+      "level": "L4",
+      "type": "filter_compound",
+      "query": "ESG 카테고리에서 가장 최근에 작성된 문서",
+      "description": "category='ESG 및 지속가능성' ORDER BY year DESC LIMIT 1",
+      "expected_answer": "가장 최근 연도 2024, 해당 연도 1건",
+      "answer_type": "list",
+      "answer_explanation": "ESG 카테고리 중 가장 최근 연도(2024)의 문서",
+      "relevant_docs": [
+        "e634b59b94b6520d"
       ]
     }
   ],

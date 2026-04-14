@@ -1,6 +1,6 @@
 {
   "dataset": "assort_hard",
-  "description": "패션 이커머스 정형 데이터 난이도별 평가 — L2~L7. node title 기반 GT.",
+  "description": "패션 이커머스 정형 데이터 난이도별 평가 — L2~L7. 기존 15개 + 온톨로지/집계/시멘틱 보강 25개 = 총 40개. expected_answer 필드로 정답을 사람이 읽을 수 있게 명시.",
   "queries": [
     {
       "qid": "a001",
@@ -156,6 +156,375 @@
       "description": "season=24FW 전수 열거 (19개)",
       "relevant_docs": [
         "products:12800005",
+        "products:12800006"
+      ]
+    },
+    {
+      "qid": "a016",
+      "level": "L4",
+      "type": "ontology_join",
+      "query": "핑크 색상으로 출시된 상품 목록",
+      "description": "product_variants → colors FK. color_name='핑크'인 모든 product_code",
+      "expected_answer": "40개 상품 (핑크 변형이 134개, 중복 제거 후 40개 distinct product)",
+      "answer_type": "list",
+      "answer_explanation": "product_variants WHERE color_id = (SELECT id FROM colors WHERE name='핑크')",
+      "relevant_docs": [
+        "products:12800001",
+        "products:12800004",
+        "products:12800005",
+        "products:12800007",
+        "products:12800008",
+        "products:12800010",
+        "products:12800012",
+        "products:12800013"
+      ]
+    },
+    {
+      "qid": "a017",
+      "level": "L5",
+      "type": "ontology_aggregation",
+      "query": "TV홈쇼핑 채널을 통한 주문 건수",
+      "description": "orders → sales_channels FK + 집계",
+      "expected_answer": "422건",
+      "answer_type": "count",
+      "answer_explanation": "orders WHERE channel_id=4 (TV홈쇼핑) → COUNT",
+      "relevant_docs": [
+        "sales_channels:4"
+      ]
+    },
+    {
+      "qid": "a018",
+      "level": "L5",
+      "type": "ontology_aggregation",
+      "query": "코스모패션 파트너사가 판매한 상품 종류 수",
+      "description": "orders → sales_partners + DISTINCT product_code",
+      "expected_answer": "80개 상품 (총 516건 주문)",
+      "answer_type": "count",
+      "answer_explanation": "orders WHERE partner='코스모패션주식회사' → DISTINCT product_code",
+      "relevant_docs": [
+        "sales_partners:4"
+      ]
+    },
+    {
+      "qid": "a019",
+      "level": "L4",
+      "type": "ontology_join",
+      "query": "가장 많은 색상 옵션을 보유한 상품",
+      "description": "product_variants GROUP BY product_code COUNT DISTINCT color_id MAX",
+      "expected_answer": "12800003 (24SS 스웨이드 A라인 미니 스커트) — 4색",
+      "answer_type": "doc",
+      "answer_explanation": "product_variants → product_code별 distinct color_id 개수가 최대인 상품",
+      "relevant_docs": [
+        "products:12800003"
+      ]
+    },
+    {
+      "qid": "a020",
+      "level": "L5",
+      "type": "ontology_aggregation",
+      "query": "여성 구매자가 가장 많이 주문한 상품",
+      "description": "orders WHERE gender=여성 GROUP BY product_code TOP",
+      "expected_answer": "12800002 (25SS 코튼 스트라이프 라운드넥 티셔츠) — 45건",
+      "answer_type": "doc",
+      "answer_explanation": "orders WHERE member_gender='여성' → 가장 많이 등장한 product_code",
+      "relevant_docs": [
+        "products:12800002"
+      ]
+    },
+    {
+      "qid": "a021",
+      "level": "L4",
+      "type": "ontology_join",
+      "query": "FREE 사이즈로 판매되는 상품들",
+      "description": "product_variants → sizes WHERE size='FREE'",
+      "expected_answer": "8개 상품 (변형 22개)",
+      "answer_type": "list",
+      "answer_explanation": "product_variants WHERE size_id=(FREE) → DISTINCT product_code",
+      "relevant_docs": [
+        "products:12800015",
+        "products:12800034",
+        "products:12800037",
+        "products:12800044",
+        "products:12800046",
+        "products:12800052",
+        "products:12800060",
+        "products:12800077"
+      ]
+    },
+    {
+      "qid": "a022",
+      "level": "L5",
+      "type": "ontology_temporal",
+      "query": "방송 직후 가장 빠르게 판매된 상품",
+      "description": "broadcasts: MIN(recent_sales_date - broadcast_date)",
+      "expected_answer": "12800000 (25SS 실크블렌드 플라워 아플리케 가디건+하프니트 앙상블) — 방송 후 0일",
+      "answer_type": "doc",
+      "answer_explanation": "broadcasts에서 (recent_sales_date - broadcast_date) 가 최소인 행",
+      "relevant_docs": [
+        "broadcasts:3",
+        "products:12800000"
+      ]
+    },
+    {
+      "qid": "a023",
+      "level": "L5",
+      "type": "ontology_aggregation",
+      "query": "50대 여성이 가장 많이 주문한 상품",
+      "description": "orders WHERE gender=여성 AND age_group LIKE '50%' GROUP BY product_code TOP",
+      "expected_answer": "12800002 (25SS 코튼 스트라이프 라운드넥 티셔츠) — 15건",
+      "answer_type": "doc",
+      "answer_explanation": "orders WHERE gender='여성' AND age_group IN ('50세~54세','55세~59세') → TOP product",
+      "relevant_docs": [
+        "products:12800002"
+      ]
+    },
+    {
+      "qid": "a024",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "할인이 적용되고 있는 상품은 몇 개인가요",
+      "description": "products WHERE discount_rate > 0 → COUNT",
+      "expected_answer": "65개 (전체 80개 중)",
+      "answer_type": "count",
+      "answer_explanation": "products.discount_rate > 0",
+      "relevant_docs": [
+        "products:12800000",
+        "products:12800003",
+        "products:12800004",
+        "products:12800005",
+        "products:12800007"
+      ]
+    },
+    {
+      "qid": "a025",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "24FW 시즌 상품의 총 개수",
+      "description": "products WHERE season='24FW' → COUNT",
+      "expected_answer": "19개",
+      "answer_type": "count",
+      "answer_explanation": "products.season = '24FW'",
+      "relevant_docs": [
+        "products:12800005",
+        "products:12800006",
+        "products:12800016",
+        "products:12800021",
+        "products:12800022"
+      ]
+    },
+    {
+      "qid": "a026",
+      "level": "L5",
+      "type": "aggregation_group",
+      "query": "주문의 성별 비율은 어떻게 되나요",
+      "description": "orders GROUP BY member_gender → COUNT, percentage",
+      "expected_answer": "여성 2112건 (85.4%), 남성 360건 (14.6%)",
+      "answer_type": "group",
+      "answer_explanation": "orders GROUP BY member_gender",
+      "relevant_docs": []
+    },
+    {
+      "qid": "a027",
+      "level": "L5",
+      "type": "aggregation_temporal",
+      "query": "주문 건수가 가장 많았던 월",
+      "description": "orders GROUP BY month(delivery_date) MAX",
+      "expected_answer": "2024-10: 217건",
+      "answer_type": "group",
+      "answer_explanation": "orders GROUP BY substring(delivery_date, 1, 7) → MAX",
+      "relevant_docs": []
+    },
+    {
+      "qid": "a028",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "50대 초반(50~54세) 고객의 주문 비율",
+      "description": "orders WHERE age_group='50세~54세' / total",
+      "expected_answer": "549건 (22.2%)",
+      "answer_type": "count",
+      "answer_explanation": "orders.age_group='50세~54세' / COUNT(orders)",
+      "relevant_docs": []
+    },
+    {
+      "qid": "a029",
+      "level": "L5",
+      "type": "aggregation_sum",
+      "query": "전체 상품의 누적 매출 총합",
+      "description": "SUM(products.cumulative_amount)",
+      "expected_answer": "16,386,795,700원 (약 163.9억)",
+      "answer_type": "number",
+      "answer_explanation": "SUM(products.cumulative_amount) over all products",
+      "relevant_docs": []
+    },
+    {
+      "qid": "a030",
+      "level": "L5",
+      "type": "aggregation_avg",
+      "query": "전체 상품의 평균 판매가",
+      "description": "AVG(products.selling_price)",
+      "expected_answer": "59,150원",
+      "answer_type": "number",
+      "answer_explanation": "AVG(products.selling_price)",
+      "relevant_docs": []
+    },
+    {
+      "qid": "a031",
+      "level": "L5",
+      "type": "aggregation_group",
+      "query": "리뷰에서 핏이 적당하다고 평가한 비율",
+      "description": "reviews GROUP BY attribute_2_value",
+      "expected_answer": "347/640건 (54.2%)",
+      "answer_type": "count",
+      "answer_explanation": "reviews WHERE attribute_2_value='적당해요' / COUNT(reviews)",
+      "relevant_docs": []
+    },
+    {
+      "qid": "a032",
+      "level": "L5",
+      "type": "aggregation_group",
+      "query": "가장 많은 변형(SKU)이 있는 색상",
+      "description": "product_variants GROUP BY color_id COUNT MAX",
+      "expected_answer": "핑크 (color_id=7): 134개 변형",
+      "answer_type": "group",
+      "answer_explanation": "product_variants GROUP BY color_id → MAX",
+      "relevant_docs": [
+        "colors:7"
+      ]
+    },
+    {
+      "qid": "a033",
+      "level": "L5",
+      "type": "aggregation_count",
+      "query": "전체 상품 변형(SKU) 개수",
+      "description": "COUNT(product_variants)",
+      "expected_answer": "852개",
+      "answer_type": "count",
+      "answer_explanation": "COUNT(product_variants)",
+      "relevant_docs": []
+    },
+    {
+      "qid": "a034",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "겨울에 따뜻하게 입을 수 있는 두꺼운 옷",
+      "description": "패딩, 캐시미어, 울 같은 겨울 의류 (24FW 시즌 + 보온 키워드)",
+      "expected_answer": "패딩, 캐시미어, 앙고라, 울 키워드를 포함한 24FW 상품들",
+      "answer_type": "list",
+      "answer_explanation": "product_name에 ['패딩', '캐시미어', '앙고라', '울', '터틀넥'] 포함",
+      "relevant_docs": [
+        "products:12800004",
+        "products:12800011",
+        "products:12800021",
+        "products:12800025",
+        "products:12800034",
+        "products:12800037",
+        "products:12800038",
+        "products:12800040"
+      ]
+    },
+    {
+      "qid": "a035",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "사무실에 입고 갈 단정한 셔츠나 블라우스",
+      "description": "오피스 룩 — 블라우스, 셔츠 카테고리",
+      "expected_answer": "블라우스/셔츠 키워드를 포함한 단정한 상의",
+      "answer_type": "list",
+      "answer_explanation": "product_name에 ['블라우스', '셔츠'] 포함",
+      "relevant_docs": [
+        "products:12800002",
+        "products:12800005",
+        "products:12800008",
+        "products:12800010",
+        "products:12800013",
+        "products:12800015",
+        "products:12800020",
+        "products:12800022"
+      ]
+    },
+    {
+      "qid": "a036",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "운동복처럼 편안하게 입을 수 있는 옷",
+      "description": "후드, 저지, 활동성 의류",
+      "expected_answer": "후드, 저지, 스웨트 류의 캐주얼 의류",
+      "answer_type": "list",
+      "answer_explanation": "product_name에 ['후드', '저지', '집업'] 포함",
+      "relevant_docs": [
+        "products:12800016",
+        "products:12800026",
+        "products:12800028",
+        "products:12800036",
+        "products:12800056"
+      ]
+    },
+    {
+      "qid": "a037",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "여름 휴가 갈 때 입을 시원한 옷",
+      "description": "린넨, 시폰 같은 여름 소재 의류",
+      "expected_answer": "린넨/시폰/코튼 키워드 + 24SS/25SS 시즌 상품",
+      "answer_type": "list",
+      "answer_explanation": "product_name에 ['린넨', '시폰', '쉬폰'] 포함",
+      "relevant_docs": [
+        "products:12800001",
+        "products:12800007",
+        "products:12800009",
+        "products:12800010",
+        "products:12800014",
+        "products:12800020",
+        "products:12800032",
+        "products:12800033"
+      ]
+    },
+    {
+      "qid": "a038",
+      "level": "L2",
+      "type": "semantic_paraphrase",
+      "query": "결혼식 하객으로 입을 만한 단정한 옷",
+      "description": "스커트, 슬랙스, 자켓 — 정장풍 의류",
+      "expected_answer": "스커트, 자켓, 슬랙스 등 정장 코디용 상품",
+      "answer_type": "list",
+      "answer_explanation": "product_name에 ['자켓', '스커트', '슬랙스', '원피스'] 포함",
+      "relevant_docs": [
+        "products:12800016",
+        "products:12800019",
+        "products:12800030",
+        "products:12800048",
+        "products:12800056",
+        "products:12800060",
+        "products:12800064"
+      ]
+    },
+    {
+      "qid": "a039",
+      "level": "L7",
+      "type": "conversational_multi",
+      "query": "최근 가장 많이 팔린 상품 중에서 핏 만족도가 높은 것 추천해줘",
+      "description": "top 5 sales ∩ reviews(fit positive)",
+      "expected_answer": "5개 상품 — 누적판매 TOP5 중 핏이 적당하거나 약간 넉넉하다는 평가가 있는 상품",
+      "answer_type": "list",
+      "answer_explanation": "products ORDER BY cumulative_sales DESC LIMIT 5 → INTERSECT reviews WHERE attribute_2_value IN ('적당해요','약간넉넉해요')",
+      "relevant_docs": [
+        "products:12800028",
+        "products:12800049",
+        "products:12800056",
+        "products:12800063",
+        "products:12800075"
+      ]
+    },
+    {
+      "qid": "a040",
+      "level": "L7",
+      "type": "conversational_multi",
+      "query": "방송 횟수가 가장 많았던 상품의 색상별 판매 현황은 어떻게 돼",
+      "description": "TOP broadcasts → variant_sales group by color",
+      "expected_answer": "12800006 (24FW 데님 A라인 미디 스커트) — 방송 6회. 색상별 변형 판매 추이 확인 필요",
+      "answer_type": "doc",
+      "answer_explanation": "broadcasts GROUP BY product_code MAX → product_variants → variant_sales GROUP BY color_id",
+      "relevant_docs": [
         "products:12800006"
       ]
     }
