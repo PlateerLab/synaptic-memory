@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from time import time
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,54 @@ from synaptic.ppr import personalized_pagerank, personalized_pagerank_v2
 from synaptic.protocols import QueryRewriter, StorageBackend
 from synaptic.resonance import ResonanceScorer
 from synaptic.synonyms import expand_synonyms
+
+# --- Vector cascade tuning ---
+#
+# These two values together replace the legacy hard-coded
+# ``cos >= 0.45`` cutoff. They are documented here so future
+# readers see the rationale next to the constants.
+#
+# ``DEFAULT_VECTOR_MIN_COSINE`` (0.10) — absolute noise floor.
+#     Cosines below this are considered random across every
+#     embedder family; nothing on any model produces meaningful
+#     positives this low. Acts as a safety net for the relative
+#     drop when the top vector hit itself is already weak.
+#
+# ``DEFAULT_VECTOR_RELATIVE_DROP`` (0.30) — fraction below the
+#     top vector hit that we still accept as relevant. With the
+#     default, anything within ``top_cos * 0.70`` is kept. The
+#     drop is *relative*, so the effective threshold automatically
+#     rescales with the embedder's cosine distribution:
+#
+#         bge-m3 / qwen3 / e5  (top ≈ 0.80)  →  floor ≈ 0.56
+#         text-embedding-3-small (top ≈ 0.55) →  floor ≈ 0.385
+#         text-embedding-ada-002  (top ≈ 0.85) →  floor ≈ 0.595
+#
+#     A single ratio works across all of these because cosine
+#     *gaps* (top vs noise) are far more portable than cosine
+#     *absolute values* across embedder families.
+DEFAULT_VECTOR_MIN_COSINE = 0.10
+DEFAULT_VECTOR_RELATIVE_DROP = 0.30
+
+
+def _resolve_float(explicit: float | None, env_var: str, default: float) -> float:
+    """Pick a tuning value from constructor → env var → default.
+
+    Kept module-level so :class:`HybridSearch` constructor stays
+    short and tests can call it directly. Garbage env values fall
+    back to the default rather than raising — a misconfigured env
+    var should never crash the search path.
+    """
+    if explicit is not None:
+        return float(explicit)
+    raw = os.environ.get(env_var)
+    if raw is not None and raw != "":
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+    return default
+
 
 if TYPE_CHECKING:
     from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
@@ -133,9 +182,61 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
 
 
 class HybridSearch:
-    """3-stage fallback search: FTS+vector → synonym expansion → query rewrite."""
+    """3-stage fallback search: FTS+vector → synonym expansion → query rewrite.
 
-    __slots__ = ("_chunk_entity_index", "_ppr_damping", "_query_rewriter", "_scorer")
+    Vector cascade tuning
+    ---------------------
+
+    The vector branch supplements FTS with semantic neighbours that
+    share meaning but not surface words. To stay embedder-agnostic
+    the cutoff is **relative**, not absolute:
+
+        floor = max(vector_min_cosine, top_cos * (1 - vector_relative_drop))
+
+    where ``top_cos`` is the highest cosine among the vector
+    candidates that are not already in the FTS hit set. This
+    automatically adapts to whichever embedder you use:
+
+        bge-m3 / qwen3-embedding-4b / multilingual-e5
+            Cosines for true positives sit around 0.55–0.85. Top
+            hit ≈ 0.80, floor ≈ 0.56 — a strict relative cutoff
+            that filters most noise.
+
+        text-embedding-3-small / text-embedding-3-large
+            OpenAI v3 models distribute cosines lower (≈ 0.20–0.55).
+            Top hit ≈ 0.55, floor ≈ 0.385 — looser in absolute
+            terms but the same *relative* gap.
+
+    Earlier versions of this class used a hard-coded
+    ``cos >= 0.45`` cutoff that was tuned for bge-style models and
+    silently rejected ~50–75% of true positives on OpenAI v3
+    embedders. The relative threshold removes that footgun.
+
+    Override hierarchy:
+      1. Constructor parameter
+      2. ``SYNAPTIC_VECTOR_MIN_COSINE`` / ``SYNAPTIC_VECTOR_RELATIVE_DROP``
+         environment variables
+      3. The defaults above (0.10 / 0.30)
+
+    Args:
+        vector_min_cosine: Absolute noise floor. Anything below this
+            is dropped even if the top vector hit is also low. Set
+            to ``0.0`` to disable the absolute floor. Default is
+            governed by ``DEFAULT_VECTOR_MIN_COSINE`` (0.10).
+        vector_relative_drop: Fraction below the top vector hit that
+            is still accepted. ``0.30`` (default) keeps anything
+            within ``top_cos * 0.70``. Lower values (e.g. ``0.15``)
+            are stricter; higher (e.g. ``0.50``) are looser.
+    """
+
+    __slots__ = (
+        "_chunk_entity_index",
+        "_ppr_damping",
+        "_query_rewriter",
+        "_scorer",
+        "_vector_min_cosine",
+        "_vector_relative_drop",
+    )
 
     def __init__(
         self,
@@ -146,11 +247,23 @@ class HybridSearch:
         spread_depth: int = 1,  # deprecated, kept for compat
         ppr_damping: float = 0.85,
         chunk_entity_index: ChunkEntityIndex | None = None,
+        vector_min_cosine: float | None = None,
+        vector_relative_drop: float | None = None,
     ) -> None:
         self._scorer = scorer or ResonanceScorer()
         self._query_rewriter = query_rewriter
         self._ppr_damping = ppr_damping
         self._chunk_entity_index = chunk_entity_index
+        self._vector_min_cosine = _resolve_float(
+            vector_min_cosine,
+            "SYNAPTIC_VECTOR_MIN_COSINE",
+            DEFAULT_VECTOR_MIN_COSINE,
+        )
+        self._vector_relative_drop = _resolve_float(
+            vector_relative_drop,
+            "SYNAPTIC_VECTOR_RELATIVE_DROP",
+            DEFAULT_VECTOR_RELATIVE_DROP,
+        )
 
     async def search(
         self,
@@ -193,15 +306,34 @@ class HybridSearch:
             #   - fusion(blend, RRF) → 소규모에서 FTS 순위 교란, 폐기 (2026-03-23)
             #   - FTS+vector 중복 boost → 모든 규모에서 노이즈 유입, 폐기 (2026-03-26)
             #   - threshold 0.40 → 대규모에서도 recall 개선 없음, 0.45 유지 (2026-03-26)
+            #   - absolute cos >= 0.45 → bge 가족 한정 동작, OpenAI v3 임베더에서
+            #     true positive를 50-75% drop. 2026-04-15에 relative threshold로
+            #     교체 (max(min_cosine, top_cos * (1 - relative_drop))).
             vec_alpha = min(0.85, max(0.3, (corpus_size - 500) / 5000 + 0.3))
 
-            for node in vec_nodes:
-                nid = node.id
-                cos = vec_cosine.get(nid, 0.0)
-                if nid not in fts_ids and cos >= 0.45:
-                    # Vector-only: FTS에 없는 결과만 삽입
+            # Vector-only candidates (FTS에 이미 있는 건 lexical rank 보존)
+            new_vec_nodes = [n for n in vec_nodes if n.id not in fts_ids]
+            if new_vec_nodes:
+                # Sort by cosine, take the top hit as the per-query
+                # "ceiling" — anything within the configured drop is
+                # accepted. This makes the cutoff scale with the
+                # embedder's natural cosine distribution instead of
+                # depending on a magic constant tuned for one model.
+                new_vec_nodes.sort(
+                    key=lambda n: vec_cosine.get(n.id, 0.0),
+                    reverse=True,
+                )
+                top_cos = vec_cosine.get(new_vec_nodes[0].id, 0.0)
+                rel_floor = top_cos * (1.0 - self._vector_relative_drop)
+                floor = max(self._vector_min_cosine, rel_floor)
+
+                for node in new_vec_nodes:
+                    cos = vec_cosine.get(node.id, 0.0)
+                    if cos < floor:
+                        # Sorted, so everything below is also below.
+                        break
                     vec_score = cos * vec_alpha
-                    all_nodes[nid] = (node, vec_score)
+                    all_nodes[node.id] = (node, vec_score)
 
         # Stage 2: Synonym expansion (if insufficient results)
         if len(all_nodes) < limit:

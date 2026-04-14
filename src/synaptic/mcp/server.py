@@ -33,6 +33,12 @@ _dsn: str = ""
 _source_dsn: str = ""  # Default source DB for CDC sync tools (optional)
 _embed_url: str = ""
 _embed_model: str = "default"
+# Vector cascade tuning — see synaptic.search.HybridSearch docstring
+# for the per-embedder cosine distribution guide. None means "use
+# the package default" (DEFAULT_VECTOR_MIN_COSINE / RELATIVE_DROP),
+# which is also overridable via the SYNAPTIC_VECTOR_* env vars.
+_vector_min_cosine: float | None = None
+_vector_relative_drop: float | None = None
 
 
 async def _ensure_graph() -> Any:
@@ -75,8 +81,15 @@ async def _ensure_graph() -> Any:
         ontology=build_agent_ontology(),
         embedder=_embedder,
         chunk_entity_index=ChunkEntityIndex(),
+        vector_min_cosine=_vector_min_cosine,
+        vector_relative_drop=_vector_relative_drop,
     )
-    logger.info("Knowledge graph initialized (backend=%s)", type(_backend).__name__)
+    logger.info(
+        "Knowledge graph initialized (backend=%s, vector_min_cos=%s, vector_rel_drop=%s)",
+        type(_backend).__name__,
+        _vector_min_cosine if _vector_min_cosine is not None else "default",
+        _vector_relative_drop if _vector_relative_drop is not None else "default",
+    )
     return _graph
 
 
@@ -1478,6 +1491,7 @@ async def agent_join_related(
 def main() -> None:
     """Entry point for synaptic-mcp command."""
     global _db_path, _dsn, _source_dsn, _embed_url, _embed_model
+    global _vector_min_cosine, _vector_relative_drop
 
     if "--version" in sys.argv:
         print(f"synaptic-mcp {__version__}")
@@ -1488,17 +1502,26 @@ def main() -> None:
             "Usage: synaptic-mcp [OPTIONS]\n"
             "\n"
             "Options:\n"
-            "  --db PATH          SQLite database path for the graph (default: knowledge.db)\n"
-            "  --dsn DSN          PostgreSQL backend for the graph itself\n"
-            "  --source-dsn DSN   Default source database for CDC sync tools\n"
-            "                     (sqlite://, postgresql://, mysql://). Optional —\n"
-            "                     the knowledge_sync_from_database tool accepts a\n"
-            "                     per-call connection_string too.\n"
-            "  --embed-url URL    Embedding API base URL (OpenAI-compatible)\n"
-            "                     Examples: http://localhost:8080/v1 (vLLM/llama.cpp)\n"
-            "                              http://localhost:11434/v1 (Ollama)\n"
-            "  --embed-model NAME Embedding model name (default: 'default')\n"
-            "  --version          Show version\n"
+            "  --db PATH                  SQLite database path for the graph (default: knowledge.db)\n"
+            "  --dsn DSN                  PostgreSQL backend for the graph itself\n"
+            "  --source-dsn DSN           Default source database for CDC sync tools\n"
+            "                             (sqlite://, postgresql://, mysql://). Optional —\n"
+            "                             the knowledge_sync_from_database tool accepts a\n"
+            "                             per-call connection_string too.\n"
+            "  --embed-url URL            Embedding API base URL (OpenAI-compatible)\n"
+            "                             Examples: http://localhost:8080/v1 (vLLM/llama.cpp)\n"
+            "                                       http://localhost:11434/v1 (Ollama)\n"
+            "  --embed-model NAME         Embedding model name (default: 'default')\n"
+            "  --vector-min-cosine FLOAT  Absolute noise floor for vector cascade (default 0.10)\n"
+            "  --vector-relative-drop FLOAT\n"
+            "                             Fraction below the top vector hit that is still\n"
+            "                             accepted (default 0.30 → keep cosines within top*0.70).\n"
+            "                             Lower = stricter, higher = looser. The relative\n"
+            "                             cutoff makes the search embedder-agnostic.\n"
+            "  --version                  Show version\n"
+            "\n"
+            "Vector tuning can also come from env vars:\n"
+            "  SYNAPTIC_VECTOR_MIN_COSINE, SYNAPTIC_VECTOR_RELATIVE_DROP\n"
         )
         return
 
@@ -1515,6 +1538,21 @@ def main() -> None:
             _embed_url = args[i + 1]
         elif arg == "--embed-model" and i + 1 < len(args):
             _embed_model = args[i + 1]
+        elif arg == "--vector-min-cosine" and i + 1 < len(args):
+            try:
+                _vector_min_cosine = float(args[i + 1])
+            except ValueError:
+                print(f"--vector-min-cosine must be a float, got {args[i + 1]!r}", file=sys.stderr)
+                sys.exit(2)
+        elif arg == "--vector-relative-drop" and i + 1 < len(args):
+            try:
+                _vector_relative_drop = float(args[i + 1])
+            except ValueError:
+                print(
+                    f"--vector-relative-drop must be a float, got {args[i + 1]!r}",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
 
     # Configure logging to stderr (stdout is MCP protocol)
     logging.basicConfig(

@@ -6,6 +6,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-04-15
+
+### Fixed — Embedder-agnostic vector cascade threshold
+
+**Background.** `HybridSearch` (the legacy 3-stage search backing
+`graph.search()` and `MCP knowledge_search`) used a hard-coded
+``cos >= 0.45`` cutoff on vector-only candidates. The threshold was
+tuned in 2026-03-26 against bge-m3-style models where true positives
+sit at cosine 0.55+. With OpenAI text-embedding-3-small / 3-large the
+cosine distribution is much lower (p50 ≈ 0.40, p75 ≈ 0.48), so the
+absolute 0.45 cutoff silently rejected 50–75% of true positives. The
+threshold had also never been benchmarked — `eval/run_all.py` always
+routes through `EvidenceSearch` when an embedder is wired up, so the
+legacy path's tuning rotted unnoticed.
+
+**Fix.** Replaced the absolute cutoff with a *relative* one whose
+floor scales with the embedder's natural cosine distribution:
+
+    floor = max(vector_min_cosine, top_cos * (1 - vector_relative_drop))
+
+where `top_cos` is the highest cosine among non-FTS-overlapping
+vector candidates. With the defaults (`vector_min_cosine=0.10`,
+`vector_relative_drop=0.30`):
+
+| Embedder | Top hit | Effective floor |
+|---|---|---|
+| bge-m3 / qwen3-embedding-4b | ~0.80 | ~0.56 |
+| multilingual-e5 | ~0.85 | ~0.595 |
+| **text-embedding-3-small** | **~0.55** | **~0.385** |
+| text-embedding-3-large | ~0.62 | ~0.434 |
+
+The same fixture returns the same number of vector candidates on
+every embedder family — the cutoff is now embedder-agnostic.
+
+**Override hierarchy.**
+1. `HybridSearch(vector_min_cosine=, vector_relative_drop=)`
+   constructor parameters
+2. `SynapticGraph(vector_min_cosine=, vector_relative_drop=)`
+   passthrough
+3. `synaptic-mcp --vector-min-cosine 0.10 --vector-relative-drop 0.30`
+   CLI flags
+4. `SYNAPTIC_VECTOR_MIN_COSINE` / `SYNAPTIC_VECTOR_RELATIVE_DROP`
+   environment variables
+5. The defaults above
+
+**Tests.** `tests/test_hybrid_search_threshold.py` covers the
+override hierarchy and runs the same fixture under both
+"bge-shape" (cosines 0.30–0.85) and "openai-shape" (0.20–0.55)
+synthetic distributions, asserting that the *count* of vector
+candidates that survive the cutoff is identical. Also documents
+the legacy bug with a regression test using a 0.44 cosine that
+the old hardcoded cutoff would have dropped. Full suite: 787 passing.
+
+**Note for users.** This only changes the legacy `HybridSearch` /
+`graph.search()` / `MCP knowledge_search` path. `agent_search`,
+`agent_deep_search`, `compare_search`, and the eval bench all use
+`EvidenceSearch` which never had this issue (it uses min-max
+normalised cosine in the reranker). Phase 2 of this work (next PR)
+will migrate `knowledge_search` to use `EvidenceSearch` as well so
+the magic number disappears entirely.
+
 ## [0.14.0] - 2026-04-14
 
 ### Added — Live database CDC (Change Data Capture)

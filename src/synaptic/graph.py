@@ -126,12 +126,16 @@ class SynapticGraph:
         query_decomposer: object | None = None,
         reranker: object | None = None,
         cache_size: int = 256,
+        vector_min_cosine: float | None = None,
+        vector_relative_drop: float | None = None,
     ) -> None:
         self._backend = backend
         self._store = Store(backend, tag_extractor=tag_extractor)
         self._search = HybridSearch(
             query_rewriter=query_rewriter,
             chunk_entity_index=chunk_entity_index,
+            vector_min_cosine=vector_min_cosine,
+            vector_relative_drop=vector_relative_drop,
         )
         self._hebbian = HebbianEngine()
         self._consolidation = ConsolidationCascade()
