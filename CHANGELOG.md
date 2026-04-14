@@ -6,6 +6,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-04-15
+
+### Fixed — MCP graph now creates cross-document phrase-hub bridges
+
+**The bug.** Ingesting N files through MCP (`knowledge_add_document`,
+`knowledge_ingest_path`, `knowledge_add_chunks`) produced N
+disconnected clusters of nodes that shared no edges. Files that
+should obviously be related (same proper noun, same topic) had no
+graph path between them. PPR / GraphExpander could not surface
+cross-document evidence; the search degraded to "FTS over
+disjoint files".
+
+**Root cause.** Synaptic implements a HippoRAG2-style dual-node
+KG: each chunk has its salient phrases extracted and lifted into
+ENTITY *phrase-hub* nodes. Multiple chunks sharing the same
+phrase all `CONTAINS`-edge into the same hub, which makes the hub
+a bridge between documents. The mechanism is implemented in
+`PhraseExtractor.extract_and_link()` and triggered from
+`graph.add()` only when a `phrase_extractor` is wired into
+`SynapticGraph`.
+
+`SynapticGraph.from_data()` and `SynapticGraph.full()` always
+wire one. The MCP server's `_ensure_graph()` factory wired
+`ChunkEntityIndex` (the read-side index that PPR uses) but
+**forgot the extractor that populates it**. Result: an empty
+phrase-hub set, no `CONTAINS` edges, no bridges.
+
+This had been silently degrading every MCP-driven graph since
+v0.14.0 added the ingest tools. It only surfaced when a user
+inspected the edge topology after ingesting three files and saw
+three islands.
+
+**Fix.** `mcp/server.py:_ensure_graph()` now passes
+`phrase_extractor=PhraseExtractor()` alongside the existing
+`chunk_entity_index=ChunkEntityIndex()`. The boot log line also
+gained a `phrase_extractor=on` field so misconfigurations are
+visible immediately.
+
+**Tests.** `tests/test_mcp_ingest_tools.py::TestCrossDocumentBridges`
+(2 new):
+
+- `test_shared_phrase_creates_bridge_node`: two documents that
+  both mention "Synaptic Memory" must share at least one
+  phrase-hub `ENTITY` node reached via `CONTAINS` from both.
+- `test_disjoint_documents_have_no_bridge`: a pizza recipe and a
+  quantum tunneling note must NOT spuriously bridge — the phrase
+  hub mechanism is precision-aware.
+
+Full suite: 793 passing.
+
+**Migration note.** Existing graphs created with v0.14.0~v0.14.2
+through MCP do not have phrase hubs and need to be re-ingested
+to gain cross-document bridges. There is no in-place backfill
+yet (related: the embedding-backfill gap noted in the v0.14.x
+follow-up plan). Re-ingest from source if you want the bridges.
+
 ## [0.14.2] - 2026-04-15
 
 ### Changed — MCP `knowledge_search` routes through EvidenceSearch

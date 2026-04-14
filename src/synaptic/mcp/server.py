@@ -49,6 +49,7 @@ async def _ensure_graph() -> Any:
         return _graph
 
     from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
+    from synaptic.extensions.phrase_extractor import PhraseExtractor
     from synaptic.extensions.tagger_regex import RegexTagExtractor
     from synaptic.graph import SynapticGraph
     from synaptic.ontology import build_agent_ontology
@@ -71,22 +72,39 @@ async def _ensure_graph() -> Any:
         _embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
         logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
 
-    # A ChunkEntityIndex is required for `add_document` to produce
-    # nodes of NodeKind.CHUNK — without it chunks default to
-    # NodeKind.CONCEPT and the PART_OF validation constraint
-    # rejects the inter-chunk edges.
+    # Wire the cross-document bridge mechanism.
+    #
+    # Without these, ingesting N files produces N isolated clusters
+    # of nodes that share no edges. The HippoRAG2-style "phrase hub"
+    # design relies on:
+    #
+    #   1. PhraseExtractor — pulls salient phrases from each chunk
+    #      and creates one ENTITY node per unique phrase. Multiple
+    #      chunks containing the same phrase all CONTAINS-edge into
+    #      the same hub, which makes the hub a bridge between docs.
+    #
+    #   2. ChunkEntityIndex — bidirectional registry that lets the
+    #      search pipeline (PPR, HybridReranker, GraphExpander)
+    #      walk from a chunk to its phrase hubs and back.
+    #
+    # Both are required for cross-document search to work. Wiring
+    # only one of them silently degrades the graph to "FTS over
+    # disjoint files".
     _graph = SynapticGraph(
         _backend,
         tag_extractor=RegexTagExtractor(),
         ontology=build_agent_ontology(),
         embedder=_embedder,
         chunk_entity_index=ChunkEntityIndex(),
+        phrase_extractor=PhraseExtractor(),
         vector_min_cosine=_vector_min_cosine,
         vector_relative_drop=_vector_relative_drop,
     )
     logger.info(
-        "Knowledge graph initialized (backend=%s, vector_min_cos=%s, vector_rel_drop=%s)",
+        "Knowledge graph initialized "
+        "(backend=%s, embedder=%s, phrase_extractor=on, vector_min_cos=%s, vector_rel_drop=%s)",
         type(_backend).__name__,
+        "on" if _embedder is not None else "off",
         _vector_min_cosine if _vector_min_cosine is not None else "default",
         _vector_relative_drop if _vector_relative_drop is not None else "default",
     )

@@ -168,6 +168,84 @@ class TestRemove:
         assert result["success"] is False
 
 
+class TestCrossDocumentBridges:
+    """Verify that ingesting multiple documents creates phrase-hub
+    bridges between them, instead of N disconnected clusters.
+
+    Regression guard for a real bug observed in the wild: the MCP
+    `_ensure_graph()` factory used to wire `ChunkEntityIndex` but
+    forgot `PhraseExtractor`. Without the extractor, no phrase
+    hubs were created, no CONTAINS edges spanned documents, and
+    PPR couldn't walk from one file's chunks to another's. Each
+    file became an isolated cluster.
+    """
+
+    async def test_shared_phrase_creates_bridge_node(self, fresh_mcp_graph):
+        """Two documents that mention the same proper noun should
+        share at least one phrase-hub ENTITY node, and that node
+        should have CONTAINS edges from both source documents.
+        """
+        from synaptic.models import EdgeKind, NodeKind
+
+        mcp_server, _ = fresh_mcp_graph
+        # Both documents share the proper noun "Synaptic Memory".
+        a = await mcp_server.knowledge_add_document(
+            title="Project README",
+            content="Synaptic Memory is a knowledge graph library for LLM agents.",
+        )
+        b = await mcp_server.knowledge_add_document(
+            title="Architecture overview",
+            content=("The Synaptic Memory project ships an MCP server with 35 tools."),
+        )
+
+        backend = mcp_server._graph.backend
+
+        # Find every ENTITY node tagged as a phrase hub.
+        all_nodes = await backend.list_nodes(limit=1000)
+        phrase_hubs = [
+            n for n in all_nodes if n.kind == NodeKind.ENTITY and "_phrase" in (n.tags or [])
+        ]
+        assert phrase_hubs, "no phrase hubs were created — extractor not wired"
+
+        # At least one hub must be reachable from BOTH documents
+        # via CONTAINS edges.
+        a_node = a["first_node_id"]
+        b_node = b["first_node_id"]
+        a_outgoing = await backend.get_edges(a_node, direction="outgoing")
+        b_outgoing = await backend.get_edges(b_node, direction="outgoing")
+        a_targets = {e.target_id for e in a_outgoing if e.kind == EdgeKind.CONTAINS}
+        b_targets = {e.target_id for e in b_outgoing if e.kind == EdgeKind.CONTAINS}
+        shared = a_targets & b_targets
+        assert shared, (
+            f"no CONTAINS-target overlap between the two docs — a={a_targets} b={b_targets}"
+        )
+
+    async def test_disjoint_documents_have_no_bridge(self, fresh_mcp_graph):
+        """Sanity check: documents with no shared salient phrases
+        should NOT spuriously bridge. The phrase hub mechanism is
+        precision-aware, not a "connect everything" hack.
+        """
+        from synaptic.models import EdgeKind
+
+        mcp_server, _ = fresh_mcp_graph
+        a = await mcp_server.knowledge_add_document(
+            title="Pizza recipe",
+            content="Knead dough, add tomato sauce, mozzarella, then bake.",
+        )
+        b = await mcp_server.knowledge_add_document(
+            title="Quantum tunneling",
+            content="Particles can traverse potential barriers via wavefunction overlap.",
+        )
+
+        backend = mcp_server._graph.backend
+        a_outgoing = await backend.get_edges(a["first_node_id"], direction="outgoing")
+        b_outgoing = await backend.get_edges(b["first_node_id"], direction="outgoing")
+        a_targets = {e.target_id for e in a_outgoing if e.kind == EdgeKind.CONTAINS}
+        b_targets = {e.target_id for e in b_outgoing if e.kind == EdgeKind.CONTAINS}
+        # No shared phrase nodes → no spurious bridge.
+        assert not (a_targets & b_targets)
+
+
 class TestKnowledgeSearch:
     """Verify MCP knowledge_search routes through EvidenceSearch.
 
