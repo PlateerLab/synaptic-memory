@@ -1204,12 +1204,56 @@ class SynapticGraph:
         *,
         limit: int = 10,
         embedding: list[float] | None = None,
+        engine: str = "legacy",
     ) -> SearchResult:
+        """Hybrid search across the graph.
+
+        Args:
+            query: User query string. NFC-normalised before lookup.
+            limit: Maximum number of nodes to return.
+            embedding: Pre-computed query embedding. When omitted and
+                an embedder is wired into the graph, the query is
+                embedded automatically.
+            engine: Which retrieval engine to use.
+
+                - ``"legacy"`` (default for v0.14.x) → :class:`HybridSearch`,
+                  the 3-stage FTS → synonym → query rewrite cascade with
+                  graph spreading activation. Deterministic, well-tested,
+                  used by every caller in this repo.
+
+                - ``"evidence"`` → :class:`EvidenceSearch`, the 3rd-gen
+                  pipeline that backs ``agent_search`` /
+                  ``agent_deep_search`` / MCP ``knowledge_search``.
+                  Anchor-driven, hybrid-reranker-based, MMR aggregation.
+                  Has no ``cos >= 0.45`` cutoff and uses min-max
+                  normalised cosine, so semantic-only queries that
+                  share no words with the corpus still surface
+                  relevant evidence.
+
+                The default will flip to ``"evidence"`` in v0.16.0
+                and the legacy engine will be removed in v0.17.0. New
+                code should pass ``engine="evidence"`` explicitly.
+
+        Returns:
+            ``SearchResult`` regardless of which engine was used —
+            the evidence-engine path runs through an internal adapter
+            that mirrors the SearchResult shape so all 67+ existing
+            callers in this repo continue to work unchanged.
+        """
         # NFC-normalize query to match NFC-normalized stored content.
         query = _nfc(query)
         # Auto-embed query for vector search
         if embedding is None and self._embedder is not None:
             embedding = await self._embedder.embed(query)
+
+        # Modern path — opt-in via engine="evidence".
+        if engine == "evidence":
+            return await self._search_via_evidence(query, limit=limit)
+
+        if engine != "legacy":
+            msg = f"Unknown search engine {engine!r}; expected 'legacy' or 'evidence'."
+            raise ValueError(msg)
+
         # Corpus size for adaptive vector weighting
         corpus_size = await self._get_corpus_size()
 
@@ -1301,6 +1345,64 @@ class SynapticGraph:
             total_candidates=result.total_candidates,
             search_time_ms=result.search_time_ms,
             stages_used=result.stages_used + ["rerank"],
+        )
+
+    async def _search_via_evidence(self, query: str, *, limit: int) -> SearchResult:
+        """Run the modern evidence pipeline and adapt its result to the
+        legacy ``SearchResult`` shape.
+
+        Lazily imported so the evidence pipeline only loads when a
+        caller explicitly opts in via ``engine="evidence"``. Any
+        future Phase C step that flips the default will simply
+        change the ``engine`` parameter default — the adapter itself
+        is forward-compatible.
+        """
+        from synaptic.extensions.evidence_search import EvidenceSearch
+
+        searcher = EvidenceSearch(
+            backend=self._backend,
+            embedder=self._embedder,
+            phrase_extractor=self._phrase_extractor,
+            reranker=self._reranker,
+        )
+        ev_result = await searcher.search(
+            query,
+            k=limit,
+            # Match the over-fetch heuristic agent_search_tool uses so
+            # the reranker sees a richer pool than ``limit`` itself.
+            fts_seed_limit=max(20, limit * 3),
+        )
+
+        # Adapter: Evidence (node + score + reason) → ActivatedNode
+        # (node + activation + resonance). The legacy callers rely on
+        # `resonance` for ordering and the `nodes` list for iteration;
+        # both are populated faithfully.
+        nodes: list[ActivatedNode] = []
+        for ev in ev_result.evidence:
+            nodes.append(
+                ActivatedNode(
+                    node=ev.node,
+                    activation=ev.score,  # cosine-rerank score in [0,1]
+                    resonance=ev.score,
+                    path=[],
+                )
+            )
+
+        # `stages_used` is informational. The evidence pipeline always
+        # runs the same steps so we list them statically; UIs that
+        # branch on stage names ("synonym" / "rewriter") will see an
+        # empty signal, which is correct — those legacy stages do not
+        # exist on the modern path.
+        stages = ["evidence", "fts"]
+        if self._embedder is not None:
+            stages.append("vector")
+
+        return SearchResult(
+            query=ev_result.query,
+            nodes=nodes,
+            total_candidates=len(ev_result.scored),
+            search_time_ms=ev_result.elapsed_ms,
+            stages_used=stages,
         )
 
     async def agent_search(

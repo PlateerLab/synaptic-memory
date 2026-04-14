@@ -1,3 +1,3 @@
 """Synaptic Memory MCP Server."""
 
-__version__ = "0.14.4"
+__version__ = "0.15.0"

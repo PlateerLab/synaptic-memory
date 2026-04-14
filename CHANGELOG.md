@@ -6,6 +6,97 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-04-15
+
+### Added — `graph.search(engine="evidence")` opt-in modern path
+
+Phase C of the v0.14.x cleanup, rescoped from the original
+"force-migrate `graph.search()` to EvidenceSearch" plan.
+
+**Why rescoped.** Tracing every `graph.search()` caller turned up
+67 sites across `tests/` and `eval/`, plus features (synonym
+expansion, query rewriter fallback, resonance-ordering
+contracts) that the legacy `HybridSearch` carries and
+`EvidenceSearch` does not. A forced migration would silently
+break every benchmark and every UI that branches on
+``stages_used == "synonym"``. The user pain that motivated
+Phase C was the magic ``cos >= 0.45`` cutoff, and that was
+already removed in v0.14.1's relative threshold + v0.14.2's
+MCP route to EvidenceSearch.
+
+The remaining gap was that **SDK users** (callers of
+`graph.search()` directly, not `MCP knowledge_search`) had no
+clean path to the modern pipeline without instantiating
+`EvidenceSearch` themselves. This release adds that path.
+
+### What changed
+
+- `SynapticGraph.search(query, *, limit=10, embedding=None,
+  engine="legacy")` — new keyword-only ``engine`` parameter.
+  - ``"legacy"`` (default) → :class:`HybridSearch`. Identical to
+    every previous version. Zero behaviour change for the 67
+    existing callers.
+  - ``"evidence"`` → :class:`EvidenceSearch` via a new
+    `_search_via_evidence()` adapter that returns a
+    ``SearchResult`` (not ``EvidenceSearchResult``) so legacy
+    iteration / sorting / `result.nodes[i].resonance` contracts
+    keep working.
+  - Anything else raises ``ValueError``.
+- The adapter populates ``stages_used = ["evidence", "fts"]``
+  (plus ``"vector"`` when an embedder is wired) so consumers
+  can detect which engine ran. The legacy stages
+  (``"synonym"``, ``"rewriter"``) are intentionally absent on
+  the modern path because EvidenceSearch does not have those
+  steps; UIs that branch on those names need to handle the
+  empty signal.
+
+### Deprecation timeline
+
+| Version | Behaviour |
+|---|---|
+| **0.15.0** (this) | ``engine="legacy"`` default, ``engine="evidence"`` opt-in |
+| **0.16.0** (next minor) | Default flips to ``engine="evidence"``, legacy still available |
+| **0.17.0** | Legacy engine removed |
+
+New code should pass ``engine="evidence"`` explicitly today —
+it gets the modern pipeline (anchor extraction, hybrid
+reranker, MMR aggregation, no magic cutoff) without an SDK
+boilerplate construction.
+
+### Tests
+
+`tests/test_search_engine_param.py` (6 new):
+
+- Default engine is ``"legacy"``.
+- ``engine="legacy"`` matches the default in node IDs and
+  ``stages_used`` (forward-compat switch, not a behaviour change).
+- ``engine="evidence"`` returns a ``SearchResult`` with
+  ``"evidence"`` in ``stages_used``.
+- ``engine="evidence"`` finds the doc with the shared salient
+  phrase and excludes the unrelated doc from the top-2.
+- Unknown engine name raises ``ValueError``.
+- ``engine="evidence"`` preserves descending-resonance ordering.
+
+The existing 54 ``test_search.py`` + ``test_graph.py`` tests
+continue to pass unchanged because the default path is the same
+HybridSearch they always exercised.
+
+Full suite: 809 passing.
+
+### Implementation notes
+
+- `_search_via_evidence` lazy-imports `EvidenceSearch` so the
+  modern pipeline only loads when a caller opts in. Cold-start
+  cost for legacy users is unchanged.
+- The adapter forwards ``self._embedder``, ``self._phrase_extractor``,
+  and ``self._reranker`` into the EvidenceSearch instance, so a
+  graph that already has those wired (e.g. via
+  ``SynapticGraph.from_data()``) gets the full modern pipeline
+  without any extra setup.
+- ``Evidence.score`` is mapped to both ``ActivatedNode.activation``
+  and ``ActivatedNode.resonance`` so any legacy code that sorts
+  by resonance keeps producing the right order.
+
 ## [0.14.4] - 2026-04-15
 
 ### Added — `graph.backfill()` + `knowledge_backfill` MCP tool
