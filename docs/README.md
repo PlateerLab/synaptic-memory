@@ -40,7 +40,9 @@ GraphRAG (Microsoft), LightRAG, LazyGraphRAG 등과의 비교. 어떤 차이가 
 ## 🗺 계획 / 로드맵
 
 ### [ROADMAP.md](ROADMAP.md)
-버전별 기능 추가 계획. 현재는 v0.13.0 배포 상태.
+버전별 기능 추가 계획. 현재 배포 상태는 **v0.15.0**
+(CDC live DB sync + MCP ingest tools + `graph.backfill()` +
+`graph.search(engine="evidence")` opt-in, 36 MCP tools).
 
 ### [PLAN-v0.5-scale.md](PLAN-v0.5-scale.md)
 v0.5 스케일업 계획 (Kuzu/Qdrant 도입 등). 역사적 자료.

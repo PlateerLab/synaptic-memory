@@ -2,7 +2,7 @@
 
 Knowledge graph + MCP tool server for LLM agents.
 
-Any data in, structured graph out. LLM agents explore it with 29 atomic tools.
+Any data in, structured graph out. LLM agents explore it with 36 atomic tools.
 
 [![PyPI](https://img.shields.io/pypi/v/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![Python](https://img.shields.io/pypi/pyversions/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
@@ -69,7 +69,7 @@ Knowledge Graph
   ├─ Documents: Category → Document → Chunk
   └─ Structured: table rows as ENTITY nodes + RELATED edges (FKs)
   ↓
-29 MCP tools → LLM agent explores via graph-aware multi-turn tool use
+36 MCP tools → LLM agent explores via graph-aware multi-turn tool use
 ```
 
 **Two jobs, nothing else:**
@@ -124,7 +124,9 @@ synaptic-mcp --db my_graph.db
 synaptic-mcp --db my_graph.db --embed-url http://localhost:11434/v1
 ```
 
-Claude can now call 29 tools to explore your graph.
+Claude can now call 36 tools to explore your graph — search, ingest
+new files into the graph mid-conversation, and sync from a live
+database without dropping to a CLI.
 
 ### Option C: Full control
 
@@ -154,16 +156,24 @@ await ingester.ingest(source)
 
 No LLM at indexing. The graph is a search index, not a knowledge base.
 
+> **v0.15.0**: `graph.search(query, engine="evidence")` opts into the
+> modern 3rd-gen pipeline from SDK code without instantiating
+> `EvidenceSearch` directly. Default is still `engine="legacy"` for
+> v0.15.x; the default flips to `"evidence"` in v0.16.0 and the
+> legacy engine is removed in v0.17.0. New code should pass
+> `engine="evidence"` explicitly today.
+
 ---
 
-## Agent Tools (29 total)
+## Agent Tools (36 total)
 
 ### Text search tools
 | Tool | Purpose |
 |------|---------|
 | `deep_search` | **Recommended.** Search → expand → read documents in ONE call |
 | `compare_search` | Auto-decompose multi-topic queries, search in parallel |
-| `search` | FTS + vector hybrid search |
+| `knowledge_search` | Core semantic search (routes through EvidenceSearch in v0.14.2+) |
+| `agent_search` | FTS + vector hybrid search with intent routing |
 | `expand` | 1-hop graph neighbours |
 | `get_document` | Full document with query-relevant chunks |
 | `search_exact` | Literal substring match for IDs/codes |
@@ -175,6 +185,19 @@ No LLM at indexing. The graph is a search index, not a knowledge base.
 | `filter_nodes` | Property filter (>=, <=, contains) — returns `{total, showing}` for accurate counting |
 | `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG/MAX/MIN with optional WHERE pre-filter |
 | `join_related` | FK-based related record lookup — walks RELATED edges (O(degree)) |
+
+### Ingest / CDC tools (v0.14.0+)
+Mid-conversation ingestion so Claude can teach itself new material without leaving the chat.
+
+| Tool | Purpose |
+|------|---------|
+| `knowledge_add_document` | Ingest a long-text document with automatic sentence-boundary chunking |
+| `knowledge_add_table` | Ingest structured rows → ENTITY nodes + FK edges |
+| `knowledge_add_chunks` | BYO-chunker path for pre-split content |
+| `knowledge_ingest_path` | Ingest a CSV / JSONL / text file from the local filesystem |
+| `knowledge_remove` | Delete a single node with edge cascade |
+| `knowledge_sync_from_database` | Incremental sync from a live database (CDC) |
+| `knowledge_backfill` | Repair graphs missing embeddings or phrase hubs (v0.14.4+) |
 
 ### Navigation tools
 | Tool | Purpose |
@@ -249,7 +272,7 @@ StorageBackend (Protocol)
   ↓
 Retrieval pipeline (BM25 + vector + PRF + PPR + reranker + MMR)
   ↓
-Agent tools (29) → MCP server → LLM agent
+Agent tools (36) → MCP server → LLM agent
 ```
 
 ---
@@ -294,7 +317,7 @@ Agent tools (29) → MCP server → LLM agent
 
 ```bash
 uv sync --extra dev --extra sqlite --extra mcp
-uv run pytest tests/ -q                   # 687+ tests
+uv run pytest tests/ -q                   # 809+ tests
 uv run ruff check --fix
 ```
 

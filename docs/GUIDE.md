@@ -233,12 +233,12 @@ graph = await SynapticGraph.from_chunks(my_chunks)           # 직접 청킹한 
 > 처리합니다. `pip install synaptic-memory[docs]`로 활성화하거나, 자체 파서로
 > 청크를 만들어 `from_chunks()`에 넘겨도 됩니다.
 
-### 29개 에이전트 도구
+### 36개 에이전트 도구
 
 | 분류 | 도구 | 용도 |
 |------|------|------|
 | **텍스트 검색** | `deep_search` | 검색→확장→문서읽기 한 번에 (추천) |
-| | `search` | FTS + 벡터 하이브리드 |
+| | `knowledge_search` | 기본 시맨틱 검색 (v0.14.2부터 EvidenceSearch 라우트) |
 | | `compare_search` | 복합 쿼리 자동 분해 |
 | **그래프 탐색** | `expand` | 노드의 1-hop 이웃 |
 | | `follow` | 특정 엣지 타입만 순회 |
@@ -246,6 +246,13 @@ graph = await SynapticGraph.from_chunks(my_chunks)           # 직접 청킹한 
 | **정형 데이터** | `filter_nodes` | SQL WHERE (total/showing 반환) |
 | | `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG + WHERE 사전 필터 |
 | | `join_related` | FK 기반 조인 (그래프 엣지 순회) |
+| **인제스트 / CDC** (v0.14.0+) | `knowledge_add_document` | 자동 청킹 + phrase hub 링크 |
+| | `knowledge_add_table` | 컬럼/행 → ENTITY 노드 + FK 엣지 |
+| | `knowledge_add_chunks` | 사전 청킹된 결과 (BYO chunker) |
+| | `knowledge_ingest_path` | 로컬 CSV/JSONL/TXT 파일 |
+| | `knowledge_remove` | 단건 삭제 (엣지 cascade) |
+| | `knowledge_sync_from_database` | 라이브 DB CDC 증분 동기화 |
+| | `knowledge_backfill` | 기존 그래프 embedding/phrase hub 복구 (v0.14.4+) |
 | **네비게이션** | `list_categories` | 카테고리 목록 |
 | | `count` | 종류/카테고리별 카운트 |
 | | `search_exact` | ID/코드 정확 매칭 |
@@ -262,9 +269,14 @@ graph = await SynapticGraph.from_chunks(my_chunks)           # 직접 청킹한 
 
 ---
 
-## 7. 벤치마크 결과 (v0.13.0)
+## 7. 벤치마크 결과
 
-### 단일 검색 (EvidenceSearch + embed + reranker)
+> 최신 FTS-only 베이스라인 + corpus snapshot hash는
+> [`eval/baselines/qa_latest.json`](../eval/baselines/qa_latest.json)의
+> `_meta` 블록에. v0.14.x 이후 검색 코드가 여러 번 바뀌어서
+> embedder/reranker 모드는 별도 재측정이 필요한 상태.
+
+### 단일 검색 (v0.13.0 시점 embedder + reranker 측정값)
 
 | 데이터셋 | 유형 | 노드 수 | MRR |
 |---------|------|---------|-----|
@@ -307,7 +319,7 @@ X2BEE Hard는 시작 시점 1/19 (5%) → **17/19 (89%)** 까지 개선됐습니
 ```bash
 synaptic-mcp --db my_graph.db --embed-url http://localhost:11434/v1
 ```
-Claude Desktop/Code에서 29개 도구를 쓸 수 있게 됩니다.
+Claude Desktop/Code에서 36개 도구를 쓸 수 있게 됩니다.
 
 ---
 
@@ -346,7 +358,7 @@ hash). 검색 알고리즘은 그대로입니다. `tests/test_cdc_search_regress
 매번 확인합니다.
 
 **Q. 프로덕션에서 쓰기 안전한가요?**
-A. v0.13.0은 Beta 단계입니다. 687개 단위 테스트 통과, 벤치마크 검증 완료.
+A. v0.15.0은 Beta 단계입니다. 809개 단위 테스트 통과, 프로덕션 PostgreSQL(X2BEE) CDC 검증 완료.
 중요 데이터는 백업을 권장합니다.
 
 ---

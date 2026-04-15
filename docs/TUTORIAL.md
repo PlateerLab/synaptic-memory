@@ -573,7 +573,12 @@ synaptic-mcp --db store.db --embed-url http://localhost:11434/v1
 }
 ```
 
-Claude Desktop 재시작. 이제 Claude가 29개 도구를 호출할 수 있습니다.
+Claude Desktop 재시작. 이제 Claude가 36개 도구를 호출할 수 있습니다 —
+검색뿐 아니라 **대화 중에 직접 새 파일을 지식 베이스에 추가**하는
+`knowledge_add_document` / `knowledge_ingest_path`, **CDC 증분
+동기화**의 `knowledge_sync_from_database`, 그리고 기존 그래프의
+embedding / phrase hub를 재인제스트 없이 복구하는
+`knowledge_backfill`까지 포함.
 
 ### 4-3. Claude Code 설정
 
@@ -826,7 +831,7 @@ uv run python eval/scripts/export_gt_to_excel.py
 
 - **멀티턴 에이전트 고도화**: [examples/multi_turn_openai.py](../examples/multi_turn_openai.py)
   실제 벤치마크에 쓰인 완전한 에이전트 코드.
-- **29개 도구 전체 탐색**: [../src/synaptic/agent_tools.py](../src/synaptic/agent_tools.py)
+- **36개 도구 전체 탐색**: [../src/synaptic/agent_tools.py](../src/synaptic/agent_tools.py) + [../src/synaptic/mcp/server.py](../src/synaptic/mcp/server.py)
   와 [agent_tools_structured.py](../src/synaptic/agent_tools_structured.py).
 - **자체 백엔드 만들기**: `StorageBackend` 프로토콜만 구현하면 됩니다.
   [src/synaptic/protocols.py](../src/synaptic/protocols.py) 참고.
