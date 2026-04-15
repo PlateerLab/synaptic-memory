@@ -618,7 +618,155 @@ dialect별 placeholder 차이 (`?` vs `$1` vs `%s`)는 `_translate_placeholders`
 
 ---
 
-## 11. 한계와 향후 방향
+## 11. Backfill: 기존 그래프를 in-place로 복구
+
+> v0.14.x 시리즈에서 발견한 "silent failure" 패턴의 회수 경로.
+
+### 왜 필요한가
+
+v0.14.x 시리즈는 "기능은 코드에 있는데 wiring이 빠져서 silent하게
+죽어 있던" 버그들을 여러 건 고쳤습니다:
+
+- **v0.14.0 초기**: MCP 서버의 `_ensure_graph()`가 `ChunkEntityIndex`는
+  wire했지만 `PhraseExtractor`를 빼먹어서 문서 간 phrase hub 다리가
+  아예 안 만들어짐. v0.14.3에서 한 줄 fix.
+- **v0.14.0 전체 기간**: 사용자가 embedder 없이 인제스트 → 나중에
+  `--embed-url`로 다시 띄워도 기존 노드는 `Node.embedding=[]` 상태
+  그대로. HNSW 인덱스는 비어 있고 vector 검색이 부분적으로 죽음.
+
+두 경우 모두 **신규 인제스트만** 고쳐졌고, 이미 들어 있는 데이터는
+재인제스트 말고는 복구할 방법이 없었습니다. 실전에서는 재인제스트가
+비싸거나 (수십만 문서) 불가능합니다 (소스 파일이 더 이상 없음). 그래서
+in-place 복구 도구가 필요했습니다.
+
+### `graph.backfill()` — 두 가지 복구 경로
+
+```python
+result = await graph.backfill(
+    embeddings=True,     # 빈 embedding 채우기
+    phrases=True,        # phrase hub 누락분 재생성
+    batch_size=64,
+    max_nodes=None,      # None = 전체, int = 처음 N개만
+)
+print(result.embeddings_filled, result.phrases_linked)
+```
+
+**Pass 1 — Embedding backfill** (`embeddings=True`):
+모든 노드를 walk하고 `node.embedding == []`인 것만 모아 `embedder.embed_batch()`에
+batch_size씩 넘김. 성공한 결과를 `backend.update_node()`로 저장.
+이미 임베딩 있는 노드는 건너뜀 (멱등성).
+
+**Pass 2 — Phrase hub backfill** (`phrases=True`):
+텍스트를 가진 노드 중 outgoing CONTAINS 엣지가 **하나도 없는** 노드만
+선별 → `phrase_extractor.extract_and_link()` 재실행 → 결과로 나온
+phrase hub 노드에 `CONTAINS` 엣지 생성 → `ChunkEntityIndex`에 등록.
+Phrase hub 노드 자신 (태그 `_phrase`)는 건너뜀 — hub of hubs 방지.
+
+두 pass 모두:
+
+- **Best-effort** — 단일 행 실패는 `BackfillResult.errors`에 append만
+  되고 나머지는 계속 진행. 한 노드의 임베딩 실패가 전체를 abort하지
+  않음.
+- **Idempotent** — 두 번 돌려도 두 번째는 `embeddings_filled=0`,
+  `phrases_linked=0`. 건강한 노드는 스킵.
+- **Bounded** — `max_nodes` 파라미터로 점진 처리 가능. 100만 노드
+  그래프를 한 번에 처리할 수 없을 때 유용.
+
+### `BackfillResult` — 투명한 리포트
+
+```python
+@dataclass(slots=True)
+class BackfillResult:
+    scanned: int = 0               # 총 inspect한 노드 수
+    embeddings_filled: int = 0     # 새로 임베딩 채운 노드 수
+    phrases_linked: int = 0        # 새로 만든 CONTAINS 엣지 수
+    skipped_no_text: int = 0       # title/content 없어서 embed 불가
+    elapsed_ms: float = 0.0        # 벽시계 시간
+    errors: list[str] = []         # per-node 에러 메시지
+```
+
+### Wiring 필요 조건
+
+`backfill()`은 그래프가 이미 필요한 컴포넌트를 wire하고 있어야 동작:
+
+- **Embedding backfill**: `SynapticGraph(embedder=...)` 필요.
+  없으면 **no-op** (에러 아님). `graph.backfill(embeddings=True)`는
+  `scanned=0`을 반환하고 조용히 넘어감.
+- **Phrase backfill**: `SynapticGraph(phrase_extractor=...)` 필요.
+  없으면 **no-op**.
+
+즉 백필 도구는 "없는 의존성을 상상으로 만들어내지" 않습니다. 사용자가
+먼저 누락된 wiring을 고치고 (`--embed-url` 추가, 신규 그래프
+생성자에서 `PhraseExtractor()` 전달) 그 다음 backfill을 호출하는
+순서입니다.
+
+### MCP tool
+
+```json
+// MCP 도구 호출 예시
+{
+  "tool": "knowledge_backfill",
+  "scope": "all",          // "all" | "embeddings" | "phrases"
+  "batch_size": 64,
+  "max_nodes": null        // 전체 처리
+}
+```
+
+응답:
+```json
+{
+  "success": true,
+  "scope": "all",
+  "scanned": 19843,
+  "embeddings_filled": 19843,
+  "phrases_linked": 5612,
+  "skipped_no_text": 0,
+  "elapsed_ms": 42350.2,
+  "errors": []
+}
+```
+
+### Phrase backfill은 검색 품질을 극적으로 개선함
+
+Phrase hub가 없는 그래프는 `GraphExpander`와 `PersonalizedPageRank`의
+cross-document 탐색이 **사실상 dead path**입니다. 문서 간 연결이
+없으니 PPR이 walk할 엣지가 없고, 1-hop 확장도 같은 문서 내부만
+맴돕니다. 결과는 "FTS over disjoint files" — 키워드 매칭이 안 되는
+의미 기반 질의에 0건 응답.
+
+Backfill을 실행하면 `CONTAINS` 엣지가 대량 생성되면서 `ChunkEntityIndex`가
+채워지고, 다음 검색부터 PPR이 실제 그래프를 돌기 시작합니다. 이 효과는
+벤치마크 수치로도 바로 드러납니다 (특히 multi-hop KRRA Hard / assort Hard).
+
+### 한계
+
+- **재-인제스트의 완전한 대체는 아님**. 원본 소스의 스키마가 바뀌었거나
+  새 컬럼이 추가됐다면 backfill은 그걸 감지하지 못합니다. 그때는 CDC
+  (`sync_from_database()`)가 올바른 도구.
+- **Embedder / reranker 모델을 바꾸면 재-embed 필요**. Backfill은
+  "현재 wire된 embedder로 다시 돌려" 동작이기 때문에 임베더 전환 시
+  `embeddings=True`로 다시 돌려야 기존 벡터가 새 모델 벡터로 교체됩니다.
+  (단, 현재 구현은 `node.embedding is []`만 체크하므로 강제 재-embed를
+  원하면 수동으로 비워야 함 — P3에서 `force=True` 옵션 예정.)
+- **Phrase hub 품질은 extractor에 의존**. Korean vs English vs mixed
+  locale에서 extractor 선택이 중요 — `create_phrase_extractor(profile)`
+  경로 사용 권장.
+
+### 설계 원칙
+
+Backfill은 **"새 기능이 아니라 복구 도구"**입니다. v0.14.x 시리즈에서
+발견한 교훈 — "feature가 wiring 누락으로 silent하게 죽어 있으면 안
+된다" — 의 후속 조치. 이상적으로는 애초에 wiring이 잘 되어 있어서
+backfill을 쓸 일이 없는 게 맞지만, 한번 발생한 과거를 되돌리는 경로는
+제공해야 사용자가 재인제스트의 비용/불가능성에 묶이지 않습니다.
+
+향후 발견될 새로운 silent-failure 패턴도 같은 방식으로 backfill 도구의
+한 pass로 추가될 수 있습니다. 예: `fingerprint_backfill=True` (스키마
+fingerprint 재계산), `category_backfill=True` (카테고리 라벨 재추출) 등.
+
+---
+
+## 12. 한계와 향후 방향
 
 ### 현재 한계
 - **멀티홉 질의 불안정**: GPT-4o-mini 같은 작은 모델은 2-3홉부터 오판
