@@ -73,9 +73,17 @@ class TestWikipediaSearchQuality:
                 return
         pytest.fail("None of the basic queries returned results")
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
     async def test_resonance_ordering(self, wiki_graph: SynapticGraph) -> None:
-        """Results should be ordered by resonance score (descending)."""
-        result = await wiki_graph.search("프로그래밍", limit=10)
+        """Results should be ordered by resonance score (descending).
+
+        Pinned to ``engine="legacy"``: EvidenceSearch's adapter
+        surfaces evidence scores on both ``activation`` and
+        ``resonance``, and the strict ``resonance``-descending
+        invariant this test pins is specific to the legacy
+        HybridSearch cascade.
+        """
+        result = await wiki_graph.search("프로그래밍", limit=10, engine="legacy")
         if len(result.nodes) < 2:
             pytest.skip("Not enough results")
 

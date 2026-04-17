@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synaptic-memory"
-version = "0.15.0"
+version = "0.16.0"
 description = "Knowledge graph + MCP tool server for LLM agents — 3rd-gen retrieval, graph-aware multi-turn exploration, structured data tools, DB→ontology one-liner."
 license = "MIT"
 requires-python = ">=3.12"
@@ -64,6 +64,7 @@ reranker = ["flashrank>=0.2"]
 rag = ["spacy>=3.7", "aiohttp>=3.9"]
 mcp = ["mcp[cli]>=1.5", "aiosqlite>=0.20"]
 docs = ["xgen-doc2chunk==0.2.26"]
+langchain = ["langchain-core>=0.3"]
 scale = [
     "kuzu>=0.11.0",
     "qdrant-client>=1.12",
@@ -74,11 +75,17 @@ all = [
     "aiosqlite>=0.20",
     "asyncpg>=0.30",
     "pgvector>=0.3",
+    "aiomysql>=0.2",
     "kuzu>=0.11.0",
     "qdrant-client>=1.12",
     "miniopy-async>=1.21",
     "aiohttp>=3.9",
     "mcp[cli]>=1.5",
+    "kiwipiepy>=0.20",
+    "usearch>=2.0",
+    "numpy>=1.26",
+    "flashrank>=0.2",
+    "spacy>=3.7",
 ]
 dev = [
     "pytest>=8.3",
@@ -90,6 +97,10 @@ eval = [
     "deepeval>=2.0",
     "openai>=1.0",
     "python-dotenv>=1.2.1",
+    # HuggingFace datasets: needed by
+    # examples/ablation/download_benchmarks.py to pull HotPotQA,
+    # MuSiQue, 2WikiMultihopQA from the public Hub.
+    "datasets>=3.0",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -162,5 +173,6 @@ reportUnknownArgumentType = "warning"
 
 [dependency-groups]
 dev = [
+    "openai>=2.29.0",
     "openpyxl>=3.1.5",
 ]

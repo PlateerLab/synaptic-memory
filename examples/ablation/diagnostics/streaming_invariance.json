@@ -1,0 +1,122 @@
+{
+  "corpus": "Allganize RAG-ko",
+  "n_docs": 200,
+  "n_queries": 200,
+  "top_k": 10,
+  "seed": 42,
+  "n_streaming_steps": 10,
+  "batch_size_per_step": 20,
+  "arm_a_ingest_sec": 0.001,
+  "arm_b_ingest_sec": 0.001,
+  "bitwise_identical_topk": 192,
+  "same_set_different_order": 5,
+  "set_mismatched": 3,
+  "top1_match": 200,
+  "mrr_batch": 0.9468,
+  "mrr_streaming": 0.9468,
+  "mrr_delta": 0.0,
+  "mismatch_sample": [
+    {
+      "qid": "ragko_62",
+      "query": "2014년 상반기에 어떤 대출 기반이 마련되었나요?",
+      "batch": [
+        "ragko_doc_62",
+        "ragko_doc_37",
+        "ragko_doc_134",
+        "ragko_doc_150",
+        "ragko_doc_151",
+        "ragko_doc_94",
+        "ragko_doc_143",
+        "ragko_doc_152",
+        "ragko_doc_42",
+        "ragko_doc_93"
+      ],
+      "streaming": [
+        "ragko_doc_62",
+        "ragko_doc_37",
+        "ragko_doc_134",
+        "ragko_doc_150",
+        "ragko_doc_151",
+        "ragko_doc_94",
+        "ragko_doc_143",
+        "ragko_doc_152",
+        "ragko_doc_42",
+        "ragko_doc_153"
+      ],
+      "only_in_batch": [
+        "ragko_doc_93"
+      ],
+      "only_in_streaming": [
+        "ragko_doc_153"
+      ]
+    },
+    {
+      "qid": "ragko_96",
+      "query": "Merkle tree의 역할에 대해 설명해주세요.",
+      "batch": [
+        "ragko_doc_96",
+        "ragko_doc_95",
+        "ragko_doc_77",
+        "ragko_doc_76",
+        "ragko_doc_25",
+        "ragko_doc_47",
+        "ragko_doc_32",
+        "ragko_doc_141",
+        "ragko_doc_10",
+        "ragko_doc_121"
+      ],
+      "streaming": [
+        "ragko_doc_96",
+        "ragko_doc_95",
+        "ragko_doc_77",
+        "ragko_doc_76",
+        "ragko_doc_25",
+        "ragko_doc_47",
+        "ragko_doc_32",
+        "ragko_doc_141",
+        "ragko_doc_121",
+        "ragko_doc_122"
+      ],
+      "only_in_batch": [
+        "ragko_doc_10"
+      ],
+      "only_in_streaming": [
+        "ragko_doc_122"
+      ]
+    },
+    {
+      "qid": "ragko_178",
+      "query": "EC(2017)의 risk premium 가정에 따르면, risk premium은 어떻게 계산되나요?",
+      "batch": [
+        "ragko_doc_178",
+        "ragko_doc_49",
+        "ragko_doc_78",
+        "ragko_doc_132",
+        "ragko_doc_150",
+        "ragko_doc_70",
+        "ragko_doc_151",
+        "ragko_doc_33",
+        "ragko_doc_43",
+        "ragko_doc_62"
+      ],
+      "streaming": [
+        "ragko_doc_178",
+        "ragko_doc_49",
+        "ragko_doc_78",
+        "ragko_doc_132",
+        "ragko_doc_150",
+        "ragko_doc_70",
+        "ragko_doc_151",
+        "ragko_doc_33",
+        "ragko_doc_43",
+        "ragko_doc_101"
+      ],
+      "only_in_batch": [
+        "ragko_doc_62"
+      ],
+      "only_in_streaming": [
+        "ragko_doc_101"
+      ]
+    }
+  ]
+}

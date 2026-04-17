@@ -1,0 +1,5598 @@
+[
+  {
+    "qid": "ragko_0",
+    "query": "글로벌 저금리 현상이 부각된 원인은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_0"
+    ],
+    "retrieved": [
+      "ragko_doc_28",
+      "ragko_doc_0",
+      "ragko_doc_177",
+      "ragko_doc_29",
+      "ragko_doc_30",
+      "ragko_doc_119",
+      "ragko_doc_92",
+      "ragko_doc_123",
+      "ragko_doc_117",
+      "ragko_doc_65"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 26,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_1",
+    "query": "고수익-고위험 부문으로의 쏠림현상에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_1"
+    ],
+    "retrieved": [
+      "ragko_doc_118",
+      "ragko_doc_29",
+      "ragko_doc_1",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 3,
+    "reciprocal_rank": 0.3333333333333333,
+    "query_len_chars": 30,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_2",
+    "query": "20세기 이후 디지털화의 진전이 금융투자업의 사업모형과 산업구조에 어떤 영향을 미쳤는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_2"
+    ],
+    "retrieved": [
+      "ragko_doc_33",
+      "ragko_doc_2",
+      "ragko_doc_14",
+      "ragko_doc_146",
+      "ragko_doc_17",
+      "ragko_doc_40",
+      "ragko_doc_15",
+      "ragko_doc_171",
+      "ragko_doc_5",
+      "ragko_doc_80"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 56,
+    "query_len_tokens": 11,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_3",
+    "query": "2000년대 이후 글로벌 IB들이 어떤 전략을 추진하였나요?",
+    "relevant": [
+      "ragko_doc_3"
+    ],
+    "retrieved": [
+      "ragko_doc_65",
+      "ragko_doc_3",
+      "ragko_doc_60",
+      "ragko_doc_0",
+      "ragko_doc_28",
+      "ragko_doc_2",
+      "ragko_doc_103",
+      "ragko_doc_197",
+      "ragko_doc_176",
+      "ragko_doc_171"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 33,
+    "query_len_tokens": 7,
+    "hangul_ratio": 0.9090909090909091,
+    "has_number": true,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_4",
+    "query": "금융시스템 개혁법은 언제 제정되었나요?",
+    "relevant": [
+      "ragko_doc_4"
+    ],
+    "retrieved": [
+      "ragko_doc_76",
+      "ragko_doc_4",
+      "ragko_doc_57"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 21,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_5",
+    "query": "코로나 19 사태 이후 금융에서도 디지털 전환이 예상을 상회하는 속도와 범위에서 진행되었나요?",
+    "relevant": [
+      "ragko_doc_5"
+    ],
+    "retrieved": [
+      "ragko_doc_101",
+      "ragko_doc_5",
+      "ragko_doc_65",
+      "ragko_doc_28",
+      "ragko_doc_0",
+      "ragko_doc_17",
+      "ragko_doc_2",
+      "ragko_doc_33",
+      "ragko_doc_129",
+      "ragko_doc_146"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 52,
+    "query_len_tokens": 12,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number"
+    ]
+  },
+  {
+    "qid": "ragko_6",
+    "query": "디지털 전환에 대한 우리나라 금융투자업자들의 위치는 어떠한가요?",
+    "relevant": [
+      "ragko_doc_6"
+    ],
+    "retrieved": [
+      "ragko_doc_91",
+      "ragko_doc_63",
+      "ragko_doc_92",
+      "ragko_doc_15",
+      "ragko_doc_6",
+      "ragko_doc_14",
+      "ragko_doc_3",
+      "ragko_doc_79",
+      "ragko_doc_90",
+      "ragko_doc_179"
+    ],
+    "hit_rank": 5,
+    "reciprocal_rank": 0.2,
+    "query_len_chars": 35,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_7",
+    "query": "금융투자업 시장에서 국제 경쟁력이 떨어지는 원인에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_7"
+    ],
+    "retrieved": [
+      "ragko_doc_99",
+      "ragko_doc_7",
+      "ragko_doc_17",
+      "ragko_doc_24",
+      "ragko_doc_97",
+      "ragko_doc_26",
+      "ragko_doc_190",
+      "ragko_doc_144",
+      "ragko_doc_48",
+      "ragko_doc_6"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 38,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_8",
+    "query": "금융산업 전반의 변화가 필요한 임계치적 상황에 도달하지 못한 이유는 무엇일까요?",
+    "relevant": [
+      "ragko_doc_8"
+    ],
+    "retrieved": [
+      "ragko_doc_16",
+      "ragko_doc_8",
+      "ragko_doc_7",
+      "ragko_doc_175",
+      "ragko_doc_112",
+      "ragko_doc_76",
+      "ragko_doc_110",
+      "ragko_doc_27",
+      "ragko_doc_62",
+      "ragko_doc_157"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 44,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_9",
+    "query": "자산관리서비스의 특징과 그에 따른 변화에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_9"
+    ],
+    "retrieved": [
+      "ragko_doc_193",
+      "ragko_doc_183",
+      "ragko_doc_40",
+      "ragko_doc_123",
+      "ragko_doc_60",
+      "ragko_doc_153",
+      "ragko_doc_57",
+      "ragko_doc_15",
+      "ragko_doc_135",
+      "ragko_doc_18"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 33,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_10",
+    "query": "중소형 증권사와 대형 증권사 중 어느 쪽이 시장조성을 위한 플랫폼 구성에 유리한가요?",
+    "relevant": [
+      "ragko_doc_10"
+    ],
+    "retrieved": [
+      "ragko_doc_10",
+      "ragko_doc_8",
+      "ragko_doc_69",
+      "ragko_doc_21",
+      "ragko_doc_9",
+      "ragko_doc_25",
+      "ragko_doc_87",
+      "ragko_doc_75",
+      "ragko_doc_128",
+      "ragko_doc_63"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 47,
+    "query_len_tokens": 12,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_11",
+    "query": "디지털화 대상 선별에서 코드화가 가능한 핵심업무 중에는 어떤 것들이 있나요?",
+    "relevant": [
+      "ragko_doc_11"
+    ],
+    "retrieved": [
+      "ragko_doc_14",
+      "ragko_doc_11",
+      "ragko_doc_191",
+      "ragko_doc_13",
+      "ragko_doc_171",
+      "ragko_doc_12",
+      "ragko_doc_3",
+      "ragko_doc_15",
+      "ragko_doc_75",
+      "ragko_doc_2"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 42,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_12",
+    "query": "디지털화 근간의 자산관리 서비스는 향후 어떤 업계의 주요 수익원이 될 것으로 예상되나요?",
+    "relevant": [
+      "ragko_doc_12"
+    ],
+    "retrieved": [
+      "ragko_doc_63",
+      "ragko_doc_12",
+      "ragko_doc_8",
+      "ragko_doc_71",
+      "ragko_doc_14",
+      "ragko_doc_33",
+      "ragko_doc_126",
+      "ragko_doc_9",
+      "ragko_doc_27",
+      "ragko_doc_15"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 49,
+    "query_len_tokens": 12,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_13",
+    "query": "디지털화로 전통적인 자문업무를 전면 대체하기 어려운 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_13"
+    ],
+    "retrieved": [
+      "ragko_doc_91",
+      "ragko_doc_13",
+      "ragko_doc_109",
+      "ragko_doc_106",
+      "ragko_doc_41",
+      "ragko_doc_120",
+      "ragko_doc_175",
+      "ragko_doc_112",
+      "ragko_doc_157",
+      "ragko_doc_132"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 39,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_14",
+    "query": "디지털화와 뉴노멀이 금융투자업계에 어떤 변화를 가져올 것으로 예상되는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_14"
+    ],
+    "retrieved": [
+      "ragko_doc_16",
+      "ragko_doc_15",
+      "ragko_doc_7",
+      "ragko_doc_126",
+      "ragko_doc_31",
+      "ragko_doc_112",
+      "ragko_doc_171",
+      "ragko_doc_17",
+      "ragko_doc_3",
+      "ragko_doc_52"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 47,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_15",
+    "query": "우리나라 금융투자업권의 디지털화는 어떤 형태로 진행되고 있나요?",
+    "relevant": [
+      "ragko_doc_15"
+    ],
+    "retrieved": [
+      "ragko_doc_97",
+      "ragko_doc_15",
+      "ragko_doc_171",
+      "ragko_doc_64",
+      "ragko_doc_14",
+      "ragko_doc_195",
+      "ragko_doc_3",
+      "ragko_doc_152",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 35,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_16",
+    "query": "금융투자업의 궁극적 변화를 위해 필요한 것은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_16"
+    ],
+    "retrieved": [
+      "ragko_doc_112",
+      "ragko_doc_16",
+      "ragko_doc_33",
+      "ragko_doc_2",
+      "ragko_doc_48",
+      "ragko_doc_102",
+      "ragko_doc_107",
+      "ragko_doc_32",
+      "ragko_doc_47",
+      "ragko_doc_166"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 31,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_17",
+    "query": "기존 금융회사들이 디지털 혁신이 가져올 파괴적 영향을 어떻게 인지하고 있나요?",
+    "relevant": [
+      "ragko_doc_17"
+    ],
+    "retrieved": [
+      "ragko_doc_17",
+      "ragko_doc_16",
+      "ragko_doc_15",
+      "ragko_doc_25",
+      "ragko_doc_126",
+      "ragko_doc_31",
+      "ragko_doc_26",
+      "ragko_doc_50",
+      "ragko_doc_35",
+      "ragko_doc_129"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 43,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_18",
+    "query": "외주화란 무엇인가?",
+    "relevant": [
+      "ragko_doc_18"
+    ],
+    "retrieved": [
+      "ragko_doc_18"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 10,
+    "query_len_tokens": 2,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "very_short_query",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_19",
+    "query": "블랙락의 알라딘(Aladdin)이 금융투자업 업무 프로세스 외주화에서 어떤 역할을 하는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_19"
+    ],
+    "retrieved": [
+      "ragko_doc_22",
+      "ragko_doc_19",
+      "ragko_doc_18",
+      "ragko_doc_156",
+      "ragko_doc_5",
+      "ragko_doc_14",
+      "ragko_doc_11",
+      "ragko_doc_99",
+      "ragko_doc_2",
+      "ragko_doc_33"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 57,
+    "query_len_tokens": 10,
+    "hangul_ratio": 0.8444444444444444,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_20",
+    "query": "상호공유화는 어떤 작업을 지칭하는가?",
+    "relevant": [
+      "ragko_doc_20"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_20",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 20,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_21",
+    "query": "복합 플랫폼의 특징과 가능성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_21"
+    ],
+    "retrieved": [
+      "ragko_doc_64",
+      "ragko_doc_21",
+      "ragko_doc_120",
+      "ragko_doc_79",
+      "ragko_doc_75",
+      "ragko_doc_12",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 27,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_22",
+    "query": "인공지능의 확산이 금융투자업의 업무처리 방식에 어떤 영향을 미치는가요?",
+    "relevant": [
+      "ragko_doc_22"
+    ],
+    "retrieved": [
+      "ragko_doc_174",
+      "ragko_doc_22",
+      "ragko_doc_14",
+      "ragko_doc_76",
+      "ragko_doc_2",
+      "ragko_doc_33",
+      "ragko_doc_171",
+      "ragko_doc_18",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 39,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_23",
+    "query": "JP Morgan Chase & Co.가 고객 데이터를 활용하여 수익을 창출하는 방법은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_23"
+    ],
+    "retrieved": [
+      "ragko_doc_26",
+      "ragko_doc_23",
+      "ragko_doc_173",
+      "ragko_doc_77",
+      "ragko_doc_109",
+      "ragko_doc_78",
+      "ragko_doc_107",
+      "ragko_doc_174",
+      "ragko_doc_3",
+      "ragko_doc_25"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 55,
+    "query_len_tokens": 12,
+    "hangul_ratio": 0.6341463414634146,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_24",
+    "query": "금융투자업에서 빅테크와의 파트너십을 유지하는 방법은 무엇일까요?",
+    "relevant": [
+      "ragko_doc_24"
+    ],
+    "retrieved": [
+      "ragko_doc_176",
+      "ragko_doc_78",
+      "ragko_doc_29",
+      "ragko_doc_17",
+      "ragko_doc_19",
+      "ragko_doc_127"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 35,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_25",
+    "query": "기존 금융회사들이 고객 데이터 확보에 유리한 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_25"
+    ],
+    "retrieved": [
+      "ragko_doc_26",
+      "ragko_doc_25",
+      "ragko_doc_17",
+      "ragko_doc_21",
+      "ragko_doc_24",
+      "ragko_doc_107",
+      "ragko_doc_23",
+      "ragko_doc_109",
+      "ragko_doc_106",
+      "ragko_doc_112"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 35,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_26",
+    "query": "고객 데이터를 확장하기 위한 전략에 대해 설명해보세요.",
+    "relevant": [
+      "ragko_doc_26"
+    ],
+    "retrieved": [
+      "ragko_doc_26",
+      "ragko_doc_23",
+      "ragko_doc_174",
+      "ragko_doc_107",
+      "ragko_doc_75",
+      "ragko_doc_25",
+      "ragko_doc_109",
+      "ragko_doc_27",
+      "ragko_doc_106",
+      "ragko_doc_173"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 30,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_27",
+    "query": "2030년에는 X-세대와 Y-세대가 전세계 취업자의 몇 퍼센트를 차지하게 될 것으로 예상되나요?",
+    "relevant": [
+      "ragko_doc_27"
+    ],
+    "retrieved": [
+      "ragko_doc_71",
+      "ragko_doc_27",
+      "ragko_doc_126",
+      "ragko_doc_70",
+      "ragko_doc_19",
+      "ragko_doc_12",
+      "ragko_doc_35",
+      "ragko_doc_63",
+      "ragko_doc_174",
+      "ragko_doc_116"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 53,
+    "query_len_tokens": 11,
+    "hangul_ratio": 0.9444444444444444,
+    "has_number": true,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "contains_number"
+    ]
+  },
+  {
+    "qid": "ragko_28",
+    "query": "한국은행이 2020년 3월에 기준금리를 어떻게 조정했나요?",
+    "relevant": [
+      "ragko_doc_28"
+    ],
+    "retrieved": [
+      "ragko_doc_30",
+      "ragko_doc_28",
+      "ragko_doc_57",
+      "ragko_doc_88",
+      "ragko_doc_164",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_23",
+      "ragko_doc_50",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 32,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_29",
+    "query": "저금리 상황에서 은행과 보험회사가 겪는 어려움은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_29"
+    ],
+    "retrieved": [
+      "ragko_doc_122",
+      "ragko_doc_29",
+      "ragko_doc_7",
+      "ragko_doc_123",
+      "ragko_doc_28",
+      "ragko_doc_117",
+      "ragko_doc_0",
+      "ragko_doc_177",
+      "ragko_doc_90",
+      "ragko_doc_118"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 33,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_30",
+    "query": "2020년 1분기 기준 가계 및 비영리단체 파생금융상품자산 잔액은 얼마인가요?",
+    "relevant": [
+      "ragko_doc_30"
+    ],
+    "retrieved": [
+      "ragko_doc_30",
+      "ragko_doc_28",
+      "ragko_doc_143",
+      "ragko_doc_108",
+      "ragko_doc_114",
+      "ragko_doc_188",
+      "ragko_doc_77",
+      "ragko_doc_41",
+      "ragko_doc_198",
+      "ragko_doc_153"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 43,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number"
+    ]
+  },
+  {
+    "qid": "ragko_31",
+    "query": "GFMA(2019)가 금융투자 산업에 전환을 가져올 4대 기술은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_31"
+    ],
+    "retrieved": [
+      "ragko_doc_31",
+      "ragko_doc_17",
+      "ragko_doc_5",
+      "ragko_doc_15",
+      "ragko_doc_16",
+      "ragko_doc_99",
+      "ragko_doc_161",
+      "ragko_doc_45",
+      "ragko_doc_6",
+      "ragko_doc_7"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 42,
+    "query_len_tokens": 8,
+    "hangul_ratio": 0.8518518518518519,
+    "has_number": true,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_32",
+    "query": "미래의 투자은행이 갖추어야 할 8가지 원칙에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_32"
+    ],
+    "retrieved": [
+      "ragko_doc_99",
+      "ragko_doc_32",
+      "ragko_doc_79",
+      "ragko_doc_156",
+      "ragko_doc_48",
+      "ragko_doc_163",
+      "ragko_doc_24",
+      "ragko_doc_174",
+      "ragko_doc_59",
+      "ragko_doc_115"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 35,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number"
+    ]
+  },
+  {
+    "qid": "ragko_33",
+    "query": "1950~60년대 초반, 어떤 업에서 디지털화가 시작되었나요?",
+    "relevant": [
+      "ragko_doc_33"
+    ],
+    "retrieved": [
+      "ragko_doc_33",
+      "ragko_doc_14",
+      "ragko_doc_171",
+      "ragko_doc_2",
+      "ragko_doc_29",
+      "ragko_doc_12",
+      "ragko_doc_17",
+      "ragko_doc_19",
+      "ragko_doc_3",
+      "ragko_doc_80"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 34,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_34",
+    "query": "1960년대에 투자은행이 컴퓨터를 어떻게 활용하였나요?",
+    "relevant": [
+      "ragko_doc_34"
+    ],
+    "retrieved": [
+      "ragko_doc_164",
+      "ragko_doc_34",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_23",
+      "ragko_doc_50",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 30,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_35",
+    "query": "핀테크와 빅테크 업체들이 금융상품 판매에 진출하는 이유는 무엇일까요?",
+    "relevant": [
+      "ragko_doc_35"
+    ],
+    "retrieved": [
+      "ragko_doc_35",
+      "ragko_doc_21",
+      "ragko_doc_74",
+      "ragko_doc_112",
+      "ragko_doc_76",
+      "ragko_doc_106",
+      "ragko_doc_24",
+      "ragko_doc_75",
+      "ragko_doc_23",
+      "ragko_doc_30"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 38,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_36",
+    "query": "국내은행이 외화예금을 외화자금의 안정적인 조달수단으로 활용 가능하게 하기 위한 세 가지 방안은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_36"
+    ],
+    "retrieved": [
+      "ragko_doc_58",
+      "ragko_doc_36",
+      "ragko_doc_45",
+      "ragko_doc_26",
+      "ragko_doc_53",
+      "ragko_doc_75",
+      "ragko_doc_166",
+      "ragko_doc_138",
+      "ragko_doc_33",
+      "ragko_doc_94"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 59,
+    "query_len_tokens": 13,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_37",
+    "query": "TD뱅크 파이낸셜 그룹의 사업은 어떤 부문으로 구분되나요?",
+    "relevant": [
+      "ragko_doc_37"
+    ],
+    "retrieved": [
+      "ragko_doc_39",
+      "ragko_doc_37",
+      "ragko_doc_171",
+      "ragko_doc_29",
+      "ragko_doc_38",
+      "ragko_doc_87",
+      "ragko_doc_14",
+      "ragko_doc_1",
+      "ragko_doc_118",
+      "ragko_doc_80"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 32,
+    "query_len_tokens": 7,
+    "hangul_ratio": 0.92,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_38",
+    "query": "PBR이란 무엇이며, 그것이 기업 가치 분석에 어떻게 활용되는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_38"
+    ],
+    "retrieved": [
+      "ragko_doc_195",
+      "ragko_doc_149",
+      "ragko_doc_24",
+      "ragko_doc_196",
+      "ragko_doc_23",
+      "ragko_doc_164",
+      "ragko_doc_26",
+      "ragko_doc_157",
+      "ragko_doc_171",
+      "ragko_doc_194"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 43,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.9090909090909091,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_39",
+    "query": "규제·감독 환경과 PBR 간의 상관관계에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_39"
+    ],
+    "retrieved": [
+      "ragko_doc_39",
+      "ragko_doc_38",
+      "ragko_doc_190",
+      "ragko_doc_146",
+      "ragko_doc_42",
+      "ragko_doc_188",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_60",
+      "ragko_doc_147"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 33,
+    "query_len_tokens": 7,
+    "hangul_ratio": 0.88,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_40",
+    "query": "아동돌봄포인트의 소비 진작 효과에 대해 어떻게 설명할 수 있나요?",
+    "relevant": [
+      "ragko_doc_40"
+    ],
+    "retrieved": [
+      "ragko_doc_40",
+      "ragko_doc_26",
+      "ragko_doc_163",
+      "ragko_doc_24",
+      "ragko_doc_27",
+      "ragko_doc_66",
+      "ragko_doc_187",
+      "ragko_doc_137",
+      "ragko_doc_164",
+      "ragko_doc_141"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 36,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_41",
+    "query": "민간소비 증가율에 영향을 미칠 수 있는 요인들은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_41"
+    ],
+    "retrieved": [
+      "ragko_doc_76",
+      "ragko_doc_39",
+      "ragko_doc_71",
+      "ragko_doc_43",
+      "ragko_doc_40",
+      "ragko_doc_85",
+      "ragko_doc_109",
+      "ragko_doc_153",
+      "ragko_doc_126",
+      "ragko_doc_100"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 33,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_42",
+    "query": "시장규모가 크지만 경쟁강도가 상대적으로 낮은 지역에서 초기 시장개척 및 정착이 비교적 용이할 것이라는 기대는 어떻게 해석할 수 있나요?",
+    "relevant": [
+      "ragko_doc_42"
+    ],
+    "retrieved": [
+      "ragko_doc_42",
+      "ragko_doc_40",
+      "ragko_doc_38",
+      "ragko_doc_44",
+      "ragko_doc_10",
+      "ragko_doc_164",
+      "ragko_doc_113",
+      "ragko_doc_52",
+      "ragko_doc_103",
+      "ragko_doc_50"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 75,
+    "query_len_tokens": 18,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "very_long_query",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_43",
+    "query": "지분을 출자하는 기업이 도산할 수 있는 경우는 어떤 경우인가요?",
+    "relevant": [
+      "ragko_doc_43"
+    ],
+    "retrieved": [
+      "ragko_doc_166",
+      "ragko_doc_43",
+      "ragko_doc_163",
+      "ragko_doc_100",
+      "ragko_doc_40",
+      "ragko_doc_92",
+      "ragko_doc_46",
+      "ragko_doc_85",
+      "ragko_doc_74",
+      "ragko_doc_187"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 35,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_44",
+    "query": "국내 특허의 출원 및 등록 건수는 많지만 사업화를 위해 활용되는 비율이 낮은 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_44"
+    ],
+    "retrieved": [
+      "ragko_doc_157",
+      "ragko_doc_44",
+      "ragko_doc_138",
+      "ragko_doc_38",
+      "ragko_doc_112",
+      "ragko_doc_192",
+      "ragko_doc_36",
+      "ragko_doc_18",
+      "ragko_doc_140",
+      "ragko_doc_4"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 53,
+    "query_len_tokens": 14,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_45",
+    "query": "기술개발이 기업에게 중요한 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_45"
+    ],
+    "retrieved": [
+      "ragko_doc_112",
+      "ragko_doc_47",
+      "ragko_doc_59",
+      "ragko_doc_175",
+      "ragko_doc_119",
+      "ragko_doc_157",
+      "ragko_doc_48",
+      "ragko_doc_169",
+      "ragko_doc_45",
+      "ragko_doc_96"
+    ],
+    "hit_rank": 9,
+    "reciprocal_rank": 0.1111111111111111,
+    "query_len_chars": 25,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_46",
+    "query": "연구개발 과정에서 도덕적 해이 문제가 연구개발의 결과에 어떤 영향을 미치는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_46"
+    ],
+    "retrieved": [
+      "ragko_doc_50",
+      "ragko_doc_46",
+      "ragko_doc_156",
+      "ragko_doc_44",
+      "ragko_doc_85",
+      "ragko_doc_126",
+      "ragko_doc_171",
+      "ragko_doc_182",
+      "ragko_doc_184",
+      "ragko_doc_14"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 50,
+    "query_len_tokens": 11,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_47",
+    "query": "중소기업이 정부과제에 참여함으로써 얻을 수 있는 이점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_47"
+    ],
+    "retrieved": [
+      "ragko_doc_106",
+      "ragko_doc_47",
+      "ragko_doc_157",
+      "ragko_doc_100",
+      "ragko_doc_40",
+      "ragko_doc_92",
+      "ragko_doc_46",
+      "ragko_doc_85",
+      "ragko_doc_74",
+      "ragko_doc_187"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 37,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_48",
+    "query": "기술선진국들과의 기술협력 체제 구축의 중요성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_48"
+    ],
+    "retrieved": [
+      "ragko_doc_190",
+      "ragko_doc_48",
+      "ragko_doc_129",
+      "ragko_doc_188",
+      "ragko_doc_3",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 36,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_49",
+    "query": "금융기관들 간의 위험전염효과에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_49"
+    ],
+    "retrieved": [
+      "ragko_doc_190",
+      "ragko_doc_114",
+      "ragko_doc_146",
+      "ragko_doc_42",
+      "ragko_doc_188",
+      "ragko_doc_49",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_60",
+      "ragko_doc_147"
+    ],
+    "hit_rank": 6,
+    "reciprocal_rank": 0.16666666666666666,
+    "query_len_chars": 27,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_50",
+    "query": "비예금부채가 리스크 관리에 어떤 영향을 미치는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_50"
+    ],
+    "retrieved": [
+      "ragko_doc_156",
+      "ragko_doc_50",
+      "ragko_doc_109",
+      "ragko_doc_76",
+      "ragko_doc_147",
+      "ragko_doc_126",
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_110",
+      "ragko_doc_80"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 34,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_51",
+    "query": "FG의 유효성이 의존하는 요소들은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_51"
+    ],
+    "retrieved": [
+      "ragko_doc_51",
+      "ragko_doc_3"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 25,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.9,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_52",
+    "query": "양적 완화(QE)의 파급경로에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_52"
+    ],
+    "retrieved": [
+      "ragko_doc_60",
+      "ragko_doc_52",
+      "ragko_doc_117",
+      "ragko_doc_194",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 27,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.9,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_53",
+    "query": "MySuper 상품의 예시로 어떤 것들이 있나요?",
+    "relevant": [
+      "ragko_doc_53"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_53",
+      "ragko_doc_14",
+      "ragko_doc_55",
+      "ragko_doc_99",
+      "ragko_doc_80",
+      "ragko_doc_22",
+      "ragko_doc_17",
+      "ragko_doc_163",
+      "ragko_doc_25"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 27,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.6666666666666666,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_54",
+    "query": "디폴트옵션상품의 수수료 상한 설정 및 관련규제 강화는 어떤 목적을 가지고 있나요?",
+    "relevant": [
+      "ragko_doc_54"
+    ],
+    "retrieved": [
+      "ragko_doc_170",
+      "ragko_doc_54",
+      "ragko_doc_172",
+      "ragko_doc_106",
+      "ragko_doc_14",
+      "ragko_doc_72",
+      "ragko_doc_4",
+      "ragko_doc_97",
+      "ragko_doc_53",
+      "ragko_doc_23"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 45,
+    "query_len_tokens": 11,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_55",
+    "query": "혼합형 옵션(Balanced investment option)에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_55"
+    ],
+    "retrieved": [
+      "ragko_doc_55",
+      "ragko_doc_19",
+      "ragko_doc_57",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 46,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.3684210526315789,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_56",
+    "query": "영국의 연금시스템은 몇 층으로 구성되어 있나요?",
+    "relevant": [
+      "ragko_doc_56"
+    ],
+    "retrieved": [
+      "ragko_doc_156",
+      "ragko_doc_56",
+      "ragko_doc_153"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 26,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_57",
+    "query": "NEST Guided Retirement Fund의 목표는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_57"
+    ],
+    "retrieved": [
+      "ragko_doc_57",
+      "ragko_doc_56"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 39,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.2727272727272727,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_58",
+    "query": "TCB와 TIB의 업무 범위와 그들의 역할에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_58"
+    ],
+    "retrieved": [
+      "ragko_doc_99",
+      "ragko_doc_63",
+      "ragko_doc_20",
+      "ragko_doc_141",
+      "ragko_doc_3",
+      "ragko_doc_22",
+      "ragko_doc_11",
+      "ragko_doc_139",
+      "ragko_doc_2",
+      "ragko_doc_19"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 35,
+    "query_len_tokens": 8,
+    "hangul_ratio": 0.7777777777777778,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_59",
+    "query": "기술기업과 공기업의 유인체계를 적절히 설계해야 하는 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_59"
+    ],
+    "retrieved": [
+      "ragko_doc_112",
+      "ragko_doc_59",
+      "ragko_doc_175",
+      "ragko_doc_157",
+      "ragko_doc_162",
+      "ragko_doc_75",
+      "ragko_doc_78",
+      "ragko_doc_193",
+      "ragko_doc_187",
+      "ragko_doc_96"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 39,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_60",
+    "query": "2000년대 벤처캐피탈 시장의 변화에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_60"
+    ],
+    "retrieved": [
+      "ragko_doc_65",
+      "ragko_doc_60",
+      "ragko_doc_181",
+      "ragko_doc_97",
+      "ragko_doc_3",
+      "ragko_doc_2",
+      "ragko_doc_15",
+      "ragko_doc_135",
+      "ragko_doc_18",
+      "ragko_doc_145"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 31,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number"
+    ]
+  },
+  {
+    "qid": "ragko_61",
+    "query": "KTRS 평가지표의 주요 항목들에는 어떤 것들이 있나요?",
+    "relevant": [
+      "ragko_doc_61"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_61",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_90",
+      "ragko_doc_102",
+      "ragko_doc_32",
+      "ragko_doc_28",
+      "ragko_doc_0"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 31,
+    "query_len_tokens": 7,
+    "hangul_ratio": 0.8333333333333334,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_62",
+    "query": "2014년 상반기에 어떤 대출 기반이 마련되었나요?",
+    "relevant": [
+      "ragko_doc_62"
+    ],
+    "retrieved": [
+      "ragko_doc_163",
+      "ragko_doc_62",
+      "ragko_doc_171",
+      "ragko_doc_196",
+      "ragko_doc_143",
+      "ragko_doc_195",
+      "ragko_doc_115",
+      "ragko_doc_194",
+      "ragko_doc_14",
+      "ragko_doc_59"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 28,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_63",
+    "query": "데이터 연계 금융서비스의 책임 강화에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_63"
+    ],
+    "retrieved": [
+      "ragko_doc_141",
+      "ragko_doc_63",
+      "ragko_doc_26",
+      "ragko_doc_174",
+      "ragko_doc_115",
+      "ragko_doc_66",
+      "ragko_doc_24",
+      "ragko_doc_114",
+      "ragko_doc_23",
+      "ragko_doc_22"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 31,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_64",
+    "query": "생태계형(ecosystem) 금융플랫폼의 특징과 장점에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_64"
+    ],
+    "retrieved": [
+      "ragko_doc_193",
+      "ragko_doc_64",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20",
+      "ragko_doc_26",
+      "ragko_doc_24"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 41,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.7272727272727273,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_65",
+    "query": "글로벌 리츠지수에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_65"
+    ],
+    "retrieved": [
+      "ragko_doc_92",
+      "ragko_doc_0",
+      "ragko_doc_28",
+      "ragko_doc_65",
+      "ragko_doc_103",
+      "ragko_doc_3",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_6",
+      "ragko_doc_176"
+    ],
+    "hit_rank": 4,
+    "reciprocal_rank": 0.25,
+    "query_len_chars": 20,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_66",
+    "query": "스폰서드 리츠에서의 세제 혜택은 어떤 것들이 있나요?",
+    "relevant": [
+      "ragko_doc_66"
+    ],
+    "retrieved": [
+      "ragko_doc_67",
+      "ragko_doc_66",
+      "ragko_doc_72",
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 29,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_67",
+    "query": "스폰서드 리츠의 특징에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_67"
+    ],
+    "retrieved": [
+      "ragko_doc_67",
+      "ragko_doc_66",
+      "ragko_doc_65",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 23,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_68",
+    "query": "증권 발행기간 및 상장 소요기간 단축이 투자의 효율성을 높이는 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_68"
+    ],
+    "retrieved": [
+      "ragko_doc_146",
+      "ragko_doc_68",
+      "ragko_doc_65",
+      "ragko_doc_12",
+      "ragko_doc_66",
+      "ragko_doc_69",
+      "ragko_doc_8",
+      "ragko_doc_10",
+      "ragko_doc_141",
+      "ragko_doc_124"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 45,
+    "query_len_tokens": 11,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_69",
+    "query": "대형화의 이점과 단점에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_69"
+    ],
+    "retrieved": [
+      "ragko_doc_193",
+      "ragko_doc_69",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20",
+      "ragko_doc_26",
+      "ragko_doc_24"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 23,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_70",
+    "query": "국민연금의 소득대체율이 2028년부터 어떻게 조정되나요?",
+    "relevant": [
+      "ragko_doc_70"
+    ],
+    "retrieved": [
+      "ragko_doc_164",
+      "ragko_doc_70",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_23",
+      "ragko_doc_50",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 31,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_71",
+    "query": "비용이 소비자에게 전가될 경우 성장성 저해요인으로 작용할 가능성에 대해 어떻게 생각하시나요?",
+    "relevant": [
+      "ragko_doc_71"
+    ],
+    "retrieved": [
+      "ragko_doc_120",
+      "ragko_doc_71",
+      "ragko_doc_163",
+      "ragko_doc_83",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_182",
+      "ragko_doc_193",
+      "ragko_doc_127",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 51,
+    "query_len_tokens": 11,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_72",
+    "query": "연금상품에 대한 세제혜택 확대와 보조금 지급이 단기적으로 어떤 영향을 미치나요?",
+    "relevant": [
+      "ragko_doc_72"
+    ],
+    "retrieved": [
+      "ragko_doc_80",
+      "ragko_doc_72",
+      "ragko_doc_76",
+      "ragko_doc_14",
+      "ragko_doc_66",
+      "ragko_doc_50",
+      "ragko_doc_43",
+      "ragko_doc_109",
+      "ragko_doc_147",
+      "ragko_doc_146"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 44,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_73",
+    "query": "국내 민간금융의 취약한 위험분담 구조가 경제시스템에 미치는 영향에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_73"
+    ],
+    "retrieved": [
+      "ragko_doc_73",
+      "ragko_doc_20",
+      "ragko_doc_76",
+      "ragko_doc_149",
+      "ragko_doc_80",
+      "ragko_doc_36",
+      "ragko_doc_50",
+      "ragko_doc_159",
+      "ragko_doc_140",
+      "ragko_doc_6"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 47,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_74",
+    "query": "빅테크가 제공하는 마켓플레이스는 어떤 기능을 가지고 있나요?",
+    "relevant": [
+      "ragko_doc_74"
+    ],
+    "retrieved": [
+      "ragko_doc_106",
+      "ragko_doc_59",
+      "ragko_doc_171",
+      "ragko_doc_24",
+      "ragko_doc_107",
+      "ragko_doc_14",
+      "ragko_doc_64",
+      "ragko_doc_166",
+      "ragko_doc_36",
+      "ragko_doc_77"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 33,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_75",
+    "query": "빅테크가 제공하는 보험 관련 서비스의 종류는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_75"
+    ],
+    "retrieved": [
+      "ragko_doc_75",
+      "ragko_doc_63",
+      "ragko_doc_107",
+      "ragko_doc_193",
+      "ragko_doc_138",
+      "ragko_doc_74",
+      "ragko_doc_141",
+      "ragko_doc_59",
+      "ragko_doc_92",
+      "ragko_doc_62"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 31,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_76",
+    "query": "BigTech의 금융서비스 확대가 금융산업에 어떤 영향을 미칠 수 있을까요?",
+    "relevant": [
+      "ragko_doc_76"
+    ],
+    "retrieved": [
+      "ragko_doc_76",
+      "ragko_doc_39",
+      "ragko_doc_71",
+      "ragko_doc_77",
+      "ragko_doc_171",
+      "ragko_doc_63",
+      "ragko_doc_115",
+      "ragko_doc_131",
+      "ragko_doc_80",
+      "ragko_doc_159"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 42,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.7878787878787878,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_77",
+    "query": "BigTech의 미결제잔액 관리 방식에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_77"
+    ],
+    "retrieved": [
+      "ragko_doc_105",
+      "ragko_doc_77",
+      "ragko_doc_76",
+      "ragko_doc_9",
+      "ragko_doc_116",
+      "ragko_doc_74",
+      "ragko_doc_114",
+      "ragko_doc_12",
+      "ragko_doc_11",
+      "ragko_doc_193"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 32,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.7307692307692307,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_78",
+    "query": "사회적 장수위험에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_78"
+    ],
+    "retrieved": [
+      "ragko_doc_181",
+      "ragko_doc_174",
+      "ragko_doc_78",
+      "ragko_doc_85",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52"
+    ],
+    "hit_rank": 3,
+    "reciprocal_rank": 0.3333333333333333,
+    "query_len_chars": 20,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_79",
+    "query": "저출산과 고령화 문제가 경제적으로 미치는 영향에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_79"
+    ],
+    "retrieved": [
+      "ragko_doc_79",
+      "ragko_doc_20",
+      "ragko_doc_24",
+      "ragko_doc_151",
+      "ragko_doc_149",
+      "ragko_doc_150",
+      "ragko_doc_153",
+      "ragko_doc_50",
+      "ragko_doc_39",
+      "ragko_doc_159"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 37,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_80",
+    "query": "유동화 방식과 역모기지 방식의 차이점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_80"
+    ],
+    "retrieved": [
+      "ragko_doc_108",
+      "ragko_doc_80",
+      "ragko_doc_140",
+      "ragko_doc_78",
+      "ragko_doc_88",
+      "ragko_doc_65",
+      "ragko_doc_190",
+      "ragko_doc_45"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 28,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_81",
+    "query": "성별이 미소금융 대출상품의 연체에 영향을 미치는가요?",
+    "relevant": [
+      "ragko_doc_81"
+    ],
+    "retrieved": [
+      "ragko_doc_159",
+      "ragko_doc_81",
+      "ragko_doc_39",
+      "ragko_doc_43",
+      "ragko_doc_50",
+      "ragko_doc_108",
+      "ragko_doc_109",
+      "ragko_doc_76",
+      "ragko_doc_17",
+      "ragko_doc_52"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 29,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_82",
+    "query": "일본에서 노동조합이 어떻게 발전해 왔는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_82"
+    ],
+    "retrieved": [
+      "ragko_doc_92",
+      "ragko_doc_82",
+      "ragko_doc_164",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_23",
+      "ragko_doc_50",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 30,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_83",
+    "query": "기간프리미엄이란 무엇이며, 그것이 장기채 발행에 어떤 영향을 미치는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_83"
+    ],
+    "retrieved": [
+      "ragko_doc_83",
+      "ragko_doc_50",
+      "ragko_doc_156",
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_159",
+      "ragko_doc_39",
+      "ragko_doc_43"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 46,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_84",
+    "query": "국채만기와 국가부채 수준은 어떤 상관관계를 가지고 있나요?",
+    "relevant": [
+      "ragko_doc_84"
+    ],
+    "retrieved": [
+      "ragko_doc_106",
+      "ragko_doc_84",
+      "ragko_doc_171",
+      "ragko_doc_184",
+      "ragko_doc_152",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_162",
+      "ragko_doc_170"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 32,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_85",
+    "query": "자산이 사회경제적 불평등 구조를 유지시키면서도 완화시킬 수 있는 수단이라는 관점에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_85"
+    ],
+    "retrieved": [
+      "ragko_doc_85",
+      "ragko_doc_20",
+      "ragko_doc_43",
+      "ragko_doc_163",
+      "ragko_doc_76",
+      "ragko_doc_31",
+      "ragko_doc_174",
+      "ragko_doc_100",
+      "ragko_doc_40",
+      "ragko_doc_92"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 56,
+    "query_len_tokens": 12,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_86",
+    "query": "대형 베이지안 VAR 모형의 단점과 주의할 사항에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_86"
+    ],
+    "retrieved": [
+      "ragko_doc_120",
+      "ragko_doc_86",
+      "ragko_doc_66",
+      "ragko_doc_50",
+      "ragko_doc_69",
+      "ragko_doc_8",
+      "ragko_doc_106",
+      "ragko_doc_21",
+      "ragko_doc_111",
+      "ragko_doc_193"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 38,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.896551724137931,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_87",
+    "query": "KEB하나은행의 오픈 플랫폼에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_87"
+    ],
+    "retrieved": [
+      "ragko_doc_64",
+      "ragko_doc_20",
+      "ragko_doc_90",
+      "ragko_doc_91",
+      "ragko_doc_87",
+      "ragko_doc_104",
+      "ragko_doc_193",
+      "ragko_doc_3",
+      "ragko_doc_163",
+      "ragko_doc_99"
+    ],
+    "hit_rank": 5,
+    "reciprocal_rank": 0.2,
+    "query_len_chars": 27,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.8636363636363636,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_88",
+    "query": "비트코인은 어떤 기관의 개입 없이 거래가 가능한가요?",
+    "relevant": [
+      "ragko_doc_88"
+    ],
+    "retrieved": [
+      "ragko_doc_94",
+      "ragko_doc_88",
+      "ragko_doc_163",
+      "ragko_doc_171",
+      "ragko_doc_191",
+      "ragko_doc_58",
+      "ragko_doc_93",
+      "ragko_doc_14",
+      "ragko_doc_131",
+      "ragko_doc_189"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 29,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_89",
+    "query": "가상자산 사업활동 허가를 받은 자는 어떤 요소들을 고려하여 적절한 자본금을 적립해야 하는가?",
+    "relevant": [
+      "ragko_doc_89"
+    ],
+    "retrieved": [
+      "ragko_doc_137",
+      "ragko_doc_89",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_184",
+      "ragko_doc_90",
+      "ragko_doc_171",
+      "ragko_doc_88",
+      "ragko_doc_14",
+      "ragko_doc_83"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 51,
+    "query_len_tokens": 12,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_90",
+    "query": "오픈뱅킹 법제의 주요 내용은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_90"
+    ],
+    "retrieved": [
+      "ragko_doc_91",
+      "ragko_doc_90",
+      "ragko_doc_53",
+      "ragko_doc_9",
+      "ragko_doc_104",
+      "ragko_doc_102",
+      "ragko_doc_32",
+      "ragko_doc_28",
+      "ragko_doc_0",
+      "ragko_doc_12"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 22,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_91",
+    "query": "오픈뱅킹의 법제화에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_91"
+    ],
+    "retrieved": [
+      "ragko_doc_193",
+      "ragko_doc_91",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20",
+      "ragko_doc_26",
+      "ragko_doc_24"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 21,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_92",
+    "query": "글로벌 디지털금융 중심지란 무엇을 의미하나요?",
+    "relevant": [
+      "ragko_doc_92"
+    ],
+    "retrieved": [
+      "ragko_doc_92",
+      "ragko_doc_90",
+      "ragko_doc_0",
+      "ragko_doc_28",
+      "ragko_doc_65",
+      "ragko_doc_91",
+      "ragko_doc_103",
+      "ragko_doc_3",
+      "ragko_doc_6",
+      "ragko_doc_176"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 25,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_93",
+    "query": "비트코인의 발행량은 점차 감소하나요?",
+    "relevant": [
+      "ragko_doc_93"
+    ],
+    "retrieved": [
+      "ragko_doc_94",
+      "ragko_doc_93",
+      "ragko_doc_70"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 20,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_94",
+    "query": "비트코인 거래에서 P2P 네트워크 방식이 의미하는 것은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_94"
+    ],
+    "retrieved": [
+      "ragko_doc_94",
+      "ragko_doc_88",
+      "ragko_doc_166",
+      "ragko_doc_93",
+      "ragko_doc_161",
+      "ragko_doc_134",
+      "ragko_doc_78",
+      "ragko_doc_63",
+      "ragko_doc_181",
+      "ragko_doc_125"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 37,
+    "query_len_tokens": 8,
+    "hangul_ratio": 0.9285714285714286,
+    "has_number": true,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_95",
+    "query": "Merkle tree에서의 키(Key) 구조는 어떻게 되나요?",
+    "relevant": [
+      "ragko_doc_95"
+    ],
+    "retrieved": [
+      "ragko_doc_96",
+      "ragko_doc_95",
+      "ragko_doc_73",
+      "ragko_doc_164",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_23",
+      "ragko_doc_50",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 34,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.5,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_96",
+    "query": "Merkle tree의 역할에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_96"
+    ],
+    "retrieved": [
+      "ragko_doc_96",
+      "ragko_doc_95",
+      "ragko_doc_141",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 27,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.5454545454545454,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_97",
+    "query": "우리나라는 외환위기 이후 어떤 방식으로 금융산업 및 시장을 규제하였나요?",
+    "relevant": [
+      "ragko_doc_97"
+    ],
+    "retrieved": [
+      "ragko_doc_197",
+      "ragko_doc_97",
+      "ragko_doc_60",
+      "ragko_doc_80",
+      "ragko_doc_34",
+      "ragko_doc_192",
+      "ragko_doc_14",
+      "ragko_doc_188",
+      "ragko_doc_94",
+      "ragko_doc_114"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 40,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_98",
+    "query": "보험업법에서는 판매 대신 어떤 용어를 사용하고 있나요?",
+    "relevant": [
+      "ragko_doc_98"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_98",
+      "ragko_doc_35",
+      "ragko_doc_25",
+      "ragko_doc_173",
+      "ragko_doc_14",
+      "ragko_doc_197",
+      "ragko_doc_149",
+      "ragko_doc_97",
+      "ragko_doc_80"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 30,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_99",
+    "query": "금융투자업자들에게 부과되는 신의성실의무는 무엇을 의미하나요?",
+    "relevant": [
+      "ragko_doc_99"
+    ],
+    "retrieved": [
+      "ragko_doc_99",
+      "ragko_doc_6"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 33,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_100",
+    "query": "청년층의 고학력층 하향취업 현상에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_100"
+    ],
+    "retrieved": [
+      "ragko_doc_156",
+      "ragko_doc_100",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20",
+      "ragko_doc_26"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 29,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_101",
+    "query": "우리나라는 어느 해에 근로기준법을 제정하여 주당 48시간으로 정규근로시간을 정했나요?",
+    "relevant": [
+      "ragko_doc_101"
+    ],
+    "retrieved": [
+      "ragko_doc_101",
+      "ragko_doc_14",
+      "ragko_doc_192",
+      "ragko_doc_97",
+      "ragko_doc_196",
+      "ragko_doc_135",
+      "ragko_doc_128",
+      "ragko_doc_145",
+      "ragko_doc_195"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 47,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number"
+    ]
+  },
+  {
+    "qid": "ragko_102",
+    "query": "공적채무조정과 사적채무조정의 병행이 가져올 수 있는 장점과 단점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_102"
+    ],
+    "retrieved": [
+      "ragko_doc_93",
+      "ragko_doc_46",
+      "ragko_doc_31",
+      "ragko_doc_126",
+      "ragko_doc_100",
+      "ragko_doc_40",
+      "ragko_doc_92",
+      "ragko_doc_85",
+      "ragko_doc_74",
+      "ragko_doc_187"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 43,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_103",
+    "query": "글로벌 금융위기 및 유럽재정위기 기간 중 어떤 지역의 G-SIB의 부도확률이 가장 높았나요? 그 이유는 무엇일까요?",
+    "relevant": [
+      "ragko_doc_103"
+    ],
+    "retrieved": [
+      "ragko_doc_176",
+      "ragko_doc_103",
+      "ragko_doc_51",
+      "ragko_doc_65",
+      "ragko_doc_0",
+      "ragko_doc_40",
+      "ragko_doc_146",
+      "ragko_doc_163",
+      "ragko_doc_28",
+      "ragko_doc_198"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 64,
+    "query_len_tokens": 15,
+    "hangul_ratio": 0.9148936170212766,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "very_long_query",
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_104",
+    "query": "은행들이 펌뱅킹 서비스를 제공하는 대상은 어떤 기업인가요?",
+    "relevant": [
+      "ragko_doc_104"
+    ],
+    "retrieved": [
+      "ragko_doc_92",
+      "ragko_doc_64",
+      "ragko_doc_132",
+      "ragko_doc_104",
+      "ragko_doc_75",
+      "ragko_doc_111",
+      "ragko_doc_133",
+      "ragko_doc_74",
+      "ragko_doc_18",
+      "ragko_doc_23"
+    ],
+    "hit_rank": 4,
+    "reciprocal_rank": 0.25,
+    "query_len_chars": 32,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_105",
+    "query": "비은행 PSP에 대한 FCA의 평가 프로세스는 어떻게 진행되는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_105"
+    ],
+    "retrieved": [
+      "ragko_doc_105",
+      "ragko_doc_50",
+      "ragko_doc_110",
+      "ragko_doc_58",
+      "ragko_doc_109",
+      "ragko_doc_23",
+      "ragko_doc_187",
+      "ragko_doc_38",
+      "ragko_doc_93",
+      "ragko_doc_157"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 43,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.8235294117647058,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_106",
+    "query": "빅테크는 어떤 강점을 가지고 있나요?",
+    "relevant": [
+      "ragko_doc_106"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_106",
+      "ragko_doc_74",
+      "ragko_doc_75",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_162",
+      "ragko_doc_170",
+      "ragko_doc_59"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 20,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_107",
+    "query": "은행이 고객의 니즈를 파악하여 신상품을 개발하는 것이 중요한 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_107"
+    ],
+    "retrieved": [
+      "ragko_doc_175",
+      "ragko_doc_112",
+      "ragko_doc_169",
+      "ragko_doc_109",
+      "ragko_doc_48",
+      "ragko_doc_196",
+      "ragko_doc_194",
+      "ragko_doc_96",
+      "ragko_doc_121",
+      "ragko_doc_153"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 44,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_108",
+    "query": "은행이 자산유동화 기법을 이용하여 부채구조의 듀레이션을 바꾸는 것의 장점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_108"
+    ],
+    "retrieved": [
+      "ragko_doc_184",
+      "ragko_doc_108",
+      "ragko_doc_142",
+      "ragko_doc_169",
+      "ragko_doc_163",
+      "ragko_doc_196",
+      "ragko_doc_36",
+      "ragko_doc_194",
+      "ragko_doc_112",
+      "ragko_doc_111"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 48,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_109",
+    "query": "비은행금융회사들이 빅데이터를 구축하는데 어려움을 겪는 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_109"
+    ],
+    "retrieved": [
+      "ragko_doc_140",
+      "ragko_doc_109",
+      "ragko_doc_174",
+      "ragko_doc_175",
+      "ragko_doc_112",
+      "ragko_doc_157"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 40,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_110",
+    "query": "여신금융전업사의 강점에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_110"
+    ],
+    "retrieved": [
+      "ragko_doc_193",
+      "ragko_doc_110",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20",
+      "ragko_doc_26",
+      "ragko_doc_24"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 23,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_111",
+    "query": "커뮤니티뱅크와 대형은행의 차이점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_111"
+    ],
+    "retrieved": [
+      "ragko_doc_112"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 25,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_112",
+    "query": "핀테크와 은행이 협업을 하는 이유에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_112"
+    ],
+    "retrieved": [
+      "ragko_doc_112",
+      "ragko_doc_64",
+      "ragko_doc_87",
+      "ragko_doc_36",
+      "ragko_doc_194",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_108",
+      "ragko_doc_121",
+      "ragko_doc_195"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 30,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_113",
+    "query": "지역금융기관이 관계형 금융을 추진하는데 필요한 것은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_113"
+    ],
+    "retrieved": [
+      "ragko_doc_113",
+      "ragko_doc_102",
+      "ragko_doc_107",
+      "ragko_doc_111",
+      "ragko_doc_90",
+      "ragko_doc_32",
+      "ragko_doc_37",
+      "ragko_doc_196",
+      "ragko_doc_146",
+      "ragko_doc_194"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 35,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_114",
+    "query": "2019년 서민금융기관의 수익성이 하락할 것으로 전망된 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_114"
+    ],
+    "retrieved": [
+      "ragko_doc_150",
+      "ragko_doc_114",
+      "ragko_doc_71",
+      "ragko_doc_38",
+      "ragko_doc_112",
+      "ragko_doc_158",
+      "ragko_doc_122",
+      "ragko_doc_115",
+      "ragko_doc_175",
+      "ragko_doc_168"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 41,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_115",
+    "query": "주택담보대출 차입자를 금리 상승 위험으로부터 보호하기 위해 어떤 방안이 필요한가요?",
+    "relevant": [
+      "ragko_doc_115"
+    ],
+    "retrieved": [
+      "ragko_doc_116",
+      "ragko_doc_115",
+      "ragko_doc_124",
+      "ragko_doc_119",
+      "ragko_doc_117",
+      "ragko_doc_126",
+      "ragko_doc_123",
+      "ragko_doc_41",
+      "ragko_doc_9",
+      "ragko_doc_36"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 46,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_116",
+    "query": "금리 상승 리스크에 대비한 리스크 관리 방안에는 어떤 것들이 있나요?",
+    "relevant": [
+      "ragko_doc_116"
+    ],
+    "retrieved": [
+      "ragko_doc_116",
+      "ragko_doc_114",
+      "ragko_doc_115",
+      "ragko_doc_124",
+      "ragko_doc_11",
+      "ragko_doc_50",
+      "ragko_doc_9",
+      "ragko_doc_119",
+      "ragko_doc_123",
+      "ragko_doc_126"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 38,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_117",
+    "query": "저금리 기조가 경제활동을 둔화시키고 저축 증가와 내수 감소 등으로 금리 하락이 지속되는 악순환을 유발할 가능성이 있나요?",
+    "relevant": [
+      "ragko_doc_117"
+    ],
+    "retrieved": [
+      "ragko_doc_118",
+      "ragko_doc_117",
+      "ragko_doc_0",
+      "ragko_doc_123",
+      "ragko_doc_28",
+      "ragko_doc_183",
+      "ragko_doc_177",
+      "ragko_doc_29",
+      "ragko_doc_71",
+      "ragko_doc_122"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 67,
+    "query_len_tokens": 16,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "very_long_query"
+    ]
+  },
+  {
+    "qid": "ragko_118",
+    "query": "구조적 불황(secular stagnation)으로의 확산 가능성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_118"
+    ],
+    "retrieved": [
+      "ragko_doc_120",
+      "ragko_doc_118",
+      "ragko_doc_174",
+      "ragko_doc_117",
+      "ragko_doc_79",
+      "ragko_doc_73",
+      "ragko_doc_0",
+      "ragko_doc_146",
+      "ragko_doc_76",
+      "ragko_doc_69"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 48,
+    "query_len_tokens": 7,
+    "hangul_ratio": 0.5641025641025641,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_119",
+    "query": "부실기업 증가가 금융기관에게 어떤 위험을 초래할 수 있는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_119"
+    ],
+    "retrieved": [
+      "ragko_doc_174",
+      "ragko_doc_172",
+      "ragko_doc_50",
+      "ragko_doc_119",
+      "ragko_doc_78",
+      "ragko_doc_171",
+      "ragko_doc_175",
+      "ragko_doc_147",
+      "ragko_doc_156",
+      "ragko_doc_164"
+    ],
+    "hit_rank": 4,
+    "reciprocal_rank": 0.25,
+    "query_len_chars": 40,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_120",
+    "query": "가계대출 연체 차주에 대한 금융권 자율 채무조정의 필요성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_120"
+    ],
+    "retrieved": [
+      "ragko_doc_178",
+      "ragko_doc_120",
+      "ragko_doc_115",
+      "ragko_doc_83",
+      "ragko_doc_66",
+      "ragko_doc_165",
+      "ragko_doc_97",
+      "ragko_doc_105",
+      "ragko_doc_81",
+      "ragko_doc_102"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 43,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_121",
+    "query": "채권은행이 구조조정을 주도적으로 추진하지 않을 경우 어떤 절차가 필요한가요?",
+    "relevant": [
+      "ragko_doc_121"
+    ],
+    "retrieved": [
+      "ragko_doc_121",
+      "ragko_doc_83",
+      "ragko_doc_160",
+      "ragko_doc_80",
+      "ragko_doc_29",
+      "ragko_doc_163",
+      "ragko_doc_171",
+      "ragko_doc_102",
+      "ragko_doc_17",
+      "ragko_doc_14"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 42,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_122",
+    "query": "저성장, 저금리 상황에서 경기대응 완충자본의 유용성이 하락하는 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_122"
+    ],
+    "retrieved": [
+      "ragko_doc_122",
+      "ragko_doc_29",
+      "ragko_doc_7",
+      "ragko_doc_123",
+      "ragko_doc_28",
+      "ragko_doc_117",
+      "ragko_doc_182",
+      "ragko_doc_0",
+      "ragko_doc_177",
+      "ragko_doc_175"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 45,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_123",
+    "query": "저금리가 금융회사에 어떤 영향을 미치나요?",
+    "relevant": [
+      "ragko_doc_123"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_123",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_159",
+      "ragko_doc_39",
+      "ragko_doc_43",
+      "ragko_doc_81",
+      "ragko_doc_50"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 23,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_124",
+    "query": "부동산 시장 침체가 증권회사에 어떤 영향을 미칠 수 있는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_124"
+    ],
+    "retrieved": [
+      "ragko_doc_76",
+      "ragko_doc_39",
+      "ragko_doc_71",
+      "ragko_doc_50",
+      "ragko_doc_156",
+      "ragko_doc_68",
+      "ragko_doc_149",
+      "ragko_doc_171",
+      "ragko_doc_65",
+      "ragko_doc_147"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 40,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_125",
+    "query": "Fedcoin의 발행과 거래 방식에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_125"
+    ],
+    "retrieved": [
+      "ragko_doc_181",
+      "ragko_doc_125",
+      "ragko_doc_83",
+      "ragko_doc_170",
+      "ragko_doc_94",
+      "ragko_doc_191",
+      "ragko_doc_193",
+      "ragko_doc_68",
+      "ragko_doc_163",
+      "ragko_doc_12"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 30,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.7083333333333334,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_126",
+    "query": "CBDC가 은행 예금을 대체하게 되면 어떤 부작용이 발생할 수 있을까요?",
+    "relevant": [
+      "ragko_doc_126"
+    ],
+    "retrieved": [
+      "ragko_doc_126",
+      "ragko_doc_46",
+      "ragko_doc_1",
+      "ragko_doc_72",
+      "ragko_doc_191",
+      "ragko_doc_36",
+      "ragko_doc_187",
+      "ragko_doc_134",
+      "ragko_doc_108",
+      "ragko_doc_127"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 40,
+    "query_len_tokens": 10,
+    "hangul_ratio": 0.8666666666666667,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_127",
+    "query": "은행 계좌를 개설할 수 없는 개인이 CBDC를 통해 어떤 이점을 얻을 수 있는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_127"
+    ],
+    "retrieved": [
+      "ragko_doc_127",
+      "ragko_doc_104",
+      "ragko_doc_157",
+      "ragko_doc_106",
+      "ragko_doc_189",
+      "ragko_doc_77",
+      "ragko_doc_188",
+      "ragko_doc_46",
+      "ragko_doc_147",
+      "ragko_doc_156"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 52,
+    "query_len_tokens": 14,
+    "hangul_ratio": 0.8947368421052632,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_128",
+    "query": "CBDC 거래가 디지털 혹은 전자적으로 기록되고 추적이 가능하다면 어떤 긍정적 효과가 발생하는지 말해주세요.",
+    "relevant": [
+      "ragko_doc_128"
+    ],
+    "retrieved": [
+      "ragko_doc_191",
+      "ragko_doc_128",
+      "ragko_doc_127",
+      "ragko_doc_190",
+      "ragko_doc_126",
+      "ragko_doc_188",
+      "ragko_doc_14",
+      "ragko_doc_17",
+      "ragko_doc_27",
+      "ragko_doc_90"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 60,
+    "query_len_tokens": 13,
+    "hangul_ratio": 0.9148936170212766,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_129",
+    "query": "디지털 예탁증서(DDR)의 역할과 중요성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_129"
+    ],
+    "retrieved": [
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_26",
+      "ragko_doc_92",
+      "ragko_doc_5",
+      "ragko_doc_14",
+      "ragko_doc_15",
+      "ragko_doc_129",
+      "ragko_doc_12",
+      "ragko_doc_6"
+    ],
+    "hit_rank": 8,
+    "reciprocal_rank": 0.125,
+    "query_len_chars": 34,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.8846153846153846,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_130",
+    "query": "전자금융범죄의 특성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_130"
+    ],
+    "retrieved": [
+      "ragko_doc_135",
+      "ragko_doc_114",
+      "ragko_doc_40",
+      "ragko_doc_145",
+      "ragko_doc_130",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17"
+    ],
+    "hit_rank": 5,
+    "reciprocal_rank": 0.2,
+    "query_len_chars": 22,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_131",
+    "query": "전자금융서비스가 본격적으로 등장한 시기는 언제인가요?",
+    "relevant": [
+      "ragko_doc_131"
+    ],
+    "retrieved": [
+      "ragko_doc_198",
+      "ragko_doc_131",
+      "ragko_doc_37"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 29,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_132",
+    "query": "전자금융에는 어떤 서비스들이 포함되나요?",
+    "relevant": [
+      "ragko_doc_132"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 22,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_133",
+    "query": "제3자 가상계좌 기반 서비스는 어떤 기관이 제공하는 서비스인가요?",
+    "relevant": [
+      "ragko_doc_133"
+    ],
+    "retrieved": [
+      "ragko_doc_135",
+      "ragko_doc_133",
+      "ragko_doc_74",
+      "ragko_doc_143",
+      "ragko_doc_64",
+      "ragko_doc_62",
+      "ragko_doc_23",
+      "ragko_doc_113",
+      "ragko_doc_111",
+      "ragko_doc_18"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 36,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_134",
+    "query": "스키밍이란 무엇인가요?",
+    "relevant": [
+      "ragko_doc_134"
+    ],
+    "retrieved": [],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 12,
+    "query_len_tokens": 2,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "very_short_query",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_135",
+    "query": "왜 전자금융범죄는 국제적인 범죄가 많이 발생하는가요?",
+    "relevant": [
+      "ragko_doc_135"
+    ],
+    "retrieved": [
+      "ragko_doc_135",
+      "ragko_doc_130",
+      "ragko_doc_145",
+      "ragko_doc_136",
+      "ragko_doc_48",
+      "ragko_doc_44",
+      "ragko_doc_165",
+      "ragko_doc_134",
+      "ragko_doc_36",
+      "ragko_doc_196"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 29,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_136",
+    "query": "전자금융사고와 전자금융범죄의 차이점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_136"
+    ],
+    "retrieved": [
+      "ragko_doc_145",
+      "ragko_doc_135",
+      "ragko_doc_130"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 27,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_137",
+    "query": "생산자들이 정보비대칭 문제를 어떻게 악용할 수 있나요?",
+    "relevant": [
+      "ragko_doc_137"
+    ],
+    "retrieved": [
+      "ragko_doc_137",
+      "ragko_doc_113",
+      "ragko_doc_39",
+      "ragko_doc_164",
+      "ragko_doc_148",
+      "ragko_doc_79",
+      "ragko_doc_26",
+      "ragko_doc_50",
+      "ragko_doc_24",
+      "ragko_doc_23"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 30,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_138",
+    "query": "유럽연합에서는 어떤 지침에 따라 전자금융서비스 관련 소비자보호가 이루어지고 있나요?",
+    "relevant": [
+      "ragko_doc_138"
+    ],
+    "retrieved": [
+      "ragko_doc_141",
+      "ragko_doc_138",
+      "ragko_doc_131",
+      "ragko_doc_80",
+      "ragko_doc_192",
+      "ragko_doc_59",
+      "ragko_doc_155",
+      "ragko_doc_145",
+      "ragko_doc_22",
+      "ragko_doc_173"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 46,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_139",
+    "query": "자금결제에 관한 법률이 포함하는 주요 내용은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_139"
+    ],
+    "retrieved": [
+      "ragko_doc_139",
+      "ragko_doc_102",
+      "ragko_doc_53",
+      "ragko_doc_140",
+      "ragko_doc_9",
+      "ragko_doc_24",
+      "ragko_doc_149",
+      "ragko_doc_78",
+      "ragko_doc_138",
+      "ragko_doc_58"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 31,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_140",
+    "query": "공인인증서의 도입과 액티브X의 활용이 국내 전자결제시스템에 어떤 영향을 미쳤나요?",
+    "relevant": [
+      "ragko_doc_140"
+    ],
+    "retrieved": [
+      "ragko_doc_140",
+      "ragko_doc_76",
+      "ragko_doc_171",
+      "ragko_doc_36",
+      "ragko_doc_22",
+      "ragko_doc_18",
+      "ragko_doc_14",
+      "ragko_doc_6",
+      "ragko_doc_7",
+      "ragko_doc_38"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 45,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.9722222222222222,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_141",
+    "query": "정책당국이 포함하는 기관들은 어떤 것들이 있나요?",
+    "relevant": [
+      "ragko_doc_141"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_114",
+      "ragko_doc_139",
+      "ragko_doc_14",
+      "ragko_doc_24",
+      "ragko_doc_149",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 27,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_142",
+    "query": "피싱·파밍사이트 사전 차단 시스템의 필요성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_142"
+    ],
+    "retrieved": [
+      "ragko_doc_174",
+      "ragko_doc_142",
+      "ragko_doc_97",
+      "ragko_doc_185",
+      "ragko_doc_73",
+      "ragko_doc_140",
+      "ragko_doc_63",
+      "ragko_doc_125",
+      "ragko_doc_193",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 35,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_143",
+    "query": "금융분야 개인정보보호 가이드라인의 중요성에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_143"
+    ],
+    "retrieved": [
+      "ragko_doc_143",
+      "ragko_doc_90",
+      "ragko_doc_33",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 34,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_144",
+    "query": "동북아 사이버 범죄센터 설립의 필요성은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_144"
+    ],
+    "retrieved": [
+      "ragko_doc_144",
+      "ragko_doc_32",
+      "ragko_doc_87"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 28,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_145",
+    "query": "전자금융범죄가 국제적인 범죄형태로 발생하는 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_145"
+    ],
+    "retrieved": [
+      "ragko_doc_145",
+      "ragko_doc_130",
+      "ragko_doc_135",
+      "ragko_doc_48",
+      "ragko_doc_193",
+      "ragko_doc_175",
+      "ragko_doc_112",
+      "ragko_doc_157",
+      "ragko_doc_186",
+      "ragko_doc_36"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 34,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_146",
+    "query": "스팩과 피합병기업의 합병 후 신주수익률에서 나타나는 장기적인 저성과 현상이 스팩 투자의 활성화에 어떤 영향을 미치는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_146"
+    ],
+    "retrieved": [
+      "ragko_doc_147",
+      "ragko_doc_146",
+      "ragko_doc_156",
+      "ragko_doc_50",
+      "ragko_doc_40",
+      "ragko_doc_14",
+      "ragko_doc_29",
+      "ragko_doc_81",
+      "ragko_doc_109",
+      "ragko_doc_80"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 73,
+    "query_len_tokens": 16,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "very_long_query",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_147",
+    "query": "스팩의 투자자 보호 장치가 합병 후기간의 수익률에 어떤 영향을 미치는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_147"
+    ],
+    "retrieved": [
+      "ragko_doc_147",
+      "ragko_doc_146",
+      "ragko_doc_50",
+      "ragko_doc_156",
+      "ragko_doc_159",
+      "ragko_doc_171",
+      "ragko_doc_76",
+      "ragko_doc_7",
+      "ragko_doc_181",
+      "ragko_doc_169"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 47,
+    "query_len_tokens": 11,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_148",
+    "query": "우리나라 기업 정보에서 제공하는 장기부채의 만기 정보는 어느 기간까지인가요?",
+    "relevant": [
+      "ragko_doc_148"
+    ],
+    "retrieved": [
+      "ragko_doc_195",
+      "ragko_doc_148",
+      "ragko_doc_196",
+      "ragko_doc_92",
+      "ragko_doc_59",
+      "ragko_doc_178",
+      "ragko_doc_23",
+      "ragko_doc_111",
+      "ragko_doc_15",
+      "ragko_doc_62"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 42,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_149",
+    "query": "재무제약이 큰 경쟁기업의 비중이 산업 침체기의 기업 가치에 어떤 영향을 미치는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_149"
+    ],
+    "retrieved": [
+      "ragko_doc_149",
+      "ragko_doc_148",
+      "ragko_doc_156",
+      "ragko_doc_50",
+      "ragko_doc_171",
+      "ragko_doc_2",
+      "ragko_doc_33",
+      "ragko_doc_109",
+      "ragko_doc_76",
+      "ragko_doc_82"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 52,
+    "query_len_tokens": 12,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_150",
+    "query": "2030년에 65세 이상 고령인구 비중이 전체 인구의 몇 퍼센트로 전망되나요?",
+    "relevant": [
+      "ragko_doc_150"
+    ],
+    "retrieved": [
+      "ragko_doc_151",
+      "ragko_doc_150",
+      "ragko_doc_148",
+      "ragko_doc_152",
+      "ragko_doc_149",
+      "ragko_doc_119",
+      "ragko_doc_153",
+      "ragko_doc_27",
+      "ragko_doc_79",
+      "ragko_doc_154"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 43,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number"
+    ]
+  },
+  {
+    "qid": "ragko_151",
+    "query": "생애주기가설(life-cycle hypothesis)에 따른 개인들의 저축 행동에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_151"
+    ],
+    "retrieved": [
+      "ragko_doc_183",
+      "ragko_doc_151",
+      "ragko_doc_123",
+      "ragko_doc_175",
+      "ragko_doc_85",
+      "ragko_doc_152",
+      "ragko_doc_197",
+      "ragko_doc_186",
+      "ragko_doc_198",
+      "ragko_doc_153"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 56,
+    "query_len_tokens": 8,
+    "hangul_ratio": 0.5777777777777777,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_152",
+    "query": "우리나라의 가계저축률이 OECD 주요 국가들에 비해 낮은 이유는 무엇일까요?",
+    "relevant": [
+      "ragko_doc_152"
+    ],
+    "retrieved": [
+      "ragko_doc_152",
+      "ragko_doc_44",
+      "ragko_doc_157",
+      "ragko_doc_28",
+      "ragko_doc_0",
+      "ragko_doc_182",
+      "ragko_doc_42",
+      "ragko_doc_184",
+      "ragko_doc_79",
+      "ragko_doc_177"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 42,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.8787878787878788,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_153",
+    "query": "은행들이 고령화 및 이에 따른 수익성 하락에 대응하기 위해 고려해야 할 점들은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_153"
+    ],
+    "retrieved": [
+      "ragko_doc_153",
+      "ragko_doc_123",
+      "ragko_doc_192",
+      "ragko_doc_114",
+      "ragko_doc_71",
+      "ragko_doc_102",
+      "ragko_doc_191",
+      "ragko_doc_79",
+      "ragko_doc_175",
+      "ragko_doc_109"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 50,
+    "query_len_tokens": 13,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_154",
+    "query": "공매도 비중 1분위와 4분위에 속한 주식의 차이점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_154"
+    ],
+    "retrieved": [
+      "ragko_doc_158",
+      "ragko_doc_154",
+      "ragko_doc_159",
+      "ragko_doc_155",
+      "ragko_doc_156",
+      "ragko_doc_170",
+      "ragko_doc_119",
+      "ragko_doc_148",
+      "ragko_doc_70",
+      "ragko_doc_150"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 35,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": true,
+    "has_english": false,
+    "notes": [
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_155",
+    "query": "공매도 제약이 강할수록 어떤 현상이 발생하는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_155"
+    ],
+    "retrieved": [
+      "ragko_doc_158",
+      "ragko_doc_155",
+      "ragko_doc_156",
+      "ragko_doc_154",
+      "ragko_doc_149",
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_157",
+      "ragko_doc_80",
+      "ragko_doc_148"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 33,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_156",
+    "query": "공매도의 수행 여부를 결정하는 요인은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_156"
+    ],
+    "retrieved": [
+      "ragko_doc_156",
+      "ragko_doc_22",
+      "ragko_doc_40",
+      "ragko_doc_126",
+      "ragko_doc_187",
+      "ragko_doc_45",
+      "ragko_doc_105",
+      "ragko_doc_96",
+      "ragko_doc_196",
+      "ragko_doc_83"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 27,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_157",
+    "query": "가치효과 이례현상이 가격오류와 어떤 관련이 있는지 설명해보세요.",
+    "relevant": [
+      "ragko_doc_157"
+    ],
+    "retrieved": [
+      "ragko_doc_157",
+      "ragko_doc_156",
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_147",
+      "ragko_doc_50",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 35,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_158",
+    "query": "공매도 비중이 낮은 주식의 경우, 수익성이 낮은 주식의 미래 시장조정수익률이 수익성이 높은 주식의 미래 시장조정수익률보다 높은가요?",
+    "relevant": [
+      "ragko_doc_158"
+    ],
+    "retrieved": [
+      "ragko_doc_158",
+      "ragko_doc_155",
+      "ragko_doc_156",
+      "ragko_doc_154",
+      "ragko_doc_38",
+      "ragko_doc_163",
+      "ragko_doc_170",
+      "ragko_doc_159",
+      "ragko_doc_152",
+      "ragko_doc_177"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 73,
+    "query_len_tokens": 16,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "very_long_query"
+    ]
+  },
+  {
+    "qid": "ragko_159",
+    "query": "시가총액과 부채비율이 미래수익률에 어떤 영향을 미치는가요?",
+    "relevant": [
+      "ragko_doc_159"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_159",
+      "ragko_doc_158",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_39",
+      "ragko_doc_43",
+      "ragko_doc_81",
+      "ragko_doc_50"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 32,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_160",
+    "query": "ICO에 투자하는 투자자들이 갖게 되는 권리에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_160"
+    ],
+    "retrieved": [
+      "ragko_doc_160",
+      "ragko_doc_78",
+      "ragko_doc_167",
+      "ragko_doc_165",
+      "ragko_doc_170",
+      "ragko_doc_193",
+      "ragko_doc_169",
+      "ragko_doc_24",
+      "ragko_doc_20",
+      "ragko_doc_26"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 36,
+    "query_len_tokens": 8,
+    "hangul_ratio": 0.8928571428571429,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_161",
+    "query": "블록체인 기술이 어떻게 발전해 왔는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_161"
+    ],
+    "retrieved": [
+      "ragko_doc_169",
+      "ragko_doc_161",
+      "ragko_doc_92",
+      "ragko_doc_167",
+      "ragko_doc_144",
+      "ragko_doc_166",
+      "ragko_doc_58",
+      "ragko_doc_45",
+      "ragko_doc_164",
+      "ragko_doc_26"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 28,
+    "query_len_tokens": 6,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_162",
+    "query": "ICO와 IPO의 차이점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_162"
+    ],
+    "retrieved": [
+      "ragko_doc_172"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 21,
+    "query_len_tokens": 4,
+    "hangul_ratio": 0.6470588235294118,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_163",
+    "query": "주주들이 회사를 소유하고 있다는 것의 의미는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_163"
+    ],
+    "retrieved": [
+      "ragko_doc_184",
+      "ragko_doc_163",
+      "ragko_doc_110",
+      "ragko_doc_94",
+      "ragko_doc_170",
+      "ragko_doc_85",
+      "ragko_doc_193",
+      "ragko_doc_40",
+      "ragko_doc_107",
+      "ragko_doc_188"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 31,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_164",
+    "query": "벤처캐피털과 엔젤투자자의 차이점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_164"
+    ],
+    "retrieved": [],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 25,
+    "query_len_tokens": 4,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_165",
+    "query": "아이디어 단계에서 ICO에 투자하는 것의 장점과 단점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_165"
+    ],
+    "retrieved": [
+      "ragko_doc_165",
+      "ragko_doc_160",
+      "ragko_doc_172",
+      "ragko_doc_93",
+      "ragko_doc_184",
+      "ragko_doc_167",
+      "ragko_doc_163",
+      "ragko_doc_10",
+      "ragko_doc_15",
+      "ragko_doc_164"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 37,
+    "query_len_tokens": 8,
+    "hangul_ratio": 0.896551724137931,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_166",
+    "query": "가상화폐 시장에 너무 많은 가상화폐가 생겨나면 어떤 단점이 있을까요?",
+    "relevant": [
+      "ragko_doc_166"
+    ],
+    "retrieved": [
+      "ragko_doc_167",
+      "ragko_doc_166",
+      "ragko_doc_161",
+      "ragko_doc_80",
+      "ragko_doc_171",
+      "ragko_doc_184",
+      "ragko_doc_14",
+      "ragko_doc_197",
+      "ragko_doc_136",
+      "ragko_doc_165"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 38,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_167",
+    "query": "ICO에 대한 규제는 어떤 것을 기본으로 따르나요?",
+    "relevant": [
+      "ragko_doc_167"
+    ],
+    "retrieved": [
+      "ragko_doc_172",
+      "ragko_doc_167",
+      "ragko_doc_160",
+      "ragko_doc_169",
+      "ragko_doc_80",
+      "ragko_doc_14",
+      "ragko_doc_91",
+      "ragko_doc_168",
+      "ragko_doc_165",
+      "ragko_doc_139"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 28,
+    "query_len_tokens": 7,
+    "hangul_ratio": 0.8571428571428571,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_168",
+    "query": "ICO는 어떤 형태의 크라우드 펀딩인가요?",
+    "relevant": [
+      "ragko_doc_168"
+    ],
+    "retrieved": [
+      "ragko_doc_168",
+      "ragko_doc_162",
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_4",
+      "ragko_doc_172",
+      "ragko_doc_80",
+      "ragko_doc_64",
+      "ragko_doc_24",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 23,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.8333333333333334,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_169",
+    "query": "블록체인 기술의 가장 중요한 장점은 무엇이며, 이것이 ICO에 어떤 영향을 미치는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_169"
+    ],
+    "retrieved": [
+      "ragko_doc_169",
+      "ragko_doc_50",
+      "ragko_doc_167",
+      "ragko_doc_156",
+      "ragko_doc_96",
+      "ragko_doc_161",
+      "ragko_doc_160",
+      "ragko_doc_48",
+      "ragko_doc_163",
+      "ragko_doc_165"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 54,
+    "query_len_tokens": 12,
+    "hangul_ratio": 0.926829268292683,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_170",
+    "query": "일반적으로 IPO는 어떤 형태로 이루어지나요?",
+    "relevant": [
+      "ragko_doc_170"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_170",
+      "ragko_doc_64",
+      "ragko_doc_160",
+      "ragko_doc_14",
+      "ragko_doc_172",
+      "ragko_doc_80",
+      "ragko_doc_163",
+      "ragko_doc_47",
+      "ragko_doc_162"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 25,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.85,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_171",
+    "query": "ICO 비즈니스 모델을 평가하는 방법은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_171"
+    ],
+    "retrieved": [
+      "ragko_doc_171",
+      "ragko_doc_168",
+      "ragko_doc_165",
+      "ragko_doc_167",
+      "ragko_doc_162",
+      "ragko_doc_172",
+      "ragko_doc_160",
+      "ragko_doc_169",
+      "ragko_doc_78",
+      "ragko_doc_87"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 28,
+    "query_len_tokens": 6,
+    "hangul_ratio": 0.8636363636363636,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_172",
+    "query": "유틸리티형 ICO의 투자자 유형, 투자 목적 및 투자 과정에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_172"
+    ],
+    "retrieved": [
+      "ragko_doc_172",
+      "ragko_doc_165",
+      "ragko_doc_99",
+      "ragko_doc_181",
+      "ragko_doc_66",
+      "ragko_doc_74",
+      "ragko_doc_170",
+      "ragko_doc_147",
+      "ragko_doc_162",
+      "ragko_doc_171"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 44,
+    "query_len_tokens": 11,
+    "hangul_ratio": 0.90625,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_173",
+    "query": "자금세탁 방지 및 부정대출 탐지 부문에서 인공지능이 어떻게 활용되고 있나요?",
+    "relevant": [
+      "ragko_doc_173"
+    ],
+    "retrieved": [
+      "ragko_doc_173",
+      "ragko_doc_138",
+      "ragko_doc_191",
+      "ragko_doc_142",
+      "ragko_doc_99",
+      "ragko_doc_32",
+      "ragko_doc_23",
+      "ragko_doc_50",
+      "ragko_doc_174",
+      "ragko_doc_122"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 42,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_174",
+    "query": "인공지능의 발전이 데이터의 가용성과 어떤 관계가 있을까요?",
+    "relevant": [
+      "ragko_doc_174"
+    ],
+    "retrieved": [
+      "ragko_doc_174",
+      "ragko_doc_23",
+      "ragko_doc_112",
+      "ragko_doc_171",
+      "ragko_doc_18",
+      "ragko_doc_73",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_65",
+      "ragko_doc_103"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 32,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_175",
+    "query": "예금부채와 비예금부채의 반응 속도에 대해 어떻게 생각하시나요?",
+    "relevant": [
+      "ragko_doc_175"
+    ],
+    "retrieved": [
+      "ragko_doc_175",
+      "ragko_doc_50",
+      "ragko_doc_163",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_164",
+      "ragko_doc_23",
+      "ragko_doc_193",
+      "ragko_doc_99",
+      "ragko_doc_27"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 34,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_176",
+    "query": "대출수요함수와 대출공급함수의 장기 추세와 단기 사이클에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_176"
+    ],
+    "retrieved": [
+      "ragko_doc_176",
+      "ragko_doc_83",
+      "ragko_doc_72",
+      "ragko_doc_52",
+      "ragko_doc_84",
+      "ragko_doc_148",
+      "ragko_doc_146",
+      "ragko_doc_175",
+      "ragko_doc_117",
+      "ragko_doc_193"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 41,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_177",
+    "query": "저금리-부채증대론에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_177"
+    ],
+    "retrieved": [
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_59"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 21,
+    "query_len_tokens": 3,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_178",
+    "query": "EC(2017)의 risk premium 가정에 따르면, risk premium은 어떻게 계산되나요?",
+    "relevant": [
+      "ragko_doc_178"
+    ],
+    "retrieved": [
+      "ragko_doc_178",
+      "ragko_doc_49",
+      "ragko_doc_78",
+      "ragko_doc_132",
+      "ragko_doc_150",
+      "ragko_doc_70",
+      "ragko_doc_151",
+      "ragko_doc_33",
+      "ragko_doc_164",
+      "ragko_doc_26"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 56,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.4,
+    "has_number": true,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "contains_number",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_179",
+    "query": "최적규제원리에 따라 비례원칙을 실현하는 제재수단의 경제적 근거는 어떻게 확립될 수 있나요?",
+    "relevant": [
+      "ragko_doc_179"
+    ],
+    "retrieved": [
+      "ragko_doc_179",
+      "ragko_doc_24",
+      "ragko_doc_51",
+      "ragko_doc_85",
+      "ragko_doc_187",
+      "ragko_doc_79",
+      "ragko_doc_164",
+      "ragko_doc_39",
+      "ragko_doc_26",
+      "ragko_doc_50"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 50,
+    "query_len_tokens": 11,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_180",
+    "query": "금융위원회가 부과과징금을 결정할 때 고려하는 요소는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_180"
+    ],
+    "retrieved": [
+      "ragko_doc_184",
+      "ragko_doc_86",
+      "ragko_doc_180",
+      "ragko_doc_68",
+      "ragko_doc_157",
+      "ragko_doc_112",
+      "ragko_doc_139",
+      "ragko_doc_158",
+      "ragko_doc_136",
+      "ragko_doc_43"
+    ],
+    "hit_rank": 3,
+    "reciprocal_rank": 0.3333333333333333,
+    "query_len_chars": 35,
+    "query_len_tokens": 7,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_181",
+    "query": "증권규제의 목적은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_181"
+    ],
+    "retrieved": [
+      "ragko_doc_172",
+      "ragko_doc_156"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 16,
+    "query_len_tokens": 3,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_182",
+    "query": "고령화와 낮은 출산율이 우리나라의 잠재성장률에 어떤 영향을 미칠 것으로 예상되나요?",
+    "relevant": [
+      "ragko_doc_182"
+    ],
+    "retrieved": [
+      "ragko_doc_182",
+      "ragko_doc_71",
+      "ragko_doc_39",
+      "ragko_doc_150",
+      "ragko_doc_152",
+      "ragko_doc_76",
+      "ragko_doc_81",
+      "ragko_doc_159",
+      "ragko_doc_15",
+      "ragko_doc_100"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 46,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_183",
+    "query": "노년 인구 비율이 늘어날 경우 경제 전체의 저축률이 어떻게 변하나요?",
+    "relevant": [
+      "ragko_doc_183"
+    ],
+    "retrieved": [
+      "ragko_doc_183",
+      "ragko_doc_78",
+      "ragko_doc_27",
+      "ragko_doc_182",
+      "ragko_doc_151",
+      "ragko_doc_152",
+      "ragko_doc_198",
+      "ragko_doc_197",
+      "ragko_doc_79",
+      "ragko_doc_185"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 38,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_184",
+    "query": "노동 효율성을 고려하여 노동투입량을 정의하는 것의 장단점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_184"
+    ],
+    "retrieved": [
+      "ragko_doc_184",
+      "ragko_doc_182",
+      "ragko_doc_82",
+      "ragko_doc_185",
+      "ragko_doc_163",
+      "ragko_doc_89",
+      "ragko_doc_181",
+      "ragko_doc_141",
+      "ragko_doc_106",
+      "ragko_doc_100"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 39,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_185",
+    "query": "노동시장 구조개혁 등으로 경제활동참가율을 높이는 것이 어떻게 성장률 하방압력을 최소화시킬 수 있는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_185"
+    ],
+    "retrieved": [
+      "ragko_doc_185",
+      "ragko_doc_182",
+      "ragko_doc_23",
+      "ragko_doc_184",
+      "ragko_doc_198",
+      "ragko_doc_50",
+      "ragko_doc_183",
+      "ragko_doc_193",
+      "ragko_doc_24",
+      "ragko_doc_152"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 63,
+    "query_len_tokens": 13,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_186",
+    "query": "핵심예금의 종류에는 어떤 것들이 있나요?",
+    "relevant": [
+      "ragko_doc_186"
+    ],
+    "retrieved": [
+      "ragko_doc_187",
+      "ragko_doc_171",
+      "ragko_doc_14",
+      "ragko_doc_80",
+      "ragko_doc_163"
+    ],
+    "hit_rank": 0,
+    "reciprocal_rank": 0.0,
+    "query_len_chars": 22,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_187",
+    "query": "핵심예금의 경제적 예상수명이란 무엇을 의미하나요?",
+    "relevant": [
+      "ragko_doc_187"
+    ],
+    "retrieved": [
+      "ragko_doc_187",
+      "ragko_doc_85",
+      "ragko_doc_79",
+      "ragko_doc_179",
+      "ragko_doc_39",
+      "ragko_doc_67",
+      "ragko_doc_51"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 27,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_188",
+    "query": "양립형 m-CBDC 방식의 장점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_188"
+    ],
+    "retrieved": [
+      "ragko_doc_190",
+      "ragko_doc_188",
+      "ragko_doc_140",
+      "ragko_doc_169",
+      "ragko_doc_88",
+      "ragko_doc_80",
+      "ragko_doc_45"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 25,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.7368421052631579,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang",
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_189",
+    "query": "CBDC 사용시 완전 익명성이 보장되는가요?",
+    "relevant": [
+      "ragko_doc_189"
+    ],
+    "retrieved": [
+      "ragko_doc_189",
+      "ragko_doc_128",
+      "ragko_doc_188",
+      "ragko_doc_190",
+      "ragko_doc_126",
+      "ragko_doc_191",
+      "ragko_doc_127",
+      "ragko_doc_97"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 24,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.7894736842105263,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_190",
+    "query": "m-CBDC 구축과 국제협력에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_190"
+    ],
+    "retrieved": [
+      "ragko_doc_190",
+      "ragko_doc_188",
+      "ragko_doc_64",
+      "ragko_doc_193",
+      "ragko_doc_163",
+      "ragko_doc_99",
+      "ragko_doc_27",
+      "ragko_doc_17",
+      "ragko_doc_52",
+      "ragko_doc_20"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 27,
+    "query_len_tokens": 5,
+    "hangul_ratio": 0.7619047619047619,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_191",
+    "query": "CBDC가 국경간 자금세탁 및 불법자금 거래에 악용될 가능성이 있나요?",
+    "relevant": [
+      "ragko_doc_191"
+    ],
+    "retrieved": [
+      "ragko_doc_191",
+      "ragko_doc_128",
+      "ragko_doc_189",
+      "ragko_doc_188",
+      "ragko_doc_173",
+      "ragko_doc_93",
+      "ragko_doc_29",
+      "ragko_doc_20",
+      "ragko_doc_46",
+      "ragko_doc_10"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 39,
+    "query_len_tokens": 9,
+    "hangul_ratio": 0.8666666666666667,
+    "has_number": false,
+    "has_english": true,
+    "notes": [
+      "mixed_lang"
+    ]
+  },
+  {
+    "qid": "ragko_192",
+    "query": "우리나라가 고령화 대응을 위해 어떤 대책을 마련해야 하는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_192"
+    ],
+    "retrieved": [
+      "ragko_doc_192",
+      "ragko_doc_92",
+      "ragko_doc_149",
+      "ragko_doc_150",
+      "ragko_doc_171",
+      "ragko_doc_153",
+      "ragko_doc_109",
+      "ragko_doc_31",
+      "ragko_doc_156",
+      "ragko_doc_79"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 40,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_193",
+    "query": "변액연금 및 일시불 종신보험 제도에 대한 오해와 문제점은 무엇인가요?",
+    "relevant": [
+      "ragko_doc_193"
+    ],
+    "retrieved": [
+      "ragko_doc_193",
+      "ragko_doc_54",
+      "ragko_doc_143",
+      "ragko_doc_111",
+      "ragko_doc_72",
+      "ragko_doc_31",
+      "ragko_doc_176",
+      "ragko_doc_75",
+      "ragko_doc_137",
+      "ragko_doc_169"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 38,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_194",
+    "query": "은행들이 기업에 대한 효과적인 신용평가를 통해 어떤 방식으로 기업의 생산성 향상에 기여하였는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_194"
+    ],
+    "retrieved": [
+      "ragko_doc_196",
+      "ragko_doc_194",
+      "ragko_doc_3",
+      "ragko_doc_199",
+      "ragko_doc_114",
+      "ragko_doc_47",
+      "ragko_doc_164",
+      "ragko_doc_104",
+      "ragko_doc_171",
+      "ragko_doc_59"
+    ],
+    "hit_rank": 2,
+    "reciprocal_rank": 0.5,
+    "query_len_chars": 60,
+    "query_len_tokens": 13,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_195",
+    "query": "우리나라 은행들이 기업대출을 통해 외부자금을 필요로 하는 산업에 어떻게 기여하였나요?",
+    "relevant": [
+      "ragko_doc_195"
+    ],
+    "retrieved": [
+      "ragko_doc_195",
+      "ragko_doc_194",
+      "ragko_doc_26",
+      "ragko_doc_164",
+      "ragko_doc_153",
+      "ragko_doc_104",
+      "ragko_doc_112",
+      "ragko_doc_107",
+      "ragko_doc_101",
+      "ragko_doc_91"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 47,
+    "query_len_tokens": 10,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_196",
+    "query": "은행의 기업대출이 중소기업의 부가가치 성장에 어떻게 기여하였는지 설명해주세요.",
+    "relevant": [
+      "ragko_doc_196"
+    ],
+    "retrieved": [
+      "ragko_doc_196",
+      "ragko_doc_195",
+      "ragko_doc_194",
+      "ragko_doc_93",
+      "ragko_doc_12",
+      "ragko_doc_164",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_108",
+      "ragko_doc_23"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 43,
+    "query_len_tokens": 8,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_197",
+    "query": "기업 저축의 역설에 대해 설명해주세요.",
+    "relevant": [
+      "ragko_doc_197"
+    ],
+    "retrieved": [
+      "ragko_doc_197",
+      "ragko_doc_59",
+      "ragko_doc_149",
+      "ragko_doc_163",
+      "ragko_doc_171",
+      "ragko_doc_27",
+      "ragko_doc_26",
+      "ragko_doc_24",
+      "ragko_doc_175",
+      "ragko_doc_193"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 21,
+    "query_len_tokens": 5,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": []
+  },
+  {
+    "qid": "ragko_198",
+    "query": "명목 경제 성장률이 높은 것이 경기호황을 의미하는 이유는 무엇인가요?",
+    "relevant": [
+      "ragko_doc_198"
+    ],
+    "retrieved": [
+      "ragko_doc_198",
+      "ragko_doc_175",
+      "ragko_doc_68",
+      "ragko_doc_157",
+      "ragko_doc_127",
+      "ragko_doc_85",
+      "ragko_doc_158",
+      "ragko_doc_197",
+      "ragko_doc_194",
+      "ragko_doc_183"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 38,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  },
+  {
+    "qid": "ragko_199",
+    "query": "대기업들의 중소기업에 대한 부당행위를 근절하면 어떤 긍정적인 효과가 있을까요?",
+    "relevant": [
+      "ragko_doc_199"
+    ],
+    "retrieved": [
+      "ragko_doc_199",
+      "ragko_doc_47",
+      "ragko_doc_14",
+      "ragko_doc_50",
+      "ragko_doc_117",
+      "ragko_doc_147",
+      "ragko_doc_171",
+      "ragko_doc_62",
+      "ragko_doc_81",
+      "ragko_doc_128"
+    ],
+    "hit_rank": 1,
+    "reciprocal_rank": 1.0,
+    "query_len_chars": 43,
+    "query_len_tokens": 9,
+    "hangul_ratio": 1.0,
+    "has_number": false,
+    "has_english": false,
+    "notes": [
+      "generic_question_form"
+    ]
+  }
+]

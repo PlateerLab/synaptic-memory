@@ -1,5 +1,7 @@
 """Tests for Reranker — NoOp and LLM reranking."""
 
+import pytest
+
 from synaptic import NodeKind, SynapticGraph
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.reranker import LLMReranker, NoOpReranker
@@ -107,20 +109,27 @@ class TestLLMReranker:
         assert result == []
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestRerankerIntegration:
+    """These tests pin the legacy reranker injection contract, which
+    only the legacy HybridSearch pipeline honours. The EvidenceSearch
+    pipeline uses a cross-encoder reranker instead (see
+    ``tests/test_cross_encoder_reranker.py``). Pass ``engine="legacy"``
+    explicitly — the default flipped to ``evidence`` in v0.16.0."""
+
     async def test_search_with_noop_reranker(self):
         graph = SynapticGraph(
             MemoryBackend(),
             reranker=NoOpReranker(),
         )
         await graph.add("Test Node", "content about databases")
-        result = await graph.search("databases")
+        result = await graph.search("databases", engine="legacy")
         assert "rerank" in result.stages_used
 
     async def test_search_without_reranker(self):
         graph = SynapticGraph.memory()
         await graph.add("Test Node", "content about databases")
-        result = await graph.search("databases")
+        result = await graph.search("databases", engine="legacy")
         assert "rerank" not in result.stages_used
 
     async def test_search_with_llm_reranker(self):
@@ -136,5 +145,5 @@ class TestRerankerIntegration:
         await graph.add("PostgreSQL", "relational database system")
         await graph.add("Redis", "in-memory cache")
 
-        result = await graph.search("database")
+        result = await graph.search("database", engine="legacy")
         assert "rerank" in result.stages_used

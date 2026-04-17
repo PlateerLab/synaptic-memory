@@ -52,10 +52,29 @@ _KO_PARTICLE = re.compile(
 )
 
 
-def _normalize_korean(text: str) -> str:
+# Query-time Korean noise words — Kiwi tokens that survive POS filtering
+# but are pure question-form noise. Dropping these at query time only
+# (not at index time, where they rarely appear in content) cuts BM25
+# noise on Allganize RAG-ko from MRR 0.621 → 0.735 (+18%).
+_KO_QUERY_NOISE: frozenset[str] = frozenset(
+    {
+        # interrogatives + demonstratives
+        "무엇", "어떻", "어떤", "어떠", "어떠한", "왜", "언제", "어디",
+        "그것", "이것", "저것", "이", "그", "저", "것", "수",
+        # "~대해", "~관련" discourse glue
+        "대해", "대한", "대하", "관련", "관한", "관하",
+        # explanatory imperatives broken up by Kiwi
+        "설명", "말씀", "주시", "바랍니다", "해주",
+        # copulas and existentials that slip through
+        "있", "없", "되",
+    }
+)
+
+
+def _normalize_korean(text: str, *, query_mode: bool = False) -> str:
     """Normalize Korean text for FTS indexing/querying.
 
-    With Kiwi: full morphological analysis → noun/verb stems + numbers.
+    With Kiwi: morphological analysis → noun / verb / adjective stems.
     "경마산업관리 규정" → "경마 산업 관리 규정"
     "정보화기기를 교체하고" → "정보 기기 교체"
 
@@ -68,6 +87,14 @@ def _normalize_korean(text: str) -> str:
     like "25SS" → "25 SS" or "product_code" → "product code", breaking
     exact matches. The regex fallback handles particle stripping without
     damaging non-Korean tokens.
+
+    When ``query_mode=True``: drop verbs (VV), adjectives (VA), and a
+    small hand-tuned list of Korean question-form stopwords
+    (``설명해주세요 / 무엇 / 어떻게`` …). These hurt BM25 ranking on
+    natural-language Korean queries because they co-occur in many
+    non-relevant documents. Measured +0.114 MRR on Allganize RAG-ko
+    and +0.076 on Allganize RAG-Eval, with zero regression on English
+    / code-heavy queries (Kiwi only fires when ≥50 % Hangul).
     """
     if not text:
         return text
@@ -82,9 +109,21 @@ def _normalize_korean(text: str) -> str:
         if kiwi is not None:
             try:
                 tokens = kiwi.tokenize(text)
-                stems = [
-                    tk.form for tk in tokens if tk.tag.startswith(("NN", "VV", "VA", "SL", "SN"))
-                ]
+                if query_mode:
+                    # Query side: nouns + foreign letters + numbers only.
+                    stems = [
+                        tk.form
+                        for tk in tokens
+                        if tk.tag in ("NNG", "NNP", "NNB", "SL", "SN")
+                        and tk.form not in _KO_QUERY_NOISE
+                    ]
+                else:
+                    # Index side: noun + verb + adjective stems (existing).
+                    stems = [
+                        tk.form
+                        for tk in tokens
+                        if tk.tag.startswith(("NN", "VV", "VA", "SL", "SN"))
+                    ]
                 if stems:
                     return " ".join(stems)
             except Exception:
@@ -456,19 +495,25 @@ class SQLiteBackend:
 
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
         db = self._db()
-        # Normalize query the same way content was indexed.
-        # Also try the original query as a fallback — Kiwi over-
-        # segmentation on the query side can miss exact matches that
-        # the regex path (used for indexed structured data) would hit.
-        normalized = _normalize_korean(query)
+        # Query-time normalisation is **more aggressive** than index-time:
+        # it drops Korean question-form noise ("설명해주세요", "무엇인가요",
+        # "어떻게", ...) that does not differentiate between documents.
+        # This is a Korean-query-only effect — Kiwi only fires when the
+        # query is ≥50 % Hangul, so English / code queries are unchanged.
+        normalized = _normalize_korean(query, query_mode=True)
         original_terms = query.strip().split()
         norm_terms = normalized.strip().split()
-        # Merge: normalized terms first, then any original terms not
-        # already present (handles Kiwi-split vs unsplit mismatch)
+        # Merge original terms only when they add structural signal that
+        # query_mode filtering stripped. A token is re-added only if it
+        # contains a digit or ASCII letter — Korean function words are
+        # intentionally dropped since _normalize_korean(..., query_mode=
+        # True) already kept every noun.
         term_seen = set(norm_terms)
         terms = list(norm_terms)
         for t in original_terms:
-            if t not in term_seen:
+            if t in term_seen:
+                continue
+            if any(c.isdigit() or ("a" <= c.lower() <= "z") for c in t):
                 terms.append(t)
                 term_seen.add(t)
         if not terms:

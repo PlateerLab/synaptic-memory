@@ -1204,7 +1204,7 @@ class SynapticGraph:
         *,
         limit: int = 10,
         embedding: list[float] | None = None,
-        engine: str = "legacy",
+        engine: str = "evidence",
     ) -> SearchResult:
         """Hybrid search across the graph.
 
@@ -1216,23 +1216,21 @@ class SynapticGraph:
                 embedded automatically.
             engine: Which retrieval engine to use.
 
-                - ``"legacy"`` (default for v0.14.x) → :class:`HybridSearch`,
-                  the 3-stage FTS → synonym → query rewrite cascade with
-                  graph spreading activation. Deterministic, well-tested,
-                  used by every caller in this repo.
-
-                - ``"evidence"`` → :class:`EvidenceSearch`, the 3rd-gen
-                  pipeline that backs ``agent_search`` /
-                  ``agent_deep_search`` / MCP ``knowledge_search``.
-                  Anchor-driven, hybrid-reranker-based, MMR aggregation.
+                - ``"evidence"`` (default from v0.16.0) →
+                  :class:`EvidenceSearch`, the hybrid pipeline
+                  (BM25 + HNSW + PPR + cross-encoder + MMR). Anchor-
+                  driven, hybrid-reranker-based, MMR aggregation.
                   Has no ``cos >= 0.45`` cutoff and uses min-max
                   normalised cosine, so semantic-only queries that
                   share no words with the corpus still surface
                   relevant evidence.
 
-                The default will flip to ``"evidence"`` in v0.16.0
-                and the legacy engine will be removed in v0.17.0. New
-                code should pass ``engine="evidence"`` explicitly.
+                - ``"legacy"`` → :class:`HybridSearch`, the 3-stage
+                  FTS → synonym → query rewrite cascade that was the
+                  default up to v0.15.x. Kept for transitional
+                  callers that depend on its specific
+                  ``stages_used`` semantics; **deprecated, scheduled
+                  for removal in v0.17.0**.
 
         Returns:
             ``SearchResult`` regardless of which engine was used —
@@ -1246,13 +1244,24 @@ class SynapticGraph:
         if embedding is None and self._embedder is not None:
             embedding = await self._embedder.embed(query)
 
-        # Modern path — opt-in via engine="evidence".
+        # Modern path — default from v0.16.0.
         if engine == "evidence":
             return await self._search_via_evidence(query, limit=limit)
 
         if engine != "legacy":
             msg = f"Unknown search engine {engine!r}; expected 'legacy' or 'evidence'."
             raise ValueError(msg)
+
+        # Legacy HybridSearch path — deprecated, scheduled for removal in v0.17.0.
+        import warnings
+
+        warnings.warn(
+            "graph.search(engine='legacy') is deprecated and will be removed in "
+            "v0.17.0. Drop the engine argument (now defaults to 'evidence') or "
+            "pass engine='evidence' explicitly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         # Corpus size for adaptive vector weighting
         corpus_size = await self._get_corpus_size()

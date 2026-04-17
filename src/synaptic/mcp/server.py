@@ -8,6 +8,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 from typing import Any
@@ -40,89 +41,116 @@ _embed_model: str = "default"
 _vector_min_cosine: float | None = None
 _vector_relative_drop: float | None = None
 
+# Lazy initialisation under concurrent tool calls — FastMCP dispatches
+# tool invocations on a shared asyncio loop, so two tools firing at
+# once during the first turn both hit `_graph is None` and can race
+# into two SynapticGraph constructions. The lock serialises the
+# initialisation path; once `_graph` is set, the fast path needs no
+# locking.
+_graph_init_lock: asyncio.Lock | None = None
+
+
+def _get_init_lock() -> asyncio.Lock:
+    global _graph_init_lock
+    if _graph_init_lock is None:
+        _graph_init_lock = asyncio.Lock()
+    return _graph_init_lock
+
 
 async def _ensure_graph() -> Any:
-    """Lazy-initialize the SynapticGraph on first use."""
+    """Lazy-initialize the SynapticGraph on first use (concurrency-safe)."""
     global _graph, _backend, _embedder
 
+    # Fast path: already initialised. No lock needed because `_graph`
+    # is only assigned once and never reset at runtime.
     if _graph is not None:
         return _graph
 
-    from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
-    from synaptic.extensions.phrase_extractor import PhraseExtractor
-    from synaptic.extensions.tagger_regex import RegexTagExtractor
-    from synaptic.graph import SynapticGraph
-    from synaptic.ontology import build_agent_ontology
+    async with _get_init_lock():
+        # Double-checked: another coroutine may have initialised while
+        # we were queued on the lock.
+        if _graph is not None:
+            return _graph
 
-    if _dsn:
-        from synaptic.backends.postgresql import PostgreSQLBackend
+        from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
+        from synaptic.extensions.phrase_extractor import PhraseExtractor
+        from synaptic.extensions.tagger_regex import RegexTagExtractor
+        from synaptic.graph import SynapticGraph
+        from synaptic.ontology import build_agent_ontology
 
-        _backend = PostgreSQLBackend(_dsn)
-    else:
-        from synaptic.backends.sqlite import SQLiteBackend
+        if _dsn:
+            from synaptic.backends.postgresql import PostgreSQLBackend
 
-        _backend = SQLiteBackend(_db_path)
+            _backend = PostgreSQLBackend(_dsn)
+        else:
+            from synaptic.backends.sqlite import SQLiteBackend
 
-    await _backend.connect()
+            _backend = SQLiteBackend(_db_path)
 
-    # Auto-embedding: connect to any OpenAI-compatible endpoint
-    if _embed_url:
-        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+        await _backend.connect()
 
-        _embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
-        logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
+        # Auto-embedding: connect to any OpenAI-compatible endpoint
+        if _embed_url:
+            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
 
-    # Wire the cross-document bridge mechanism.
-    #
-    # Without these, ingesting N files produces N isolated clusters
-    # of nodes that share no edges. The HippoRAG2-style "phrase hub"
-    # design relies on:
-    #
-    #   1. PhraseExtractor — pulls salient phrases from each chunk
-    #      and creates one ENTITY node per unique phrase. Multiple
-    #      chunks containing the same phrase all CONTAINS-edge into
-    #      the same hub, which makes the hub a bridge between docs.
-    #
-    #   2. ChunkEntityIndex — bidirectional registry that lets the
-    #      search pipeline (PPR, HybridReranker, GraphExpander)
-    #      walk from a chunk to its phrase hubs and back.
-    #
-    # Both are required for cross-document search to work. Wiring
-    # only one of them silently degrades the graph to "FTS over
-    # disjoint files".
-    _graph = SynapticGraph(
-        _backend,
-        tag_extractor=RegexTagExtractor(),
-        ontology=build_agent_ontology(),
-        embedder=_embedder,
-        chunk_entity_index=ChunkEntityIndex(),
-        phrase_extractor=PhraseExtractor(),
-        vector_min_cosine=_vector_min_cosine,
-        vector_relative_drop=_vector_relative_drop,
-    )
-    logger.info(
-        "Knowledge graph initialized "
-        "(backend=%s, embedder=%s, phrase_extractor=on, vector_min_cos=%s, vector_rel_drop=%s)",
-        type(_backend).__name__,
-        "on" if _embedder is not None else "off",
-        _vector_min_cosine if _vector_min_cosine is not None else "default",
-        _vector_relative_drop if _vector_relative_drop is not None else "default",
-    )
-    return _graph
+            _embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
+            logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
+
+        # Wire the cross-document bridge mechanism.
+        #
+        # Without these, ingesting N files produces N isolated clusters
+        # of nodes that share no edges. The HippoRAG2-style "phrase hub"
+        # design relies on:
+        #
+        #   1. PhraseExtractor — pulls salient phrases from each chunk
+        #      and creates one ENTITY node per unique phrase. Multiple
+        #      chunks containing the same phrase all CONTAINS-edge into
+        #      the same hub, which makes the hub a bridge between docs.
+        #
+        #   2. ChunkEntityIndex — bidirectional registry that lets the
+        #      search pipeline (PPR, HybridReranker, GraphExpander)
+        #      walk from a chunk to its phrase hubs and back.
+        #
+        # Both are required for cross-document search to work. Wiring
+        # only one of them silently degrades the graph to "FTS over
+        # disjoint files".
+        _graph = SynapticGraph(
+            _backend,
+            tag_extractor=RegexTagExtractor(),
+            ontology=build_agent_ontology(),
+            embedder=_embedder,
+            chunk_entity_index=ChunkEntityIndex(),
+            phrase_extractor=PhraseExtractor(),
+            vector_min_cosine=_vector_min_cosine,
+            vector_relative_drop=_vector_relative_drop,
+        )
+        logger.info(
+            "Knowledge graph initialized "
+            "(backend=%s, embedder=%s, phrase_extractor=on, vector_min_cos=%s, vector_rel_drop=%s)",
+            type(_backend).__name__,
+            "on" if _embedder is not None else "off",
+            _vector_min_cosine if _vector_min_cosine is not None else "default",
+            _vector_relative_drop if _vector_relative_drop is not None else "default",
+        )
+        return _graph
 
 
 async def _ensure_tracker() -> Any:
-    """Lazy-initialize the ActivityTracker."""
+    """Lazy-initialize the ActivityTracker (concurrency-safe)."""
     global _tracker
 
     if _tracker is not None:
         return _tracker
 
-    from synaptic.activity import ActivityTracker
+    async with _get_init_lock():
+        if _tracker is not None:
+            return _tracker
 
-    graph = await _ensure_graph()
-    _tracker = ActivityTracker(graph)
-    return _tracker
+        from synaptic.activity import ActivityTracker
+
+        graph = await _ensure_graph()
+        _tracker = ActivityTracker(graph)
+        return _tracker
 
 
 # --- Tools ---

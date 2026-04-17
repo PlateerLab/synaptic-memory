@@ -13,6 +13,12 @@ eval/data/*.sqlite-wal
 eval/data/*.kuzu
 eval/data/*.kuzu.*
 eval/results/
+examples/benchmark_vs_competitors/results/
+examples/benchmark_vs_competitors/hipporag_bench/
+# Example-run output DBs (quickstart, langchain example, etc.)
+*.db
+*.db-shm
+*.db-wal
 temp/
 .DS_Store
 ~/

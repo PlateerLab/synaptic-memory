@@ -214,8 +214,11 @@ class TestSpreadingActivation:
         await backend.close()
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestReinforcementRanking:
-    """Reinforced nodes should rank higher in search results."""
+    """Reinforcement-based boost is a legacy-engine behaviour — Evidence
+    search does not honour per-node success counters. Tests pin the
+    legacy contract via ``engine="legacy"``."""
 
     async def test_reinforcement_boosts_ranking(self) -> None:
         """Reinforce a node 10 times, then verify it ranks higher."""
@@ -235,7 +238,7 @@ class TestReinforcementRanking:
             nodes.append(node)
 
         # Initial search — get baseline ranking
-        result_before = await graph.search("소프트웨어 설계", limit=5)
+        result_before = await graph.search("소프트웨어 설계", limit=5, engine="legacy")
         assert len(result_before.nodes) >= 3, "Need at least 3 results for ranking test"
 
         # Pick the LAST result (lowest ranked)
@@ -248,7 +251,7 @@ class TestReinforcementRanking:
             await graph.reinforce([target_id], success=True)
 
         # Search again
-        result_after = await graph.search("소프트웨어 설계", limit=5)
+        result_after = await graph.search("소프트웨어 설계", limit=5, engine="legacy")
         new_rank = next(
             (i for i, n in enumerate(result_after.nodes) if n.node.id == target_id),
             len(result_after.nodes),
@@ -290,7 +293,7 @@ class TestReinforcementRanking:
         for _ in range(10):
             await graph.reinforce([node_reinforced.id], success=True)
 
-        result = await graph.search("데이터 분석", limit=5)
+        result = await graph.search("데이터 분석", limit=5, engine="legacy")
         result_ids = [n.node.id for n in result.nodes]
 
         assert node_reinforced.id in result_ids, "Reinforced node should appear in results"

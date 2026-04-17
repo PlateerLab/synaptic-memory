@@ -1,0 +1,107 @@
+% arXiv-ready LaTeX skeleton for "Streaming Retrieval with Top-K Invariance"
+%
+% Build:
+%   pdflatex streaming_rag.tex
+%   bibtex   streaming_rag
+%   pdflatex streaming_rag.tex
+%   pdflatex streaming_rag.tex
+%
+% Or convert draft.md directly with pandoc:
+%   pandoc draft.md --bibliography=references.bib --citeproc \
+%       -s --template=template.tex -o streaming_rag.pdf
+%
+% The actual prose lives in draft.md; this file is a minimal LaTeX
+% shell that arXiv's auto-build pipeline accepts.
+
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{natbib}
+\usepackage{kotex}  % Korean text rendering for examples
+\usepackage{xcolor}
+\usepackage[ruled,vlined]{algorithm2e}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+\title{Streaming Retrieval with Top-K Invariance:\\
+An LLM-Free Baseline for Knowledge-Graph RAG}
+
+\author{%
+  Son Seongjun\thanks{Independent researcher. Correspondence: \texttt{sonsj97@gmail.com}. Code and benchmarks: \url{https://github.com/PlateerLab/synaptic-memory}.}%
+}
+
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Modern knowledge-graph retrieval-augmented generation (KG-RAG) systems --
+Microsoft GraphRAG, HippoRAG, LightRAG, Cognee, Mem0 with graph memory --
+rely on large language models to extract entities, relations, and
+community summaries at index time. This makes incremental updates (a)
+expensive, (b) non-deterministic, and (c) fragile under change data
+capture (CDC) workflows common in enterprise deployments. We present
+\textbf{Synaptic Memory}, an open-source KG-RAG system that builds its
+graph with structural and statistical signals only -- no LLM at index
+time -- and we prove a \textbf{Top-K Set Invariance theorem}: for any
+two cumulative ingest schedules producing the same final corpus, the
+top-$k$ retrieved set is identical. An empirical run on Allganize
+RAG-ko (200 docs, 200 queries) shows 98.5\% set agreement and $|\Delta\,\mathrm{MRR}| < 0.01$ between one-batch and ten-batch streaming ingests.
+Orthogonally, we identify a language-specific FTS improvement -- dropping
+Kiwi-surviving Korean question-form morphemes at query time only -- that
+lifts FTS-only retrieval MRR on every Korean public benchmark we tested
+(Allganize RAG-ko: $0.621 \to 0.743$; AutoRAG: $0.592 \to 0.692$;
+PublicHealthQA KO: $0.318 \to 0.466$) with zero regression on English
+HotPotQA. Full source and ablation scripts are open at
+\url{https://github.com/PlateerLab/synaptic-memory}.
+\end{abstract}
+
+% ---------------------------------------------------------------
+% The prose follows draft.md section-for-section. To avoid drift
+% we recommend keeping draft.md as the single source of truth and
+% generating the final arXiv submission with
+%   pandoc draft.md --bibliography=references.bib --citeproc \
+%       -s --template=docs/paper/template.tex -o streaming_rag.pdf
+% ---------------------------------------------------------------
+
+\input{sections/1_introduction}
+\input{sections/2_system}
+\input{sections/3_theorem}
+\input{sections/4_korean_stripping}
+\input{sections/5_comparison}
+\input{sections/6_related_work}
+\input{sections/7_limitations}
+\input{sections/8_conclusion}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+
+\section{Proof of Corollary 1}
+\input{sections/appendix_a}
+
+\section{Reproducing every number}
+\input{sections/appendix_b}
+
+\end{document}

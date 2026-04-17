@@ -6,6 +6,161 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-04-17
+
+v0.16.0 is a **foundational cleanup release**. Five changes that add
+up to a noticeably different product: (1) the retrieval engine
+finally defaults to the hybrid EvidenceSearch pipeline the benchmarks
+have been advertising, (2) CDC sync drops N round-trips to a single
+batch SELECT, (3) concurrent MCP tool calls no longer race on
+first-use initialisation, (4) the query-mode Kiwi improvement
+from the v0.15.1 branch is carried forward, and (5) the evaluation
+surface is expanded 30× — from 715 queries across 5 Korean-heavy
+corpora to 22,400 queries across 8 corpora including standard English
+multi-hop benchmarks (HotPotQA-dev, MuSiQue-Ans, 2WikiMultihopQA).
+The net effect on public Korean benchmarks is large (Allganize RAG-ko
+MRR 0.621 → 0.947 since v0.15.0); English multi-hop debuts at
+HotPotQA-dev MRR 0.784 / 2Wiki-dev MRR 0.795 (500-query subsets,
+embedder-free).
+
+### Changed — `graph.search()` default engine flipped to `"evidence"`
+
+Public API semantics change: `SynapticGraph.search(query, ...)` with
+no `engine=` kwarg now uses the :class:`EvidenceSearch` hybrid
+pipeline (BM25 + HNSW + PPR + MMR + optional cross-encoder) that
+`agent_search` / `knowledge_search` / `deep_search` already used.
+
+Why now. The previous default (``engine="legacy"`` → HybridSearch)
+was retained through v0.15.x for caller stability, but every
+measured benchmark — including the ones quoted in the README and in
+[docs/paper/draft.md](docs/paper/draft.md) — was run through
+EvidenceSearch via the MCP tool path. Leaving SDK callers on the
+legacy cascade meant our own quoted numbers didn't match what a
+first-time user of ``graph.search()`` saw. This release closes that
+gap.
+
+Effect on public FTS-only benchmarks (no embedder, no reranker):
+
+| Dataset | v0.15.0 (legacy) | v0.15.1 (legacy + kiwi) | **v0.16.0 (evidence + kiwi)** | Total Δ |
+|---------|------------------|-------------------------|-------------------------------|---------|
+| Allganize RAG-ko | 0.621 | 0.743 | **0.947** | +0.326 |
+| Allganize RAG-Eval | 0.615 | 0.695 | **0.911** | +0.296 |
+| PublicHealthQA KO | 0.318 | 0.466 | **0.546** | +0.228 |
+| AutoRAG KO | 0.592 | 0.692 | **0.906** | +0.314 |
+| HotPotQA-24 EN | 0.727 | 0.727 | **0.875** | +0.148 |
+
+Migration. ``engine="legacy"`` still works and raises
+:class:`DeprecationWarning`. Legacy-specific features
+(`query_decomposer`, `reranker=LLMReranker(...)` injection, and
+reinforcement-based ranking boost) are only honoured on the legacy
+path and keep their tests under `engine="legacy"`. Scheduled for
+removal in v0.17.0.
+
+### Changed — streaming invariance sharpens under the new default
+
+`examples/ablation/streaming_experiment.py` re-run on the Evidence
+pipeline (Allganize RAG-ko, 200 docs / 200 queries, 10 random
+streaming batches vs. one batch):
+
+| Metric | v0.15.x (legacy engine) | **v0.16.0 (evidence engine)** |
+|--------|-------------------------|-------------------------------|
+| Bit-wise identical top-10 | 103 / 200 (51.5 %) | **192 / 200 (96.0 %)** |
+| Top-1 identical | 109 / 200 (54.5 %) | **200 / 200 (100 %)** |
+| \|Δ MRR\| | 0.0100 | **0.0000** |
+| Set-equal top-10 | 197 / 200 (98.5 %) | 197 / 200 (98.5 %) |
+
+The streaming-invariance theorem in [docs/paper/theorem.md](docs/paper/theorem.md)
+holds more tightly on the new default.
+
+### Fixed — CDC sync: N+1 round-trips → one batch SELECT
+
+Both `HashTableSyncer.sync_table()` and
+`TimestampTableSyncer.sync_table()`
+(`src/synaptic/extensions/cdc/sync.py`) previously issued 3 × N
+awaits per table (one `get_row_hash` + `get_node_id` + `get_fk_edges`
+call per row). They now issue a single
+`SyncStateStore.get_pk_index_batch(...)` call that returns
+`{pk: (node_id, row_hash, fk_json)}` for every changed PK in one
+SQLite round-trip (chunked to 500 PKs per statement defensively).
+
+Impact. For a source table with N changed rows on a 1 ms local
+SQLite round-trip, CDC sync latency drops from 3N ms to ~1 ms — so
+a 100-row change sync moves from ~300 ms of sequential awaits to a
+single query. At 10 k rows the difference is 30 s → <100 ms.
+
+### Fixed — concurrent `_ensure_graph()` no longer races
+
+`src/synaptic/mcp/server.py` — lazy graph initialisation is now
+serialised through an `asyncio.Lock` with a double-checked fast path.
+Previously, two tool invocations firing on the same first turn could
+both see `_graph is None` and construct two SynapticGraph instances,
+leaking a backend connection. The fast path (graph already set) still
+requires no lock.
+
+### Added — Tier-1 English multi-hop evaluation coverage
+
+`examples/ablation/download_benchmarks.py` pulls HotPotQA-dev
+(distractor), MuSiQue-Ans-dev, and 2WikiMultihopQA-dev from
+HuggingFace and converts them to the BEIR-style JSON that
+`examples/ablation/run_tier1_benchmarks.py` consumes. Every file is
+gitignored and regenerated on demand, so the download is a one-shot
+per clone. Adds an `[eval]` optional extra with `datasets>=3.0`.
+
+Initial numbers on a 500-query subset (embedder-free,
+`engine="evidence"`, 2026-04-17):
+
+| Dataset | Docs | MRR @ 10 | R @ 5 | R @ 10 | Hit @ 10 |
+|---------|-----:|---------:|------:|-------:|---------:|
+| HotPotQA dev (distractor) | 66,635 | **0.784** | 0.585 | 0.658 | 459/500 |
+| MuSiQue-Ans dev | 21,100 | 0.590 | 0.379 | 0.440 | 381/500 |
+| 2WikiMultihopQA dev | 56,687 | **0.795** | 0.501 | 0.552 | 456/500 |
+
+Wall clock on a laptop, total 31 minutes. A full-dataset rerun is
+scheduled for v0.16.1 after the PPR stage's first-hit latency is
+profiled (currently ~1.8 s / query at 66 k docs).
+
+### Deprecated
+
+- `graph.search(engine="legacy")` — emits DeprecationWarning,
+  scheduled for removal in v0.17.0.
+- `LLMReranker` / `NoOpReranker` injection on `SynapticGraph`
+  (legacy-engine-only).
+- `query_decomposer` kwarg on `SynapticGraph` (legacy-engine-only).
+
+### Changed — query-mode Kiwi lifts FTS-only Korean retrieval quality
+
+`_normalize_korean(text, query_mode=True)` — at search time only —
+drops verb (VV) and adjective (VA) stems and a small set of
+interrogative / copular noise forms that survive POS filtering but
+degrade BM25 ranking on natural-language Korean queries ("설명해주세요",
+"무엇인가요", "어떻게", "대해", …).
+
+Index-time normalisation is **unchanged**. No graph rebuild required.
+Kiwi only fires on queries that are ≥50 % Hangul, so English and
+code-heavy queries are mathematically unchanged.
+
+Measured on public FTS-only reproducible benchmarks
+(`examples/ablation/run_ablation.py`, 2026-04-17):
+
+| Dataset | Pre-0.15.1 MRR | v0.15.1 MRR | Δ | Hit @ 10 |
+|---------|----------------|-------------|---|----------|
+| Allganize RAG-ko | 0.621 | **0.743** | +0.122 | 200/200 |
+| Allganize RAG-Eval | 0.615 | **0.695** | +0.080 | 286/300 |
+| PublicHealthQA KO | 0.318 | **0.466** | +0.148 | 65/77 |
+| AutoRAG KO | 0.592 | **0.692** | +0.100 | 114/114 |
+| HotPotQA-24 EN | 0.727 | 0.727 | 0.000 | 24/24 |
+
+Diagnostic that led to the change:
+`examples/ablation/failure_diagnostic.py`. 16 of 20 Allganize RAG-ko
+misses were "generic question form" queries whose topic nouns were
+drowned out by Kiwi-surviving question tails. Applied the same filter
+in `MemoryBackend.search_fts` so benchmark adapters (which all use
+MemoryBackend) pick up the improvement without a SQLite rebuild.
+
+> **Note**: the numbers above are the v0.15.1 delta measured against
+> the v0.15.0 legacy-engine baseline. v0.16.0's engine flip pushes
+> these to 0.947 / 0.911 / 0.546 / 0.906 — see the 0.16.0 entry above.
+
 ## [0.15.0] - 2026-04-15
 
 ### Added — `graph.search(engine="evidence")` opt-in modern path

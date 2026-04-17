@@ -951,6 +951,7 @@ async def run_agent_benchmark(
     embed_url: str | None = None,
     embed_model: str = "qwen3-embedding:4b",
     judge: bool = False,
+    llm_base_url: str | None = None,
 ) -> RunResult:
     """Run multi-turn agent on a custom dataset's hard queries."""
     if not cfg.query_path or not cfg.query_path.exists():
@@ -960,14 +961,14 @@ async def run_agent_benchmark(
 
     import os
 
-    os.environ["OPENAI_API_KEY"] = api_key
+    os.environ["OPENAI_API_KEY"] = api_key or "ollama"
 
     from openai import AsyncOpenAI
 
     from synaptic.backends.sqlite_graph import SqliteGraphBackend
     from synaptic.search_session import SearchSession, build_graph_context
 
-    client = AsyncOpenAI()
+    client = AsyncOpenAI(base_url=llm_base_url) if llm_base_url else AsyncOpenAI()
     backend = SqliteGraphBackend(str(cfg.path))
     await backend.connect()
 
@@ -1229,7 +1230,17 @@ def _parse_args():
     p.add_argument(
         "--agent", action="store_true", help="Run multi-turn agent benchmark (requires OpenAI key)"
     )
+    p.add_argument(
+        "--agent-only",
+        action="store_true",
+        help="Skip single-shot retrieval, only run agent benchmark",
+    )
     p.add_argument("--openai-key", default=None, help="OpenAI API key (or set OPENAI_API_KEY env)")
+    p.add_argument(
+        "--llm-base-url",
+        default=None,
+        help="Custom LLM base URL (OpenAI-compatible, e.g. http://host:11434/v1 for Ollama)",
+    )
     p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
     p.add_argument("--agent-max-turns", type=int, default=5, help="Max turns per agent query")
     p.add_argument(
@@ -1254,6 +1265,9 @@ async def main():
                 continue
             datasets.append(d)
 
+    if args.agent_only:
+        datasets = []
+        print("\n--agent-only: skipping single-shot retrieval")
     print(f"\nRunning {len(datasets)} benchmarks...")
     results: list[RunResult] = []
 
@@ -1287,8 +1301,8 @@ async def main():
     # Agent benchmark (optional, requires OpenAI key)
     if args.agent:
         api_key = args.openai_key or os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
-            print("  ⚠ --agent requires --openai-key or OPENAI_API_KEY env")
+        if not api_key and not args.llm_base_url:
+            print("  ⚠ --agent requires --openai-key/OPENAI_API_KEY env or --llm-base-url")
         else:
             agent_datasets = [d for d in CUSTOM_DATASETS if "Hard" in d.name or "Conv" in d.name]
             for cfg in agent_datasets:
@@ -1306,6 +1320,7 @@ async def main():
                         embed_url=args.embed_url,
                         embed_model=args.embed_model,
                         judge=args.judge,
+                        llm_base_url=args.llm_base_url,
                     )
                     results.append(r)
                     if r.error:

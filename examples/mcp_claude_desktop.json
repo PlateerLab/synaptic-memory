@@ -1,0 +1,33 @@
+{
+  "_comment": "Claude Desktop MCP configuration for Synaptic Memory. Copy the mcpServers block into ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows). Replace ABSOLUTE_PATH_TO_DB with the full path to your knowledge.db file. Restart Claude Desktop after saving.",
+  "mcpServers": {
+    "synaptic": {
+      "command": "synaptic-mcp",
+      "args": [
+        "--db",
+        "ABSOLUTE_PATH_TO_DB/knowledge.db"
+      ]
+    },
+    "synaptic-with-embedding": {
+      "command": "synaptic-mcp",
+      "args": [
+        "--db",
+        "ABSOLUTE_PATH_TO_DB/knowledge.db",
+        "--embed-url",
+        "http://localhost:11434/v1"
+      ],
+      "env": {
+        "SYNAPTIC_EMBED_MODEL": "qwen3-embedding:4b"
+      }
+    },
+    "synaptic-with-cdc": {
+      "command": "synaptic-mcp",
+      "args": [
+        "--db",
+        "ABSOLUTE_PATH_TO_DB/knowledge.db",
+        "--source-dsn",
+        "postgresql://user:password@localhost:5432/mydb"
+      ]
+    }
+  }
+}

@@ -117,8 +117,26 @@ class MemoryBackend:
     # --- Search ---
 
     async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
-        query_lower = query.lower()
+        # Apply the same query-time noise-stripping used by SqliteBackend —
+        # Korean question-form verbs ("설명해주세요 / 무엇인가요 / 어떻게")
+        # are dropped for natural-language Korean queries (≥50 % Hangul),
+        # which measurably improves MRR on the Allganize RAG-ko / RAG-Eval
+        # benchmarks. English / code queries are unchanged.
+        from synaptic.backends.sqlite import _normalize_korean
+
+        normalized = _normalize_korean(query, query_mode=True)
+        query_lower = normalized.lower() if normalized else query.lower()
         terms = [t for t in query_lower.split() if len(t) >= 1]
+        # Re-add original tokens that carry structural signal (digits /
+        # ASCII letters) — same guard as SqliteBackend.search_fts.
+        seen = set(terms)
+        for t in query.strip().split():
+            tl = t.lower()
+            if tl in seen:
+                continue
+            if any(c.isdigit() or ("a" <= c.lower() <= "z") for c in tl):
+                terms.append(tl)
+                seen.add(tl)
         if not terms:
             return []
 

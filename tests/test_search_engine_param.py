@@ -55,22 +55,33 @@ async def populated_graph():
 
 
 class TestEngineParam:
-    async def test_default_engine_is_legacy(self, populated_graph):
-        """No engine kwarg → behaves identically to v0.14.x."""
+    async def test_default_engine_is_evidence(self, populated_graph):
+        """v0.16.0+: no ``engine`` kwarg → EvidenceSearch pipeline."""
         result = await populated_graph.search("Synaptic Memory", limit=5)
         assert isinstance(result, SearchResult)
-        # Legacy path always reports 'fts' in stages_used.
+        # Modern path reports both 'evidence' and 'fts' in stages_used.
+        assert "evidence" in result.stages_used
         assert "fts" in result.stages_used
 
-    async def test_explicit_legacy_matches_default(self, populated_graph):
-        """``engine='legacy'`` must produce the same result as the
-        default — the parameter is purely a forward-compatibility
-        switch, not a behaviour change."""
+    async def test_explicit_evidence_matches_default(self, populated_graph):
+        """``engine='evidence'`` must produce the same result as the
+        default — they are the same pipeline from v0.16.0 onward."""
         a = await populated_graph.search("Synaptic Memory", limit=5)
-        b = await populated_graph.search("Synaptic Memory", limit=5, engine="legacy")
-        # IDs in the same order
+        b = await populated_graph.search("Synaptic Memory", limit=5, engine="evidence")
         assert [n.node.id for n in a.nodes] == [n.node.id for n in b.nodes]
         assert a.stages_used == b.stages_used
+
+    async def test_legacy_engine_still_reachable(self, populated_graph, recwarn):
+        """``engine='legacy'`` is deprecated but still works until v0.17.0."""
+        result = await populated_graph.search("Synaptic Memory", limit=5, engine="legacy")
+        assert isinstance(result, SearchResult)
+        assert "fts" in result.stages_used
+        # Should emit a DeprecationWarning.
+        assert any(
+            issubclass(w.category, DeprecationWarning)
+            and "engine='legacy'" in str(w.message)
+            for w in recwarn
+        )
 
     async def test_evidence_engine_returns_search_result(self, populated_graph):
         """The opt-in path goes through the modern pipeline and the

@@ -17,6 +17,7 @@ isolated inside ``db_ingester.py``.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -260,10 +261,18 @@ class TimestampTableSyncer:
         pk_batch: list[tuple[str, str, str | None, dict[str, str] | None]] = []
 
         # Bucket add/update *before* ingest — after upsert_pk is
-        # called, every PK looks 'known'. While we're paying the
-        # round-trip we also fetch the prior FK snapshot so the
-        # post-ingest diff (Phase 4) can detect rewires without a
-        # second pass over the rows.
+        # called, every PK looks 'known'. We fetch every prior PK
+        # index entry in **one batch SELECT** rather than paying N
+        # sequential round-trips on a table with N changed rows.
+        pk_strs: list[str] = []
+        for row in rows:
+            pk_val = row.get(schema.primary_key)
+            if pk_val is not None:
+                pk_strs.append(canonical_pk(pk_val))
+        prior_index = await self._store.get_pk_index_batch(
+            self._source_url, schema.name, pk_strs
+        )
+
         row_is_new: list[bool] = []
         prior_fks: dict[str, dict[str, str]] = {}
         for row in rows:
@@ -272,12 +281,15 @@ class TimestampTableSyncer:
                 row_is_new.append(False)
                 continue
             pk_str = canonical_pk(pk_val)
-            existing = await self._store.get_node_id(self._source_url, schema.name, pk_str)
+            existing, _prior_hash, prior_fk_json = prior_index.get(
+                pk_str, (None, None, None)
+            )
             row_is_new.append(existing is None)
-            if existing is not None and fk_map:
-                snapshot = await self._store.get_fk_edges(self._source_url, schema.name, pk_str)
-                if snapshot:
-                    prior_fks[pk_str] = snapshot
+            if existing is not None and fk_map and prior_fk_json:
+                try:
+                    prior_fks[pk_str] = dict(json.loads(prior_fk_json))
+                except (ValueError, TypeError):
+                    pass
 
         # Ingest via TableIngester with deterministic IDs. New FK
         # edges are created here; stale edges (from a previous FK
@@ -500,24 +512,34 @@ class HashTableSyncer:
 
         fk_map = {fk.column: (fk.ref_table, fk.ref_column) for fk in schema.foreign_keys}
 
-        # Bucket rows: which need ingest, which can be skipped.
-        # Doing the lookup row-by-row is fine for the typical
-        # "small table without updated_at" case (lookup tables,
-        # config rows). Phase 6+ can switch to a single batch SELECT
-        # if the per-row cost matters.
-        to_ingest: list[dict[str, Any]] = []
+        # Bucket rows: which need ingest, which can be skipped. We do
+        # **one batch SELECT** instead of the previous 3 × N per-row
+        # calls (get_row_hash + get_node_id + get_fk_edges). For a
+        # 100-row table the cost drops from 300 sequential awaits to
+        # one.
+        pk_list: list[str] = []
+        pk_to_row: dict[str, dict[str, Any]] = {}
         new_hashes: dict[str, str] = {}
-        prior_fks: dict[str, dict[str, str]] = {}
         for row in rows:
             pk_val = row.get(schema.primary_key)
             if pk_val is None:
                 continue
             pk_str = canonical_pk(pk_val)
-            new_hash = row_hash(row)
-            new_hashes[pk_str] = new_hash
+            pk_list.append(pk_str)
+            pk_to_row[pk_str] = row
+            new_hashes[pk_str] = row_hash(row)
 
-            prior_hash = await self._store.get_row_hash(self._source_url, schema.name, pk_str)
-            existing_node = await self._store.get_node_id(self._source_url, schema.name, pk_str)
+        prior_index = await self._store.get_pk_index_batch(
+            self._source_url, schema.name, pk_list
+        )
+
+        to_ingest: list[dict[str, Any]] = []
+        prior_fks: dict[str, dict[str, str]] = {}
+        for pk_str, row in pk_to_row.items():
+            new_hash = new_hashes[pk_str]
+            existing_node, prior_hash, prior_fk_json = prior_index.get(
+                pk_str, (None, None, None)
+            )
 
             if existing_node is None:
                 stats.added += 1
@@ -525,10 +547,11 @@ class HashTableSyncer:
             elif prior_hash != new_hash:
                 stats.updated += 1
                 to_ingest.append(row)
-                if fk_map:
-                    snapshot = await self._store.get_fk_edges(self._source_url, schema.name, pk_str)
-                    if snapshot:
-                        prior_fks[pk_str] = snapshot
+                if fk_map and prior_fk_json:
+                    try:
+                        prior_fks[pk_str] = dict(json.loads(prior_fk_json))
+                    except (ValueError, TypeError):
+                        pass
             # else: unchanged — skip
 
         if not to_ingest:

@@ -329,6 +329,46 @@ class SyncStateStore:
             row = await cur.fetchone()
         return row[0] if row else None
 
+    async def get_pk_index_batch(
+        self,
+        source_url: str,
+        table: str,
+        pks: list[str],
+    ) -> dict[str, tuple[str | None, str | None, str | None]]:
+        """Batch lookup for ``(node_id, row_hash, fk_edges_json)`` by PK.
+
+        Returns a mapping ``canonical_pk → (node_id, row_hash, fk_json)``.
+        Missing PKs are simply absent from the map; callers treat absence
+        as "new row". This replaces the per-row ``get_row_hash`` +
+        ``get_node_id`` + ``get_fk_edges`` triple call sites that
+        previously produced 3 × N round-trips for a table of N rows.
+        Using a single ``IN (...)`` query keeps the CDC path linear in
+        the number of changed rows rather than quadratic in round-trip
+        latency.
+        """
+        if not pks:
+            return {}
+
+        canonical = [canonical_pk(p) for p in pks]
+        out: dict[str, tuple[str | None, str | None, str | None]] = {}
+
+        # SQLite's default host-variable ceiling is 999, so we chunk
+        # defensively. aiosqlite ceilings on modern sqlite (>=3.32)
+        # are much higher but we keep the batch size conservative.
+        CHUNK = 500
+        for i in range(0, len(canonical), CHUNK):
+            chunk = canonical[i : i + CHUNK]
+            placeholders = ",".join("?" * len(chunk))
+            sql = (
+                "SELECT pk, node_id, row_hash, fk_edges "
+                "FROM syn_cdc_pk_index "
+                f"WHERE source_url = ? AND table_name = ? AND pk IN ({placeholders})"
+            )
+            async with self._conn.execute(sql, (source_url, table, *chunk)) as cur:
+                async for row in cur:
+                    out[str(row[0])] = (row[1], row[2], row[3])
+        return out
+
     async def delete_pk(
         self,
         source_url: str,
