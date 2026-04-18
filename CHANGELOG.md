@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.17.0] - 2026-04-19 (draft)
+## [0.17.0] - 2026-04-19
 
 v0.17.0 is a **measurement-driven tuning release**. The headline change
 is a single constant — `EvidenceSearch.rerank_blend` — moving from 0.4

@@ -232,10 +232,11 @@ If you need LLM-synthesized summaries on top of the graph, layer them
 with your own agent — Synaptic gives you the primitives and leaves
 the synthesis choice to you.
 
-> **v0.15.0**: pass `engine="evidence"` to `graph.search()` to use the
-> hybrid pipeline (BM25 + HNSW + PPR + cross-encoder + MMR). The
-> default flips to `"evidence"` in v0.16.0 and the legacy engine is
-> removed in v0.17.0. A migration guide will ship with v0.16.0.
+> **v0.16.0+**: `graph.search()` defaults to the hybrid
+> EvidenceSearch pipeline (BM25 + HNSW + PPR + cross-encoder + MMR).
+> `engine="legacy"` still works but raises `DeprecationWarning`;
+> removal is pushed to v0.18.0 to bundle with HippoRAG2-style
+> architecture work.
 
 ---
 
