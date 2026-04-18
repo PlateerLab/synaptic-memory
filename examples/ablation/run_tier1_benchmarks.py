@@ -126,6 +126,7 @@ async def run_one(
     *,
     embedder: EmbeddingProvider | None = None,
     reranker: object | None = None,
+    decomposer: object | None = None,
     use_sqlite_graph: bool = False,
     embed_batch: int = 256,
 ) -> Report:
@@ -159,7 +160,12 @@ async def run_one(
     else:
         backend = MemoryBackend()
     await backend.connect()
-    graph = SynapticGraph(backend, embedder=embedder, reranker=reranker)
+    graph = SynapticGraph(
+        backend,
+        embedder=embedder,
+        reranker=reranker,
+        query_decomposer=decomposer,
+    )
 
     # Pre-compute embeddings in large batches (GPU-friendly).
     # ``graph.add()`` accepts an ``embedding`` arg; if we pass it we
@@ -240,6 +246,7 @@ def _emit_markdown(
     *,
     embedder_label: str,
     reranker_label: str,
+    decomposer_label: str = "none",
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -251,6 +258,7 @@ def _emit_markdown(
         f"- Subset: {subset if subset else 'full'}",
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
+        f"- Decomposer: {decomposer_label}",
         "- Engine: `graph.search()` default (EvidenceSearch)",
         "",
         "| Dataset | Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |",
@@ -321,12 +329,52 @@ async def amain(argv: list[str]) -> int:
         "(default: 64 — safe under 6 GB free VRAM). Bump to 128–256 "
         "if more headroom.",
     )
+    p.add_argument(
+        "--llm-decomposer-url",
+        default=None,
+        help="OpenAI-compatible endpoint for LLMChainDecomposer "
+        "(e.g. http://localhost:8012/v1 for a local vLLM). "
+        "If unset, no decomposition.",
+    )
+    p.add_argument(
+        "--llm-decomposer-model",
+        default="Qwen3.5-27b",
+        help="Model name served at --llm-decomposer-url.",
+    )
+    p.add_argument(
+        "--rule-decomposer",
+        action="store_true",
+        help="Use the rule-based QueryDecomposer (compound KO/EN splitter). "
+        "Overridden by --llm-decomposer-url if both are set.",
+    )
     args = p.parse_args(argv)
 
     embedder: EmbeddingProvider | None = None
     embedder_label = "none (FTS-only baseline)"
     reranker: object | None = None
     reranker_label = "none"
+    decomposer: object | None = None
+    decomposer_label = "none"
+
+    if args.llm_decomposer_url:
+        from synaptic.extensions.llm_provider import OpenAILLMProvider
+        from synaptic.extensions.query_decomposer_llm import LLMChainDecomposer
+
+        llm = OpenAILLMProvider(
+            api_base=args.llm_decomposer_url,
+            model=args.llm_decomposer_model,
+            timeout=60,
+        )
+        decomposer = LLMChainDecomposer(llm=llm)
+        decomposer_label = (
+            f"LLMChainDecomposer ({args.llm_decomposer_model} @ "
+            f"{args.llm_decomposer_url})"
+        )
+    elif args.rule_decomposer:
+        from synaptic.extensions.query_decomposer import QueryDecomposer
+
+        decomposer = QueryDecomposer()
+        decomposer_label = "rule-based QueryDecomposer"
 
     if args.local_bge:
         from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
@@ -360,6 +408,7 @@ async def amain(argv: list[str]) -> int:
     print(f"  backend:  {backend_label}")
     print(f"  embedder: {embedder_label}")
     print(f"  reranker: {reranker_label}")
+    print(f"  decomposer: {decomposer_label}")
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -375,6 +424,7 @@ async def amain(argv: list[str]) -> int:
                 args.subset,
                 embedder=embedder,
                 reranker=reranker,
+                decomposer=decomposer,
                 use_sqlite_graph=args.use_sqlite_graph,
                 embed_batch=args.embed_batch,
             )
@@ -394,6 +444,7 @@ async def amain(argv: list[str]) -> int:
             args.subset,
             embedder_label=embedder_label,
             reranker_label=reranker_label,
+            decomposer_label=decomposer_label,
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")
