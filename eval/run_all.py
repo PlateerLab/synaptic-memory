@@ -174,15 +174,16 @@ class RunResult:
 
 async def run_custom_dataset(
     cfg: DatasetConfig,
-    embed_url: str | None = None,
-    embed_model: str = "qwen3-embedding:4b",
-    reranker_url: str | None = None,
+    embedder: object | None = None,
+    reranker: object | None = None,
     use_flashrank: bool = False,
 ) -> RunResult:
     """Run a custom dataset against its pre-built SQLite graph.
 
-    When embed_url is provided, uses EvidenceSearch with vector cascade.
-    When reranker_url is provided, adds cross-encoder reranking.
+    ``embedder`` / ``reranker`` are instantiated once in ``main()`` and
+    shared across all datasets, so model weights load exactly once per
+    suite run (critical for local --local-bge runs where bge-m3 load is
+    ~10-15s on first call).
     """
     if not cfg.path.exists():
         return RunResult(name=cfg.name, error="graph not found")
@@ -198,21 +199,6 @@ async def run_custom_dataset(
         gt = json.load(f)
     queries = gt.get("queries", [])
     id_field = gt.get("id_field", "doc_id")
-
-    # Build searcher — with optional embedding + reranker
-    embedder = None
-    if embed_url:
-        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
-
-        embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
-
-    reranker = None
-    # FlashRank is English-only (ms-marco trained). For Korean datasets
-    # use TEI with bge-reranker-v2-m3 instead.
-    if reranker_url:
-        from synaptic.extensions.reranker_cross import TEIReranker
-
-        reranker = TEIReranker(base_url=reranker_url)
 
     from synaptic.extensions.evidence_search import EvidenceSearch
 
@@ -275,16 +261,17 @@ async def run_custom_dataset(
 
 async def run_public_dataset(
     cfg: DatasetConfig,
-    embed_url: str | None = None,
-    embed_model: str = "qwen3-embedding:4b",
-    reranker_url: str | None = None,
+    embedder: object | None = None,
+    reranker: object | None = None,
+    entity_linker_cfg: tuple[int, float] | None = None,
 ) -> RunResult:
     """Run a public benchmark dataset — full pipeline: ingest → index → search.
 
-    Uses MemoryBackend for speed (no disk I/O). The graph.add() path
-    exercises the same NFC normalization, FTS indexing, and search
-    pipeline as production SQLite/Kuzu backends. When embed_url is
-    provided, uses EvidenceSearch with vector cascade.
+    Uses MemoryBackend for speed (no disk I/O). Shared ``embedder``/
+    ``reranker`` objects (instantiated once in ``main()``) avoid
+    per-dataset model reload. When ``entity_linker_cfg = (min_df,
+    max_df_ratio)`` is set, runs :class:`EntityLinker` post-hoc to build
+    a DF-filtered phrase hub before search.
     """
     if not cfg.path.exists():
         return RunResult(name=cfg.name, error="file not found")
@@ -323,16 +310,54 @@ async def run_public_dataset(
     # Full pipeline: build graph via graph.add()
     backend = MemoryBackend()
     await backend.connect()
-    graph = SynapticGraph(backend)
+    graph = SynapticGraph(backend, embedder=embedder, reranker=reranker)
 
-    for doc_id, title, text in corpus:
+    # Pre-compute corpus embeddings in batches when an embedder is wired.
+    # Passing ``embedding=`` to ``graph.add`` avoids the per-node single
+    # embed call that bottlenecks at batch=1 (the main reason public
+    # bench ingest was GPU-idle in previous runs).
+    embeddings: list[list[float] | None] = [None] * len(corpus)
+    if embedder is not None and hasattr(embedder, "embed_batch"):
+        embed_inputs = [
+            f"{title or doc_id}\n{(text or '')[:1500]}" for doc_id, title, text in corpus
+        ]
+        BATCH = 64
+        for i in range(0, len(embed_inputs), BATCH):
+            chunk = embed_inputs[i : i + BATCH]
+            vecs = await embedder.embed_batch(chunk)
+            for j, v in enumerate(vecs):
+                embeddings[i + j] = v if v else None
+
+    for (doc_id, title, text), emb in zip(corpus, embeddings):
         if not text and not title:
             continue
         await graph.add(
             title=title or doc_id,
             content=text,
             properties={"doc_id": doc_id},
+            embedding=emb,
         )
+
+    # Post-hoc DF-filtered entity linking.
+    if entity_linker_cfg is not None:
+        from synaptic.extensions.domain_profile import DomainProfile
+        from synaptic.extensions.entity_linker import EntityLinker
+        from synaptic.extensions.phrase_extractor import PhraseExtractor
+        from synaptic.models import NodeKind as _NK
+
+        min_df, max_df_ratio = entity_linker_cfg
+        profile = DomainProfile(
+            name=f"{cfg.name}-eval",
+            locale="multi",
+            min_df=min_df,
+            max_df_ratio=max_df_ratio,
+        )
+        linker = EntityLinker(
+            extractor=PhraseExtractor(),
+            profile=profile,
+            max_links_per_source=15,
+        )
+        await linker.link(backend, source_kind=_NK.CONCEPT)
 
     # Parse queries — support both list and BEIR dict format
     qrels = data.get("relevant_docs", data.get("qrels", {}))
@@ -368,18 +393,6 @@ async def run_public_dataset(
         return RunResult(name=cfg.name, error="no valid queries")
 
     # Build searcher — EvidenceSearch when embedder available, else graph.search
-    embedder = None
-    if embed_url:
-        from synaptic.extensions.embedder import OpenAIEmbeddingProvider
-
-        embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
-
-    reranker = None
-    if reranker_url:
-        from synaptic.extensions.reranker_cross import TEIReranker
-
-        reranker = TEIReranker(base_url=reranker_url)
-
     use_evidence = embedder is not None or reranker is not None
     searcher = None
     if use_evidence:
@@ -1225,6 +1238,35 @@ def _parse_args():
     p.add_argument("--embed-model", default="qwen3-embedding:4b")
     p.add_argument("--reranker-url", default=None, help="TEI reranker URL (enables cross-encoder)")
     p.add_argument(
+        "--local-bge",
+        action="store_true",
+        help="Load BAAI/bge-m3 + bge-reranker-v2-m3 directly via transformers "
+        "(no external endpoint). Requires torch + GPU. Overrides --embed-url / "
+        "--reranker-url when set.",
+    )
+    p.add_argument(
+        "--local-bge-device",
+        default="cuda:0",
+        help="GPU device for --local-bge (default: cuda:0).",
+    )
+    p.add_argument(
+        "--entity-linker",
+        action="store_true",
+        help="Run post-hoc DF-filtered EntityLinker on each public benchmark "
+        "corpus (min_df=2, max_df_ratio=0.02 by default). Custom SQLite "
+        "graphs are left untouched.",
+    )
+    p.add_argument(
+        "--entity-min-df",
+        type=int,
+        default=2,
+    )
+    p.add_argument(
+        "--entity-max-df-ratio",
+        type=float,
+        default=0.02,
+    )
+    p.add_argument(
         "--flashrank", action="store_true", help="Use FlashRank CPU reranker (no GPU needed)"
     )
     p.add_argument(
@@ -1268,7 +1310,52 @@ async def main():
     if args.agent_only:
         datasets = []
         print("\n--agent-only: skipping single-shot retrieval")
+
+    # Instantiate embedder / reranker ONCE so model weights load once per
+    # suite run and stay warm across all datasets.
+    shared_embedder: object | None = None
+    shared_reranker: object | None = None
+    embedder_label = "none"
+    reranker_label = "none"
+    if args.local_bge:
+        import sys as _sys
+
+        _sys.path.insert(
+            0, str(Path(__file__).resolve().parent.parent / "examples" / "ablation")
+        )
+        from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
+
+        print(f"Loading bge-m3 + bge-reranker-v2-m3 on {args.local_bge_device} ...")
+        shared_embedder = LocalBgeM3Embedder(device=args.local_bge_device)
+        shared_reranker = LocalBgeRerankerV2(device=args.local_bge_device)
+        embedder_label = f"local BAAI/bge-m3 ({args.local_bge_device})"
+        reranker_label = f"local BAAI/bge-reranker-v2-m3 ({args.local_bge_device})"
+    else:
+        if args.embed_url:
+            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
+            shared_embedder = OpenAIEmbeddingProvider(
+                api_base=args.embed_url, model=args.embed_model
+            )
+            embedder_label = f"OpenAI {args.embed_model} @ {args.embed_url}"
+        if args.reranker_url:
+            from synaptic.extensions.reranker_cross import TEIReranker
+
+            shared_reranker = TEIReranker(base_url=args.reranker_url)
+            reranker_label = f"TEI @ {args.reranker_url}"
+
+    entity_linker_cfg: tuple[int, float] | None = None
+    if args.entity_linker:
+        entity_linker_cfg = (args.entity_min_df, args.entity_max_df_ratio)
+
     print(f"\nRunning {len(datasets)} benchmarks...")
+    print(f"  embedder: {embedder_label}")
+    print(f"  reranker: {reranker_label}")
+    if entity_linker_cfg:
+        print(
+            f"  entity linker: min_df={entity_linker_cfg[0]}, "
+            f"max_df_ratio={entity_linker_cfg[1]} (public datasets only)"
+        )
     results: list[RunResult] = []
 
     for cfg in datasets:
@@ -1277,17 +1364,16 @@ async def main():
             if cfg.is_custom:
                 r = await run_custom_dataset(
                     cfg,
-                    embed_url=args.embed_url,
-                    embed_model=args.embed_model,
-                    reranker_url=args.reranker_url,
+                    embedder=shared_embedder,
+                    reranker=shared_reranker,
                     use_flashrank=args.flashrank,
                 )
             else:
                 r = await run_public_dataset(
                     cfg,
-                    embed_url=args.embed_url,
-                    embed_model=args.embed_model,
-                    reranker_url=args.reranker_url if hasattr(args, "reranker_url") else None,
+                    embedder=shared_embedder,
+                    reranker=shared_reranker,
+                    entity_linker_cfg=entity_linker_cfg,
                 )
             results.append(r)
             if r.error:
