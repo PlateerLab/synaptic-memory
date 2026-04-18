@@ -128,6 +128,7 @@ async def run_one(
     reranker: object | None = None,
     decomposer: object | None = None,
     phrase_extractor: object | None = None,
+    entity_linker_cfg: tuple[int, float] | None = None,
     use_sqlite_graph: bool = False,
     embed_batch: int = 256,
 ) -> Report:
@@ -200,6 +201,41 @@ async def run_one(
             properties={"doc_id": doc_id},
             embedding=emb,
         )
+
+    # Post-hoc DF-filtered entity linking (opt-in via --entity-linker).
+    # Runs AFTER ingest because the DF filter needs global corpus
+    # statistics. Typically 5-20× cheaper than inline phrase-extractor
+    # because it uses batch writes and skips per-node re-hash.
+    if entity_linker_cfg is not None:
+        from synaptic.extensions.domain_profile import DomainProfile
+        from synaptic.extensions.entity_linker import EntityLinker
+        from synaptic.extensions.phrase_extractor import PhraseExtractor
+
+        min_df, max_df_ratio = entity_linker_cfg
+        profile = DomainProfile(
+            name=f"{ds.name}-tier1",
+            locale="multi",
+            min_df=min_df,
+            max_df_ratio=max_df_ratio,
+        )
+        linker = EntityLinker(
+            extractor=PhraseExtractor(),
+            profile=profile,
+            max_links_per_source=15,
+        )
+        from synaptic.models import NodeKind as _NK
+
+        stats = await linker.link(backend, source_kind=_NK.CONCEPT)
+        print(
+            f"  entity-linker: {stats.phrase_nodes_created} hubs / "
+            f"{stats.mentions_edges_created} MENTIONS "
+            f"(min_df={min_df}, max_df={max_df_ratio:.3f}, "
+            f"{stats.elapsed_seconds:.1f}s)"
+        )
+        if stats.top_phrases_by_df:
+            top5 = ", ".join(f"{p}({d})" for p, d in stats.top_phrases_by_df[:5])
+            print(f"    top-DF: {top5}")
+
     build_sec = time.perf_counter() - t_build
 
     mrr_total = 0.0
@@ -250,6 +286,7 @@ def _emit_markdown(
     reranker_label: str,
     decomposer_label: str = "none",
     phrase_extractor_label: str = "none",
+    entity_linker_label: str = "none",
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -262,7 +299,8 @@ def _emit_markdown(
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
-        f"- Phrase hub: {phrase_extractor_label}",
+        f"- Phrase hub (inline): {phrase_extractor_label}",
+        f"- Entity linker (post-hoc): {entity_linker_label}",
         "- Engine: `graph.search()` default (EvidenceSearch)",
         "",
         "| Dataset | Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |",
@@ -354,8 +392,30 @@ async def amain(argv: list[str]) -> int:
     p.add_argument(
         "--phrase-extractor",
         action="store_true",
-        help="Build the phrase hub at ingestion (EnglishPhraseExtractor). "
-        "Required for cross-document bridging via shared entities / PPR.",
+        help="Build the phrase hub INLINE at ingestion (no DF filter). "
+        "Cheap path but super-hubs can poison PPR on large English corpora.",
+    )
+    p.add_argument(
+        "--entity-linker",
+        action="store_true",
+        help="Run EntityLinker AFTER ingest to build a DF-filtered phrase hub. "
+        "Preferred over --phrase-extractor for large English corpora: batch "
+        "writes + DF filter kill super-hubs.",
+    )
+    p.add_argument(
+        "--entity-min-df",
+        type=int,
+        default=2,
+        help="EntityLinker: minimum distinct-source DF for a phrase to survive "
+        "(default 2 — keeps 2-hop bridge candidates, drops hapax).",
+    )
+    p.add_argument(
+        "--entity-max-df-ratio",
+        type=float,
+        default=0.02,
+        help="EntityLinker: max df / corpus_size (default 0.02 = 2%%). "
+        "Tighter than DomainProfile default 0.3 so generic adjectives "
+        "('American', 'French') don't form super-hubs.",
     )
     args = p.parse_args(argv)
 
@@ -392,7 +452,16 @@ async def amain(argv: list[str]) -> int:
         from synaptic.extensions.phrase_extractor import PhraseExtractor
 
         phrase_extractor_obj = PhraseExtractor()
-        phrase_extractor_label = "EnglishPhraseExtractor"
+        phrase_extractor_label = "EnglishPhraseExtractor (inline)"
+
+    entity_linker_cfg: tuple[int, float] | None = None
+    entity_linker_label = "none"
+    if args.entity_linker:
+        entity_linker_cfg = (args.entity_min_df, args.entity_max_df_ratio)
+        entity_linker_label = (
+            f"EntityLinker (min_df={args.entity_min_df}, "
+            f"max_df_ratio={args.entity_max_df_ratio:.3f})"
+        )
 
     if args.local_bge:
         from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
@@ -428,6 +497,7 @@ async def amain(argv: list[str]) -> int:
     print(f"  reranker: {reranker_label}")
     print(f"  decomposer: {decomposer_label}")
     print(f"  phrase hub: {phrase_extractor_label}")
+    print(f"  entity linker: {entity_linker_label}")
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -445,6 +515,7 @@ async def amain(argv: list[str]) -> int:
                 reranker=reranker,
                 decomposer=decomposer,
                 phrase_extractor=phrase_extractor_obj,
+                entity_linker_cfg=entity_linker_cfg,
                 use_sqlite_graph=args.use_sqlite_graph,
                 embed_batch=args.embed_batch,
             )
@@ -466,6 +537,7 @@ async def amain(argv: list[str]) -> int:
             reranker_label=reranker_label,
             decomposer_label=decomposer_label,
             phrase_extractor_label=phrase_extractor_label,
+            entity_linker_label=entity_linker_label,
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")
