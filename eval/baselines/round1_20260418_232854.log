@@ -1,0 +1,42 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  95%|█████████▌| 373/391 [00:00<00:00, 3719.50it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3783.88it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3989.82it/s]
+
+Running 14 benchmarks...
+  embedder: local BAAI/bge-m3 (cuda:0)
+  reranker: local BAAI/bge-reranker-v2-m3 (cuda:0)
+  entity linker: min_df=2, max_df_ratio=0.02 (public datasets only)
+  KRRA Easy... ❌ graph not found
+  KRRA Hard... ❌ graph not found
+  assort Easy... ❌ graph not found
+  assort Hard... ❌ graph not found
+  X2BEE Easy... ❌ graph not found
+  X2BEE Hard... ❌ graph not found
+  KRRA Conv... ❌ graph not found
+  assort Conv... ❌ graph not found
+  X2BEE Conv... ❌ graph not found
+  HotPotQA-24... MRR=0.979 (3.4s)
+  Allganize RAG-ko... MRR=0.967 (24.8s)
+  Allganize RAG-Eval... MRR=0.924 (31.7s)
+  PublicHealthQA... MRR=0.706 (6.4s)
+  AutoRAG... MRR=0.638 (36.5s)
+
+Dataset                 Corpus     MRR    P@10    R@10    nDCG      Hit    Time  Status
+-----------------------------------------------------------------------------------------------
+KRRA Easy                                                                        ❌ graph not found
+KRRA Hard                                                                        ❌ graph not found
+assort Easy                                                                      ❌ graph not found
+assort Hard                                                                      ❌ graph not found
+X2BEE Easy                                                                       ❌ graph not found
+X2BEE Hard                                                                       ❌ graph not found
+KRRA Conv                                                                        ❌ graph not found
+assort Conv                                                                      ❌ graph not found
+X2BEE Conv                                                                       ❌ graph not found
+HotPotQA-24                226   0.979   0.171   0.854   0.870    24/24    3.4s  ✅
+Allganize RAG-ko           200   0.967   0.099   0.985   0.972  197/200   24.8s  ✅
+Allganize RAG-Eval         300   0.924   0.094   0.943   0.928  283/300   31.7s  ✅
+PublicHealthQA              77   0.706   0.083   0.831   0.736    64/77    6.4s  ✅
+AutoRAG                    720   0.638   0.068   0.684   0.650   78/114   36.5s  ✅
+
+Results saved → /home/gpuuser/sonAIengine/synaptic-memory/eval/baselines/qa_latest.json

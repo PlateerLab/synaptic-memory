@@ -1,12 +1,11 @@
 {
   "_meta": {
-    "synaptic_version": "0.14.4",
-    "saved_at_utc": "2026-04-14T16:37:41+00:00",
-    "mode": "fts-only (no --embed-url, no --reranker-url)",
+    "synaptic_version": "0.16.0",
+    "saved_at_utc": "2026-04-18T14:30:51+00:00",
     "corpus_md5": {
-      "krra_chunks_jsonl": "d79eade08731a3b49fa3c871e53230d5",
-      "krra_documents_jsonl": "a2801efd299d789490eb862b49051d92",
-      "assort_products_csv": "136475587a359e2e779ef69db16c751c"
+      "krra_chunks_jsonl": "missing",
+      "krra_documents_jsonl": "missing",
+      "assort_products_csv": "missing"
     },
     "query_md5": {
       "_public_sources": "ec3efacbfa6d9cb79a85f170f7cc02c5",
@@ -22,104 +21,41 @@
       "x2bee_conversational": "c77e2498d4e5efe535d9bde77077ecf0",
       "x2bee_hard": "65adc5aa4ab9afa62895dbcd031657e0"
     },
-    "note": "Baseline written by eval/run_all.py. The _meta block captures corpus + query file hashes so phantom regressions from drifting source data are easy to diagnose."
-  },
-  "KRRA Easy": {
-    "mrr": 0.45,
-    "p_at_k": 0.2256,
-    "r_at_k": 0.3508,
-    "ndcg": 0.3688,
-    "corpus_size": 20
-  },
-  "KRRA Hard": {
-    "mrr": 0.3913,
-    "p_at_k": 0.2082,
-    "r_at_k": 0.132,
-    "ndcg": 0.1977,
-    "corpus_size": 40
-  },
-  "assort Easy": {
-    "mrr": 0.8833,
-    "p_at_k": 0.0933,
-    "r_at_k": 0.9,
-    "ndcg": 0.8696,
-    "corpus_size": 15
-  },
-  "assort Hard": {
-    "mrr": 0.0,
-    "p_at_k": 0.0,
-    "r_at_k": 0.0,
-    "ndcg": 0.0,
-    "corpus_size": 40
-  },
-  "X2BEE Easy": {
-    "mrr": 1.0,
-    "p_at_k": 0.125,
-    "r_at_k": 0.8417,
-    "ndcg": 0.8706,
-    "corpus_size": 20
-  },
-  "X2BEE Hard": {
-    "mrr": 0.2632,
-    "p_at_k": 0.0684,
-    "r_at_k": 0.2632,
-    "ndcg": 0.2632,
-    "corpus_size": 20
-  },
-  "KRRA Conv": {
-    "mrr": 0.1756,
-    "p_at_k": 0.0766,
-    "r_at_k": 0.08,
-    "ndcg": 0.0869,
-    "corpus_size": 30
-  },
-  "assort Conv": {
-    "mrr": 0.425,
-    "p_at_k": 0.075,
-    "r_at_k": 0.4444,
-    "ndcg": 0.4088,
-    "corpus_size": 30
-  },
-  "X2BEE Conv": {
-    "mrr": 0.1667,
-    "p_at_k": 0.0519,
-    "r_at_k": 0.1852,
-    "ndcg": 0.17,
-    "corpus_size": 30
+    "note": "Baseline written by eval/run_all.py. The `_meta` block captures corpus + query file hashes so phantom regressions from drifting source data are easy to diagnose. If you see a score change after a code-only PR, compare the hashes first."
   },
   "HotPotQA-24": {
-    "mrr": 0.7271,
-    "p_at_k": 0.1625,
-    "r_at_k": 0.8125,
-    "ndcg": 0.6767,
+    "mrr": 0.9792,
+    "p_at_k": 0.1708,
+    "r_at_k": 0.8542,
+    "ndcg": 0.8697,
     "corpus_size": 226
   },
   "Allganize RAG-ko": {
-    "mrr": 0.6213,
-    "p_at_k": 0.1088,
-    "r_at_k": 0.9,
-    "ndcg": 0.693,
+    "mrr": 0.9671,
+    "p_at_k": 0.0985,
+    "r_at_k": 0.985,
+    "ndcg": 0.9716,
     "corpus_size": 200
   },
   "Allganize RAG-Eval": {
-    "mrr": 0.6154,
-    "p_at_k": 0.0951,
-    "r_at_k": 0.88,
-    "ndcg": 0.6838,
+    "mrr": 0.9237,
+    "p_at_k": 0.0943,
+    "r_at_k": 0.9433,
+    "ndcg": 0.9284,
     "corpus_size": 300
   },
   "PublicHealthQA": {
-    "mrr": 0.3177,
-    "p_at_k": 0.0622,
-    "r_at_k": 0.5844,
-    "ndcg": 0.3817,
+    "mrr": 0.7062,
+    "p_at_k": 0.0831,
+    "r_at_k": 0.8312,
+    "ndcg": 0.7359,
     "corpus_size": 77
   },
   "AutoRAG": {
-    "mrr": 0.5919,
-    "p_at_k": 0.086,
-    "r_at_k": 0.8596,
-    "ndcg": 0.6591,
+    "mrr": 0.6382,
+    "p_at_k": 0.0684,
+    "r_at_k": 0.6842,
+    "ndcg": 0.6499,
     "corpus_size": 720
   }
 }
