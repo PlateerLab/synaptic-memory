@@ -127,6 +127,7 @@ async def run_one(
     embedder: EmbeddingProvider | None = None,
     reranker: object | None = None,
     decomposer: object | None = None,
+    phrase_extractor: object | None = None,
     use_sqlite_graph: bool = False,
     embed_batch: int = 256,
 ) -> Report:
@@ -165,6 +166,7 @@ async def run_one(
         embedder=embedder,
         reranker=reranker,
         query_decomposer=decomposer,
+        phrase_extractor=phrase_extractor,
     )
 
     # Pre-compute embeddings in large batches (GPU-friendly).
@@ -247,6 +249,7 @@ def _emit_markdown(
     embedder_label: str,
     reranker_label: str,
     decomposer_label: str = "none",
+    phrase_extractor_label: str = "none",
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -259,6 +262,7 @@ def _emit_markdown(
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
+        f"- Phrase hub: {phrase_extractor_label}",
         "- Engine: `graph.search()` default (EvidenceSearch)",
         "",
         "| Dataset | Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |",
@@ -347,6 +351,12 @@ async def amain(argv: list[str]) -> int:
         help="Use the rule-based QueryDecomposer (compound KO/EN splitter). "
         "Overridden by --llm-decomposer-url if both are set.",
     )
+    p.add_argument(
+        "--phrase-extractor",
+        action="store_true",
+        help="Build the phrase hub at ingestion (EnglishPhraseExtractor). "
+        "Required for cross-document bridging via shared entities / PPR.",
+    )
     args = p.parse_args(argv)
 
     embedder: EmbeddingProvider | None = None
@@ -375,6 +385,14 @@ async def amain(argv: list[str]) -> int:
 
         decomposer = QueryDecomposer()
         decomposer_label = "rule-based QueryDecomposer"
+
+    phrase_extractor_obj: object | None = None
+    phrase_extractor_label = "none"
+    if args.phrase_extractor:
+        from synaptic.extensions.phrase_extractor import PhraseExtractor
+
+        phrase_extractor_obj = PhraseExtractor()
+        phrase_extractor_label = "EnglishPhraseExtractor"
 
     if args.local_bge:
         from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
@@ -409,6 +427,7 @@ async def amain(argv: list[str]) -> int:
     print(f"  embedder: {embedder_label}")
     print(f"  reranker: {reranker_label}")
     print(f"  decomposer: {decomposer_label}")
+    print(f"  phrase hub: {phrase_extractor_label}")
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -425,6 +444,7 @@ async def amain(argv: list[str]) -> int:
                 embedder=embedder,
                 reranker=reranker,
                 decomposer=decomposer,
+                phrase_extractor=phrase_extractor_obj,
                 use_sqlite_graph=args.use_sqlite_graph,
                 embed_batch=args.embed_batch,
             )
@@ -445,6 +465,7 @@ async def amain(argv: list[str]) -> int:
             embedder_label=embedder_label,
             reranker_label=reranker_label,
             decomposer_label=decomposer_label,
+            phrase_extractor_label=phrase_extractor_label,
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")
