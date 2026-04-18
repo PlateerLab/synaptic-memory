@@ -266,24 +266,54 @@ Decomposer 코드 (`query_decomposer_llm.py`, `QueryDecomposer` Protocol, Eviden
 
 ---
 
-## 9. Round 1 결과 — v0.17.0 스코프 확정
+## 9. Round 1 재측정 + blend weight 튜닝 (2026-04-18~19)
 
-### 9.1 측정 (2026-04-18 23:30)
+### 9.1 초기 Round 1 결과 — **+54% 내러티브는 오판**
 
-공개 벤치 5종, H100 단일 GPU, `eval/run_all.py --quick --local-bge --entity-linker`:
+첫 측정 (R1, 2026-04-18 23:30) 에서 공개 5 벤치 평균 MRR 0.575 → 0.843 (+54%) 보고. **하지만 FTS-only 베이스라인을 v0.14.4 값 (0.575 평균) 에서 끌어온 실수**. v0.16.0 engine flip + Kiwi 개선으로 이미 FTS-only 평균 0.837 였음.
 
-| 벤치 | FTS-only | + bge-m3 + reranker + EntityLinker | Δ | Hit | Search |
-|---|---:|---:|---:|---:|---:|
-| HotPotQA-24 | 0.727 | **0.979** | **+35%** | 24/24 | 3.4s |
-| Allganize RAG-ko (200q) | 0.621 | **0.967** | **+56%** | 197/200 | 24.8s |
-| Allganize RAG-Eval (300q) | 0.615 | **0.924** | **+50%** | 283/300 | 31.7s |
-| PublicHealthQA (77q) | 0.318 | **0.706** | **+122%** | 64/77 | 6.4s |
-| AutoRAG (720q) | 0.592 | **0.638** | +7.8% | 78/114 | 36.5s |
-| **평균** | 0.575 | **0.843** | **+54%** | | **102.8s 총합** |
+### 9.2 재측정 삼각검증 (2026-04-19)
 
-- 모델 로드 1회 공유 → per-benchmark 오버헤드 없음
-- EntityLinker post-hoc (min_df=2, max_df_ratio=0.02) — 공개 벤치 모두에서 positive
-- 9개 custom 벤치 (KRRA/assort/X2BEE) 는 pre-built SQLite graph 가 H100 에 없어서 skip. Follow-up 에서 transfer or rebuild
+3 라운드 비교로 실제 component 효과 격리:
+
+| 벤치 | R1b FTS-only | R1a bge only | R1 bge + EntityLinker | 해석 |
+|---|---:|---:|---:|---|
+| HotPotQA-24 | 0.875 | **1.000** | 0.979 | +14%. EL 살짝 음수 |
+| Allganize RAG-ko | 0.947 | **0.972** | 0.967 | +3%. 이미 강함 |
+| Allganize RAG-Eval | 0.911 | **0.925** | 0.924 | +1.5%. 이미 강함 |
+| PublicHealthQA | 0.547 | **0.706** | 0.706 | +29%. 의료 paraphrase |
+| **AutoRAG** | **0.906** | **0.642** | 0.638 | **−29% regression** ❗ |
+
+**AutoRAG component isolation** (`examples/ablation/diagnose_autorag.py`):
+- FTS-only: 0.906 (Hit 114/114)
+- Embedder only: 0.879 (114/114) — vector seed/PRF 약간 음수
+- **Reranker only: 0.641 (81/114)** ← 범인
+- Embedder + Reranker: 0.642 (80/114)
+
+**근본 원인**: `evidence_search.py:313` 의 blend 가중치 **0.4가 retrieval-style corpus 에 과도함**. AutoRAG 같이 FTS 순위가 이미 최적이면 cross-encoder 재정렬이 정답을 떨어뜨림.
+
+### 9.3 Blend weight sweep (`examples/ablation/sweep_rerank_blend.py`)
+
+5 벤치 × 3 blend 교차 측정:
+
+| 벤치 | b=0.1 | b=0.2 | b=0.4 (구 default) | FTS-only |
+|---|---:|---:|---:|---:|
+| HotPotQA-24 | 0.979 | 1.000 | 1.000 | 0.875 |
+| Allganize RAG-ko | **0.982** | 0.981 | 0.972 | 0.947 |
+| Allganize RAG-Eval | **0.946** | 0.935 | 0.925 | 0.911 |
+| PublicHealthQA | **0.734** | 0.719 | 0.706 | 0.547 |
+| AutoRAG | **0.766** | 0.708 | 0.642 | 0.906 |
+| **평균** | **0.881** | 0.869 | 0.849 | 0.837 |
+
+**결정**: `EvidenceSearch.__init__` default `rerank_blend: float = 0.1`. 5 벤치 평균 +3.2%p, AutoRAG 19%p 회복. HotPotQA 1개 쿼리 손실은 허용 가능.
+
+### 9.4 확정된 v0.17.0 narrative
+
+**이전 (오판)**: "FTS-only → Full pipeline +54% 도약"
+**확정**: "FTS-only 이미 강함 (v0.16.0 engine flip 덕분). Full pipeline 은 paraphrase-heavy corpora 에서 +10-34%, retrieval-style 에서는 ~−15% 까지 regression 가능. v0.17.0 의 blend=0.1 튜닝은 평균 +5.3% uplift 으로 안전하게 개선. Reranker 는 opt-in 으로 권장."
+
+- 공개 벤치 5종 공식 값은 CLAUDE.md §"현재 베이스라인" 참조
+- 9 custom 벤치 (KRRA/assort/X2BEE) 는 pre-built SQLite graph 가 H100 에 없어서 skip. Follow-up 에서 transfer or rebuild
 
 ### 9.2 v0.17.0 리포지셔닝
 
@@ -332,4 +362,5 @@ Decomposer 코드 (`query_decomposer_llm.py`, `QueryDecomposer` Protocol, Eviden
 - 2026-04-18 (저녁): W-1~W-6 구현 완료 (커밋 `9e9dcf9` + `2eb2b3b`). Rule decomposer 가 MuSiQue 영어 chain 쿼리에 부적합 (4% split rate, 오분해)이라 W-5 (LLMChainDecomposer + Qwen3.5-27B) 를 W-7 이전으로 이동. W-7 측정 실행 중.
 - 2026-04-18 (22:04): **W-7 negative** — LLMChainDecomposer MuSiQue 500q 측정 완료. R@5 0.453 → 0.405 (−10.6%), search 476s → 1820s. 원인: RRF fusion 이 서브쿼리 노이즈 seed 를 과대평가, reranker 는 원본만 봄. **방향 재설정**: W-8 을 typed relation sweep 에서 **query-to-phrase linking** (HippoRAG2 +12.5%p 진짜 기여분) 으로 재스코프.
 - 2026-04-18 (22:59): **W-8a / W-8b 연속 negative** — inline `EnglishPhraseExtractor` (R@5 0.423, −6.6%, build 15.5× 느림) 및 post-hoc DF-filtered `EntityLinker` (R@5 0.435, −4%, build 1.6× 느림) 둘 다 baseline 못 이김. 결론: **MuSiQue 는 mechanism 추가 만으로는 절대 못 따라잡는 벤치.** HippoRAG2 추격은 **architecture-level 교체** (OpenIE triple + NV-Embed-v2 triple matching) 필요, v0.18.0+ 연구 트랙으로 분리.
-- 2026-04-18 (23:30): **Round 1 완료 — 전략 회전**. 공개 벤치 5개 (HotPotQA-24 / Allganize RAG-ko 200q / RAG-Eval 300q / PublicHealthQA 77q / AutoRAG 720q) 전부 `--local-bge + --entity-linker` 로 재측정. 평균 MRR **+54% uplift** (최대 PublicHealthQA +122%). CLAUDE.md FTS-only 베이스라인 표가 Synaptic 실력을 절반만 보여주고 있었음이 확정. v0.17.0 은 이 데이터로 리포지셔닝 (§9 참조).
+- 2026-04-18 (23:30): **Round 1 완료 — 전략 회전**. 공개 벤치 5개 (HotPotQA-24 / Allganize RAG-ko 200q / RAG-Eval 300q / PublicHealthQA 77q / AutoRAG 720q) 전부 `--local-bge + --entity-linker` 로 재측정. 평균 MRR **+54% uplift** 보고. ~~v0.17.0 은 이 데이터로 리포지셔닝~~ (§9.1 참조 — 이 내러티브 다음 날 정정됨).
+- 2026-04-19 (자정): **R1 내러티브 오판 발견 + 삼각검증**. FTS-only 베이스를 v0.14.4 에서 끌어온 실수. v0.16.0 엔진 flip 이후 FTS-only 는 이미 평균 0.837. 재측정으로 3-round 매트릭스 구축 (R1b FTS-only / R1a bge only / R1 bge+EL). **AutoRAG 에서 reranker 가 단독 −29% regression** 발견. 원인 격리 (`diagnose_autorag.py`) → cross-encoder blend weight 0.4 가 retrieval-style corpus 에서 과도함. Sweep (`sweep_rerank_blend.py`) 후 default **0.4 → 0.1** 변경. 5 벤치 평균 MRR 0.849 → 0.881 (+3.2%p), AutoRAG 0.642 → 0.766 회복. §9.3 참조.
