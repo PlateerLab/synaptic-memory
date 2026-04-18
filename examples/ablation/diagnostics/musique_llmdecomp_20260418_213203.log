@@ -1,0 +1,16 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  90%|█████████ | 352/391 [00:00<00:00, 3516.58it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3487.50it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  70%|███████   | 277/393 [00:00<00:00, 2762.01it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 2976.95it/s]
+Tier-1 multi-hop English benchmarks — Synaptic v0.16.0 full pipeline
+  backend:  SqliteGraphBackend (HNSW)
+  embedder: local BAAI/bge-m3 (cuda:0)
+  reranker: local BAAI/bge-reranker-v2-m3 (cuda:0)
+  decomposer: LLMChainDecomposer (Qwen3.5-27b @ http://localhost:8012/v1)
+  embed batch: 64
+
+Dataset                     Docs     Qs   MRR@10     R@5    R@10        Hit   Build   Search
+--------------------------------------------------------------------------------------------
+MuSiQue-Ans dev            21100    500    0.696   0.405   0.421   372/500    98.0s  1819.6s
+
+Markdown report → examples/ablation/diagnostics/tier1_20260418_220413.md

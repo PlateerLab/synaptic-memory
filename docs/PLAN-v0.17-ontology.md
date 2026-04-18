@@ -1,7 +1,7 @@
 # PLAN — v0.17 온톨로지 고도화 우선순위 재평가
 
 > 작성일: 2026-04-18
-> 상태: **Case B 확정** — MuSiQue 500q 재측정 완료 (R@5 0.453 < 0.5)
+> 상태: **Case B 확정 + W-7 negative** — decomposer 접근 MuSiQue 실패, HippoRAG2 triple-linking 방향 재설정
 > 대상: v0.17.x 시리즈 scope 결정 + v0.18.0+ 재정렬
 
 ---
@@ -202,21 +202,57 @@ v0.17.0 에 넣지 않는다 (ROI 불명 + 원칙 충돌):
 
 ### 🎯 v0.17.0 신규 스코프
 
-| ID | 작업 | 파일 | 예상 공수 |
-|---|---|---|---:|
-| W-1 | `QueryDecomposer` Protocol 정의 (`decompose(query) -> list[SubQuery]`) | `src/synaptic/protocols.py` | 0.5d |
-| W-2 | `evidence_search.py` 에 decomposer 분기 추가 — 서브쿼리 병렬 seed → union → per-sub MMR | `src/synaptic/extensions/evidence_search.py` | 3d |
-| W-3 | 서브쿼리 결합 정책: RRF (Reciprocal Rank Fusion, k=60) 로 통합 후 rerank | 동상 | W-2 포함 |
-| W-4 | Rule-based decomposer 리팩터 + 테스트 보강 (`query_decomposer.py` 184줄 prototype → protocol 구현체) | `src/synaptic/extensions/query_decomposer.py` | 1d |
-| W-5 | LLM decomposer 구현체 (BYO, opt-in) | `src/synaptic/extensions/query_decomposer_llm.py` | 1d |
-| W-6 | SynapticGraph `__init__` 에 `decomposer=None` 파라미터 + `agent_tools_v2.deep_search` 위임 | `graph.py` / `agent_tools_v2.py` | 0.5d |
-| W-7 | MuSiQue 500q + 2Wiki 500q 재측정 + decomposer ON/OFF ablation | `examples/ablation/` | 0.5d (측정) + GPU time |
-| W-8 | `scripts/extract_typed_relations.py` opt-in CLI sweep 도구 (기존 `relation_detector_llm.py` 활용) | `scripts/` 신규 | 2d |
-| W-9 | EdgeKind 확장 (`WORKS_FOR`, `LOCATED_IN`, `SUBSIDIARY_OF` 등) + PPR `_EDGE_TYPE_WEIGHTS` | `models.py` / `ppr.py` | 1d |
+| ID | 작업 | 상태 | 파일 / 커밋 |
+|---|---|---|---|
+| W-1 | `QueryDecomposer` Protocol 정의 (`decompose(query) -> list[str]`) | ✅ 완료 | `protocols.py` / `9e9dcf9` |
+| W-2 | `evidence_search.py` 에 decomposer 분기 — Step 2d RRF seed fusion | ✅ 완료 | `evidence_search.py` / `9e9dcf9` |
+| W-3 | RRF (k=60) 결합 정책 | ✅ W-2 포함 | 동상 |
+| W-4 | Rule-based decomposer 리팩터 (`query_decomposer.py` prototype 유지 — 기존 `async decompose(query) -> list[str]` 이 이미 Protocol 만족) | ✅ Zero-change | 기존 클래스 그대로 |
+| W-5 | `LLMChainDecomposer` — chain / multi-hop 전용, vLLM/Ollama/OpenAI 호환 | ✅ 완료 | `query_decomposer_llm.py` / `2eb2b3b` |
+| W-6 | SynapticGraph facade 에서 EvidenceSearch 로 decomposer 위임 | ✅ 완료 | `graph.py` / `9e9dcf9` |
+| W-7 | MuSiQue 500q decomposer ON/OFF ablation (Qwen3.5-27B @ vLLM 8012) | ❌ Negative | `diagnostics/tier1_20260418_220413.md` |
+| W-8 | ~~`scripts/extract_typed_relations.py` CLI sweep~~ → **Query-to-phrase linking** (HippoRAG2 의 +12.5%p 컴포넌트) | 🔁 재스코프 | `evidence_search.py` / `phrase_extractor.py` |
+| W-9 | EdgeKind 확장 + PPR `_EDGE_TYPE_WEIGHTS` 추가 | ⏳ 보류 (W-8 결과에 따라) | `models.py` / `ppr.py` |
 
-**합계**: ~9.5일 엔지니어링 + GPU 측정 시간. 2주 스프린트 내 가능.
+**진행 상황 (2026-04-18 저녁)**: W-1~W-6 완료. 809 → 817 unit tests passing (+8 LLMChainDecomposer + 4 EvidenceSearch decomposer tests).
 
-**성공 기준**: MuSiQue 500q R@5 ≥ 0.55 (현재 0.453 → +0.1). HippoRAG2 0.747 까지는 못 가도 "구조적 개선 입증" 으로 v0.17.0 릴리즈 의미 충분.
+**중요 관찰 — rule decomposer는 MuSiQue 쿼리에서 4% split rate + 오분해 경향** (50/2 샘플, "Hannibal and Scipio" 같은 고유명사를 쪼갬). chain query 에는 LLM decomposer가 필수 — 이 발견 때문에 W-5 를 W-7 이전으로 이동.
+
+**성공 기준 (W-7)**: MuSiQue 500q R@5 ≥ 0.55 (baseline 0.453 → +0.1). HippoRAG2 0.747 까지는 못 가도 "구조적 개선 입증" 으로 v0.17.0 릴리즈 의미 충분.
+
+### 📉 W-7 결과 (2026-04-18 22:04) — Negative
+
+| 지표 | Baseline (no decomposer) | LLMChainDecomposer ON | Δ |
+|---|---:|---:|---:|
+| MRR@10 | 0.729 | 0.696 | **−0.033** |
+| R@5 | **0.453** | **0.405** | **−0.048 (−10.6%)** |
+| R@10 | 0.480 | 0.421 | −0.059 |
+| Hit@10 | 400/500 (80.0%) | 372/500 (74.4%) | −5.6%p |
+| Search time | 476s | 1820s | 3.8× |
+
+Decomposer가 **악화**. 성공 기준 (≥ 0.55) 미달일 뿐 아니라 baseline 보다도 낮음. 원인 분석:
+
+1. **RRF 가중이 너무 민주적** — `1/(60+rank)` 로 원본·서브 동등 취급. 원본의 full semantic 신호가 서브쿼리 FTS 노이즈에 희석.
+2. **서브쿼리가 노이즈 seed 끌어옴** — "Who distributed the film UHF?" → UHF 방송 일반 문서 대량. Weird Al 영화 맥락 손실.
+3. **Reranker는 원본만 봄** — 서브쿼리가 끌어온 bridge doc이 원본 쿼리 기준으로 low score → top-N 에서 밀림. 정작 필요한 2-hop 중간 문서 사라짐.
+4. **서브쿼리는 FTS-only** — bge-m3 power 활용 못함.
+
+### 🔁 방향 재설정 — HippoRAG2 본질 재조명
+
+HippoRAG2 의 +12.5%p Recall@5 기여분은 **query → sub-query** 가 아니라 **query → triple/phrase linking** (NV-Embed-v2 로 쿼리를 triple 임베딩에 매칭). 우리 decomposer 접근은 **잘못된 레이어**에서 작동.
+
+**W-8 재스코프 (Query-to-phrase linking)**:
+
+| ID | 작업 | 가설 |
+|---|---|---|
+| W-8a | `PhraseExtractor` 가 만든 phrase hub 노드에 bge-m3 embedding 부여 | seed 단계에서 쿼리-phrase dense match 가능 |
+| W-8b | `EvidenceSearch` Step 2e 추가: 쿼리 embedding 과 phrase 노드 embedding top-K 매칭 → phrase → 연결된 문서 노드 seed | HippoRAG2 의 query-triple linking 등가물 |
+| W-8c | Phrase 매칭으로 발견된 문서에 전용 `fts_scores` 밴드 부여 (vec_seeds 와 유사, 그러나 PPR teleport 점수로도 기능) | |
+| W-8d | MuSiQue 500q 재측정 | 성공 기준 R@5 ≥ 0.50 |
+
+**왜 이게 맞는 방향인가**: `phrase_extractor.py` 는 이미 corpus 인덱싱 시 phrase hub 를 만드는 중. MENTIONS 엣지 도 있음. 지금 빠진 건 **쿼리 사이드 dense 매칭**. 인제스트 비용 제로.
+
+Decomposer 코드 (`query_decomposer_llm.py`, `QueryDecomposer` Protocol, EvidenceSearch Step 2d) 는 **유지** — opt-in default-off. 다른 corpus (compound 쿼리 많은 한국어 데이터) 에서 유용할 수 있음.
 
 ---
 
@@ -234,3 +270,5 @@ v0.17.0 에 넣지 않는다 (ROI 불명 + 원칙 충돌):
 
 - 2026-04-18: 초안 작성. 4개 서브에이전트 교차검증 결과 반영. P0 실행 전 상태.
 - 2026-04-18 (addendum): P0 Stage 1 (MuSiQue 500q, bge-m3 + bge-reranker-v2-m3) 완료. R@5 0.453 측정 → **Case B 확정**. §4.5 / §6 재작성. Stage 2/3 은 vLLM 공존 VRAM 부족으로 이월.
+- 2026-04-18 (저녁): W-1~W-6 구현 완료 (커밋 `9e9dcf9` + `2eb2b3b`). Rule decomposer 가 MuSiQue 영어 chain 쿼리에 부적합 (4% split rate, 오분해)이라 W-5 (LLMChainDecomposer + Qwen3.5-27B) 를 W-7 이전으로 이동. W-7 측정 실행 중.
+- 2026-04-18 (22:04): **W-7 negative** — LLMChainDecomposer MuSiQue 500q 측정 완료. R@5 0.453 → 0.405 (−10.6%), search 476s → 1820s. 원인: RRF fusion 이 서브쿼리 노이즈 seed 를 과대평가, reranker 는 원본만 봄. **방향 재설정**: W-8 을 typed relation sweep 에서 **query-to-phrase linking** (HippoRAG2 +12.5%p 진짜 기여분) 으로 재스코프.
