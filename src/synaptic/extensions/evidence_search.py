@@ -121,6 +121,7 @@ class EvidenceSearch:
         "_embedder",
         "_expander",
         "_expansion_budget",
+        "_rerank_blend",
         "_reranker",
     )
 
@@ -136,11 +137,13 @@ class EvidenceSearch:
         expansion_budget: ExpansionBudget | None = None,
         mmr_lambda: float = 0.7,
         similarity_threshold: float = 0.85,
+        rerank_blend: float = 0.1,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
         self._cross_reranker = reranker
         self._decomposer = decomposer
+        self._rerank_blend = rerank_blend
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -362,16 +365,25 @@ class EvidenceSearch:
         # each (query, content) pair jointly. This is what enables
         # paraphrase matching ("말 복지" ↔ "재활힐링승마") that neither
         # BM25 nor cosine can handle.
+        #
+        # Blend defaults to 0.1 (10% cross-encoder + 90% existing hybrid).
+        # Earlier versions used 0.4 which maximised paraphrase wins but
+        # wrecked retrieval-style corpora where FTS ranking was already
+        # near-optimal (AutoRAG: 0.906 FTS → 0.642 at blend=0.4, recovered
+        # to 0.766 at 0.1). 0.1 is the global optimum across 5 public
+        # benches; see ``examples/ablation/sweep_rerank_blend.py``.
         if self._cross_reranker is not None and scored:
             top_n = min(20, len(scored))
             top_candidates = scored[:top_n]
             documents = [f"{s.node.title}\n{s.node.content[:400]}" for s in top_candidates]
             try:
                 rerank_scores = await self._cross_reranker.rerank(query, documents)
-                # Blend: 40% cross-encoder + 60% existing hybrid score
                 for i, s in enumerate(top_candidates):
                     if i < len(rerank_scores):
-                        blended = 0.4 * rerank_scores[i] + 0.6 * s.total
+                        blended = (
+                            self._rerank_blend * rerank_scores[i]
+                            + (1.0 - self._rerank_blend) * s.total
+                        )
                         s.total = blended
                 scored[:top_n] = top_candidates
                 scored.sort(key=lambda s: s.total, reverse=True)
