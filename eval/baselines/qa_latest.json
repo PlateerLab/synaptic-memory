@@ -1,7 +1,7 @@
 {
   "_meta": {
     "synaptic_version": "0.16.0",
-    "saved_at_utc": "2026-04-18T14:30:51+00:00",
+    "saved_at_utc": "2026-04-18T14:38:43+00:00",
     "corpus_md5": {
       "krra_chunks_jsonl": "missing",
       "krra_documents_jsonl": "missing",
@@ -24,38 +24,38 @@
     "note": "Baseline written by eval/run_all.py. The `_meta` block captures corpus + query file hashes so phantom regressions from drifting source data are easy to diagnose. If you see a score change after a code-only PR, compare the hashes first."
   },
   "HotPotQA-24": {
-    "mrr": 0.9792,
-    "p_at_k": 0.1708,
-    "r_at_k": 0.8542,
-    "ndcg": 0.8697,
+    "mrr": 0.875,
+    "p_at_k": 0.1625,
+    "r_at_k": 0.8125,
+    "ndcg": 0.7365,
     "corpus_size": 226
   },
   "Allganize RAG-ko": {
-    "mrr": 0.9671,
-    "p_at_k": 0.0985,
-    "r_at_k": 0.985,
-    "ndcg": 0.9716,
+    "mrr": 0.9468,
+    "p_at_k": 0.1063,
+    "r_at_k": 1.0,
+    "ndcg": 0.9598,
     "corpus_size": 200
   },
   "Allganize RAG-Eval": {
-    "mrr": 0.9237,
-    "p_at_k": 0.0943,
-    "r_at_k": 0.9433,
-    "ndcg": 0.9284,
+    "mrr": 0.9109,
+    "p_at_k": 0.0968,
+    "r_at_k": 0.95,
+    "ndcg": 0.9203,
     "corpus_size": 300
   },
   "PublicHealthQA": {
-    "mrr": 0.7062,
+    "mrr": 0.5472,
     "p_at_k": 0.0831,
     "r_at_k": 0.8312,
-    "ndcg": 0.7359,
+    "ndcg": 0.6143,
     "corpus_size": 77
   },
   "AutoRAG": {
-    "mrr": 0.6382,
-    "p_at_k": 0.0684,
-    "r_at_k": 0.6842,
-    "ndcg": 0.6499,
+    "mrr": 0.9062,
+    "p_at_k": 0.1,
+    "r_at_k": 1.0,
+    "ndcg": 0.929,
     "corpus_size": 720
   }
 }

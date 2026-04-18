@@ -1,0 +1,14 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+corpus: 720 docs
+queries: 114
+
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 4209.42it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  77%|███████▋  | 303/393 [00:00<00:00, 3018.79it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3196.57it/s]
+
+Config                                MRR        Hit     Time
+------------------------------------------------------------
+A. FTS-only                         0.906   114/114     9.0s
+B. Embedder only (no reranker)      0.879   114/114    25.1s
+C. Reranker only (no embedder)      0.641    81/114     9.1s
+D. Embedder + reranker              0.642    80/114    26.8s

@@ -1,0 +1,17 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 4334.41it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  99%|█████████▉| 389/393 [00:00<00:00, 3887.10it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3905.29it/s]
+
+Benchmark                 Queries    b=0.1    b=0.2    b=0.4
+----------------------------------------------------------------------
+HotPotQA-24                    24    0.979    1.000    1.000  (build 0.9s)
+Allganize RAG-ko              200    0.982    0.981    0.972  (build 0.2s)
+Allganize RAG-Eval            300    0.946    0.935    0.925  (build 0.2s)
+PublicHealthQA                 77    0.734    0.719    0.706  (build 0.1s)
+AutoRAG                       114    0.766    0.708    0.642  (build 1.0s)
+
+Mean MRR across benchmarks:
+  blend=0.1: mean=0.881 over 5 benches
+  blend=0.2: mean=0.869 over 5 benches
+  blend=0.4: mean=0.849 over 5 benches

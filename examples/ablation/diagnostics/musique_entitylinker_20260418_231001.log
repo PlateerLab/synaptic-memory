@@ -1,0 +1,20 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  94%|█████████▍| 367/391 [00:00<00:00, 3664.03it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3717.47it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 4053.08it/s]
+Tier-1 multi-hop English benchmarks — Synaptic v0.16.0 full pipeline
+  backend:  SqliteGraphBackend (HNSW)
+  embedder: local BAAI/bge-m3 (cuda:0)
+  reranker: local BAAI/bge-reranker-v2-m3 (cuda:0)
+  decomposer: none
+  phrase hub: none
+  entity linker: EntityLinker (min_df=2, max_df_ratio=0.020)
+  embed batch: 64
+
+Dataset                     Docs     Qs   MRR@10     R@5    R@10        Hit   Build   Search
+--------------------------------------------------------------------------------------------
+  entity-linker: 10049 hubs / 47075 MENTIONS (min_df=2, max_df=0.020, 63.6s)
+    top-DF: World War(314), New York(260), American(257), United(247), United Kingdom(240)
+MuSiQue-Ans dev            21100    500    0.718   0.435   0.467   399/500   161.9s   539.3s
+
+Markdown report → examples/ablation/diagnostics/tier1_20260418_232154.md
