@@ -37,13 +37,20 @@ cross-checked independently of GPU infrastructure.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from synaptic.backends.memory import MemoryBackend
+from synaptic.extensions.embedder import (
+    EmbeddingProvider,
+    OllamaEmbeddingProvider,
+)
+from synaptic.extensions.reranker_cross import TEIReranker
 from synaptic.graph import SynapticGraph
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -107,7 +114,13 @@ def _parse_queries(
     return out
 
 
-async def run_dataset(name: str, path: Path) -> Report:
+async def run_dataset(
+    name: str,
+    path: Path,
+    *,
+    embedder: EmbeddingProvider | None = None,
+    reranker: object | None = None,
+) -> Report:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
@@ -133,7 +146,7 @@ async def run_dataset(name: str, path: Path) -> Report:
     # --- Build graph (MemoryBackend — no disk I/O) ---
     backend = MemoryBackend()
     await backend.connect()
-    graph = SynapticGraph(backend)
+    graph = SynapticGraph(backend, embedder=embedder, reranker=reranker)
     for doc_id, title, text in corpus:
         if not text and not title:
             continue
@@ -170,9 +183,66 @@ async def run_dataset(name: str, path: Path) -> Report:
     )
 
 
-async def main() -> None:
-    print("Allganize RAG-ko benchmark — Synaptic Memory embedder-free baseline")
+async def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument(
+        "--embedder-url",
+        default=None,
+        help="Ollama base URL (e.g. http://localhost:11434). If unset, "
+        "runs the embedder-free baseline (the v0.16.0 published numbers).",
+    )
+    p.add_argument(
+        "--embedder-model",
+        default="qwen3-embedding:4b",
+        help="Ollama embedding model (default: qwen3-embedding:4b).",
+    )
+    p.add_argument(
+        "--reranker-url",
+        default=None,
+        help="TEI reranker base URL (e.g. http://localhost:8180).",
+    )
+    p.add_argument(
+        "--local-bge",
+        action="store_true",
+        help="Load BAAI/bge-m3 + bge-reranker-v2-m3 directly via "
+        "transformers (no external endpoint). Requires torch + GPU.",
+    )
+    p.add_argument(
+        "--local-bge-device",
+        default="cuda:0",
+        help="GPU device for --local-bge (default: cuda:0).",
+    )
+    args = p.parse_args(argv if argv is not None else sys.argv[1:])
+
+    embedder: EmbeddingProvider | None = None
+    embedder_label = "none (FTS-only baseline)"
+    reranker: object | None = None
+    reranker_label = "none"
+
+    if args.local_bge:
+        sys.path.insert(0, str(REPO_ROOT / "examples" / "ablation"))
+        from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
+
+        print(f"Loading bge-m3 + bge-reranker-v2-m3 on {args.local_bge_device} ...")
+        embedder = LocalBgeM3Embedder(device=args.local_bge_device)
+        reranker = LocalBgeRerankerV2(device=args.local_bge_device)
+        embedder_label = f"local BAAI/bge-m3 ({args.local_bge_device})"
+        reranker_label = f"local BAAI/bge-reranker-v2-m3 ({args.local_bge_device})"
+    else:
+        if args.embedder_url:
+            embedder = OllamaEmbeddingProvider(
+                base_url=args.embedder_url, model=args.embedder_model
+            )
+            embedder_label = f"Ollama {args.embedder_model} @ {args.embedder_url}"
+        if args.reranker_url:
+            reranker = TEIReranker(base_url=args.reranker_url)
+            reranker_label = f"TEI cross-encoder @ {args.reranker_url}"
+
+    mode = "full pipeline" if (embedder or reranker) else "embedder-free baseline"
+    print(f"Allganize RAG-ko benchmark — Synaptic Memory {mode}")
     print(f"  top-k = {TOP_K}, engine = evidence (BM25 + PPR + MMR + Kiwi)")
+    print(f"  embedder: {embedder_label}")
+    print(f"  reranker: {reranker_label}")
     print()
     print(f"{'Dataset':<22} {'Corpus':>8} {'Queries':>8} {'MRR':>8} {'R@10':>8} {'Hit':>10} {'Time':>8}")
     print("-" * 80)
@@ -182,7 +252,7 @@ async def main() -> None:
         if not path.exists():
             print(f"{name:<22} SKIP — file not found: {path}")
             continue
-        report = await run_dataset(name, path)
+        report = await run_dataset(name, path, embedder=embedder, reranker=reranker)
         reports.append(report)
         print(
             f"{report.name:<22} "
@@ -196,10 +266,14 @@ async def main() -> None:
 
     print()
     print("Notes:")
-    print("  * Embedder-free — the EvidenceSearch default in v0.16.0+.")
-    print("    Adding a GPU-backed embedder + cross-encoder pushes these")
-    print("    further (see README.md#benchmarks).")
-    print("  * Deterministic — re-running produces identical numbers.")
+    if embedder or reranker:
+        print(f"  * Mode: {mode}.")
+        print("  * For the deterministic embedder-free baseline, re-run without flags.")
+    else:
+        print("  * Embedder-free — the EvidenceSearch default in v0.16.0+.")
+        print("    Adding a GPU-backed embedder + cross-encoder pushes these")
+        print("    further: pass --embedder-url / --reranker-url.")
+        print("  * Deterministic — re-running produces identical numbers.")
     print("  * Corpus attribution: allganize/RAG-Evaluation-Dataset-KO (HuggingFace).")
 
 

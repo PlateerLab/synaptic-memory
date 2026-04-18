@@ -1,0 +1,29 @@
+==== Environment ====
+0, 5686 MiB
+1, 5688 MiB
+Sat Apr 18 05:13:31 PM KST 2026
+
+==== Stage 1/3: MuSiQue 500q (decision-critical) ====
+Sat Apr 18 05:13:31 PM KST 2026
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 4275.32it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  62%|██████▏   | 245/393 [00:00<00:00, 2441.97it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 2875.49it/s]
+Tier-1 multi-hop English benchmarks — Synaptic v0.16.0 full pipeline
+  backend:  SqliteGraphBackend (HNSW)
+  embedder: local BAAI/bge-m3 (cuda:0)
+  reranker: local BAAI/bge-reranker-v2-m3 (cuda:0)
+  embed batch: 64
+
+Dataset                     Docs     Qs   MRR@10     R@5    R@10        Hit   Build   Search
+--------------------------------------------------------------------------------------------
+MuSiQue-Ans dev            21100    500    0.729   0.453   0.480   400/500    98.9s   476.1s
+
+Markdown report → examples/ablation/diagnostics/tier1_20260418_172317.md
+
+==== Stage 2/3: HotPotQA + 2Wiki @ 100q each ====
+Sat Apr 18 05:23:18 PM KST 2026
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 4001.72it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  67%|██████▋   | 265/393 [00:00<00:00, 2636.14it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 2923.52it/s]

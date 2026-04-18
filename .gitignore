@@ -19,6 +19,8 @@ examples/benchmark_vs_competitors/hipporag_bench/
 *.db
 *.db-shm
 *.db-wal
+# Local Claude Code session transcripts synced to H100 etc.
+.local-claude/
 temp/
 .DS_Store
 ~/
