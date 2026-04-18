@@ -1,6 +1,6 @@
 # Synaptic Memory — Roadmap
 
-> 마지막 업데이트: 2026-04-15 (v0.15.0 기준)
+> 마지막 업데이트: 2026-04-18 (v0.17.0 온톨로지 트랙 Case B 확정)
 
 ## 현재 상태: v0.15.0 ✅
 
@@ -79,6 +79,28 @@ v0.14.0 CDC에서 `syn_cdc_state.schema_fingerprint`를 저장하지만 **비교
 ## v0.17.0 — Legacy 제거 + 근본 개선
 
 > 목표: v0.15 deprecation timeline 완료 + 구조적 개선.
+
+> **온톨로지 트랙 — Case B 확정 (2026-04-18)**: 사용자 요청 "온톨로지 고도화"는
+> [PLAN-v0.17-ontology.md](PLAN-v0.17-ontology.md) 에서 별도 평가.
+> MuSiQue 500q (bge-m3 + bge-reranker-v2-m3 ON) 재측정 결과 R@5 **0.453**
+> (< 0.5 threshold, HippoRAG2 0.747 대비 -0.294) → 임베더 강화만으론 구조적 상한
+> 확인. **P8 (Query decomposer 통합)** 추가. Typed relation 은 opt-in CLI sweep
+> 으로만 제공 (LLM-free 인덱싱 원칙 유지). 기존 P5/P6/P7은 그대로 진행.
+
+### P8: Query decomposer 통합 (v0.17.0 온톨로지 트랙)
+
+PLAN-v0.17-ontology §6 작업 분해(W-1 ~ W-9) 요약:
+
+| # | 작업 |
+|---|------|
+| P8-1 | `QueryDecomposer` Protocol 정의 (`protocols.py`) |
+| P8-2 | EvidenceSearch 에 decomposer 분기 — 서브쿼리 병렬 seed → RRF(k=60) 통합 → rerank |
+| P8-3 | Rule-based decomposer 리팩터 (`query_decomposer.py` 184줄 prototype → Protocol 구현) + 테스트 보강 |
+| P8-4 | LLM decomposer 구현체 (BYO, opt-in — `query_decomposer_llm.py`) |
+| P8-5 | `SynapticGraph(decomposer=None)` 파라미터 + `agent_tools_v2.deep_search` 위임 |
+| P8-6 | MuSiQue / 2Wiki 500q decomposer ON/OFF ablation — 성공 기준 R@5 ≥ 0.55 |
+| P8-7 | `scripts/extract_typed_relations.py` opt-in CLI sweep (기존 `relation_detector_llm.py` 활용) |
+| P8-8 | EdgeKind 확장 (`WORKS_FOR`, `LOCATED_IN`, `SUBSIDIARY_OF` 등) + PPR `_EDGE_TYPE_WEIGHTS` |
 
 ### P5: Legacy HybridSearch 제거
 
