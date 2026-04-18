@@ -784,6 +784,82 @@ fingerprint 재계산), `category_backfill=True` (카테고리 라벨 재추출)
 
 ---
 
+## 13. Measured negatives — 시도했지만 ship하지 않은 것들
+
+v0.17.0 개발 중 MuSiQue 와 공개 벤치 5종에서 여러 메커니즘을 측정했고, **4개 접근이 품질을 악화시킨다는 증거로 확정됐다.** 향후 세션/기여자가 같은 실수를 반복하지 않도록 측정치와 함께 기록한다.
+
+### 13.1 LLM query decomposer — MuSiQue R@5 −10.6%
+
+가설: Multi-hop 쿼리를 LLM 으로 서브쿼리로 분해하고 (`LLMChainDecomposer`, `OpenAILLMProvider` 백엔드) 각 서브에 대해 FTS seed 를 뽑아 RRF(k=60) 로 융합하면 bridge document 가 seed pool 에 들어올 것.
+
+측정 (MuSiQue-Ans dev 500q, bge-m3 + bge-reranker-v2-m3):
+- Baseline: MRR 0.729 / R@5 0.453 / Search 476s
+- With LLMChainDecomposer: MRR 0.696 / R@5 **0.405** / Search 1820s
+
+원인: RRF 가 원본 쿼리와 서브쿼리 랭크를 동등하게 취급 (`1/(60+rank)`). 서브쿼리가 끌어온 FTS seed 대부분이 topic-drift 노이즈 (UHF 영화의 "film UHF" 서브가 UHF 방송 일반 문서를 대량 인입). Reranker 는 여전히 원본 쿼리로 스코어하므로 bridge doc 이 top-N 에서 밀림.
+
+**현재 상태**: `QueryDecomposer` Protocol + `LLMChainDecomposer` 는 commit `2eb2b3b` 에 남아 있다 — **opt-in default-off**. Compound 쿼리 ("A 와 B 비교") 가 주 사용 패턴인 한국어 corpus 에선 positive 일 가능성 있음. Chain-reasoning 벤치에선 enable 하지 말 것.
+
+### 13.2 Inline phrase hub (DF filter 없이) — MuSiQue R@5 −6.6%, build 15× 느림
+
+가설: `PhraseExtractor` 를 `SynapticGraph(phrase_extractor=...)` 에 인라인으로 붙이면 shared-phrase 노드가 생겨서 문서 간 bridging edge 가 생기고, PPR 이 multi-hop doc 을 자연히 집는다.
+
+측정:
+- Baseline: build 99s, R@5 0.453
+- With inline phrase_extractor: build **1534s** (15.5× slower), R@5 **0.423**
+
+원인: `EnglishPhraseExtractor` 에 DF filter 가 없어서 "American" (샘플 1k docs 에서 130개), "United", "She" 같은 generic phrase 가 super-hub 노드로 만들어진다. PPR random walk 이 super-hub 에 teleport 된 뒤 무관한 문서로 흩어짐. **노이즈 필터링 없는 phrase hub 은 cross-document bridging 이 아니라 cross-document poisoning.**
+
+**현재 상태**: Inline 경로는 그대로 남지만 (다른 locale/corpus 에선 유용 가능) v0.17.0 default 는 **post-hoc DF-filtered `EntityLinker`** 사용. 벤치 스크립트의 `--phrase-extractor` flag 는 진단용.
+
+### 13.3 DF-filtered EntityLinker — 공개 벤치에서 neutral (±1%)
+
+가설: `EntityLinker` 는 post-hoc 패스에서 `min_df=2, max_df_ratio=0.02` DF filter 를 걸어 super-hub 를 제거한다. Build 시간 15× → 1.6× 로 회복. MuSiQue 에서 R@5 0.423 → 0.435 (inline 대비 +2.8%, baseline 대비 여전히 −4%).
+
+공개 5 벤치 교차 측정에서 EntityLinker ON/OFF 차이는 모두 ±1% 미만:
+- HotPotQA-24: 1.000 → 0.979 (−2%, 24 쿼리 중 1개 차이)
+- Allganize RAG-ko: 0.972 → 0.967 (−0.5%)
+- Allganize RAG-Eval: 0.925 → 0.924 (neutral)
+- PublicHealthQA: 0.706 → 0.706 (neutral)
+- AutoRAG: 0.642 → 0.638 (neutral)
+
+**현재 상태**: `--entity-linker` flag 로 opt-in, default-off. 대규모 corpus 에서 사용자 corpus profile 튜닝 뒤 재측정 시 positive 가능성 남김. Release scope 에서 "phrase hub 이 도움이 되는 corpus 에서만 opt-in" 으로 문서화.
+
+### 13.4 `rerank_blend=0.4` (pre-v0.17.0 default) — AutoRAG −29%
+
+가설: Cross-encoder rerank blend 0.4 (40% cross + 60% hybrid) 가 `bge-reranker-v2-m3` 의 paraphrase 잡는 능력을 최대화한다.
+
+측정 (AutoRAG 114q, component isolation via `diagnose_autorag.py`):
+- FTS-only: MRR 0.906 / Hit 114/114
+- Embedder only (no reranker): 0.879 / 114/114 (**near-neutral**)
+- Reranker only: **0.641 / 81/114** (**−29%, 33 쿼리가 top-10 밖으로**)
+- Embedder + reranker: 0.642 / 80/114
+
+Blend sweep (5 벤치 × 3 blend, `sweep_rerank_blend.py`):
+
+| Bench | b=0.1 | b=0.2 | b=0.4 (구) | FTS-only |
+|---|---:|---:|---:|---:|
+| HotPotQA-24 | 0.979 | 1.000 | 1.000 | 0.875 |
+| Allganize RAG-ko | **0.982** | 0.981 | 0.972 | 0.947 |
+| Allganize RAG-Eval | **0.946** | 0.935 | 0.925 | 0.911 |
+| PublicHealthQA | **0.734** | 0.719 | 0.706 | 0.547 |
+| AutoRAG | **0.766** | 0.708 | 0.642 | 0.906 |
+| **평균** | **0.881** | 0.869 | 0.849 | 0.837 |
+
+원인: `bge-reranker-v2-m3` 는 long-form paraphrase 데이터로 튜닝됐다. Retrieval-style corpus (AutoRAG — 짧은 팩트 쿼리, 좁은 gold 셋) 에선 FTS 랭킹이 이미 최적이고 cross-encoder 의 sentence-level 재스코어가 정답을 떨어뜨린다. 0.4 blend 에서 이 파괴력이 최대.
+
+**현재 상태**: commit `7472dc0` 에서 default 0.1 로 변경. 5 벤치 평균 +3.2pp. Retrieval-style corpus 는 여전히 FTS-only 가 ceiling (AutoRAG 0.906 vs full-pipeline 0.766). 사용자 가이드에 "corpus 유형별 reranker opt-in/opt-out" 권고.
+
+### 13.5 교훈 한줄 요약
+
+> **"Mechanism 추가 = 품질 개선" 이라는 전제는 corpus 유형에 따라 부합하지 않는다.**
+> FTS 랭킹이 이미 near-optimal 인 corpus 에서 bridging / reranking / decomposition
+> 모두 정답을 top-K 밖으로 밀어낸다. 하나를 켜기 전에 FTS-only 와 교차측정할 것.
+> v0.14.4 시점 베이스라인이 4 major release 뒤에도 최신인 척 비교하면 false uplift
+> narrative 가 나온다 — **항상 current-code FTS-only 를 재측정한 뒤 비교할 것.**
+
+---
+
 ## 참고 문헌
 
 - **GraphRAG** (Microsoft, 2024): Edge et al., "From Local to Global"

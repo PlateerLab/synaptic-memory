@@ -6,6 +6,116 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-04-19 (draft)
+
+v0.17.0 is a **measurement-driven tuning release**. The headline change
+is a single constant — `EvidenceSearch.rerank_blend` — moving from 0.4
+to 0.1 after a three-round triangulation exposed a 29 %-point MRR
+regression on retrieval-style corpora that was hidden by the v0.16.0
+engine flip. Two new opt-in flags (`--local-bge`, `--entity-linker`)
+and a `QueryDecomposer` Protocol round out the release. The honest
+summary: **Synaptic's FTS-only pipeline is already state-of-the-art on
+Korean long-form corpora; Full pipeline adds ~+5 pp mean MRR but must
+be opted out of on retrieval-style corpora.**
+
+### Changed — `rerank_blend` default 0.4 → 0.1
+
+`EvidenceSearch(reranker=...)` now blends the cross-encoder at 10 %
+against the hybrid-rank's 90 %, down from 40 % / 60 %. The old blend
+maximised paraphrase wins (PublicHealthQA, Allganize) but wrecked
+retrieval-style corpora where FTS ranking was already near-optimal.
+
+Evidence across 5 public benches (`bge-m3 + bge-reranker-v2-m3`,
+H100 FP16):
+
+| Bench | FTS-only | b=0.1 (new) | b=0.4 (old) |
+|-------|---------:|------------:|------------:|
+| HotPotQA-24 | 0.875 | 0.979 | 1.000 |
+| Allganize RAG-ko | 0.947 | **0.982** | 0.972 |
+| Allganize RAG-Eval | 0.911 | **0.946** | 0.925 |
+| PublicHealthQA | 0.547 | **0.734** | 0.706 |
+| AutoRAG | **0.906** | 0.766 | 0.642 |
+| **MEAN** | 0.837 | **0.881** | 0.849 |
+
+Component isolation on AutoRAG (`diagnose_autorag.py`) pinned the
+regression squarely on the cross-encoder: FTS-only 0.906 → reranker
+alone 0.641 (Hit 114 / 114 → 81 / 114). The embedder path was
+near-neutral. Sweep: `examples/ablation/sweep_rerank_blend.py`.
+
+Callers can override per-corpus: `EvidenceSearch(..., rerank_blend=0.2)`.
+
+### Added — `QueryDecomposer` Protocol + `LLMChainDecomposer`
+
+`src/synaptic/protocols.py` gains a `QueryDecomposer` Protocol
+(`async decompose(query) -> list[str]`). Two implementations ship:
+
+- Existing `QueryDecomposer` (rule-based, Korean conjunction splits) now
+  satisfies the Protocol structurally — zero-change compat.
+- New `LLMChainDecomposer` (`extensions/query_decomposer_llm.py`) for
+  multi-hop English chain queries via any OpenAI-compatible endpoint.
+
+`EvidenceSearch` gains a `decomposer=` kwarg. When the decomposer
+returns ≥2 sub-queries, each sub runs a separate FTS seed retrieval
+and the ranks are fused via RRF (`k=60`) before graph expansion and
+reranking (which stay on the original query).
+
+**Opt-in, default-off.** The chain decomposer measured
+**−10.6 % R@5 on MuSiQue-Ans** (500 q, R@5 0.453 → 0.405) — documented
+in `docs/PLAN-v0.17-ontology.md` §9 and `docs/CONCEPTS.md` §13.1. The
+mechanism helps compound queries but hurts chain-reasoning benchmarks
+because RRF equal-weights sub-query noise against the original query.
+Use only when compound splits (Korean "A와 B 비교") dominate your
+corpus.
+
+### Added — `--local-bge` end-to-end benchmark runner
+
+`eval/run_all.py --local-bge` loads `BAAI/bge-m3` +
+`BAAI/bge-reranker-v2-m3` directly via `transformers` (FP16, cuda:0).
+No Ollama endpoint, no TEI container. Same path in
+`examples/ablation/run_tier1_benchmarks.py` and
+`examples/benchmark_allganize.py`. Model weights load once per suite
+run and are shared across all datasets. Requires `torch` and a GPU;
+coexists with a running vLLM (tested with Qwen3.5-27B-TP2).
+
+Also adds `--entity-linker` (opt-in post-hoc DF-filtered phrase hub,
+`min_df=2, max_df_ratio=0.02`). Effect on public benches was ±1 %
+across the board — left opt-in for users whose corpora may benefit.
+
+### Measured and NOT shipping as default
+
+Three mechanisms were implemented, measured, and **kept off**. Each
+has a standalone section in `docs/CONCEPTS.md` §13:
+
+- **LLM query decomposition**: −10.6 % on MuSiQue R@5
+- **Inline phrase hub (no DF filter)**: −6.6 % on MuSiQue, 15× slower build
+- **DF-filtered EntityLinker**: ±1 % on public benches (neutral)
+
+See `docs/PLAN-v0.17-ontology.md` §9 for the full post-mortem of the
+"initial +54 % uplift" narrative that collapsed on triangulation (the
+baseline was v0.14.4, not current-code FTS-only after v0.15.1 +
+v0.16.0).
+
+### Documented — known gap on English multi-hop
+
+MuSiQue-Ans-dev 500q full pipeline hits R@5 **0.453** vs HippoRAG2
+published **0.747** (−0.294). Three rounds of targeted fixes
+(decomposer, phrase hub variants, entity linker) all regressed the
+score — the gap is structural. Closing it requires OpenIE triple
+extraction + query→triple dense linking, which is a v0.18.0+ research
+track rather than a default pipeline change. Synaptic's strength is
+Korean / structured-data RAG; English Wikipedia multi-hop is
+honestly documented as a trade-off.
+
+### Unchanged but worth noting
+
+- `graph.search()` default engine remains `"evidence"` (v0.16.0)
+- `engine="legacy"` still raises DeprecationWarning; removal pushed to
+  v0.18.0 to bundle with HippoRAG2-style architecture work
+- Core dependencies remain 0; `torch` is only required when using
+  `--local-bge` (benchmark harness opt-in)
+
+---
+
 ## [0.16.0] - 2026-04-17
 
 v0.16.0 is a **foundational cleanup release**. Five changes that add

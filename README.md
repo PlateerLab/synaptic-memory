@@ -384,16 +384,52 @@ HippoRAG / GraphRAG line of research uses for head-to-head.
 Numbers go in
 [docs/comparison/synaptic_results.md](docs/comparison/synaptic_results.md#tier-15--english-multi-hop-standard-benchmarks-v0160).
 
-### Full pipeline (embedder + reranker) — pre-v0.16.0 measurements
+### Full pipeline (BGE-M3 + cross-encoder) — v0.17.0
 
-The numbers below predate the v0.16.0 engine flip. They were
-measured with the **EvidenceSearch pipeline plus an embedder
-(Ollama `qwen3-embedding:4b`) and a cross-encoder reranker
-(TEI `bge-reranker-v2-m3`)**, which is why they match or beat the
-embedder-free numbers above on private corpora. Reproducing these
-requires a GPU-backed embedder and reranker — see
-[`eval/run_all.py`](eval/run_all.py). A v0.16.0 rerun is scheduled
-after the Home-server rebuild.
+Measured 2026-04-19 on an H100, `BAAI/bge-m3` + `BAAI/bge-reranker-v2-m3`
+loaded in-process via `transformers` (no external TEI / Ollama
+endpoint needed):
+
+```bash
+python eval/run_all.py --quick --local-bge
+```
+
+| Dataset | Lang | Queries | FTS-only | Full pipeline | Δ |
+|---------|------|--------:|---------:|--------------:|---:|
+| HotPotQA-24 | en | 24 | 0.875 | **0.979** | +12% |
+| Allganize RAG-ko | ko | 200 | 0.947 | **0.982** | +3.7% |
+| Allganize RAG-Eval | ko | 300 | 0.911 | **0.946** | +3.8% |
+| PublicHealthQA | ko | 77 | 0.547 | **0.734** | +34% |
+| AutoRAG KO | ko | 114 | **0.906** | 0.766 | **−15%** ⚠ |
+| **Mean** | | | 0.837 | **0.881** | +5.3pp |
+
+**When the cross-encoder helps — and when it hurts.** The reranker
+shines on paraphrase-heavy corpora (PublicHealthQA medical queries
++34%, HotPotQA English multi-hop +12%) but actively damages
+retrieval-style corpora where FTS ranking is already near-optimal
+(AutoRAG −15%, even after tuning `rerank_blend` from 0.4 → 0.1 in
+v0.17.0). If your corpus looks like AutoRAG — short queries, narrow
+gold sets, FAQ-style — **pass `reranker=None`**; the FTS-only pipeline
+is your ceiling, not your floor. Component-isolation evidence:
+[`examples/ablation/diagnose_autorag.py`](examples/ablation/diagnose_autorag.py).
+
+**Known gap on English multi-hop.** On MuSiQue-Ans-dev 500q the full
+pipeline hits R@5 **0.453**, vs HippoRAG2's published 0.747. Three
+rounds of targeted fixes (LLM query decomposition, inline phrase hub,
+DF-filtered entity linker) all regressed the score — the gap is
+structural, not a tuning knob. Closing it requires OpenIE triple
+extraction + query→triple dense linking, which is a v0.18.0+ research
+track rather than a default pipeline change. Synaptic's strength is
+Korean / structured-data RAG; English Wikipedia multi-hop is
+honestly documented as a trade-off. Details:
+[`docs/PLAN-v0.17-ontology.md`](docs/PLAN-v0.17-ontology.md#9-round-1-재측정--blend-weight-튜닝-2026-04-1819).
+
+### Full pipeline on custom corpora — pre-v0.16.0 numbers (pending re-measure)
+
+The table below predates the v0.16.0 engine flip and the v0.17.0
+`rerank_blend` tuning. The SQLite graph files are on the original
+Home-server box and haven't been synced to the H100 measurement
+environment yet, so these numbers stay provisional until the transfer.
 
 | Dataset | Type | Nodes | MRR | Hit |
 |---------|------|-------|-----|-----|
@@ -401,11 +437,6 @@ after the Home-server rebuild.
 | KRRA Hard | Korean documents (private) | 19,720 | **1.000** | 15/15 |
 | X2BEE Easy | PostgreSQL e-commerce (private) | 19,843 | **1.000** | 20/20 |
 | assort Easy | Fashion CSV (private) | 13,909 | **0.867** | 13/15 |
-| HotPotQA-24 | English multi-hop (public subset) | 226 | **0.964** | 24/24 |
-
-> HotPotQA-24 is a 24-question subset. A full HotPotQA-dev (7,405 q)
-> run is planned for v0.16.1 — we won't claim parity with published
-> numbers until then.
 
 ### Multi-turn agent (GPT-4o-mini, 5 turns max)
 
