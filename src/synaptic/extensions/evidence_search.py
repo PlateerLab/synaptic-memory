@@ -68,7 +68,11 @@ if TYPE_CHECKING:
     from synaptic.extensions.embedder import EmbeddingProvider
     from synaptic.extensions.query_anchor import PhraseExtractorProtocol
     from synaptic.extensions.reranker_cross import RerankerProtocol
-    from synaptic.protocols import StorageBackend
+    from synaptic.protocols import QueryDecomposer, StorageBackend
+
+# RRF (Reciprocal Rank Fusion) constant — 60 is the canonical k from the
+# original Cormack et al. 2009 paper and what every baseline re-implements.
+_RRF_K = 60
 
 logger = logging.getLogger("evidence-search")
 
@@ -90,6 +94,7 @@ class EvidenceSearchResult:
     scored: list[ScoredCandidate] = field(default_factory=list)
     evidence: list[Evidence] = field(default_factory=list)
     elapsed_ms: float = 0.0
+    sub_queries: list[str] = field(default_factory=list)
 
 
 class EvidenceSearch:
@@ -112,6 +117,7 @@ class EvidenceSearch:
         "_anchor_extractor",
         "_backend",
         "_cross_reranker",
+        "_decomposer",
         "_embedder",
         "_expander",
         "_expansion_budget",
@@ -125,6 +131,7 @@ class EvidenceSearch:
         embedder: EmbeddingProvider | None = None,
         reranker: RerankerProtocol | None = None,
         phrase_extractor: PhraseExtractorProtocol | None = None,
+        decomposer: QueryDecomposer | None = None,
         reranker_weights: RerankerWeights | None = None,
         expansion_budget: ExpansionBudget | None = None,
         mmr_lambda: float = 0.7,
@@ -133,6 +140,7 @@ class EvidenceSearch:
         self._backend = backend
         self._embedder = embedder
         self._cross_reranker = reranker
+        self._decomposer = decomposer
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -248,6 +256,59 @@ class EvidenceSearch:
 
         all_seeds = list(fts_nodes) + vec_seeds + prf_seeds
 
+        # Step 2d — query decomposition + RRF seed fusion.
+        # If a decomposer is wired and returns >1 sub-queries, run FTS for
+        # each sub and fuse the ranked lists via RRF (k=60). Sub-queries
+        # surface bridge documents that the original compound query
+        # buries. We only re-FTS (not vec/PRF) per-sub to keep this cheap
+        # — PRF's payoff scales with query specificity, which sub-queries
+        # already have.
+        #
+        # Graph expansion and reranking (Steps 3-5) continue to operate
+        # on the ORIGINAL query so relevance is scored against actual
+        # user intent, not the decomposed fragments.
+        sub_queries: list[str] = []
+        if self._decomposer is not None:
+            try:
+                decomposed = await self._decomposer.decompose(query)
+                if len(decomposed) > 1:
+                    sub_queries = [s for s in decomposed if s and s != query]
+            except Exception as exc:
+                logger.warning("query decomposition failed: %s", exc)
+
+        if sub_queries:
+            ranked_lists: list[list] = [list(fts_nodes)]
+            for sub in sub_queries:
+                try:
+                    sub_fts = await self._backend.search_fts(sub, limit=fts_seed_limit)
+                    ranked_lists.append(sub_fts)
+                except Exception as exc:
+                    logger.warning("sub-query FTS failed (%r): %s", sub, exc)
+                    continue
+
+            rrf: dict[str, float] = {}
+            for ranked in ranked_lists:
+                for rank, node in enumerate(ranked):
+                    rrf[node.id] = rrf.get(node.id, 0.0) + 1.0 / (_RRF_K + rank)
+
+            existing_ids = {n.id for n in all_seeds}
+            for ranked in ranked_lists[1:]:
+                for node in ranked:
+                    if node.id not in existing_ids:
+                        all_seeds.append(node)
+                        existing_ids.add(node.id)
+
+            # Normalise RRF → [0.10, 0.95] (same band as FTS rank scores).
+            # Max-combine with the original fts_scores so a node's best
+            # signal wins; vec-only / PRF-only nodes keep their floor.
+            if rrf:
+                rrf_max = max(rrf.values())
+                for node_id, score in rrf.items():
+                    normalised = 0.10 + 0.85 * (score / rrf_max)
+                    fts_scores[node_id] = max(
+                        fts_scores.get(node_id, 0.0), normalised
+                    )
+
         # Step 3 — shallow graph expansion
         expanded = await self._expander.expand(
             anchors=anchors,
@@ -344,4 +405,5 @@ class EvidenceSearch:
             scored=scored,
             evidence=evidence,
             elapsed_ms=elapsed_ms,
+            sub_queries=sub_queries,
         )

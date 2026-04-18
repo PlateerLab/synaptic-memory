@@ -64,6 +64,7 @@ from synaptic.ontology import OntologyRegistry, build_agent_ontology
 from synaptic.protocols import (
     Digester,
     KindClassifier,
+    QueryDecomposer,
     QueryRewriter,
     RelationDetector,
     StorageBackend,
@@ -124,7 +125,7 @@ class SynapticGraph:
         relation_detector: RelationDetector | None = None,
         phrase_extractor: PhraseExtractor | None = None,
         chunk_entity_index: ChunkEntityIndex | None = None,
-        query_decomposer: object | None = None,
+        query_decomposer: QueryDecomposer | None = None,
         reranker: object | None = None,
         cache_size: int = 256,
         vector_min_cosine: float | None = None,
@@ -1373,6 +1374,7 @@ class SynapticGraph:
             embedder=self._embedder,
             phrase_extractor=self._phrase_extractor,
             reranker=self._reranker,
+            decomposer=self._query_decomposer,
         )
         ev_result = await searcher.search(
             query,

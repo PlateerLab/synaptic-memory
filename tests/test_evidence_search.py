@@ -271,3 +271,80 @@ class TestPerDocumentCapE2E:
         result = await searcher.search("규정 위반", k=4, per_document_cap=1)
         rule_docs = [e for e in result.evidence if e.document_id == "doc_r"]
         assert len(rule_docs) <= 1
+
+
+# --- Query decomposer integration ---
+
+
+class _StubDecomposer:
+    """Deterministic decomposer for integration tests.
+
+    Returns the preset list on any input, so tests can verify that
+    EvidenceSearch reacts to a >1-element decomposition without coupling
+    to the rule-based decomposer's pattern library.
+    """
+
+    def __init__(self, subs: list[str]) -> None:
+        self._subs = subs
+
+    async def decompose(self, query: str) -> list[str]:
+        return self._subs
+
+
+@pytest.mark.asyncio
+class TestDecomposerIntegration:
+    async def test_no_decomposer_leaves_sub_queries_empty(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await _seed_graph(backend)
+
+        searcher = EvidenceSearch(backend=backend)
+        result = await searcher.search("규정 운영계획", k=4)
+        assert result.sub_queries == []
+
+    async def test_single_subquery_treated_as_no_decomposition(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await _seed_graph(backend)
+
+        searcher = EvidenceSearch(
+            backend=backend,
+            decomposer=_StubDecomposer(["규정 운영계획"]),
+        )
+        result = await searcher.search("규정 운영계획", k=4)
+        # len==1 means "not decomposable" → no fusion attempted.
+        assert result.sub_queries == []
+
+    async def test_multi_subquery_surfaces_both_categories(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await _seed_graph(backend)
+
+        # Deliberately use a compound query whose terms alone don't hit
+        # both categories; the sub-queries do.
+        searcher = EvidenceSearch(
+            backend=backend,
+            decomposer=_StubDecomposer(["규정 준수", "경마 운영계획"]),
+        )
+        result = await searcher.search("두 영역을 함께 살펴보자", k=6)
+
+        assert result.sub_queries == ["규정 준수", "경마 운영계획"]
+        evidence_cats = {e.category for e in result.evidence}
+        # RRF fusion over sub-query FTS results should bring both sides.
+        assert "규정 및 지침" in evidence_cats
+        assert "운영계획" in evidence_cats
+
+    async def test_decomposer_failure_is_non_fatal(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await _seed_graph(backend)
+
+        class _BrokenDecomposer:
+            async def decompose(self, query: str) -> list[str]:
+                raise RuntimeError("boom")
+
+        searcher = EvidenceSearch(backend=backend, decomposer=_BrokenDecomposer())
+        result = await searcher.search("규정", k=4)
+        # Pipeline must degrade to the original-query path.
+        assert result.sub_queries == []
+        assert result.evidence

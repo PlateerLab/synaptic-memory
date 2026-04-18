@@ -101,6 +101,22 @@ class QueryRewriter(Protocol):
     async def rewrite(self, query: str) -> list[str]: ...
 
 
+class QueryDecomposer(Protocol):
+    """Breaks a compound query into atomic sub-queries.
+
+    Distinct from ``QueryRewriter``: a rewriter returns alternative phrasings
+    of the *same* information need (paraphrases, synonyms), while a
+    decomposer returns *multiple independent* sub-queries whose union
+    answers the original (the output is meant to be searched in parallel
+    and fused via RRF, not substituted).
+
+    A non-decomposable query should be returned as a single-element list so
+    the caller can treat "no decomposition" uniformly.
+    """
+
+    async def decompose(self, query: str) -> list[str]: ...
+
+
 class TagExtractor(Protocol):
     """Extracts tags from text content."""
 
