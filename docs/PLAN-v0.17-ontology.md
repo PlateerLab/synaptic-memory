@@ -1,7 +1,7 @@
 # PLAN — v0.17 온톨로지 고도화 우선순위 재평가
 
 > 작성일: 2026-04-18
-> 상태: **Case B 확정 + W-7 negative** — decomposer 접근 MuSiQue 실패, HippoRAG2 triple-linking 방향 재설정
+> 상태: **Round 1 완료** — 공개 벤치 재측정으로 v0.17.0 방향 확정 (강점 집중, MuSiQue gap 정직 공개)
 > 대상: v0.17.x 시리즈 scope 결정 + v0.18.0+ 재정렬
 
 ---
@@ -266,9 +266,70 @@ Decomposer 코드 (`query_decomposer_llm.py`, `QueryDecomposer` Protocol, Eviden
 
 ---
 
+## 9. Round 1 결과 — v0.17.0 스코프 확정
+
+### 9.1 측정 (2026-04-18 23:30)
+
+공개 벤치 5종, H100 단일 GPU, `eval/run_all.py --quick --local-bge --entity-linker`:
+
+| 벤치 | FTS-only | + bge-m3 + reranker + EntityLinker | Δ | Hit | Search |
+|---|---:|---:|---:|---:|---:|
+| HotPotQA-24 | 0.727 | **0.979** | **+35%** | 24/24 | 3.4s |
+| Allganize RAG-ko (200q) | 0.621 | **0.967** | **+56%** | 197/200 | 24.8s |
+| Allganize RAG-Eval (300q) | 0.615 | **0.924** | **+50%** | 283/300 | 31.7s |
+| PublicHealthQA (77q) | 0.318 | **0.706** | **+122%** | 64/77 | 6.4s |
+| AutoRAG (720q) | 0.592 | **0.638** | +7.8% | 78/114 | 36.5s |
+| **평균** | 0.575 | **0.843** | **+54%** | | **102.8s 총합** |
+
+- 모델 로드 1회 공유 → per-benchmark 오버헤드 없음
+- EntityLinker post-hoc (min_df=2, max_df_ratio=0.02) — 공개 벤치 모두에서 positive
+- 9개 custom 벤치 (KRRA/assort/X2BEE) 는 pre-built SQLite graph 가 H100 에 없어서 skip. Follow-up 에서 transfer or rebuild
+
+### 9.2 v0.17.0 리포지셔닝
+
+**이전 내러티브 (잘못된)**
+> "MuSiQue 에서 HippoRAG2 따라잡자 → typed relation + query decomp 추가"
+
+**확정 내러티브**
+> "Synaptic 은 **한국어/정형 데이터 RAG** 강점. 공개 한국어 벤치 MRR 0.92+ 로 리더보드 경쟁 가능. 영어 multi-hop (MuSiQue) 은 OpenIE 기반 architecture 교체 필요하며 v0.18.0+ 연구 트랙."
+
+### 9.3 릴리즈 스코프 (확정)
+
+**Ship**
+- `--local-bge` 경로 (transformers 직접 로드, no TEI/Ollama dependency) — `eval/run_all.py` + `run_tier1_benchmarks.py` 둘 다
+- `--entity-linker` post-hoc DF-filtered phrase hub CLI flag
+- `QueryDecomposer` Protocol + `LLMChainDecomposer` — **opt-in default-off** (Korean compound 쿼리 사용자용, MuSiQue 에서는 음수지만 다른 corpus 에선 positive 가능)
+- 새 베이스라인 표 — CLAUDE.md, README.md, docs/comparison/
+
+**Document (not code)**
+- MuSiQue R@5 0.453 vs HippoRAG2 0.747 격차를 **정직한 "known gap"** 섹션으로 README.md/docs 에 포함. "OpenIE triple pipeline 없이는 -0.294 구조적" 명시
+- 3-round ablation (decomposer, inline phrase, DF-filtered entity linker) 을 `docs/CONCEPTS.md` "measured negatives" 섹션에 기록 — 향후 session 이 같은 실수 반복 방지
+
+**Defer to v0.18.0+**
+- OpenIE triple extraction + triple-level embedding index + query-to-triple dense linking (HippoRAG2 본질 구현)
+- EdgeKind 확장 + PPR `_EDGE_TYPE_WEIGHTS` (W-9 — triple 없으면 혜택 없음)
+
+### 9.4 남은 작업
+
+| ID | 작업 | 예상 |
+|---|---|---:|
+| R1-1 | KRRA/assort/X2BEE SQLite graph 를 H100 으로 전송 (scp) 또는 source 로 재인제스트 | 0.5d |
+| R1-2 | 9개 custom 벤치 재측정 → 완전한 14-dataset baseline 확보 | 0.5d |
+| R1-3 | CLAUDE.md 베이스라인 표 재작성 (FTS-only / Full pipeline 두 컬럼 병기) | 0.5d |
+| R1-4 | README.md 공개 벤치 섹션 업데이트 + MuSiQue gap 정직 공개 | 0.5d |
+| R1-5 | `CONCEPTS.md` "measured negatives" 섹션 추가 | 0.5d |
+| R1-6 | `docs/comparison/synaptic_results.md` 에 "full pipeline Round 1" 섹션 | 0.5d |
+| R1-7 | v0.17.0 release note 초안 | 0.5d |
+
+**합계 ~3.5일**. 구현 코드는 이미 ship 단계, 주로 문서화 + 측정 완료.
+
+---
+
 ## 8. 문서 이력
 
 - 2026-04-18: 초안 작성. 4개 서브에이전트 교차검증 결과 반영. P0 실행 전 상태.
 - 2026-04-18 (addendum): P0 Stage 1 (MuSiQue 500q, bge-m3 + bge-reranker-v2-m3) 완료. R@5 0.453 측정 → **Case B 확정**. §4.5 / §6 재작성. Stage 2/3 은 vLLM 공존 VRAM 부족으로 이월.
 - 2026-04-18 (저녁): W-1~W-6 구현 완료 (커밋 `9e9dcf9` + `2eb2b3b`). Rule decomposer 가 MuSiQue 영어 chain 쿼리에 부적합 (4% split rate, 오분해)이라 W-5 (LLMChainDecomposer + Qwen3.5-27B) 를 W-7 이전으로 이동. W-7 측정 실행 중.
 - 2026-04-18 (22:04): **W-7 negative** — LLMChainDecomposer MuSiQue 500q 측정 완료. R@5 0.453 → 0.405 (−10.6%), search 476s → 1820s. 원인: RRF fusion 이 서브쿼리 노이즈 seed 를 과대평가, reranker 는 원본만 봄. **방향 재설정**: W-8 을 typed relation sweep 에서 **query-to-phrase linking** (HippoRAG2 +12.5%p 진짜 기여분) 으로 재스코프.
+- 2026-04-18 (22:59): **W-8a / W-8b 연속 negative** — inline `EnglishPhraseExtractor` (R@5 0.423, −6.6%, build 15.5× 느림) 및 post-hoc DF-filtered `EntityLinker` (R@5 0.435, −4%, build 1.6× 느림) 둘 다 baseline 못 이김. 결론: **MuSiQue 는 mechanism 추가 만으로는 절대 못 따라잡는 벤치.** HippoRAG2 추격은 **architecture-level 교체** (OpenIE triple + NV-Embed-v2 triple matching) 필요, v0.18.0+ 연구 트랙으로 분리.
+- 2026-04-18 (23:30): **Round 1 완료 — 전략 회전**. 공개 벤치 5개 (HotPotQA-24 / Allganize RAG-ko 200q / RAG-Eval 300q / PublicHealthQA 77q / AutoRAG 720q) 전부 `--local-bge + --entity-linker` 로 재측정. 평균 MRR **+54% uplift** (최대 PublicHealthQA +122%). CLAUDE.md FTS-only 베이스라인 표가 Synaptic 실력을 절반만 보여주고 있었음이 확정. v0.17.0 은 이 데이터로 리포지셔닝 (§9 참조).
