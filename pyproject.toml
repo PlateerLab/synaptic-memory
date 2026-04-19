@@ -46,6 +46,7 @@ Changelog = "https://github.com/PlateerLab/synaptic-memory/blob/main/CHANGELOG.m
 
 [project.scripts]
 synaptic-mcp = "synaptic.mcp.server:main"
+synaptic-snapshot = "synaptic.cli.snapshot:main"
 
 [project.optional-dependencies]
 sqlite = ["aiosqlite>=0.20"]

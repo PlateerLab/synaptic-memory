@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — v0.18-α2: Auto graph snapshot (Graphify G1 absorption)
+
+New `synaptic.snapshot` module + `synaptic-snapshot` CLI + `knowledge_snapshot`
+MCP tool + opt-in priming inside `SynapticGraph.chat()`. Generates a markdown
+summary of a graph (scale, categories, top phrase hubs, structured tables, edge
+kinds, sample query hints) so an LLM agent can skip the cold-start exploration
+turns. Measured 0.85 s on KRRA (720 docs / 18.6k chunks / 70k entities). All
+stats are direct backend reads — no LLM calls; preserves the LLM-free
+indexing principle. `chat(prime_with_snapshot=True)` is the default and the
+priming is appended to `extra_context`. 11 new unit tests, all green.
+
+This is the only Graphify (`safishamsi/graphify`) absorption item PLAN-v0.18
+green-lit (G2-G5 declined as Neo4j/GraphRAG-derivative or out of scope).
+
 ### Changed — `agent_loop` system prompt: relative-time + multi-source guidance
 
 Two new tip lines in the agent prompt, learned from the v0.18-α1-2 KRRA

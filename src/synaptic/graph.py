@@ -1208,6 +1208,7 @@ class SynapticGraph:
         max_turns: int = 5,
         system_prompt: str | None = None,
         extra_context: str | None = None,
+        prime_with_snapshot: bool = True,
     ):
         """Multi-turn agent loop — Synaptic's measured-strongest mode.
 
@@ -1234,6 +1235,13 @@ class SynapticGraph:
                 context is always appended.
             extra_context: Additional per-corpus instructions appended
                 to the system prompt.
+            prime_with_snapshot: If True (default), inject a markdown
+                snapshot of the graph (categories, top phrase hubs,
+                tables) into the system prompt to skip the agent's
+                cold-start exploration turns. Set to False on very
+                large graphs (>100k nodes) where the snapshot overhead
+                approaches the saved-turn benefit, or when ``extra_context``
+                already provides equivalent priming.
 
         Returns:
             :class:`synaptic.agent_loop.AgentSearchResult` with
@@ -1252,6 +1260,29 @@ class SynapticGraph:
         """
         from synaptic.agent_loop import run_agent_loop
 
+        # Auto-priming via graph snapshot — measured value: cold-start
+        # agent typically wastes turn 0 on "what categories exist /
+        # what tables can I filter". Snapshot preempts that probe by
+        # injecting the answer up front. Cheap (sub-second on 100k
+        # nodes), additive to the existing build_graph_context already
+        # done inside run_agent_loop.
+        priming_context = extra_context or ""
+        if prime_with_snapshot:
+            try:
+                from synaptic.snapshot import generate_snapshot
+
+                snapshot_md = await generate_snapshot(self._backend, include_sample_queries=True)
+                priming_block = (
+                    "[Graph snapshot — already provided so you can skip "
+                    "the usual probe turns]\n\n" + snapshot_md
+                )
+                priming_context = (
+                    priming_block + "\n\n" + priming_context if priming_context else priming_block
+                )
+            except Exception:
+                # Snapshot is best-effort priming; never block the chat.
+                pass
+
         return await run_agent_loop(
             client=llm_client,
             backend=self._backend,
@@ -1260,7 +1291,7 @@ class SynapticGraph:
             max_turns=max_turns,
             embedder=self._embedder,
             system_prompt=system_prompt,
-            extra_context=extra_context,
+            extra_context=priming_context or None,
         )
 
     async def search(

@@ -346,6 +346,49 @@ async def knowledge_stats() -> dict[str, Any]:
 
 
 @server.tool()
+async def knowledge_snapshot(
+    max_entities: int = 5_000,
+    top_phrase_hubs: int = 15,
+    top_categories: int = 30,
+    include_sample_queries: bool = True,
+) -> dict[str, Any]:
+    """Generate a markdown snapshot of the graph — for agent priming.
+
+    Returns a compact human-readable summary the agent can read at the
+    start of a session to skip the usual cold-start exploration turns
+    (probing categories / tables / entities). Sections covered:
+
+    - Scale (documents, chunks, phrase hubs, structured rows, edges)
+    - Categories (with doc counts) — usable as ``deep_search(category=)``
+    - Top phrase hubs (mention-ranked) — likely good search anchors
+    - Tables (structured data) — for ``filter/aggregate/join`` tools
+    - Edge types (sampled) — for ``follow``
+    - Sample queries — 1-3 illustrative tool invocations
+
+    All stats are computed from direct backend reads — no LLM calls.
+
+    Args:
+        max_entities: Cap on entity scan (default 5000). Higher = more
+            accurate phrase-hub ranking on large corpora, slower.
+        top_phrase_hubs: How many phrase hubs to surface (default 15).
+        top_categories: How many categories to list (default 30).
+        include_sample_queries: Append a "Sample queries" section with
+            1-3 hint invocations derived from the corpus shape.
+    """
+    graph = await _ensure_graph()
+    from synaptic.snapshot import generate_snapshot
+
+    md = await generate_snapshot(
+        graph._backend,
+        max_entities_scanned=max_entities,
+        top_n_phrase_hubs=top_phrase_hubs,
+        top_n_categories=top_categories,
+        include_sample_queries=include_sample_queries,
+    )
+    return {"success": True, "format": "markdown", "snapshot": md, "length": len(md)}
+
+
+@server.tool()
 async def knowledge_export(
     output_format: str = "markdown",
 ) -> dict[str, Any]:

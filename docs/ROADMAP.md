@@ -59,19 +59,20 @@ GPT-4o-mini baseline 초과.
 | α1-3 | Agent-loop latency 감축 — 첫 1-2 turn priming 으로 탐색 turn 절약 | 🟡 G1 항목 참조 |
 | α1-4 | Context overflow 회피 (현재 172q 중 10q = 5.8% vLLM 16k 초과로 fail) | 🔴 미착수 |
 
-### α2. G1 — Auto graph snapshot / agent priming
+### α2. G1 — Auto graph snapshot / agent priming ✅ ship
 
 **문제**: Agent 가 cold start 시 corpus 구조 모르고 시작 → 첫 1-2 turn 이
 탐색에 낭비. Graphify (`safishamsi/graphify`) 의 UX 패턴 흡수.
 
-| # | 작업 |
-|---|------|
-| α2-1 | `synaptic snapshot <db> --output graph.md` CLI |
-| α2-2 | 출력 내용: 카테고리 트리, top phrase hub (DF), entity-table 분포, edge 통계, sample queries |
-| α2-3 | `knowledge_snapshot()` MCP 도구 — agent 시작 시 1회, system prompt inject |
-| α2-4 | `graph.chat()` 기본 경로에 통합 |
+| # | 작업 | 상태 |
+|---|------|---|
+| α2-1 | `synaptic-snapshot <db> --output graph.md` CLI | ✅ ship — `synaptic.cli.snapshot` |
+| α2-2 | 출력 내용: 카테고리 트리, top phrase hub (DF), entity-table 분포, edge 통계, sample queries | ✅ ship — `synaptic.snapshot` |
+| α2-3 | `knowledge_snapshot()` MCP 도구 — agent 시작 시 1회, system prompt inject | ✅ ship — `mcp/server.py` |
+| α2-4 | `graph.chat()` 기본 경로에 통합 — `prime_with_snapshot=True` (default) | ✅ ship |
 
-예상 작업: 1주. G2-G5 는 [v0.18 architecture doc](PLAN-v0.18-architecture.md) 에서 격하됨.
+11 unit tests / 0.85 s on KRRA (720 docs / 18.6k chunks / 70k entities).
+G2-G5 는 [v0.18 architecture doc](PLAN-v0.18-architecture.md) 에서 격하됨.
 
 ### α3. OpenIE triple 실험 (MuSiQue 한계 회복)
 
