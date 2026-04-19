@@ -4,8 +4,8 @@
 LLM 에이전트용 지식 그래프 + MCP 도구 서버.
 아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 36개 도구로 LLM이 탐색.
 
-- PyPI: `synaptic-memory` (v0.17.1)
-- 라이선스: MIT
+- PyPI: `synaptic-memory` (v0.17.2)
+- 라이선스: Apache-2.0
 - Python: >=3.12
 - 코어 의존성: **0** (백엔드/임베더/한국어 분석 전부 optional)
 

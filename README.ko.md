@@ -5,7 +5,7 @@ LLM 에이전트용 지식 그래프 + MCP 도구 서버. 하이브리드 검색
 
 [![PyPI](https://img.shields.io/pypi/v/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![Python](https://img.shields.io/pypi/pyversions/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 > [English README](README.md)
 
@@ -445,4 +445,5 @@ uv run ruff check --fix
 
 ## 라이선스
 
-MIT
+Apache-2.0 — [LICENSE](LICENSE) 참조. 출처(copyright/attribution notice)만 보존하면
+상용·수정·재배포 모두 자유.

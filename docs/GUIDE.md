@@ -374,4 +374,4 @@ A. v0.15.0은 Beta 단계입니다. 809개 단위 테스트 통과, 프로덕션
 
 ---
 
-**MIT License · 작성자: Son Seongjun**
+**Apache-2.0 License · 작성자: Son Seongjun**

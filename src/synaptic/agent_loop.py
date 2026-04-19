@@ -189,7 +189,7 @@ AGENT_TOOLS = [
                     "limit": {"type": "integer"},
                     "from_ids": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["table", "property", "op", "value"],
+                "required": ["property", "op", "value"],
             },
         },
     },
@@ -208,10 +208,14 @@ AGENT_TOOLS = [
                     "where_property": {"type": "string"},
                     "where_op": {"type": "string"},
                     "where_value": {"type": "string"},
+                    "group_by_format": {
+                        "type": "string",
+                        "description": "Date bucket format: 'YYYY', 'YYYY-MM', 'YYYY-MM-DD'.",
+                    },
                     "limit": {"type": "integer"},
                     "from_ids": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["table", "group_by", "metric"],
+                "required": ["group_by"],
             },
         },
     },
@@ -330,6 +334,7 @@ async def _dispatch_tool(
                 where_property=args.get("where_property", ""),
                 where_op=args.get("where_op", ""),
                 where_value=args.get("where_value", ""),
+                group_by_format=args.get("group_by_format", ""),
                 limit=int(args.get("limit", 50)),
                 from_ids=args.get("from_ids") or None,
             )
@@ -351,7 +356,20 @@ async def _dispatch_tool(
 
 
 def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None = None) -> None:
-    """Collect every plausible doc identifier from a tool result."""
+    """Collect every plausible doc identifier from a tool result.
+
+    ``data`` is expected to be the *unwrapped* tool data (``result["data"]``),
+    not the raw wrapper. Covers every tool's response shape:
+      - evidence[].document_id / .properties.doc_id / .title
+      - results[].properties.doc_id / .title (filter/join)
+      - merged_evidence[].document_id (deep_search)
+      - document_excerpts[].document.properties.doc_id (deep_search)
+      - sub_results[].top_result.* (compare_search)
+      - document.properties.doc_id (get_document)
+      - groups[].group / .node_title + synthesised "table:value" composites
+        (aggregate_nodes — needed for structured-only corpora like assort
+        Hard where the answer IS the group key).
+    """
     for key in (
         "evidence", "results", "merged_evidence", "matches",
         "expanded_neighbours", "neighbours",
@@ -400,6 +418,49 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
         did = (doc_data.get("properties", {}) or {}).get("doc_id", "")
         if did:
             found_ids.add(did)
+
+    # aggregate groups — group value may be a PK that *is* the answer
+    agg_info = data.get("aggregation", {}) if isinstance(data.get("aggregation"), dict) else {}
+    agg_table = agg_info.get("table", "")
+    group_by = agg_info.get("group_by", "")
+    for grp in data.get("groups", []):
+        if not isinstance(grp, dict):
+            continue
+        g = grp.get("group", "")
+        if not g:
+            continue
+        found_ids.add(g)
+        nt = grp.get("node_title", "")
+        if nt:
+            found_ids.add(nt)
+
+        looks_like_pk = (
+            len(g) <= 30
+            and " " not in g
+            and "-" not in g[:5]
+            and not g.startswith("20")
+        )
+        if not looks_like_pk:
+            continue
+
+        if agg_table:
+            found_ids.add(f"{agg_table}:{g}")
+
+        if group_by:
+            base = group_by.rsplit("_", 1)[0] if "_" in group_by else group_by
+            if known_tables:
+                for tbl in known_tables:
+                    tbl_lower = tbl.lower()
+                    if base in tbl_lower or tbl_lower.startswith(base):
+                        found_ids.add(f"{tbl}:{g}")
+            for candidate in (
+                f"{base}:{g}",
+                f"{base}s:{g}",
+                f"{base}es:{g}",
+                f"pr_{base}_base:{g}",
+                f"pr_{base}:{g}",
+            ):
+                found_ids.add(candidate)
 
 
 # --- Public API ----------------------------------------------------
@@ -491,7 +552,11 @@ async def run_agent_loop(
                     fn_args = {}
                 result = await _dispatch_tool(fn, fn_args, backend, session, embedder=embedder)
                 tool_calls += 1
-                _extract_ids(result, found_ids, known_tables=known_tables)
+                # Tool wrappers return {"tool": ..., "data": {...}}; unwrap
+                # before extraction so _extract_ids sees evidence/groups
+                # at top level.
+                payload = result.get("data", {}) if isinstance(result, dict) else {}
+                _extract_ids(payload, found_ids, known_tables=known_tables)
                 messages.append(
                     {
                         "role": "tool",

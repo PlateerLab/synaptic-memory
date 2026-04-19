@@ -6,7 +6,7 @@ CDC-based live database sync, and Korean FTS built in.
 
 [![PyPI](https://img.shields.io/pypi/v/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
 [![Python](https://img.shields.io/pypi/pyversions/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 > [한국어 README](README.ko.md)
 
@@ -548,4 +548,5 @@ uv run ruff check --fix
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](LICENSE). Permits commercial use, modification, and
+redistribution as long as the copyright/attribution notice is preserved.

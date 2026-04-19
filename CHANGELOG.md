@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-04-19
+
+Patch release bundling the license switch and the
+`SynapticGraph.chat()` agent-loop ID-extraction fix. No public-API
+breakage; downstream code that imported from `synaptic.agent_loop`
+gains correct `found_ids` population — previously empty for tool
+results that came back wrapped (i.e. all of them) and for
+structured-only corpora where the answer was an aggregate group
+key.
+
+### Changed — License: MIT → Apache-2.0
+
+Project license switched from MIT to Apache-2.0 for the next release. Both
+licenses are permissive and allow commercial use with attribution; Apache-2.0
+adds an explicit patent grant + termination clause that gives downstream
+adopters (especially enterprises) clearer protection. All v0.17.x releases
+remain MIT-licensed; the Apache-2.0 grant applies from the next published
+version onward.
+
+### Fixed — `synaptic.agent_loop` ID extraction
+
+`run_agent_loop` and `SynapticGraph.chat()` were passing the raw tool wrapper
+(`{"tool": ..., "data": {...}}`) to ``_extract_ids`` instead of the unwrapped
+``data`` dict, so ``found_ids`` stayed empty even when tools returned valid
+evidence. Also added aggregate-group extraction (group value + synthesised
+``table:value`` composites) so structured-only corpora like assort Hard, where
+the answer IS the group key, score correctly. Tool schemas relaxed to match
+``eval/run_all.py`` (``filter_nodes.table`` and ``aggregate_nodes.metric`` no
+longer required; ``aggregate_nodes.group_by_format`` accepted for date
+bucketing).
+
 ## [0.17.1] - 2026-04-19 (PyPI published 22:16 KST)
 
 v0.17.1 is the **kind-aware pipeline release**. v0.17.0's measurement
