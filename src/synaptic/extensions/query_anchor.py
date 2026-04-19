@@ -120,6 +120,7 @@ class QueryAnchors:
     entities: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
     category_node_ids: list[str] = field(default_factory=list)
+    preferred_tables: list[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         """``True`` if the extractor produced nothing usable."""
@@ -152,6 +153,7 @@ class QueryAnchorExtractor:
         "_category_cache_limit",
         "_extractor",
         "_min_keyword_length",
+        "_table_query_hints",
     )
 
     def __init__(
@@ -161,12 +163,19 @@ class QueryAnchorExtractor:
         phrase_extractor: PhraseExtractorProtocol | None = None,
         category_cache_limit: int = 500,
         min_keyword_length: int = 2,
+        table_query_hints: dict[str, list[str]] | None = None,
     ) -> None:
         self._backend = backend
         self._extractor = phrase_extractor
         self._category_cache: list[tuple[str, str]] | None = None
         self._category_cache_limit = category_cache_limit
         self._min_keyword_length = min_keyword_length
+        # ``{table_name: [hint_keyword, ...]}`` — typically sourced from a
+        # ``DomainProfile``. Each hint is substring-matched against the
+        # NFC-normalised lowercased query; a match adds the table_name
+        # to ``preferred_tables`` so EvidenceSearch can boost / augment
+        # seeds from that table. See ``_match_tables`` for details.
+        self._table_query_hints = table_query_hints or {}
 
     async def extract(self, query: str) -> QueryAnchors:
         """Build the anchor set for ``query``.
@@ -181,6 +190,7 @@ class QueryAnchorExtractor:
         keywords = self._extract_keywords(query)
         entities = self._extract_entities(query)
         cat_labels, cat_ids = await self._match_categories(query, keywords)
+        preferred_tables = self._match_tables(query)
 
         anchors = QueryAnchors(
             query=query,
@@ -188,15 +198,36 @@ class QueryAnchorExtractor:
             entities=entities,
             categories=cat_labels,
             category_node_ids=cat_ids,
+            preferred_tables=preferred_tables,
         )
         logger.debug(
-            "query-anchor[%r]: %d keywords, %d entities, %d categories",
+            "query-anchor[%r]: %d keywords, %d entities, %d categories, %d tables",
             query,
             len(keywords),
             len(entities),
             len(cat_labels),
+            len(preferred_tables),
         )
         return anchors
+
+    def _match_tables(self, query: str) -> list[str]:
+        """Return table names whose hint keywords appear in the query.
+
+        Pure substring match on the NFC-normalised, lowercased query —
+        cheap, deterministic, locale-agnostic. Duplicates removed while
+        preserving first-hit order so the caller can use the list as a
+        stable priority ordering.
+        """
+        if not self._table_query_hints:
+            return []
+        q_lower = query.lower()
+        matched: list[str] = []
+        for table_name, hints in self._table_query_hints.items():
+            for hint in hints:
+                if hint and hint.lower() in q_lower:
+                    matched.append(table_name)
+                    break
+        return matched
 
     def invalidate_cache(self) -> None:
         """Drop the cached category list.

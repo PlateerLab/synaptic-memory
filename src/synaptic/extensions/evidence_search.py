@@ -138,6 +138,7 @@ class EvidenceSearch:
         mmr_lambda: float = 0.7,
         similarity_threshold: float = 0.85,
         rerank_blend: float = 0.1,
+        table_query_hints: dict[str, list[str]] | None = None,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -147,6 +148,7 @@ class EvidenceSearch:
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
+            table_query_hints=table_query_hints,
         )
         self._expander = GraphExpander(backend=backend)
         self._reranker = HybridReranker(weights=reranker_weights)
@@ -258,6 +260,56 @@ class EvidenceSearch:
                     pass
 
         all_seeds = list(fts_nodes) + vec_seeds + prf_seeds
+
+        # Step 2c+ — table hint seed augmentation (v0.17.1).
+        # If ``DomainProfile.table_query_hints`` was wired and any hint
+        # matched the query, ``anchors.preferred_tables`` carries the
+        # target tables.
+        #
+        # We only intervene when FTS has *under-represented* the target
+        # table (≤2 hits in the current seed pool). For narrow-target
+        # corpora — e.g. assort q012 "LBL코리아 판매 파트너" where the
+        # gold ``sales_partners:2`` never reaches FTS top-30 — we
+        # augment with a targeted re-FTS (``"{table_name} {query}"``)
+        # and score the hits at 0.96, just past the rank-0 FTS floor
+        # of 0.95 so they can outrank cross-table noise. When the
+        # hinted table already dominates FTS (X2BEE's pr_goods_base
+        # appears 10+ times in top-30) we leave well enough alone —
+        # further boosting flattens every row to the same top score
+        # and dilutes the gold rank, which the earlier "bulk boost to
+        # 0.99" implementation demonstrated with a −5%-point X2BEE
+        # Hard regression.
+        preferred_tables = anchors.preferred_tables
+        if preferred_tables:
+            existing_ids = {n.id for n in all_seeds}
+            for table_name in preferred_tables:
+                in_table_count = sum(
+                    1 for n in fts_nodes
+                    if (n.properties or {}).get("_table_name") == table_name
+                )
+                if in_table_count >= 3:
+                    continue  # table is well-represented; FTS is doing fine
+
+                try:
+                    aug_nodes = await self._backend.search_fts(
+                        f"{table_name} {query}", limit=5
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "table-hint FTS failed (%r): %s", table_name, exc
+                    )
+                    continue
+                for node in aug_nodes:
+                    if (node.properties or {}).get("_table_name") != table_name:
+                        continue
+                    if node.id in existing_ids:
+                        fts_scores[node.id] = max(
+                            fts_scores.get(node.id, 0.0), 0.96
+                        )
+                    else:
+                        all_seeds.append(node)
+                        existing_ids.add(node.id)
+                        fts_scores[node.id] = 0.96
 
         # Step 2d — query decomposition + RRF seed fusion.
         # If a decomposer is wired and returns >1 sub-queries, run FTS for
@@ -372,23 +424,74 @@ class EvidenceSearch:
         # near-optimal (AutoRAG: 0.906 FTS → 0.642 at blend=0.4, recovered
         # to 0.766 at 0.1). 0.1 is the global optimum across 5 public
         # benches; see ``examples/ablation/sweep_rerank_blend.py``.
+        #
+        # v0.17.1 — structured rows (nodes with a ``_table_name``
+        # property, emitted by db_ingester / table_ingester) are excluded
+        # from reranking entirely. The cross-encoder's training
+        # distribution is long-form paraphrase; applied to short
+        # structured rows it produces near-random signal that
+        # overrides FTS's near-optimal ranking on those corpora
+        # (X2BEE Hard −34%, assort Conv −37% measured under blend=0.4).
+        # Passage kinds (CHUNK, CONCEPT, plain ENTITY) still rerank.
         if self._cross_reranker is not None and scored:
             top_n = min(20, len(scored))
             top_candidates = scored[:top_n]
-            documents = [f"{s.node.title}\n{s.node.content[:400]}" for s in top_candidates]
-            try:
-                rerank_scores = await self._cross_reranker.rerank(query, documents)
-                for i, s in enumerate(top_candidates):
-                    if i < len(rerank_scores):
-                        blended = (
-                            self._rerank_blend * rerank_scores[i]
-                            + (1.0 - self._rerank_blend) * s.total
-                        )
-                        s.total = blended
-                scored[:top_n] = top_candidates
-                scored.sort(key=lambda s: s.total, reverse=True)
-            except Exception as exc:
-                logger.warning("cross-encoder rerank failed: %s", exc)
+            rerank_indices = [
+                i for i, s in enumerate(top_candidates)
+                if not (s.node.properties or {}).get("_table_name")
+            ]
+            if rerank_indices:
+                documents = [
+                    f"{top_candidates[i].node.title}\n"
+                    f"{top_candidates[i].node.content[:400]}"
+                    for i in rerank_indices
+                ]
+                try:
+                    rerank_scores = await self._cross_reranker.rerank(query, documents)
+                    # Adaptive blend (v0.17.1) — scale the reranker
+                    # contribution by its own discrimination strength.
+                    # When the cross-encoder produces a tight cluster of
+                    # logits (e.g. AutoRAG: std≈0.3) it has no signal and
+                    # blending it just injects noise that displaces the
+                    # FTS top-1 (measured −15 % MRR at fixed blend=0.1).
+                    # When it produces a wide spread (PublicHealthQA:
+                    # std≈4) the reranker is clearly picking up paraphrase
+                    # similarity and the full blend pays off (+34 %).
+                    # Linear interpolation: std≥3 → full blend, std=0 →
+                    # zero. Threshold 3.0 was chosen from per-corpus
+                    # diagnostics (see docs/PLAN-v0.18-architecture.md
+                    # §Q3 + examples/ablation/diagnose_autorag.py); the
+                    # worst-case std on AutoRAG was 0.53.
+                    #
+                    # Round 5 also tried RRF rank-fusion as a
+                    # magnitude-free alternative; it was strictly worse
+                    # (mean MRR 0.637 vs 0.647) — rank discretisation
+                    # discards the score-magnitude information that the
+                    # weighted blend uses to do small reorders. Adaptive
+                    # weighted blend is the v0.17.1 default.
+                    if len(rerank_scores) >= 2:
+                        mean = sum(rerank_scores) / len(rerank_scores)
+                        var = sum(
+                            (s - mean) ** 2 for s in rerank_scores
+                        ) / len(rerank_scores)
+                        std = var ** 0.5
+                        discriminator = min(1.0, std / 3.0)
+                    else:
+                        discriminator = 1.0
+                    effective_blend = self._rerank_blend * discriminator
+                    if effective_blend > 0:
+                        for j, i in enumerate(rerank_indices):
+                            if j < len(rerank_scores):
+                                s = top_candidates[i]
+                                blended = (
+                                    effective_blend * rerank_scores[j]
+                                    + (1.0 - effective_blend) * s.total
+                                )
+                                s.total = blended
+                        scored[:top_n] = top_candidates
+                        scored.sort(key=lambda s: s.total, reverse=True)
+                except Exception as exc:
+                    logger.warning("cross-encoder rerank failed: %s", exc)
 
         # Step 5 — evidence aggregation with diversity
         evidence = self._aggregator.aggregate(

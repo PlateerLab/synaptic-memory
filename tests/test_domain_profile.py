@@ -151,7 +151,13 @@ class TestTomlLoader:
         with pytest.raises(ValueError, match="'name' is required"):
             DomainProfile.load(path)
 
-    def test_load_invalid_nodekind_raises(self, tmp_path):
+    def test_load_invalid_nodekind_warns_and_skips(self, tmp_path):
+        """v0.17.1: lenient loader. Profiles often outlive individual
+        NodeKind renames; we warn and skip the bad entry rather than
+        nuking the whole config (which left assort.toml unloadable
+        because EVENT was removed from the enum)."""
+        import warnings
+
         path = self._write_toml(
             tmp_path,
             """
@@ -160,10 +166,15 @@ class TestTomlLoader:
 
             [ontology_hints]
             "category" = "NOT_A_KIND"
+            "valid" = "concept"
             """,
         )
-        with pytest.raises(ValueError, match="unknown NodeKind"):
-            DomainProfile.load(path)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            profile = DomainProfile.load(path)
+        assert any("unknown NodeKind" in str(w.message) for w in caught)
+        assert "valid" in profile.ontology_hints
+        assert "category" not in profile.ontology_hints
 
     def test_load_invalid_regex_raises(self, tmp_path):
         path = self._write_toml(

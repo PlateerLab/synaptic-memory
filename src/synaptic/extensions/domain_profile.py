@@ -240,6 +240,17 @@ class DomainProfile:
     # When empty, the built-in defaults in search.py are used.
     # Example: {"RULE": ["규칙", "정책", "policy"], "LESSON": ["실패", "error"]}
     kind_query_hints: dict[str, list[str]] = field(default_factory=dict)
+    # Table-query hints: keywords that signal a query is looking for a
+    # row from a specific structured table (matches ``_table_name``
+    # property emitted by db_ingester / table_ingester). When a hint
+    # fires, EvidenceSearch boosts FTS seeds from that table and
+    # augments the seed pool with a targeted secondary FTS call. Used
+    # only on corpora ingested from relational sources; invisible to
+    # document-only corpora. Example for an e-commerce table graph:
+    #     {"sizes": ["사이즈", "size"],
+    #      "sales_partners": ["파트너", "판매처", "판매 파트너"],
+    #      "reviews": ["리뷰", "후기"]}
+    table_query_hints: dict[str, list[str]] = field(default_factory=dict)
     # Document content enrichment — when True, DocumentIngester joins
     # the title with the first few chunks' text so Document nodes
     # become meaningfully searchable via FTS. Without this Document
@@ -415,6 +426,8 @@ class DomainProfile:
         ontology_hints: dict[str, NodeKind] = {}
         hints_raw = data.get("ontology_hints", {})
         if isinstance(hints_raw, dict):
+            import warnings
+
             for key, value in hints_raw.items():
                 if not isinstance(key, str) or not isinstance(value, str):
                     continue
@@ -425,11 +438,19 @@ class DomainProfile:
                     try:
                         ontology_hints[key] = NodeKind[value.upper()]
                     except KeyError:
-                        msg = (
-                            f"Profile {path}: unknown NodeKind '{value}' for "
-                            f"ontology_hints['{key}']"
+                        # Unknown NodeKind — warn and skip rather than
+                        # fail the whole profile load. Profiles often
+                        # outlive individual NodeKind renames and we
+                        # want the rest of the config (table_query_hints,
+                        # stopwords, etc.) to stay usable.
+                        warnings.warn(
+                            f"Profile {path}: unknown NodeKind "
+                            f"'{value}' for ontology_hints['{key}'] — "
+                            f"skipping. Valid kinds: "
+                            f"{[k.value for k in NodeKind]}",
+                            stacklevel=2,
                         )
-                        raise ValueError(msg) from None
+                        continue
 
         authority_by_kind: dict[NodeKind, int] = {}
         auth_raw = data.get("authority_by_kind", {})
@@ -451,6 +472,16 @@ class DomainProfile:
                     except (ValueError, TypeError):
                         pass
 
+        table_query_hints: dict[str, list[str]] = {}
+        table_hints_raw = data.get("table_query_hints", {})
+        if isinstance(table_hints_raw, dict):
+            for table_name, hints in table_hints_raw.items():
+                if not isinstance(table_name, str) or not isinstance(hints, list):
+                    continue
+                table_query_hints[table_name] = [
+                    str(h) for h in hints if isinstance(h, str) and h
+                ]
+
         return cls(
             name=name,
             locale=locale,
@@ -464,6 +495,7 @@ class DomainProfile:
             min_phrase_len=int(data.get("min_phrase_len", 3)),
             max_phrase_len=int(data.get("max_phrase_len", 20)),
             authority_by_kind=authority_by_kind,
+            table_query_hints=table_query_hints,
             enrich_document_content=bool(data.get("enrich_document_content", True)),
             document_preview_chars=int(data.get("document_preview_chars", 600)),
         )

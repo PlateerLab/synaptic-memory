@@ -260,3 +260,96 @@ class TestOutputShape:
         scored = [_scored("a", total=0.5, content="x", doc_id="doc_42")]
         result = agg.aggregate(scored=scored, k=1)
         assert result[0].document_id == "doc_42"
+
+
+# --- Kind-aware split (v0.17.1): structured rows bypass MMR / cap / coverage ---
+
+
+def _structured_scored(id_: str, *, total: float, table_name: str) -> ScoredCandidate:
+    """Helper: scored candidate whose node is a ``_table_name``-bearing
+    ENTITY — i.e. a row materialised by db_ingester / table_ingester."""
+    node = Node(
+        id=id_,
+        kind=NodeKind.ENTITY,
+        title=f"{table_name}:{id_}",
+        content=f"{table_name}: row content for {id_}",
+        properties={
+            "_table_name": table_name,
+            "_primary_key": "id",
+        },
+        level=ConsolidationLevel.L0_RAW,
+    )
+    return ScoredCandidate(
+        node=node, total=total, lexical=total, semantic=0.0, graph=0.5,
+        structural=0.0, reason="seed",
+    )
+
+
+class TestKindAwareSplit:
+    def test_structured_rows_bypass_per_document_cap(self):
+        """Multiple rows from the same source table (via doc_id) must all
+        be retrievable; the chunk-style cap=1 would incorrectly keep only
+        the first. Regression for the assort entity corpus."""
+        agg = EvidenceAggregator()
+        rows = [
+            _structured_scored(f"r{i}", total=0.9 - i * 0.01, table_name="products")
+            for i in range(4)
+        ]
+        # All rows share a doc_id to simulate chunk-cap behaviour — if the
+        # kind-aware split is wrong, at most 1 would survive cap=1.
+        for r in rows:
+            r.node.properties["doc_id"] = "shared_source"
+
+        result = agg.aggregate(scored=rows, k=4, per_document_cap=1)
+        assert len(result) == 4
+        assert all(e.reason == "structured_top_score" for e in result)
+
+    def test_structured_and_passage_merge_by_score(self):
+        """When both kinds are in the pool, final order follows score."""
+        agg = EvidenceAggregator()
+        # Use distinct content tokens so MMR similarity doesn't suppress chunk_b.
+        mixed = [
+            _structured_scored("prod_a", total=0.9, table_name="products"),
+            _scored("chunk_a", total=0.8, content="규정 준수 의무"),
+            _structured_scored("prod_b", total=0.7, table_name="products"),
+            _scored("chunk_b", total=0.6, content="경마 운영계획 예산"),
+        ]
+        result = agg.aggregate(scored=mixed, k=4)
+        assert [e.node.id for e in result] == ["prod_a", "chunk_a", "prod_b", "chunk_b"]
+
+    def test_entity_without_table_name_still_uses_passage_path(self):
+        """Plain ENTITY nodes (phrase hub, test fixtures) keep MMR/cap
+        behaviour — the structured path only opts in via _table_name."""
+        agg = EvidenceAggregator()
+
+        # ENTITY-kind but NO _table_name → should still go through passage logic
+        node = Node(
+            id="phrase_einstein",
+            kind=NodeKind.ENTITY,
+            title="Einstein",
+            content="",
+            properties={"doc_id": "shared"},  # triggers cap in passage path
+            level=ConsolidationLevel.L0_RAW,
+            tags=["_phrase"],
+        )
+        cand_a = ScoredCandidate(
+            node=node, total=0.9, lexical=0.9, semantic=0.0, graph=0.5,
+            structural=0.0, reason="seed",
+        )
+        node_b = Node(
+            id="phrase_bonn",
+            kind=NodeKind.ENTITY,
+            title="Bonn",
+            content="",
+            properties={"doc_id": "shared"},
+            level=ConsolidationLevel.L0_RAW,
+            tags=["_phrase"],
+        )
+        cand_b = ScoredCandidate(
+            node=node_b, total=0.8, lexical=0.8, semantic=0.0, graph=0.5,
+            structural=0.0, reason="seed",
+        )
+        result = agg.aggregate(scored=[cand_a, cand_b], k=2, per_document_cap=1)
+        # Cap=1 under passage path should drop the second
+        assert len(result) == 1
+        assert result[0].node.id == "phrase_einstein"

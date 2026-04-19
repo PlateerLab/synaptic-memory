@@ -168,6 +168,60 @@ class EvidenceAggregator:
         candidate that matches it, even if it wouldn't have won the
         greedy pass on its own merit. The remaining slots are filled
         greedily.
+
+        Kind-aware split (v0.17.1)
+        --------------------------
+        Candidates whose node carries a ``_table_name`` property — i.e.
+        the rows materialised by ``table_ingester`` / ``db_ingester`` —
+        are treated as **structured atoms**: they bypass MMR /
+        per-document cap / category coverage, which all assume a
+        chunk-like hierarchy and actively hurt retrieval on structured
+        corpora (assort, X2BEE tables: MRR jumps from 0.425 → 0.268
+        under full pipeline otherwise). Structured path is a straight
+        top-K by score. Passage-style nodes (CHUNK, CONCEPT, plain
+        ENTITY without a table binding) keep the full MMR + cap +
+        coverage pipeline.
+        """
+        if not scored or k <= 0:
+            return []
+
+        # --- Kind split: structured rows → atoms, rest → passages ---
+        structured = [
+            s for s in scored
+            if (s.node.properties or {}).get("_table_name")
+        ]
+        passage = [
+            s for s in scored
+            if not (s.node.properties or {}).get("_table_name")
+        ]
+
+        passage_evidence = self._aggregate_passages(
+            passage, k=k, per_document_cap=per_document_cap,
+            anchor_categories=anchor_categories,
+        )
+
+        structured_evidence: list[Evidence] = []
+        for cand in structured[:k]:
+            structured_evidence.append(
+                _make_evidence(cand, reason="structured_top_score")
+            )
+
+        merged = passage_evidence + structured_evidence
+        merged.sort(key=lambda e: e.score, reverse=True)
+        return merged[:k]
+
+    def _aggregate_passages(
+        self,
+        scored: list[ScoredCandidate],
+        *,
+        k: int,
+        per_document_cap: int,
+        anchor_categories: set[str] | None,
+    ) -> list[Evidence]:
+        """Legacy passage aggregator — MMR + per-doc cap + category coverage.
+
+        Extracted from ``aggregate`` to keep the kind-aware split readable.
+        Behaviour unchanged from v0.17.0 for CHUNK / CONCEPT / etc.
         """
         if not scored or k <= 0:
             return []
