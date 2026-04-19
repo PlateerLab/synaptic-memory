@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "synaptic_version": "0.16.0",
-    "saved_at_utc": "2026-04-18T14:38:43+00:00",
+    "synaptic_version": "0.17.0",
+    "saved_at_utc": "2026-04-19T02:48:25+00:00",
     "corpus_md5": {
       "krra_chunks_jsonl": "missing",
       "krra_documents_jsonl": "missing",
@@ -23,39 +23,102 @@
     },
     "note": "Baseline written by eval/run_all.py. The `_meta` block captures corpus + query file hashes so phantom regressions from drifting source data are easy to diagnose. If you see a score change after a code-only PR, compare the hashes first."
   },
+  "KRRA Easy": {
+    "mrr": 0.975,
+    "p_at_k": 0.5914,
+    "r_at_k": 0.8572,
+    "ndcg": 0.8822,
+    "corpus_size": 20
+  },
+  "KRRA Hard": {
+    "mrr": 0.5887,
+    "p_at_k": 0.3312,
+    "r_at_k": 0.2048,
+    "ndcg": 0.3198,
+    "corpus_size": 40
+  },
+  "assort Easy": {
+    "mrr": 0.8556,
+    "p_at_k": 0.1,
+    "r_at_k": 0.9333,
+    "ndcg": 0.8754,
+    "corpus_size": 15
+  },
+  "assort Hard": {
+    "mrr": 0.0,
+    "p_at_k": 0.0,
+    "r_at_k": 0.0,
+    "ndcg": 0.0,
+    "corpus_size": 40
+  },
+  "X2BEE Easy": {
+    "mrr": 1.0,
+    "p_at_k": 0.14,
+    "r_at_k": 1.0,
+    "ndcg": 1.0,
+    "corpus_size": 20
+  },
+  "X2BEE Hard": {
+    "mrr": 0.3684,
+    "p_at_k": 0.1,
+    "r_at_k": 0.3286,
+    "ndcg": 0.3684,
+    "corpus_size": 20
+  },
+  "KRRA Conv": {
+    "mrr": 0.1659,
+    "p_at_k": 0.0592,
+    "r_at_k": 0.0733,
+    "ndcg": 0.0809,
+    "corpus_size": 30
+  },
+  "assort Conv": {
+    "mrr": 0.4722,
+    "p_at_k": 0.0917,
+    "r_at_k": 0.5208,
+    "ndcg": 0.4586,
+    "corpus_size": 30
+  },
+  "X2BEE Conv": {
+    "mrr": 0.1636,
+    "p_at_k": 0.0222,
+    "r_at_k": 0.1852,
+    "ndcg": 0.166,
+    "corpus_size": 30
+  },
   "HotPotQA-24": {
-    "mrr": 0.875,
-    "p_at_k": 0.1625,
-    "r_at_k": 0.8125,
-    "ndcg": 0.7365,
+    "mrr": 0.9792,
+    "p_at_k": 0.1792,
+    "r_at_k": 0.8958,
+    "ndcg": 0.8982,
     "corpus_size": 226
   },
   "Allganize RAG-ko": {
-    "mrr": 0.9468,
-    "p_at_k": 0.1063,
+    "mrr": 0.9833,
+    "p_at_k": 0.1,
     "r_at_k": 1.0,
-    "ndcg": 0.9598,
+    "ndcg": 0.9876,
     "corpus_size": 200
   },
   "Allganize RAG-Eval": {
-    "mrr": 0.9109,
-    "p_at_k": 0.0968,
-    "r_at_k": 0.95,
-    "ndcg": 0.9203,
+    "mrr": 0.9547,
+    "p_at_k": 0.0967,
+    "r_at_k": 0.9667,
+    "ndcg": 0.9577,
     "corpus_size": 300
   },
   "PublicHealthQA": {
-    "mrr": 0.5472,
-    "p_at_k": 0.0831,
-    "r_at_k": 0.8312,
-    "ndcg": 0.6143,
+    "mrr": 0.7481,
+    "p_at_k": 0.0883,
+    "r_at_k": 0.8831,
+    "ndcg": 0.7813,
     "corpus_size": 77
   },
   "AutoRAG": {
-    "mrr": 0.9062,
-    "p_at_k": 0.1,
-    "r_at_k": 1.0,
-    "ndcg": 0.929,
+    "mrr": 0.8063,
+    "p_at_k": 0.093,
+    "r_at_k": 0.9298,
+    "ndcg": 0.8371,
     "corpus_size": 720
   }
 }

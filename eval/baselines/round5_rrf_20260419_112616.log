@@ -1,0 +1,45 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  73%|███████▎  | 287/391 [00:00<00:00, 2868.64it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3114.59it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3928.79it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3920.32it/s]
+
+Running 14 benchmarks...
+  embedder: local BAAI/bge-m3 (cuda:0)
+  reranker: local BAAI/bge-reranker-v2-m3 (cuda:0)
+  KRRA Easy... MRR=0.975 (11.6s)
+  KRRA Hard... MRR=0.549 (19.8s)
+  assort Easy... /home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:214: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['orders'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+/home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:214: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['broadcasts'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+MRR=0.856 (4.1s)
+  assort Hard... MRR=0.000 (8.6s)
+  X2BEE Easy... MRR=1.000 (1.8s)
+  X2BEE Hard... MRR=0.368 (1.0s)
+  KRRA Conv... MRR=0.141 (15.7s)
+  assort Conv... MRR=0.472 (6.8s)
+  X2BEE Conv... MRR=0.164 (1.5s)
+  HotPotQA-24... MRR=0.972 (3.2s)
+  Allganize RAG-ko... MRR=0.976 (22.9s)
+  Allganize RAG-Eval... MRR=0.940 (33.2s)
+  PublicHealthQA... MRR=0.707 (6.6s)
+  AutoRAG... MRR=0.802 (35.6s)
+
+Dataset                 Corpus     MRR    P@10    R@10    nDCG      Hit    Time  Status
+-----------------------------------------------------------------------------------------------
+KRRA Easy                   20   0.975   0.591   0.857   0.882    20/20   11.6s  ✅
+KRRA Hard                   40   0.549   0.329   0.196   0.308    29/40   19.8s  ✅
+assort Easy                 15   0.856   0.100   0.933   0.875    14/15    4.1s  ✅
+assort Hard                 40   0.000   0.000   0.000   0.000     0/40    8.6s  ✅
+X2BEE Easy                  20   1.000   0.140   1.000   1.000    20/20    1.8s  ✅
+X2BEE Hard                  20   0.368   0.100   0.329   0.368     7/20    1.0s  ✅
+KRRA Conv                   30   0.141   0.058   0.073   0.073     8/30   15.7s  ✅
+assort Conv                 30   0.472   0.092   0.521   0.459    14/30    6.8s  ✅
+X2BEE Conv                  30   0.164   0.022   0.185   0.166     6/30    1.5s  ✅
+HotPotQA-24                226   0.972   0.192   0.958   0.900    24/24    3.2s  ✅
+Allganize RAG-ko           200   0.976   0.100   1.000   0.982  200/200   22.9s  ✅
+Allganize RAG-Eval         300   0.940   0.098   0.977   0.949  293/300   33.2s  ✅
+PublicHealthQA              77   0.707   0.088   0.883   0.750    68/77    6.6s  ✅
+AutoRAG                    720   0.802   0.098   0.982   0.847  112/114   35.6s  ✅
+
+Results saved → /home/gpuuser/sonAIengine/synaptic-memory/eval/baselines/qa_latest.json

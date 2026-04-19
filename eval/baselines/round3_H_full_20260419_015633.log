@@ -1,0 +1,26 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  88%|████████▊ | 343/391 [00:00<00:00, 3429.34it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3517.16it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  73%|███████▎  | 288/393 [00:00<00:00, 2874.04it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3070.94it/s]
+
+Running 14 benchmarks...
+  embedder: local BAAI/bge-m3 (cuda:0)
+  reranker: local BAAI/bge-reranker-v2-m3 (cuda:0)
+  KRRA Easy... MRR=0.967 (12.1s)
+  KRRA Hard... MRR=0.606 (20.6s)
+  assort Easy... /home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:214: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['orders'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+/home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:214: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['broadcasts'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+MRR=0.856 (4.4s)
+  assort Hard... MRR=0.000 (9.3s)
+  X2BEE Easy... MRR=1.000 (1.8s)
+  X2BEE Hard... MRR=0.195 (1.3s)
+  KRRA Conv... MRR=0.155 (16.3s)
+  assort Conv... MRR=0.472 (7.5s)
+  X2BEE Conv... MRR=0.158 (2.2s)
+  HotPotQA-24... MRR=0.979 (3.2s)
+  Allganize RAG-ko... MRR=0.982 (23.2s)
+  Allganize RAG-Eval... MRR=0.946 (33.8s)
+  PublicHealthQA... MRR=0.732 (6.7s)
+  AutoRAG... 

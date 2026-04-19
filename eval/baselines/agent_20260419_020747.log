@@ -1,0 +1,205 @@
+
+--agent-only: skipping single-shot retrieval
+
+Running 0 benchmarks...
+  embedder: none
+  reranker: none
+  KRRA Hard (agent, max 5 turns)...       [h001] turns=4 found=23 hit=True (id)
+      [h002] turns=5 found=10 hit=True (id)
+      [h003] turns=5 found=22 hit=True (id)
+      [h004] turns=5 found=25 hit=True (id)
+      [h005] turns=5 found=11 hit=True (id)
+      [h006] turns=5 found=14 hit=True (id)
+      [h007] turns=5 found=13 hit=True (id)
+      [h008] turns=5 found=21 hit=True (id)
+      [h009] turns=5 found=5 hit=True (id)
+      [h010] turns=5 found=25 hit=True (id)
+      [h011] turns=4 found=23 hit=True (id)
+      [h012] turns=5 found=26 hit=True (id)
+      [h013] turns=5 found=26 hit=True (id)
+      [h014] turns=5 found=26 hit=True (id)
+      [h015] turns=5 found=10 hit=False | relevant={'49833f0ed56ba434', '55ab962e1bccc09b', '8c423366bc12e4d4', '2c473c597114e075', 'd13b5751987d7a60', 'e27b76214a7c2602', 'e507dc22077335c1', 'e634b59b94b6520d', 'f3dc845fb6dbe8da', '499f2103edc5d6e1', '80a94be22b61d169', '1ab7e770624479a7', 'c653cf2802a20997', 'f960b0c32b20eee5', '4fdea9de7be2260f', 'fbae0ee191a8631c', '06ea8eb0c6498c61', 'f2f04400eeb9a3b9', 'ea444be674f612a7', '475035a5d7c43233', 'd908c9b95b9e082a', '2ffc5467d8f17d86', 'f1f510c2c52de3f3', '8476f39f99eface1', '8bbee2b71d68fdbd', '363c897a38703bf5', '957fa34075bbf580', 'b5fccf6b88e57b97', 'de08827cf2920b82', '9293b657686b140c', '03e46e426c5e0a40', '605478a88b9721c1', '4c2beab48a4fa8ba', 'eb14eb093b0e78d0', '470d301f2c963cc9', 'a5a2b9b43a8c4623', 'b695e817ea157351', 'd2b11aaf8f116aa8', '4b93e74ded9f99c1', '27325f8e49d559f4', '78e709be9aea6b6b', '40122ffcb05effea', '9a0b16fa2c681045', '61764acda2753a0c', '6c8917aa77bbade5', 'de015b57086a5f6e', '210e0e2db641965a', '4bd81a5d3f7d0759', '0cc6e308b2160025', 'b6cea9b16146a199', 'ee84570820b418cb', '2a67e1073fe83029', '56dfb0d39e2d829a', '320953785300baf0', '790f2015dc65b6e1', 'b1b444823f464103', '0fdd2b845b06532f', '386c3d238d9e12b0', '725ae7e3f94266ed'} | sample_found=['윤리경영', '실질적인 윤리경영', '통한 윤리경영']
+      [h016] turns=5 found=36 hit=True (id)
+      [h017] turns=3 found=16 hit=False | relevant={'670404279a356f61', '4a8510e15b032621', '658909313c076116', 'e06085ab87c5e9da', '2eaa8a7351dbfb3c', 'e634b59b94b6520d', '2eede8200e1e0db8', 'b8af468a3104065b', '858311a17598e098', '762c83d98e1a04ca'} | sample_found=['2022년도_안전보건경영시스템 문서 제정개정(안) #4', '721c3ac7b9002280', '문서작성']
+      [h018] turns=5 found=27 hit=True (id)
+      [h019] turns=4 found=21 hit=False | relevant={'2df376eb9253a430', 'dd534b8aff2c0b47', '110f8ff7eb5dbdc1', '2b77cb92e3b2e52e', '6cdb3f17c1eafe48', '012dcbe84f52c595', '788bbf4ba82b5320', '929899bce4b8ff3e', '157016074626f25d', '858311a17598e098'} | sample_found=['0bffcf8f8dc55f5f', '파일 형식', 'fe8c38071fcd2654']
+      [h020] turns=2 found=0 hit=True (judge)
+      [h022] turns=3 found=15 hit=False | relevant={'8ff32e537262bfa2', 'b1b444823f464103', 'd986946925263cee'} | sample_found=['2022년도_[별첨2] 2022년 KRA-ESG경영진단 모델 활용 진단 결과_최종 #33', '2022년도_[별첨2] 2022년 KRA-ESG경영진단 모델 활용 진단 결과_최종 #26', '2023년도_[붙임] 2023년 지사 ESG 추진계획(230827_최종) #4']
+      [h023] turns=2 found=4 hit=True (id)
+      [h024] turns=5 found=22 hit=True (id)
+      [h025] turns=5 found=7 hit=False | relevant={'123f03df3479517e', '8ff32e537262bfa2', 'b1b444823f464103', 'd13b5751987d7a60', '3899cc22b412106f', '5cbc3a546cb3bcbe', '848f72ccaa6e8c6f', 'b920ef9abe96e1cb', 'd986946925263cee', 'd908c9b95b9e082a', '9a0b16fa2c681045', 'de015b57086a5f6e'} | sample_found=['2021년도_(본문) 2021년 인권경영 기본계획 #0', '인권경영', '2021년도_(본문) 2021년 인권경영 기본계획']
+      [h026] turns=5 found=73 hit=True (id)
+      [h027] turns=5 found=7 hit=True (judge)
+      [h028] turns=5 found=34 hit=False | relevant={'61c9d3fe217811d8', 'd7a90f635c33307a', '529d27b941c8f7bf', '4d186c7392bcd0a1', 'd19e9d4655070510', '436d43261922a8da', '36f5479362d3d864', '790f2015dc65b6e1', '6933abba91248418', '864c7ea3086114e0', '27325f8e49d559f4', '9d5b56e85d791e6f'} | sample_found=['8a1e9d4f981d299d', '3e1e3c7c7c6dbc28', '2024년도_[붙임2] 개정 「내부통제규정」전문']
+      [h029] turns=4 found=16 hit=True (id)
+      [h030] turns=2 found=15 hit=True (judge)
+      [h031] turns=5 found=15 hit=True (id)
+      [h032] turns=5 found=8 hit=False | relevant={'8ff32e537262bfa2', 'd986946925263cee'} | sample_found=['조사 및 평가', 'e7f908c8ad940762', '2022년도_[참고] 2022년 기준 평가시행분류 #0']
+      [h033] turns=5 found=7 hit=True (id)
+      [h034] turns=5 found=28 hit=True (id)
+      [h035] turns=5 found=20 hit=True (id)
+      [h036] turns=5 found=20 hit=False | relevant={'9e0b5f9c2ae462c6', '2df376eb9253a430', '2b77cb92e3b2e52e', 'f416b3a944127f08', '9f2b17d44d6964da', '012dcbe84f52c595', 'c8a5fac46012cbe5'} | sample_found=['조사 및 평가', '2021년도_경주마 교배 및 번식분야 복지 가이드라인 수립 결과 보고 #0', '2021년도_경주마 교배 및 번식분야 복지 가이드라인(안) #3']
+      [h037] turns=5 found=44 hit=True (id)
+      [h038] turns=2 found=11 hit=True (id)
+      [h039] turns=5 found=37 hit=True (id)
+      [h040] turns=5 found=35 hit=False | relevant={'e634b59b94b6520d'} | sample_found=['2023년도_[붙임] 2023년 지사 ESG 추진계획(230827_최종) #4', '2023년도_[붙임2] 2024년 사업별 조직별 예산 계층구조', '2024년도_(붙임 2)2024년 동반성장 추진 기본계획(안) 02.29. #35']
+solved=30/39 (1332.4s)
+  assort Hard (agent, max 5 turns)...       [a001] turns=2 found=58 hit=True (id)
+      [a002] turns=4 found=28 hit=True (judge)
+      [a003] turns=3 found=363 hit=True (id)
+      [a004] turns=5 found=760 hit=True (id)
+      [a005] turns=2 found=10 hit=True (id)
+      [a006] turns=2 found=50 hit=True (judge)
+      [a007] turns=4 found=70 hit=True (id)
+      [a008] turns=2 found=21 hit=True (judge)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [a009] turns=5 found=148 hit=True (id)
+      [a010] turns=5 found=450 hit=False | relevant={'reviews:259000000', 'reviews:259000004'} | sample_found=['pr_product_base:12800043', 'reviews:12800074', 'product_variants:12800031']
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [a011] turns=5 found=37 hit=True (id)
+      [a012] turns=5 found=215 hit=True (id)
+      [a013] turns=5 found=531 hit=True (id)
+      [a014] turns=2 found=20 hit=True (judge)
+      [a015] turns=2 found=19 hit=True (id)
+      [a016] turns=5 found=415 hit=True (id)
+      [a017] turns=3 found=101 hit=True (id)
+      [a018] turns=4 found=501 hit=True (id)
+      [a019] turns=5 found=371 hit=True (id)
+      [a020] turns=3 found=400 hit=True (id)
+      [a021] turns=5 found=77 hit=True (id)
+      [a022] turns=5 found=290 hit=True (id)
+      [a023] turns=5 found=1740 hit=True (id)
+      [a024] turns=2 found=20 hit=True (judge)
+      [a025] turns=2 found=19 hit=True (id)
+      [a032] turns=3 found=70 hit=True (id)
+      [a034] turns=5 found=35 hit=True (id)
+      [a035] turns=3 found=25 hit=True (id)
+      [a036] turns=4 found=23 hit=True (judge)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [a037] turns=4 found=80 hit=True (id)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [a038] turns=5 found=43 hit=True (id)
+      [a039] turns=5 found=166 hit=False | relevant={'products:12800049', 'products:12800056', 'products:12800063', 'products:12800075', 'products:12800028'} | sample_found=['variant_sales:25900116', 'variant:25900388', 'variant_sales:25900160']
+      [a040] turns=5 found=150 hit=False | relevant={'products:12800006'} | sample_found=['pr_product_base:12800044', 'product_variants:12800066', 'pr_product:12800066']
+solved=30/33 (1757.4s)
+  X2BEE Hard (agent, max 5 turns)...       [h001] turns=5 found=17 hit=True (id)
+      [h002] turns=5 found=15 hit=True (id)
+      [h003] turns=5 found=35 hit=True (id)
+      [h004] turns=5 found=9 hit=True (id)
+      [h005] turns=3 found=21 hit=True (id)
+      [h006] turns=4 found=1 hit=True (id)
+      [h007] turns=3 found=21 hit=True (id)
+      [h008] turns=2 found=1 hit=True (id)
+      [h009] turns=2 found=4 hit=True (id)
+      [h010] turns=2 found=41 hit=True (id)
+      [h011] turns=2 found=24 hit=True (id)
+      [h012] turns=3 found=40 hit=True (id)
+      [h013] turns=3 found=11 hit=True (id)
+      [h014] turns=3 found=400 hit=True (id)
+      [h015] turns=5 found=8 hit=True (id)
+      [h016] turns=2 found=50 hit=True (judge)
+      [h017] turns=5 found=28 hit=True (id)
+      [h018] turns=4 found=17 hit=True (id)
+      [h019] turns=5 found=27 hit=True (id)
+solved=19/19 (615.1s)
+  KRRA Conv (agent, max 5 turns)...       [c001] turns=5 found=10 hit=False | relevant={'0ac741faaa2da029', '1b3a2926650166e0', '06a77998947ddb80', '156fec294ba67ae4', '0ac3271720f05406'} | sample_found=['068eb0be1021da16', '2022년도_(요약)`22년 경마시행계획 #5', '2022년도_(요약)`22년 경마시행계획 #0']
+      [c002] turns=4 found=20 hit=True (judge)
+      [c003] turns=5 found=14 hit=True (id)
+      [c004] turns=5 found=0 hit=False (miss)
+      [c005] turns=5 found=12 hit=False | relevant={'0ac741faaa2da029', '0bffcf8f8dc55f5f', '03e46e426c5e0a40', '0346542e0be2b2ab', '0fdd2b845b06532f'} | sample_found=['복지 및 교육', '운영계획', '5f378e291bd283b3']
+      [c006] turns=5 found=23 hit=False | relevant={'068eb0be1021da16', '294a5acf52548d54', '1b3a2926650166e0', '140155f6377c6ed1', '0ac3271720f05406'} | sample_found=['3671af959373efbd', "2025년도_'25년 경마시행계획(본문)_최종", "2025년도_'25년 경마시행계획(본문)_최종 #250"]
+      [c007] turns=5 found=10 hit=False | relevant={'1dd7a41b6d49067a', '07c4de1cc000e7e8', '156fec294ba67ae4', '133dd2fda4f7c41d', '29c493103f7c509c'} | sample_found=['복지 및 교육', '5dcccad8d715ad0a', '2024년도_(본문) 2024년 서울경마공원 경주마 재활 지원 프로그램 운영 계획(안) #0']
+      [c008] turns=5 found=45 hit=False | relevant={'3dd0576c06bdadd0', '36f5479362d3d864', '0f9e1947b0221b27', '3d8c8292183997c8', '2e907c84c2a15612'} | sample_found=['2024년도_[붙임2-1] 304.경영관리규정 #9', '2024년도_2024년 서울경마공원 발매사업 운영계획(안)_최종', 'bb89f9fdd19b762e']
+      [c009] turns=2 found=7 hit=True (judge)
+      [c010] turns=5 found=13 hit=True (id)
+      [c011] turns=5 found=7 hit=True (judge)
+      [c012] turns=3 found=11 hit=False | relevant={'0346542e0be2b2ab', '0a863b5949be411e', '012dcbe84f52c595', '156fec294ba67ae4', '0ac3271720f05406'} | sample_found=['2022년도_출발대 칸의 변경 운영기준 개선(안) #7', '2022년도_출발대 칸의 변경 운영기준 개선(안) 요약 #5', '2022년도_출발대 칸의 변경 운영기준 개선(안) #6']
+      [c013] turns=5 found=7 hit=False | relevant={'0ac741faaa2da029', '08dbb848822964aa', '012dcbe84f52c595', '05889d5822d0109f', '133dd2fda4f7c41d'} | sample_found=['e39b4656a5219700', '2020년도_@ (요약) 2020년 경주마 생산 및 교배지원 결과보고 @ #2', '2020년도_@ (요약) 2020년 경주마 생산 및 교배지원 결과보고 @ #1']
+      [c014] turns=5 found=47 hit=False | relevant={'1da3f1fef69b9b0e', '027e0c5f0f5686c0', '1c2e14b3e46641c4', '230b3c89a0f6cfdc', '23f259fe9f9c25d9'} | sample_found=['연구개발 기본계획', '425d5a095aa05d99', '조사 및 평가']
+      [c015] turns=5 found=34 hit=True (id)
+      [c016] turns=5 found=10 hit=False | relevant={'0f9e1947b0221b27', '134ceaf0ae1ba751', '20ce77daff008e50', '012dcbe84f52c595', '19fe4e04b9ae46af'} | sample_found=['425d5a095aa05d99', '2023년도_2023년 말산업 연구사업 추진계획(본문) #0', '530eee4771fc7f6a']
+      [c017] turns=3 found=12 hit=True (judge)
+      [c018] turns=5 found=17 hit=False | relevant={'352b2e0ed9bd7c00', '140155f6377c6ed1', '3426f5fdd6c93022', '45d800cab99cab86', '29c493103f7c509c'} | sample_found=['2024년도_제18회 농림부장관배 승마대회 개최계획(안)', '2024년도_제18회 농림부장관배 승마대회 개최계획(안) #1', '기승능력인증제']
+      [c019] turns=2 found=7 hit=True (judge)
+      [c020] turns=5 found=20 hit=False | relevant={'512e17e7a4d429e6', '2d94f6c769030bda', '38bd220368aba4ab', '2e907c84c2a15612', '2bd46b499bdcc01d'} | sample_found=['2022년도_붙임2_(본문)사감위 4차 종합계획 수립 대응계획_결재 #29', '불법사설경마', '2020년도_2020년 불법사설경마 대응계획(안)']
+      [c021] turns=2 found=7 hit=True (judge)
+      [c022] turns=2 found=7 hit=True (judge)
+      [c023] turns=5 found=14 hit=False | relevant={'0ac741faaa2da029', '08dbb848822964aa', '012dcbe84f52c595', '0ac3271720f05406', '05889d5822d0109f'} | sample_found=['2020년도_@ (결재상신) 2020년 경주마 생산 및 교배지원 결과보고 @ #0', '2020년도_@ (결재상신) 2020년 경주마 생산 및 교배지원 결과보고 @', '운영계획']
+      [c024] turns=5 found=0 hit=False (miss)
+      [c025] turns=3 found=64 hit=True (judge)
+      [c026] turns=5 found=17 hit=False | relevant={'10f09627fe81dec0', '1c2e14b3e46641c4', '048a00f4ea8e90a9', '133dd2fda4f7c41d', '17701730bc960da9'} | sample_found=['2024년도_[본문] 24년 데이터기반행정 활성화 추진 계획_20240504', '2024년도_[본문] 24년 데이터기반행정 활성화 추진 계획_20240504 #4', '2024년도_[본문] 24년 데이터기반행정 활성화 추진 계획_20240504 #6']
+      [c027] turns=5 found=20 hit=True (id)
+      [c028] turns=5 found=6 hit=False | relevant={'031374f12370d483', '07c4de1cc000e7e8', '1a38e229b370f559', '048a00f4ea8e90a9', '17701730bc960da9'} | sample_found=['규정 및 지침', '2022년도_(제23-15호) 말등록규정 일부 개정(안) #2', '2022년도_(제23-15호) 말등록규정 일부 개정(안) #1']
+      [c029] turns=5 found=28 hit=True (id)
+      [c030] turns=4 found=17 hit=True (judge)
+solved=14/30 (869.9s)
+  assort Conv (agent, max 5 turns)...       [c001] turns=2 found=29 hit=True (id)
+      [c002] turns=3 found=10 hit=True (id)
+      [c003] turns=5 found=21 hit=False | relevant={'products:12800000'} | sample_found=['reviews:259000405', 'variant_sales:25900811', 'product_variants:25900811']
+      [c005] turns=2 found=18 hit=True (id)
+      [c006] turns=5 found=40 hit=True (id)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [c007] turns=5 found=58 hit=True (id)
+      [c008] turns=2 found=70 hit=True (id)
+      [c009] turns=5 found=16 hit=True (id)
+      [c010] turns=5 found=451 hit=True (id)
+      [c012] turns=2 found=21 hit=True (judge)
+      [c013] turns=3 found=32 hit=True (id)
+      [c014] turns=3 found=7 hit=True (judge)
+      [c015] turns=5 found=83 hit=True (id)
+      [c017] turns=5 found=301 hit=True (judge)
+      [c019] turns=2 found=32 hit=True (id)
+      [c020] turns=4 found=10 hit=True (judge)
+      [c022] turns=2 found=20 hit=True (judge)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [c023] turns=3 found=39 hit=True (id)
+      [c024] turns=2 found=15 hit=True (id)
+      [c025] turns=3 found=21 hit=True (id)
+      [c027] turns=5 found=21 hit=True (judge)
+      [c028] turns=4 found=79 hit=True (id)
+      [c029] turns=2 found=19 hit=True (id)
+      [c030] turns=5 found=80 hit=False | relevant={'products:12800000', 'products:12800004'} | sample_found=['pr_product_base:12800075', 'pr_product:12800028', 'products:12800028']
+solved=22/24 (1291.1s)
+  X2BEE Conv (agent, max 5 turns)...       [c001] turns=3 found=8 hit=True (id)
+      [c002] turns=3 found=1 hit=True (id)
+      [c003] turns=2 found=20 hit=True (judge)
+      [c004] turns=2 found=12 hit=True (judge)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [c005] turns=5 found=952 hit=True (id)
+      [c006] turns=3 found=30 hit=True (id)
+      [c007] turns=5 found=2 hit=True (id)
+      [c008] turns=2 found=20 hit=True (id)
+      [c009] turns=2 found=20 hit=True (id)
+      [c010] turns=5 found=1150 hit=True (id)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [c011] turns=5 found=922 hit=True (id)
+      [c012] turns=4 found=48 hit=True (id)
+      [c013] turns=3 found=30 hit=True (judge)
+      [c014] turns=5 found=35 hit=True (id)
+      [c015] turns=3 found=1 hit=True (id)
+      [c017] turns=4 found=850 hit=True (judge)
+      [c019] turns=2 found=7616 hit=True (id)
+      [c020] turns=4 found=51 hit=True (judge)
+      [c021] turns=5 found=160 hit=True (id)
+      [c022] turns=2 found=7 hit=True (judge)
+      [c023] turns=5 found=26 hit=False | relevant={'pr_goods_base:G00003'} | sample_found=['pr_goods_base:G00995', 'pr_goods_base:G01006', 'pr_goods_sold_hist:SH0000055']
+      [c025] turns=3 found=400 hit=True (id)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [c026] turns=4 found=53 hit=True (id)
+      [c027] turns=2 found=7 hit=True (id)
+      [c028] turns=5 found=40 hit=True (id)
+    ⚠ API error: Error code: 400 - {'error': {'message': "This model's maximum context length is 16000 tokens. However, you requested 2048 output tokens and your prompt contains at least 13953 input tokens, for a total of at least 16001 tokens. Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_tokens, value=13953)", 'type': 'BadRequestError', 'param': 'input_tokens', 'code': 400}}
+      [c029] turns=4 found=47 hit=True (id)
+      [c030] turns=5 found=15 hit=False | relevant={'pr_goods_base:G00005'} | sample_found=['pr_goods_base:G01009', 'goodss:G01009', 'pr_sales:9999.0']
+solved=25/27 (1328.3s)
+
+Dataset                 Corpus     MRR    P@10    R@10    nDCG      Hit    Time  Status
+-----------------------------------------------------------------------------------------------
+KRRA Hard (agent)           39   0.769   0.000   0.000   0.000    30/39 1332.4s  ✅
+assort Hard (agent)         33   0.909   0.000   0.000   0.000    30/33 1757.4s  ✅
+X2BEE Hard (agent)          19   1.000   0.000   0.000   0.000    19/19  615.1s  ✅
+KRRA Conv (agent)           30   0.467   0.000   0.000   0.000    14/30  869.9s  ✅
+assort Conv (agent)         24   0.917   0.000   0.000   0.000    22/24 1291.1s  ✅
+X2BEE Conv (agent)          27   0.926   0.000   0.000   0.000    25/27 1328.3s  ✅
+
+Results saved → /home/gpuuser/sonAIengine/synaptic-memory/eval/baselines/qa_latest.json

@@ -200,9 +200,31 @@ async def run_custom_dataset(
     queries = gt.get("queries", [])
     id_field = gt.get("id_field", "doc_id")
 
+    # v0.17.1 — load a ``DomainProfile`` (if present at
+    # ``eval/data/profiles/{corpus}.toml``) to pick up table_query_hints.
+    # The corpus-basename lookup matches the SQLite filename convention
+    # (``assort_graph.sqlite`` → ``assort``); falls back to no hints.
+    table_query_hints: dict[str, list[str]] | None = None
+    corpus_stem = cfg.path.stem.removesuffix("_graph")
+    profile_path = Path(__file__).parent / "data" / "profiles" / f"{corpus_stem}.toml"
+    if profile_path.exists():
+        try:
+            from synaptic.extensions.domain_profile import DomainProfile
+
+            profile = DomainProfile.load(profile_path)
+            if profile.table_query_hints:
+                table_query_hints = dict(profile.table_query_hints)
+        except Exception:
+            pass
+
     from synaptic.extensions.evidence_search import EvidenceSearch
 
-    searcher = EvidenceSearch(backend=backend, embedder=embedder, reranker=reranker)
+    searcher = EvidenceSearch(
+        backend=backend,
+        embedder=embedder,
+        reranker=reranker,
+        table_query_hints=table_query_hints,
+    )
 
     bench = BenchmarkResult()
     t0 = time.time()
@@ -911,6 +933,7 @@ async def _llm_judge(
     query: str,
     agent_answer: str,
     relevant_samples: list[str],
+    model: str = "gpt-4o-mini",
 ) -> bool:
     """Ask an LLM whether the agent's answer semantically satisfies the query.
 
@@ -946,7 +969,7 @@ Rules:
 Reply with only YES or NO."""
     try:
         resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=10,
             temperature=0,
@@ -1079,7 +1102,9 @@ async def run_agent_benchmark(
         # LLM-as-Judge fallback: if ID matching failed but agent produced
         # an answer, check whether the answer is semantically correct.
         if not id_hit and judge and final_answer:
-            judge_hit = await _llm_judge(client, query_text, final_answer, list(relevant))
+            judge_hit = await _llm_judge(
+                client, query_text, final_answer, list(relevant), model=model
+            )
             if judge_hit:
                 hit = True
         if hit:

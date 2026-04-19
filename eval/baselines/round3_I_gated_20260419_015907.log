@@ -1,0 +1,42 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 on cuda:0 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 4018.76it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  71%|███████   | 280/393 [00:00<00:00, 2769.02it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3043.90it/s]
+Traceback (most recent call last):
+  File "/home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py", line 1464, in <module>
+    sys.exit(asyncio.run(main()))
+             ^^^^^^^^^^^^^^^^^^^
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py", line 1352, in main
+    shared_reranker = LocalBgeRerankerV2(device=args.local_bge_device)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/gpuuser/sonAIengine/synaptic-memory/examples/ablation/local_bge.py", line 103, in __init__
+    ).to(device)
+      ^^^^^^^^^^
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 3574, in to
+    return super().to(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1340, in to
+    return self._apply(convert)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 900, in _apply
+    module._apply(fn)
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 900, in _apply
+    module._apply(fn)
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 900, in _apply
+    module._apply(fn)
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 927, in _apply
+    param_applied = fn(param)
+                    ^^^^^^^^^
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1326, in convert
+    return t.to(
+           ^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 490.00 MiB. GPU 0 has a total capacity of 79.11 GiB of which 129.81 MiB is free. Process 1528433 has 73.55 GiB memory in use. Process 1869470 has 3.83 GiB memory in use. Including non-PyTorch memory, this process has 1.58 GiB memory in use. Of the allocated memory 1.06 GiB is allocated by PyTorch, and 16.96 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

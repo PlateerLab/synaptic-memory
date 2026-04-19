@@ -22,3 +22,19 @@ stopwords_extra = [
 "colors"           = "CONCEPT"
 "sizes"            = "CONCEPT"
 "variant_sales"    = "OBSERVATION"
+
+# v0.17.1 — query-to-table hints.
+# When a hint keyword appears in the query, EvidenceSearch augments
+# seeds with a targeted FTS for that table and boosts existing seeds
+# whose ``_table_name`` matches. Fixes regressions like
+# "LBL코리아 판매 파트너" that would otherwise drown in product hits.
+[table_query_hints]
+sizes            = ["사이즈", "size"]
+sales_partners   = ["파트너", "판매처", "판매 파트너"]
+sales_channels   = ["채널", "판매 채널"]
+reviews          = ["리뷰", "후기"]
+orders           = ["주문", "오더"]
+broadcasts       = ["방송", "라방"]
+colors           = ["색상", "컬러"]
+products         = ["상품", "제품"]
+product_variants = ["옵션", "variant"]
