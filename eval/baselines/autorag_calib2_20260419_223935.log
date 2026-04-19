@@ -1,0 +1,9 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  94%|█████████▍| 367/391 [00:00<00:00, 3669.40it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3664.81it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 4098.81it/s]
+corpus: 720 docs, queries: 114
+BEFORE calibration: MRR=0.790  Hit=104/114  (12.1s)
+CALIBRATION: sample_mrr=0.665 → blend=0.1
+  rationale: FTS-only sample MRR 0.67 in [0.55, 0.85] — default v0.17.1 adaptive blend (rerank_blend=0.1) applied.
+AFTER calibration:  MRR=0.790  Hit=104/114  (11.8s)

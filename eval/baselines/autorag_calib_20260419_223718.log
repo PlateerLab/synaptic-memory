@@ -1,0 +1,9 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading bge-m3 + bge-reranker-v2-m3 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  85%|████████▌ | 334/391 [00:00<00:00, 3292.76it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3349.72it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3937.81it/s]
+corpus: 720 docs, queries: 114
+BEFORE calibration: MRR=0.790  Hit=104/114  (12.0s)
+CALIBRATION: sample_mrr=0.481 → blend=0.2
+  rationale: FTS-only sample MRR 0.48 ≤ 0.55 — corpus is paraphrase-heavy; cross-encoder weighted higher and vector PRF enabled (measured PublicHealthQA: FTS 0.547 → Full pipeline 0.748).
+AFTER calibration:  MRR=0.733  Hit=94/114  (11.7s)

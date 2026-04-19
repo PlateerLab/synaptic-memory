@@ -116,6 +116,8 @@ class EvidenceSearch:
         "_aggregator",
         "_anchor_extractor",
         "_backend",
+        "_calibrated_blend",
+        "_calibration_loaded",
         "_cross_reranker",
         "_decomposer",
         "_embedder",
@@ -144,7 +146,15 @@ class EvidenceSearch:
         self._embedder = embedder
         self._cross_reranker = reranker
         self._decomposer = decomposer
+        # ``_rerank_blend`` is the user-provided default. The actual
+        # blend used at search time may be overridden by a per-corpus
+        # calibration (see ``synaptic.extensions.calibration``) — for
+        # FTS-already-strong corpora calibration sets the override to
+        # 0.0, structurally avoiding the AutoRAG / X2BEE Easy
+        # regression measured in v0.17.x.
         self._rerank_blend = rerank_blend
+        self._calibration_loaded = False
+        self._calibrated_blend: float | None = None
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -412,6 +422,29 @@ class EvidenceSearch:
             anchor_categories=anchor_category_set,
         )
 
+        # Lazy-load per-corpus calibration once (auto-disable reranker
+        # on FTS-already-strong corpora; see calibration.py).
+        if not self._calibration_loaded:
+            try:
+                from synaptic.extensions.calibration import read_calibration
+
+                cal = await read_calibration(self._backend)
+                if cal is not None:
+                    self._calibrated_blend = cal.rerank_blend
+                    logger.info(
+                        "calibration loaded: blend=%s (sample_mrr=%.3f)",
+                        cal.rerank_blend,
+                        cal.sample_mrr,
+                    )
+            except Exception:
+                pass
+            self._calibration_loaded = True
+        active_blend = (
+            self._calibrated_blend
+            if self._calibrated_blend is not None
+            else self._rerank_blend
+        )
+
         # Step 4b — cross-encoder reranking (optional, highest quality).
         # Takes the top candidates from the hybrid reranker and rescores
         # each (query, content) pair jointly. This is what enables
@@ -478,7 +511,7 @@ class EvidenceSearch:
                         discriminator = min(1.0, std / 3.0)
                     else:
                         discriminator = 1.0
-                    effective_blend = self._rerank_blend * discriminator
+                    effective_blend = active_blend * discriminator
                     if effective_blend > 0:
                         for j, i in enumerate(rerank_indices):
                             if j < len(rerank_scores):
