@@ -1,26 +1,26 @@
 # Synaptic Memory — Roadmap
 
-> 마지막 업데이트: 2026-04-18 (v0.17.0 온톨로지 트랙 Case B 확정)
+> 마지막 업데이트: 2026-04-19 (v0.17.1 PyPI 배포 + v0.18 reform 트랙 시작 직전)
 
-## 현재 상태: v0.15.0 ✅
+## 현재 상태: v0.17.1 ✅ (PyPI 배포 완료 2026-04-19)
 
-- **PyPI**: [`synaptic-memory==0.15.0`](https://pypi.org/project/synaptic-memory/)
-- **테스트**: 809 단위 테스트 통과 + X2BEE 프로덕션 PostgreSQL CDC 검증
-- **MCP 도구**: 36개 (검색 + 그래프 탐색 + 정형 데이터 + 인제스트 / CDC + 복구 + 온톨로지 + 세션)
+- **PyPI**: [`synaptic-memory==0.17.1`](https://pypi.org/project/synaptic-memory/0.17.1/)
+- **테스트**: 820 단위 테스트 통과
+- **MCP 도구**: 36개
 - **코어 의존성**: 0 (torch-free, BYO embedder/reranker)
+- **22-벤치 baseline (FTS-only, 2026-04-19)**: 평균 MRR **0.650** (Korean enterprise 16 + English diverse 6 domains)
+- **14-벤치 Full pipeline (bge-m3 + bge-reranker-v2-m3)**: 평균 MRR **0.647** (FTS-only 0.615 → 첫 번째 net positive)
+- **6-벤치 Agent (Qwen3.5-27B vLLM)**: 평균 solved **81%**
 
-**v0.14.x → v0.15.0 시리즈에서 ship한 것**:
+**v0.16.0 → v0.17.1 시리즈에서 ship한 것**:
 
 | Release | 핵심 |
 |---|---|
-| v0.14.0 | Live DB CDC + MCP ingest tools (29→35) |
-| v0.14.1 | HybridSearch hardcoded `cos >= 0.45` → embedder-agnostic relative threshold |
-| v0.14.2 | MCP `knowledge_search` → EvidenceSearch (magic number 우회) |
-| v0.14.3 | MCP graph `PhraseExtractor` wiring (cross-document bridges 복구) |
-| v0.14.4 | `graph.backfill()` + `knowledge_backfill` MCP tool — 기존 그래프 복구 (35→36) |
-| **v0.15.0** | `graph.search(engine="evidence")` opt-in + deprecation timeline |
+| v0.16.0 | `graph.search()` default engine flip (`evidence`), CDC batching, 30× eval coverage |
+| v0.17.0 | `rerank_blend` 0.4→0.1, `QueryDecomposer` Protocol + `LLMChainDecomposer`, `--local-bge` flag |
+| **v0.17.1** | Kind-aware aggregator + reranker skip, adaptive cross-encoder blend, `DomainProfile.table_query_hints`, `LLMReranker` / `HyDEEmbedder` opt-in modules, lenient profile loader |
 
-모든 "silent failure — feature는 코드에 있는데 wiring이 빠져서 죽어 있던" 버그를 사냥한 시리즈. 자세한 내용은 [CHANGELOG.md](../CHANGELOG.md).
+자세한 내용은 [CHANGELOG.md](../CHANGELOG.md). 알고리즘 설계 결정과 measured negatives는 [PLAN-v0.17-ontology.md](PLAN-v0.17-ontology.md), [PLAN-v0.18-architecture.md](PLAN-v0.18-architecture.md), [CONCEPTS.md §13](CONCEPTS.md).
 
 ---
 

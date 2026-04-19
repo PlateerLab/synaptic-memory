@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.17.1] - 2026-04-19
+## [0.17.1] - 2026-04-19 (PyPI published 22:16 KST)
 
 v0.17.1 is the **kind-aware pipeline release**. v0.17.0's measurement
 revealed that uniform pipeline application broke structured-data
@@ -138,6 +138,41 @@ calibration) and proposes scope per question for v0.18.0+.
 
 820 unit tests pass (818 in v0.17.0 + new kind-aware aggregator
 tests + lenient loader test + decomposer integration tests).
+
+### Also bundled into the 0.17.1 PyPI wheel (post-tag improvements)
+
+The published wheel includes the following work that landed between
+the v0.17.1 release tag (commit 7560e6d) and PyPI upload (commit
+16cee92), captured here so version metadata stays honest:
+
+- **`extensions/reranker_llm.LLMReranker`** — listwise rerank via any
+  OpenAI-compatible LLM (vLLM, Ollama, Anthropic). Drop-in
+  ``RerankerProtocol``. AutoRAG measurement showed it underperforms
+  bge-reranker on FAQ-style corpora (0.793 vs 0.806 MRR, 19× slower)
+  — kept as opt-in for users with different corpus characteristics.
+- **`extensions/embedder_hyde.HyDEEmbedder`** — wraps any
+  ``EmbeddingProvider`` so query-side ``embed`` first asks an LLM for
+  a hypothetical answer, then embeds query + hypothetical. KRRA Conv
+  measurement showed no benefit on Korean regulatory terminology (HyDE
+  output diverged from the corpus's specific phrasing) — kept as
+  opt-in for paraphrase-heavy English corpora where the original HyDE
+  paper saw +5-10pp.
+- **`EvidenceAggregator` MMR-preservation fix** — kind-aware split
+  was unconditionally re-sorting the merged evidence by raw score,
+  which silently destroyed the MMR-derived order returned by the
+  passage aggregator (KRRA Hard FTS-only collapsed 0.583 → 0.518 in
+  the v0.18-prep baseline before the fix). Now: preserve aggregator
+  ordering when only one kind contributes; re-sort only on cross-kind
+  merge.
+- **`eval/run_all.py` SqliteGraphBackend swap** — public benchmark
+  runner switched from MemoryBackend (Python-loop FTS) to
+  SqliteGraphBackend (FTS5, C-implemented). 5× speedup on 2Wiki-dev
+  (56k docs × 12k queries: ~7h → ~75min) plus +0.01-0.12 MRR uplift
+  from FTS5's tighter BM25.
+- **22-bench v0.17.1 baseline locked** — added 5 new public benches
+  (TREC-COVID, FiQA, SciFact + wired-up 2Wiki-dev / MuSiQue-dev) for
+  v0.18 generality verification. Mean FTS-only MRR 0.650 across 22
+  benches in 6 distinct domains. See `eval/baselines/qa_latest.json`.
 
 ---
 
