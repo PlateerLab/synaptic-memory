@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — `agent_loop` system prompt: relative-time + multi-source guidance
+
+Two new tip lines in the agent prompt, learned from the v0.18-α1-2 KRRA
+Conv diagnostic:
+
+- **Relative time references** ("올해" / "내년도" / "this year"): the agent
+  should NOT inject a literal year number. The corpus may span multiple
+  years and a hard `2024` filter throws away matches. Search the topic
+  first, narrow by year only after evidence the user wants one.
+- **"X 관련 자료/내용/정보" type questions** ask for *multiple* sources.
+  The agent should not stop after the first ``deep_search`` returns 1-2
+  docs — at least one paraphrase pass before concluding.
+
+These guidance lines are general-purpose and apply to any corpus, not
+just KRRA Conv. The KRRA Conv −23pp regression itself is documented as
+known issue: it stems from a recall ceiling on broad topical queries
+where 5 GT docs share a vague topic word (예산 / 인권), not from agent
+reasoning. Real fix would require either a higher deep_search top-K cap
+or reranker-on-by-default for broad queries — both v0.19+ items.
+
 ## [0.17.2] - 2026-04-19
 
 Patch release bundling the license switch and the

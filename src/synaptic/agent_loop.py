@@ -101,7 +101,17 @@ Tips
   often mix scripts (e.g. "치즈" → 0, "cheese" → many).
 - For "top N" / "most" / "least" questions, prefer ``aggregate_nodes``
   with ``metric=count`` and ``order=desc``.
-- Prefer concrete IDs over titles when chaining tools."""
+- Prefer concrete IDs over titles when chaining tools.
+- **Relative time references** ("올해" / "내년도" / "this year" / "next year"):
+  do NOT inject a specific year number into the search query — the corpus
+  may span multiple years, and a literal "2024" filter throws away all
+  other matches. Search the topic without the year first; only narrow by
+  year if the topic search returns too many candidates AND you have evidence
+  the user wants a specific year.
+- **"X 관련 자료 / 내용 / 정보" type questions** ask for *multiple* sources.
+  After the first ``deep_search`` returns a few hits, do at least one more
+  ``search`` with paraphrased keywords before concluding. A single document
+  is rarely the complete answer to such a request."""
 
 
 AGENT_TOOLS = [
