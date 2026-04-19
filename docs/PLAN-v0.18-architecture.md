@@ -284,7 +284,7 @@ v0.17.1 까지 ship한 것:
 
 2026-04 조사. 코드/멀티모달 corpus → NetworkX in-memory graph 변환 + MCP server. 동일 *agent + graph + MCP* 시장 정면 경쟁자.
 
-### Graphify 가 우리보다 잘 하는 것
+### Graphify 의 표면적 차별 항목
 
 | 항목 | Graphify 구현 | Synaptic 현재 |
 |---|---|---|
@@ -294,17 +294,36 @@ v0.17.1 까지 ship한 것:
 | Multimodal | native pipeline (Whisper transcription + image/PDF/video) | 외부 변환기 의존 |
 | Hyperedges | 3+ 노드 묶는 design rationale 보존 | binary edges only |
 
-### 흡수 가치 (with Synaptic-native reform)
+### 비판적 재평가 — 알고리즘 신규성은 G1 만
 
-5가지 모두 **Synaptic 구조에 자연 통합 가능** — Graphify 는 single-file JSON 인 반면 우리는 SQLite/Kuzu/PG 같은 production backend, hybrid retrieval, LLM-free indexing 원칙을 유지하면서 흡수.
+5 항목 중 algorithm-level 신규 가치 있는 건 **G1 (auto agent priming)** 뿐. 나머지 4 개는:
 
-각 흡수 항목은 `docs/ROADMAP.md` v0.18.0+ "Graphify-inspired absorption track" 섹션 참조. 우선순위 / 일정은 v0.18 의 main track (Agent-Native B + Graph-Augmented Anchor A) 와 통합 관리.
+- **Edge confidence/provenance**: Neo4j 등이 옛날부터 표준 — `EXTRACTED/INFERRED/AMBIGUOUS` 라벨은 임의적
+- **Leiden community detection**: **Microsoft GraphRAG (arXiv:2404.16130) 가 원전**, Graphify 는 차용
+- **Multimodal converter**: Whisper/pdfplumber/vision LLM 등 standard tools 의 packaging — 알고리즘 0
+- **Hyperedges**: 학술적 흥미, 실용 미미 (1970s 부터 존재)
 
-### 흡수 안 하는 것 (의도적)
+또한 Graphify 의 "**71.5× 토큰 절감**" 마케팅은 **방법론 미공개** + raw-file dump 와 비교한 것으로 추정 — prompt cache 만 적용해도 비슷한 수치. **Retrieval 품질 (MRR/Recall) 측정은 부재**.
+
+### 흡수 결정
+
+| ID | 항목 | 결정 | 사유 |
+|---|---|---|---|
+| **G1** | Auto agent priming | ✅ 흡수 — v0.18 alpha, Agent-Native (B) 의 부분 | UX 패턴 신규, 우리 측정상 agent 첫 1-2 turn 절약 가치 |
+| ~~G2~~ | Edge confidence | ❌ Skip Graphify 식 — production 표준 직접 따라감 | Neo4j 등 옛날부터 표준 |
+| ~~G3~~ | Community detection | ❌ Skip Graphify 식 — GraphRAG paper 직접 reference | Graphify 는 GraphRAG 차용 |
+| ~~G4~~ | Multimodal converter | ❌ Skip Graphify 식 — LangChain / 자체 구현 | Algorithm 0, packaging 차이만 |
+| ~~G5~~ | Hyperedges | ❌ Skip — 사용자 요청 시 재검토 | Niche use case |
+
+### 의도적 비흡수 (Synaptic 차별성 보존)
 
 - **NetworkX in-memory + JSON 단일 파일 storage** — production scale 불가. 우리 multi-backend 유지.
 - **Indexing 시 Claude subagent 호출** — LLM-free indexing 원칙 위반. Synaptic 의 차별성 핵심.
 - **Tree-sitter AST 25-language 코드 파싱** — Synaptic 의 1차 도메인 (한국어 enterprise) 와 무관. 별도 extras 패키지로 community 기여 가능.
+
+### 진짜 알고리즘 SOTA 의 출처 (Graphify 가 아닌 곳)
+
+`§7` 외부 참조 — paper 직접 reference. Graphify 는 productization / marketing 영역에서 학습할 가치 있지만 **algorithm 측면 학습 가치는 G1 1 항목으로 한정**.
 
 ---
 
