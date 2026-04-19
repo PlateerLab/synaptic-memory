@@ -25,9 +25,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "examples" / "ablation"))
 
-from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2  # noqa: E402
+from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
 
-from synaptic.backends.sqlite_graph import SqliteGraphBackend  # noqa: E402
+from synaptic.backends.sqlite_graph import SqliteGraphBackend
 
 GRAPH_PATH = REPO_ROOT / "eval" / "data" / "krra_graph.sqlite"
 QUERY_PATH = REPO_ROOT / "eval" / "data" / "queries" / "krra_hard.json"
@@ -56,9 +56,7 @@ async def _run_one(query, backend, embedder, reranker, *, blend_mode: str):
             backend=backend, embedder=embedder, reranker=reranker, rerank_blend=0.1
         )
         # Patch the reranker so we can capture the score distribution
-    result = await searcher.search(
-        query["query"], k=TOP_K, fts_seed_limit=SEED_LIMIT
-    )
+    result = await searcher.search(query["query"], k=TOP_K, fts_seed_limit=SEED_LIMIT)
     retrieved: list[str] = []
     for ev in result.evidence:
         did = (ev.node.properties or {}).get("doc_id", "")
@@ -133,9 +131,7 @@ async def main() -> None:
 
     print("\nCapturing rerank score stats for each query...")
     for q in queries:
-        scores, std, titles = await _capture_rerank_stats(
-            q["query"], backend, embedder, reranker
-        )
+        scores, std, titles = await _capture_rerank_stats(q["query"], backend, embedder, reranker)
         rr_f = fixed_rrs.get(q["qid"], 0.0)
         rr_a = adaptive_rrs.get(q["qid"], 0.0)
         rows.append(

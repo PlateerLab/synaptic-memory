@@ -21,15 +21,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "examples" / "ablation"))
 
-from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2  # noqa: E402
+from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
 
-from synaptic.backends.memory import MemoryBackend  # noqa: E402
-from synaptic.backends.sqlite_graph import SqliteGraphBackend  # noqa: E402
-from synaptic.extensions.embedder_hyde import HyDEEmbedder  # noqa: E402
-from synaptic.extensions.evidence_search import EvidenceSearch  # noqa: E402
-from synaptic.extensions.llm_provider import OpenAILLMProvider  # noqa: E402
-from synaptic.extensions.reranker_llm import LLMReranker  # noqa: E402
-from synaptic.graph import SynapticGraph  # noqa: E402
+from synaptic.backends.memory import MemoryBackend
+from synaptic.backends.sqlite_graph import SqliteGraphBackend
+from synaptic.extensions.embedder_hyde import HyDEEmbedder
+from synaptic.extensions.evidence_search import EvidenceSearch
+from synaptic.extensions.llm_provider import OpenAILLMProvider
+from synaptic.extensions.reranker_llm import LLMReranker
+from synaptic.graph import SynapticGraph
 
 VLLM = "http://localhost:8012/v1"
 MODEL = "Qwen3.5-27b"
@@ -58,8 +58,10 @@ async def _build_memory_graph(corpus, embedder):
         if not text and not title:
             continue
         await graph.add(
-            title=title or doc_id, content=text,
-            properties={"doc_id": doc_id}, embedding=e,
+            title=title or doc_id,
+            content=text,
+            properties={"doc_id": doc_id},
+            embedding=e,
         )
     return backend
 
@@ -88,15 +90,16 @@ async def _measure(label, *, searcher, queries, id_field):
             hit += 1
     elapsed = time.time() - t0
     n = len(queries)
-    print(f"  {label:<35} MRR={mrr_total/max(n,1):.3f}  Hit={hit}/{n}  ({elapsed:.1f}s)")
+    print(f"  {label:<35} MRR={mrr_total / max(n, 1):.3f}  Hit={hit}/{n}  ({elapsed:.1f}s)")
 
 
 async def autorag_d():
     print("\n=== AutoRAG (114q) — LLM reranker (D) ===")
-    data = json.loads((REPO_ROOT / "tests" / "benchmark" / "data" / "autorag_retrieval.json").read_text())
+    data = json.loads(
+        (REPO_ROOT / "tests" / "benchmark" / "data" / "autorag_retrieval.json").read_text()
+    )
     corpus = [
-        (str(k), str(v.get("title", "")), str(v.get("text", "")))
-        for k, v in data["corpus"].items()
+        (str(k), str(v.get("title", "")), str(v.get("text", ""))) for k, v in data["corpus"].items()
     ]
     qrels = data["qrels"]
     queries = [
@@ -116,11 +119,15 @@ async def autorag_d():
 
     # Baseline (current v0.17.1): bge embedder + bge reranker
     s_bge = EvidenceSearch(backend=backend, embedder=bge_emb, reranker=bge_rer)
-    await _measure("baseline (bge embed + bge rer)", searcher=s_bge, queries=queries, id_field="doc_id")
+    await _measure(
+        "baseline (bge embed + bge rer)", searcher=s_bge, queries=queries, id_field="doc_id"
+    )
 
     # FTS-only: no embedder, no reranker
     s_fts = EvidenceSearch(backend=backend)
-    await _measure("FTS-only (ceiling on this corpus)", searcher=s_fts, queries=queries, id_field="doc_id")
+    await _measure(
+        "FTS-only (ceiling on this corpus)", searcher=s_fts, queries=queries, id_field="doc_id"
+    )
 
     # D: bge embedder + LLM reranker
     s_d = EvidenceSearch(backend=backend, embedder=bge_emb, reranker=llm_rer)
@@ -131,8 +138,12 @@ async def krra_conv_a():
     print("\n=== KRRA Conv (30q) — HyDE (A) ===")
     backend = SqliteGraphBackend(str(REPO_ROOT / "eval" / "data" / "krra_graph.sqlite"))
     await backend.connect()
-    queries = json.loads((REPO_ROOT / "eval" / "data" / "queries" / "krra_conversational.json").read_text())["queries"]
-    id_field = json.loads((REPO_ROOT / "eval" / "data" / "queries" / "krra_conversational.json").read_text()).get("id_field", "doc_id")
+    queries = json.loads(
+        (REPO_ROOT / "eval" / "data" / "queries" / "krra_conversational.json").read_text()
+    )["queries"]
+    id_field = json.loads(
+        (REPO_ROOT / "eval" / "data" / "queries" / "krra_conversational.json").read_text()
+    ).get("id_field", "doc_id")
 
     print(f"queries: {len(queries)}, id_field: {id_field}")
     bge_emb = LocalBgeM3Embedder(device="cuda:0")
@@ -142,7 +153,9 @@ async def krra_conv_a():
 
     # Baseline (v0.17.1): bge embedder + bge reranker
     s_bge = EvidenceSearch(backend=backend, embedder=bge_emb, reranker=bge_rer)
-    await _measure("baseline (bge embed + bge rer)", searcher=s_bge, queries=queries, id_field=id_field)
+    await _measure(
+        "baseline (bge embed + bge rer)", searcher=s_bge, queries=queries, id_field=id_field
+    )
 
     # A: HyDE embedder + bge reranker
     s_a = EvidenceSearch(backend=backend, embedder=hyde_emb, reranker=bge_rer)

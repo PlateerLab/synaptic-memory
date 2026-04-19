@@ -105,9 +105,7 @@ async def _build_arm(
         cumulative += len(batch)
 
         top_k = await _run_queries(graph, queries)
-        checkpoints.append(
-            StepCheckpoint(step_idx=step_idx, n_docs=cumulative, top_k=top_k)
-        )
+        checkpoints.append(StepCheckpoint(step_idx=step_idx, n_docs=cumulative, top_k=top_k))
 
     return checkpoints, total_ingest
 
@@ -134,9 +132,7 @@ async def main() -> None:
             queries.append((str(qid), str(text), ids))
 
     # --- Arm A: batch baseline — all 200 docs in one ingest ---
-    arm_a_checkpoints, arm_a_ingest = await _build_arm(
-        corpus, queries, batches=[corpus]
-    )
+    arm_a_checkpoints, arm_a_ingest = await _build_arm(corpus, queries, batches=[corpus])
     batch_top_k = arm_a_checkpoints[-1].top_k
 
     # --- Arm B: streaming, split into N_STEPS random batches ---
@@ -144,9 +140,7 @@ async def main() -> None:
     shuffled = corpus[:]
     rng.shuffle(shuffled)
     batch_size = max(1, len(shuffled) // N_STEPS)
-    streaming_batches = [
-        shuffled[i : i + batch_size] for i in range(0, len(shuffled), batch_size)
-    ]
+    streaming_batches = [shuffled[i : i + batch_size] for i in range(0, len(shuffled), batch_size)]
     # Collapse any stragglers into the last batch.
     if len(streaming_batches) > N_STEPS:
         last = streaming_batches[N_STEPS - 1]
@@ -154,9 +148,7 @@ async def main() -> None:
             last.extend(extra)
         streaming_batches = streaming_batches[:N_STEPS]
 
-    arm_b_checkpoints, arm_b_ingest = await _build_arm(
-        corpus, queries, batches=streaming_batches
-    )
+    arm_b_checkpoints, arm_b_ingest = await _build_arm(corpus, queries, batches=streaming_batches)
     streaming_top_k = arm_b_checkpoints[-1].top_k
 
     # --- Compare ---
@@ -233,12 +225,8 @@ async def main() -> None:
         f"  bit-wise identical top-10       {identical}/{total_q} "
         f"({100 * identical / total_q:.1f} %)"
     )
-    print(
-        f"  same set, different order       {near_identical}/{total_q}"
-    )
-    print(
-        f"  set mismatched                  {len(diffs)}/{total_q}"
-    )
+    print(f"  same set, different order       {near_identical}/{total_q}")
+    print(f"  set mismatched                  {len(diffs)}/{total_q}")
     print(
         f"  top-1 identical                 {top1_match}/{total_q} "
         f"({100 * top1_match / total_q:.1f} %)"
@@ -246,9 +234,7 @@ async def main() -> None:
     print()
     print(f"  MRR batch                       {mrr_a:.4f}")
     print(f"  MRR streaming                   {mrr_b:.4f}")
-    print(
-        f"  Δ MRR (streaming − batch)       {mrr_b - mrr_a:+.4f}"
-    )
+    print(f"  Δ MRR (streaming - batch)       {mrr_b - mrr_a:+.4f}")
     print()
     print(f"  Full report → {out_path.relative_to(REPO_ROOT)}")
 

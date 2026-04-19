@@ -77,10 +77,18 @@ async def run_one(name: str, corpus: Corpus, k: int) -> RunResult:
         adapter = _load_adapter(name)
     except ImportError as exc:
         return RunResult(
-            system=name, corpus=corpus.name, n_docs=len(corpus.docs),
-            n_queries=len(corpus.queries), mrr=0.0, recall_at_k=0.0,
-            precision_at_k=0.0, hit_count=0, build_sec=0.0, search_sec=0.0,
-            k=k, error=f"not installed ({exc.msg if hasattr(exc, 'msg') else exc})",
+            system=name,
+            corpus=corpus.name,
+            n_docs=len(corpus.docs),
+            n_queries=len(corpus.queries),
+            mrr=0.0,
+            recall_at_k=0.0,
+            precision_at_k=0.0,
+            hit_count=0,
+            build_sec=0.0,
+            search_sec=0.0,
+            k=k,
+            error=f"not installed ({exc.msg if hasattr(exc, 'msg') else exc})",
         )
 
     try:
@@ -92,28 +100,40 @@ async def run_one(name: str, corpus: Corpus, k: int) -> RunResult:
             for query in corpus.queries:
                 try:
                     hits = await adapter.search(query.text, k=k)
-                except Exception as exc:  # noqa: BLE001 - per-query isolation
+                except Exception as exc:
                     print(f"  [warn] {name} failed on qid={query.qid}: {exc}")
                     hits = []
                 retrieved.append(hits)
 
         result = score_run(
-            system=adapter.name, corpus=corpus, retrieved_per_query=retrieved,
-            build_sec=build_t.elapsed, search_sec=search_t.elapsed, k=k,
+            system=adapter.name,
+            corpus=corpus,
+            retrieved_per_query=retrieved,
+            build_sec=build_t.elapsed,
+            search_sec=search_t.elapsed,
+            k=k,
         )
         return result
-    except Exception as exc:  # noqa: BLE001 - capture framework-level failures
+    except Exception as exc:
         traceback.print_exc()
         return RunResult(
-            system=name, corpus=corpus.name, n_docs=len(corpus.docs),
-            n_queries=len(corpus.queries), mrr=0.0, recall_at_k=0.0,
-            precision_at_k=0.0, hit_count=0, build_sec=0.0, search_sec=0.0,
-            k=k, error=str(exc),
+            system=name,
+            corpus=corpus.name,
+            n_docs=len(corpus.docs),
+            n_queries=len(corpus.queries),
+            mrr=0.0,
+            recall_at_k=0.0,
+            precision_at_k=0.0,
+            hit_count=0,
+            build_sec=0.0,
+            search_sec=0.0,
+            k=k,
+            error=str(exc),
         )
     finally:
         try:
             await adapter.close()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
 
@@ -132,9 +152,7 @@ def _write_markdown_report(results: list[RunResult], subset: int | None) -> Path
     ]
     for r in results:
         if r.error:
-            lines.append(
-                f"| {r.system} | {r.corpus} | — | — | — | — | — | — | `{r.error}` |"
-            )
+            lines.append(f"| {r.system} | {r.corpus} | — | — | — | — | — | — | `{r.error}` |")
             continue
         lines.append(
             f"| {r.system} | {r.corpus} | {r.n_docs} | {r.n_queries} | "
@@ -158,7 +176,8 @@ def _write_markdown_report(results: list[RunResult], subset: int | None) -> Path
 async def amain(argv: list[str]) -> int:
     p = argparse.ArgumentParser()
     p.add_argument(
-        "--only", default="synaptic",
+        "--only",
+        default="synaptic",
         help="comma-separated list of adapters to run (synaptic,mem0,cognee,hipporag)",
     )
     p.add_argument("--subset", type=int, default=None, help="first N queries only (for quick POC)")

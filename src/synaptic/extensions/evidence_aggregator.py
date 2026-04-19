@@ -186,25 +186,19 @@ class EvidenceAggregator:
             return []
 
         # --- Kind split: structured rows → atoms, rest → passages ---
-        structured = [
-            s for s in scored
-            if (s.node.properties or {}).get("_table_name")
-        ]
-        passage = [
-            s for s in scored
-            if not (s.node.properties or {}).get("_table_name")
-        ]
+        structured = [s for s in scored if (s.node.properties or {}).get("_table_name")]
+        passage = [s for s in scored if not (s.node.properties or {}).get("_table_name")]
 
         passage_evidence = self._aggregate_passages(
-            passage, k=k, per_document_cap=per_document_cap,
+            passage,
+            k=k,
+            per_document_cap=per_document_cap,
             anchor_categories=anchor_categories,
         )
 
         structured_evidence: list[Evidence] = []
         for cand in structured[:k]:
-            structured_evidence.append(
-                _make_evidence(cand, reason="structured_top_score")
-            )
+            structured_evidence.append(_make_evidence(cand, reason="structured_top_score"))
 
         # Preserve aggregator-specific ordering when only one kind is
         # present:

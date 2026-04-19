@@ -61,9 +61,7 @@ class Mem0Adapter(Adapter):
         try:
             from mem0 import Memory  # type: ignore
         except ImportError as exc:  # pragma: no cover
-            raise ImportError(
-                "Mem0Adapter needs mem0ai. Install: pip install mem0ai"
-            ) from exc
+            raise ImportError("Mem0Adapter needs mem0ai. Install: pip install mem0ai") from exc
         self._Memory = Memory
         self._client = None
         self._user_id = f"synbench_{uuid.uuid4().hex[:8]}"
@@ -110,5 +108,5 @@ class Mem0Adapter(Adapter):
         if self._client is not None:
             try:
                 self._client.delete_all(user_id=self._user_id)
-            except Exception:  # noqa: BLE001 - best-effort cleanup
+            except Exception:
                 pass

@@ -185,9 +185,7 @@ async def run_one(
 
     embeddings: list[list[float] | None] = [None] * len(items)
     if embedder is not None:
-        embed_inputs = [
-            f"{title}\n{(text or '')[:1500]}" for _doc_id, title, text in items
-        ]
+        embed_inputs = [f"{title}\n{(text or '')[:1500]}" for _doc_id, title, text in items]
         for i in range(0, len(embed_inputs), embed_batch):
             chunk = embed_inputs[i : i + embed_batch]
             vecs = await embedder.embed_batch(chunk)
@@ -368,7 +366,7 @@ async def amain(argv: list[str]) -> int:
         type=int,
         default=64,
         help="Pre-compute corpus embeddings in batches of this size "
-        "(default: 64 — safe under 6 GB free VRAM). Bump to 128–256 "
+        "(default: 64 - safe under 6 GB free VRAM). Bump to 128-256 "
         "if more headroom.",
     )
     p.add_argument(
@@ -437,8 +435,7 @@ async def amain(argv: list[str]) -> int:
         )
         decomposer = LLMChainDecomposer(llm=llm)
         decomposer_label = (
-            f"LLMChainDecomposer ({args.llm_decomposer_model} @ "
-            f"{args.llm_decomposer_url})"
+            f"LLMChainDecomposer ({args.llm_decomposer_model} @ {args.llm_decomposer_url})"
         )
     elif args.rule_decomposer:
         from synaptic.extensions.query_decomposer import QueryDecomposer

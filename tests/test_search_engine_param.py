@@ -78,8 +78,7 @@ class TestEngineParam:
         assert "fts" in result.stages_used
         # Should emit a DeprecationWarning.
         assert any(
-            issubclass(w.category, DeprecationWarning)
-            and "engine='legacy'" in str(w.message)
+            issubclass(w.category, DeprecationWarning) and "engine='legacy'" in str(w.message)
             for w in recwarn
         )
 

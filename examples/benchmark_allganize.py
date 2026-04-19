@@ -73,6 +73,7 @@ def _recall_at_k(retrieved: list[str], relevant: set[str], k: int) -> float:
     hits = sum(1 for d in top_k if d in relevant)
     return hits / len(relevant)
 
+
 BENCH_DATA = REPO_ROOT / "tests" / "benchmark" / "data"
 DATASETS = [
     ("Allganize RAG-ko", BENCH_DATA / "allganize_rag_ko.json"),
@@ -92,9 +93,7 @@ class Report:
     elapsed_sec: float
 
 
-def _parse_queries(
-    raw_queries, qrels
-) -> list[tuple[str, str, set[str]]]:
+def _parse_queries(raw_queries, qrels) -> list[tuple[str, str, set[str]]]:
     """Normalize BEIR-style qrels + either dict or list query formats."""
     out: list[tuple[str, str, set[str]]] = []
     if isinstance(raw_queries, dict):
@@ -244,7 +243,9 @@ async def main(argv: list[str] | None = None) -> None:
     print(f"  embedder: {embedder_label}")
     print(f"  reranker: {reranker_label}")
     print()
-    print(f"{'Dataset':<22} {'Corpus':>8} {'Queries':>8} {'MRR':>8} {'R@10':>8} {'Hit':>10} {'Time':>8}")
+    print(
+        f"{'Dataset':<22} {'Corpus':>8} {'Queries':>8} {'MRR':>8} {'R@10':>8} {'Hit':>10} {'Time':>8}"
+    )
     print("-" * 80)
 
     reports: list[Report] = []

@@ -184,7 +184,10 @@ AGENT_TOOLS = [
                 "properties": {
                     "table": {"type": "string"},
                     "property": {"type": "string"},
-                    "op": {"type": "string", "description": ">=, <=, >, <, ==, !=, contains, starts_with, date_range"},
+                    "op": {
+                        "type": "string",
+                        "description": ">=, <=, >, <, ==, !=, contains, starts_with, date_range",
+                    },
                     "value": {"type": "string"},
                     "limit": {"type": "integer"},
                     "from_ids": {"type": "array", "items": {"type": "string"}},
@@ -264,7 +267,7 @@ class AgentSearchResult:
     query: str
     final_answer: str = ""
     found_ids: set[str] = field(default_factory=set)
-    nodes: list["Node"] = field(default_factory=list)
+    nodes: list[Node] = field(default_factory=list)
     turns_used: int = 0
     tool_calls_made: int = 0
     elapsed_ms: float = 0.0
@@ -276,10 +279,10 @@ class AgentSearchResult:
 async def _dispatch_tool(
     name: str,
     args: dict,
-    backend: "StorageBackend",
+    backend: StorageBackend,
     session,
     *,
-    embedder: "EmbeddingProvider | None" = None,
+    embedder: EmbeddingProvider | None = None,
 ) -> dict:
     """Route an LLM-emitted tool call to the actual Synaptic tool."""
     from synaptic.agent_tools import (
@@ -298,8 +301,11 @@ async def _dispatch_tool(
     try:
         if name == "deep_search":
             r = await deep_search_tool(
-                backend, session, args.get("query", ""),
-                category=args.get("category"), embedder=embedder,
+                backend,
+                session,
+                args.get("query", ""),
+                category=args.get("category"),
+                embedder=embedder,
             )
         elif name == "search":
             r = await search_tool(backend, session, args.get("query", ""), embedder=embedder)
@@ -307,16 +313,22 @@ async def _dispatch_tool(
             r = await expand_tool(backend, session, args.get("node_id", ""))
         elif name == "follow":
             r = await follow_tool(
-                backend, session, args.get("node_id", ""),
+                backend,
+                session,
+                args.get("node_id", ""),
                 args.get("edge_kind", "related"),
             )
         elif name == "get_document":
             r = await get_document_tool(
-                backend, session, args.get("doc_id", ""), query=args.get("query", ""),
+                backend,
+                session,
+                args.get("doc_id", ""),
+                query=args.get("query", ""),
             )
         elif name == "filter_nodes":
             r = await filter_nodes_tool(
-                backend, session,
+                backend,
+                session,
                 table=args.get("table", ""),
                 property=args.get("property", ""),
                 op=args.get("op", "contains"),
@@ -326,7 +338,8 @@ async def _dispatch_tool(
             )
         elif name == "aggregate_nodes":
             r = await aggregate_nodes_tool(
-                backend, session,
+                backend,
+                session,
                 table=args.get("table", ""),
                 group_by=args.get("group_by", ""),
                 metric=args.get("metric", "count"),
@@ -340,7 +353,8 @@ async def _dispatch_tool(
             )
         elif name == "join_related":
             r = await join_related_tool(
-                backend, session,
+                backend,
+                session,
                 from_value=args.get("from_value", ""),
                 from_values=args.get("from_values") or None,
                 fk_property=args.get("fk_property", ""),
@@ -371,8 +385,12 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
         Hard where the answer IS the group key).
     """
     for key in (
-        "evidence", "results", "merged_evidence", "matches",
-        "expanded_neighbours", "neighbours",
+        "evidence",
+        "results",
+        "merged_evidence",
+        "matches",
+        "expanded_neighbours",
+        "neighbours",
     ):
         for item in data.get(key, []):
             if not isinstance(item, dict):
@@ -435,10 +453,7 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
             found_ids.add(nt)
 
         looks_like_pk = (
-            len(g) <= 30
-            and " " not in g
-            and "-" not in g[:5]
-            and not g.startswith("20")
+            len(g) <= 30 and " " not in g and "-" not in g[:5] and not g.startswith("20")
         )
         if not looks_like_pk:
             continue
@@ -469,11 +484,11 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
 async def run_agent_loop(
     *,
     client: Any,
-    backend: "StorageBackend",
+    backend: StorageBackend,
     query: str,
     model: str = "gpt-4o-mini",
     max_turns: int = 5,
-    embedder: "EmbeddingProvider | None" = None,
+    embedder: EmbeddingProvider | None = None,
     system_prompt: str | None = None,
     extra_context: str | None = None,
 ) -> AgentSearchResult:
@@ -535,7 +550,10 @@ async def run_agent_loop(
         turns_used = turn + 1
         try:
             resp = await client.chat.completions.create(
-                model=model, messages=messages, tools=AGENT_TOOLS, max_tokens=2048,
+                model=model,
+                messages=messages,
+                tools=AGENT_TOOLS,
+                max_tokens=2048,
             )
         except Exception as exc:
             logger.warning("agent LLM call failed at turn %d: %s", turn, exc)

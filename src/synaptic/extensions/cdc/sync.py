@@ -269,9 +269,7 @@ class TimestampTableSyncer:
             pk_val = row.get(schema.primary_key)
             if pk_val is not None:
                 pk_strs.append(canonical_pk(pk_val))
-        prior_index = await self._store.get_pk_index_batch(
-            self._source_url, schema.name, pk_strs
-        )
+        prior_index = await self._store.get_pk_index_batch(self._source_url, schema.name, pk_strs)
 
         row_is_new: list[bool] = []
         prior_fks: dict[str, dict[str, str]] = {}
@@ -281,9 +279,7 @@ class TimestampTableSyncer:
                 row_is_new.append(False)
                 continue
             pk_str = canonical_pk(pk_val)
-            existing, _prior_hash, prior_fk_json = prior_index.get(
-                pk_str, (None, None, None)
-            )
+            existing, _prior_hash, prior_fk_json = prior_index.get(pk_str, (None, None, None))
             row_is_new.append(existing is None)
             if existing is not None and fk_map and prior_fk_json:
                 try:
@@ -529,17 +525,13 @@ class HashTableSyncer:
             pk_to_row[pk_str] = row
             new_hashes[pk_str] = row_hash(row)
 
-        prior_index = await self._store.get_pk_index_batch(
-            self._source_url, schema.name, pk_list
-        )
+        prior_index = await self._store.get_pk_index_batch(self._source_url, schema.name, pk_list)
 
         to_ingest: list[dict[str, Any]] = []
         prior_fks: dict[str, dict[str, str]] = {}
         for pk_str, row in pk_to_row.items():
             new_hash = new_hashes[pk_str]
-            existing_node, prior_hash, prior_fk_json = prior_index.get(
-                pk_str, (None, None, None)
-            )
+            existing_node, prior_hash, prior_fk_json = prior_index.get(pk_str, (None, None, None))
 
             if existing_node is None:
                 stats.added += 1

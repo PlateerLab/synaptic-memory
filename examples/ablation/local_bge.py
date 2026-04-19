@@ -42,10 +42,9 @@ class LocalBgeM3Embedder:
 
     def __init__(self, *, device: str = "cuda:0", batch_size: int = 64) -> None:
         import os
+
         # Reduce fragmentation in tight VRAM (we co-exist with vLLM).
-        os.environ.setdefault(
-            "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True"
-        )
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         import torch
         from transformers import AutoModel, AutoTokenizer
 

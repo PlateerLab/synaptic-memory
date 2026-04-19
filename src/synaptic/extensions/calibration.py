@@ -77,7 +77,7 @@ class CalibrationResult:
         return json.dumps(asdict(self))
 
     @classmethod
-    def from_json(cls, raw: str) -> "CalibrationResult":
+    def from_json(cls, raw: str) -> CalibrationResult:
         data = json.loads(raw)
         return cls(**data)
 
@@ -147,11 +147,7 @@ async def calibrate_corpus(
     sync). Cheap (N FTS calls, no LLM, no embedder).
     """
     nodes = await backend.list_nodes(limit=10_000)
-    candidates = [
-        n
-        for n in nodes
-        if n.title and n.title.strip() and (n.content or "").strip()
-    ]
+    candidates = [n for n in nodes if n.title and n.title.strip() and (n.content or "").strip()]
     if not candidates:
         # No content-bearing nodes — degenerate corpus, fall back to
         # default config.

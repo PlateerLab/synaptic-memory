@@ -46,7 +46,6 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from datetime import UTC
 
-from synaptic.backends.memory import MemoryBackend
 from synaptic.graph import SynapticGraph
 from tests.benchmark.metrics import BenchmarkResult
 
@@ -345,6 +344,7 @@ async def run_public_dataset(
     # 5-10× faster on the same workload. Tempfile so we don't pollute
     # the data dir; backend.close() at the end deletes via OS cleanup.
     import tempfile
+
     from synaptic.backends.sqlite_graph import SqliteGraphBackend
 
     tmp_db = tempfile.NamedTemporaryFile(
@@ -1153,6 +1153,7 @@ async def run_agent_benchmark_public(
     os.environ["OPENAI_API_KEY"] = api_key or "ollama"
 
     from openai import AsyncOpenAI
+
     from synaptic.backends.sqlite_graph import SqliteGraphBackend
 
     client = AsyncOpenAI(base_url=llm_base_url) if llm_base_url else AsyncOpenAI()
@@ -1169,9 +1170,7 @@ async def run_agent_benchmark_public(
     if isinstance(raw_corpus, dict):
         for doc_id, doc in raw_corpus.items():
             if isinstance(doc, dict):
-                corpus.append(
-                    (str(doc_id), str(doc.get("title", "")), str(doc.get("text", "")))
-                )
+                corpus.append((str(doc_id), str(doc.get("title", "")), str(doc.get("text", ""))))
             elif isinstance(doc, str):
                 corpus.append((str(doc_id), "", doc))
 
@@ -1182,7 +1181,9 @@ async def run_agent_benchmark_public(
             ids = (
                 set(str(k) for k in rel.keys())
                 if isinstance(rel, dict)
-                else set(map(str, rel)) if isinstance(rel, list) else set()
+                else set(map(str, rel))
+                if isinstance(rel, list)
+                else set()
             )
             if ids and text:
                 queries.append({"qid": str(qid), "query": str(text), "relevant_docs": list(ids)})
@@ -1605,7 +1606,8 @@ async def main():
         import sys as _sys
 
         _sys.path.insert(
-            0, str(Path(__file__).resolve().parent.parent / "examples" / "ablation")
+            0,
+            str(Path(__file__).resolve().parent.parent / "examples" / "ablation"),  # noqa: ASYNC240
         )
         from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
 
@@ -1708,9 +1710,9 @@ async def main():
             # both fast and full modes.
             if args.agent_public:
                 public_pool = [
-                    d for d in PUBLIC_DATASETS
-                    if d.path.exists() and d.name != "HotPotQA-24"
-                    and (not args.quick or d.quick)
+                    d
+                    for d in PUBLIC_DATASETS
+                    if d.path.exists() and d.name != "HotPotQA-24" and (not args.quick or d.quick)
                 ]
                 for cfg in public_pool:
                     print(
@@ -1733,9 +1735,7 @@ async def main():
                         else:
                             print(f"solved={r.hit_rate} ({r.elapsed:.1f}s)")
                     except Exception as exc:
-                        results.append(
-                            RunResult(name=cfg.name + " (agent)", error=str(exc)[:80])
-                        )
+                        results.append(RunResult(name=cfg.name + " (agent)", error=str(exc)[:80]))
                         print(f"❌ {exc}")
 
     print_table(results, baseline)

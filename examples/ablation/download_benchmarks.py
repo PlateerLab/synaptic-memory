@@ -42,9 +42,7 @@ OUT_DIR = REPO_ROOT / "tests" / "benchmark" / "data"
 
 def _hash_doc(title: str, text: str) -> str:
     """Stable doc_id based on content — dedupes across questions."""
-    return hashlib.blake2b(
-        (title + "||" + text).encode("utf-8"), digest_size=8
-    ).hexdigest()
+    return hashlib.blake2b((title + "||" + text).encode("utf-8"), digest_size=8).hexdigest()
 
 
 def _write(path: Path, obj: dict) -> None:

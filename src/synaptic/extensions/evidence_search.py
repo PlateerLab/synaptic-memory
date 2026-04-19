@@ -294,28 +294,21 @@ class EvidenceSearch:
             existing_ids = {n.id for n in all_seeds}
             for table_name in preferred_tables:
                 in_table_count = sum(
-                    1 for n in fts_nodes
-                    if (n.properties or {}).get("_table_name") == table_name
+                    1 for n in fts_nodes if (n.properties or {}).get("_table_name") == table_name
                 )
                 if in_table_count >= 3:
                     continue  # table is well-represented; FTS is doing fine
 
                 try:
-                    aug_nodes = await self._backend.search_fts(
-                        f"{table_name} {query}", limit=5
-                    )
+                    aug_nodes = await self._backend.search_fts(f"{table_name} {query}", limit=5)
                 except Exception as exc:
-                    logger.warning(
-                        "table-hint FTS failed (%r): %s", table_name, exc
-                    )
+                    logger.warning("table-hint FTS failed (%r): %s", table_name, exc)
                     continue
                 for node in aug_nodes:
                     if (node.properties or {}).get("_table_name") != table_name:
                         continue
                     if node.id in existing_ids:
-                        fts_scores[node.id] = max(
-                            fts_scores.get(node.id, 0.0), 0.96
-                        )
+                        fts_scores[node.id] = max(fts_scores.get(node.id, 0.0), 0.96)
                     else:
                         all_seeds.append(node)
                         existing_ids.add(node.id)
@@ -370,9 +363,7 @@ class EvidenceSearch:
                 rrf_max = max(rrf.values())
                 for node_id, score in rrf.items():
                     normalised = 0.10 + 0.85 * (score / rrf_max)
-                    fts_scores[node_id] = max(
-                        fts_scores.get(node_id, 0.0), normalised
-                    )
+                    fts_scores[node_id] = max(fts_scores.get(node_id, 0.0), normalised)
 
         # Step 3 — shallow graph expansion
         expanded = await self._expander.expand(
@@ -440,9 +431,7 @@ class EvidenceSearch:
                 pass
             self._calibration_loaded = True
         active_blend = (
-            self._calibrated_blend
-            if self._calibrated_blend is not None
-            else self._rerank_blend
+            self._calibrated_blend if self._calibrated_blend is not None else self._rerank_blend
         )
 
         # Step 4b — cross-encoder reranking (optional, highest quality).
@@ -470,13 +459,13 @@ class EvidenceSearch:
             top_n = min(20, len(scored))
             top_candidates = scored[:top_n]
             rerank_indices = [
-                i for i, s in enumerate(top_candidates)
+                i
+                for i, s in enumerate(top_candidates)
                 if not (s.node.properties or {}).get("_table_name")
             ]
             if rerank_indices:
                 documents = [
-                    f"{top_candidates[i].node.title}\n"
-                    f"{top_candidates[i].node.content[:400]}"
+                    f"{top_candidates[i].node.title}\n{top_candidates[i].node.content[:400]}"
                     for i in rerank_indices
                 ]
                 try:
@@ -504,10 +493,8 @@ class EvidenceSearch:
                     # weighted blend is the v0.17.1 default.
                     if len(rerank_scores) >= 2:
                         mean = sum(rerank_scores) / len(rerank_scores)
-                        var = sum(
-                            (s - mean) ** 2 for s in rerank_scores
-                        ) / len(rerank_scores)
-                        std = var ** 0.5
+                        var = sum((s - mean) ** 2 for s in rerank_scores) / len(rerank_scores)
+                        std = var**0.5
                         discriminator = min(1.0, std / 3.0)
                     else:
                         discriminator = 1.0

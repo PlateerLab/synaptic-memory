@@ -156,7 +156,7 @@ class RunResult:
         ]
 
 
-HEADER = ["System", "Corpus", "Docs", "MRR", f"R@10", "Hit", "Build", "Search"]
+HEADER = ["System", "Corpus", "Docs", "MRR", "R@10", "Hit", "Build", "Search"]
 
 
 def score_run(
@@ -209,7 +209,7 @@ def format_table(results: list[RunResult]) -> str:
 class Timer:
     """Context manager that captures elapsed wall-clock seconds."""
 
-    def __enter__(self) -> "Timer":
+    def __enter__(self) -> Timer:
         self._t0 = time.perf_counter()
         return self
 

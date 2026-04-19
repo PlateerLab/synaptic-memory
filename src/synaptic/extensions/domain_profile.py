@@ -478,9 +478,7 @@ class DomainProfile:
             for table_name, hints in table_hints_raw.items():
                 if not isinstance(table_name, str) or not isinstance(hints, list):
                     continue
-                table_query_hints[table_name] = [
-                    str(h) for h in hints if isinstance(h, str) and h
-                ]
+                table_query_hints[table_name] = [str(h) for h in hints if isinstance(h, str) and h]
 
         return cls(
             name=name,

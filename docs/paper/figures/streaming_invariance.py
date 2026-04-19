@@ -58,7 +58,9 @@ def main() -> None:
         f"Top-10 agreement: batch vs. 10-step streaming  (n={total})",
         fontsize=10,
     )
-    ax_top.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=1, fontsize=9)
+    ax_top.legend(
+        frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=1, fontsize=9
+    )
 
     # Right: MRR side-by-side
     mrr_vals = [r["mrr_batch"], r["mrr_streaming"]]
@@ -82,9 +84,7 @@ def main() -> None:
     ax_mrr.yaxis.grid(True, linestyle=":", alpha=0.6)
     ax_mrr.set_axisbelow(True)
     ax_mrr.set_ylabel("MRR @ 10")
-    ax_mrr.set_title(
-        f"MRR under streaming  (Δ = {r['mrr_delta']:+.4f})", fontsize=10
-    )
+    ax_mrr.set_title(f"MRR under streaming  (Δ = {r['mrr_delta']:+.4f})", fontsize=10)
 
     fig.tight_layout()
     fig.savefig(HERE / "streaming_invariance.pdf")

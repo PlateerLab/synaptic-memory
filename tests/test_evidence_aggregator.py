@@ -280,8 +280,13 @@ def _structured_scored(id_: str, *, total: float, table_name: str) -> ScoredCand
         level=ConsolidationLevel.L0_RAW,
     )
     return ScoredCandidate(
-        node=node, total=total, lexical=total, semantic=0.0, graph=0.5,
-        structural=0.0, reason="seed",
+        node=node,
+        total=total,
+        lexical=total,
+        semantic=0.0,
+        graph=0.5,
+        structural=0.0,
+        reason="seed",
     )
 
 
@@ -333,8 +338,13 @@ class TestKindAwareSplit:
             tags=["_phrase"],
         )
         cand_a = ScoredCandidate(
-            node=node, total=0.9, lexical=0.9, semantic=0.0, graph=0.5,
-            structural=0.0, reason="seed",
+            node=node,
+            total=0.9,
+            lexical=0.9,
+            semantic=0.0,
+            graph=0.5,
+            structural=0.0,
+            reason="seed",
         )
         node_b = Node(
             id="phrase_bonn",
@@ -346,8 +356,13 @@ class TestKindAwareSplit:
             tags=["_phrase"],
         )
         cand_b = ScoredCandidate(
-            node=node_b, total=0.8, lexical=0.8, semantic=0.0, graph=0.5,
-            structural=0.0, reason="seed",
+            node=node_b,
+            total=0.8,
+            lexical=0.8,
+            semantic=0.0,
+            graph=0.5,
+            structural=0.0,
+            reason="seed",
         )
         result = agg.aggregate(scored=[cand_a, cand_b], k=2, per_document_cap=1)
         # Cap=1 under passage path should drop the second

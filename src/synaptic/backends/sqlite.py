@@ -59,14 +59,39 @@ _KO_PARTICLE = re.compile(
 _KO_QUERY_NOISE: frozenset[str] = frozenset(
     {
         # interrogatives + demonstratives
-        "무엇", "어떻", "어떤", "어떠", "어떠한", "왜", "언제", "어디",
-        "그것", "이것", "저것", "이", "그", "저", "것", "수",
+        "무엇",
+        "어떻",
+        "어떤",
+        "어떠",
+        "어떠한",
+        "왜",
+        "언제",
+        "어디",
+        "그것",
+        "이것",
+        "저것",
+        "이",
+        "그",
+        "저",
+        "것",
+        "수",
         # "~대해", "~관련" discourse glue
-        "대해", "대한", "대하", "관련", "관한", "관하",
+        "대해",
+        "대한",
+        "대하",
+        "관련",
+        "관한",
+        "관하",
         # explanatory imperatives broken up by Kiwi
-        "설명", "말씀", "주시", "바랍니다", "해주",
+        "설명",
+        "말씀",
+        "주시",
+        "바랍니다",
+        "해주",
         # copulas and existentials that slip through
-        "있", "없", "되",
+        "있",
+        "없",
+        "되",
     }
 )
 

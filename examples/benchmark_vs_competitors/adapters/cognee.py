@@ -30,9 +30,7 @@ class CogneeAdapter(Adapter):
         try:
             import cognee  # type: ignore  # noqa: F401
         except ImportError as exc:  # pragma: no cover
-            raise ImportError(
-                "CogneeAdapter needs cognee. Install: pip install cognee"
-            ) from exc
+            raise ImportError("CogneeAdapter needs cognee. Install: pip install cognee") from exc
         self._dataset = dataset
         # Store a {doc_id: preview} map so we can recover doc_ids from
         # Cognee's search results, which return text snippets.
@@ -46,7 +44,7 @@ class CogneeAdapter(Adapter):
         try:
             await cognee.prune.prune_data()
             await cognee.prune.prune_system(metadata=True)
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception:
             pass
 
         for doc in corpus.docs:

@@ -23,7 +23,7 @@ retrieval score, and any structured properties (doc_id, category, ...).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 try:
     from langchain_core.callbacks import (
@@ -65,7 +65,7 @@ class SynapticRetriever(BaseRetriever):
     k: int = 5
     engine: str = "evidence"
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config: ClassVar[dict] = {"arbitrary_types_allowed": True}
 
     async def _aget_relevant_documents(
         self,

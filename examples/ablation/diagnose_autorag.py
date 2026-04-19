@@ -26,11 +26,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "examples" / "ablation"))
 
-from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2  # noqa: E402
+from local_bge import LocalBgeM3Embedder, LocalBgeRerankerV2
 
-from synaptic.backends.memory import MemoryBackend  # noqa: E402
-from synaptic.extensions.evidence_search import EvidenceSearch  # noqa: E402
-from synaptic.graph import SynapticGraph  # noqa: E402
+from synaptic.backends.memory import MemoryBackend
+from synaptic.extensions.evidence_search import EvidenceSearch
+from synaptic.graph import SynapticGraph
 
 TOP_K = 10
 DATA_PATH = REPO_ROOT / "tests" / "benchmark" / "data" / "autorag_retrieval.json"
