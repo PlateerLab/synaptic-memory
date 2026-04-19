@@ -206,6 +206,20 @@ class EvidenceAggregator:
                 _make_evidence(cand, reason="structured_top_score")
             )
 
+        # Preserve aggregator-specific ordering when only one kind is
+        # present:
+        #   - passage_evidence carries MMR-adjusted order, but its
+        #     ``score`` field stores the *raw* total (pre-MMR). Sorting
+        #     by score here would revert the diversity work — measured
+        #     as a −6.5pp regression on KRRA Hard FTS-only.
+        #   - structured_evidence is already in score-descending order.
+        # Only when *both* kinds are present do we re-merge by score so
+        # the top-K cap respects relative magnitudes across kinds.
+        if not structured_evidence:
+            return passage_evidence[:k]
+        if not passage_evidence:
+            return structured_evidence[:k]
+
         merged = passage_evidence + structured_evidence
         merged.sort(key=lambda e: e.score, reverse=True)
         return merged[:k]

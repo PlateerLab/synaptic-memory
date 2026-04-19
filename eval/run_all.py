@@ -337,8 +337,23 @@ async def run_public_dataset(
     if not corpus:
         return RunResult(name=cfg.name, error="could not parse corpus")
 
-    # Full pipeline: build graph via graph.add()
-    backend = MemoryBackend()
+    # v0.18-prep — public datasets switched to SqliteGraphBackend
+    # (FTS5, C-implemented) instead of MemoryBackend (Python O(N) loop).
+    # MemoryBackend FTS scaled badly on the new BEIR / 2Wiki / MuSiQue
+    # corpora (2Wiki: 56k docs × 12k queries = 712M comparisons → ~7
+    # hours per measurement). SqliteGraphBackend with FTS5 + HNSW is
+    # 5-10× faster on the same workload. Tempfile so we don't pollute
+    # the data dir; backend.close() at the end deletes via OS cleanup.
+    import tempfile
+    from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
+    tmp_db = tempfile.NamedTemporaryFile(
+        prefix=f"public_{cfg.name.replace(' ', '_')}_",
+        suffix=".db",
+        delete=False,
+    )
+    tmp_db.close()
+    backend = SqliteGraphBackend(tmp_db.name)
     await backend.connect()
     graph = SynapticGraph(backend, embedder=embedder, reranker=reranker)
 
@@ -459,6 +474,17 @@ async def run_public_dataset(
         )
 
     elapsed = time.time() - t0
+
+    # Clean up the per-bench tempfile + sidecar HNSW files
+    await backend.close()
+    import os as _os
+
+    for ext in ("", ".hnsw", ".hnsw.meta.json"):
+        _path = tmp_db.name + ext
+        try:
+            _os.unlink(_path)
+        except FileNotFoundError:
+            pass
 
     summary = bench.summary()
     total_q = summary.get("total_queries", 0)

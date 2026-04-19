@@ -1,0 +1,4 @@
+
+=== SciFact (SqliteGraphBackend) ===
+MRR=0.623 P@k=0.088 R@k=0.799 elapsed=74.2s
+corpus=5183 hit=246/300

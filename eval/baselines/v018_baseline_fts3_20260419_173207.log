@@ -1,0 +1,57 @@
+
+Running 22 benchmarks...
+  embedder: none
+  reranker: none
+  KRRA Easy... MRR=0.967 (10.3s)
+  KRRA Hard... MRR=0.583 (17.8s)
+  assort Easy... /home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:222: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['orders'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+/home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:222: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['broadcasts'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+MRR=0.856 (3.5s)
+  assort Hard... MRR=0.000 (7.4s)
+  X2BEE Easy... MRR=1.000 (1.5s)
+  X2BEE Hard... MRR=0.368 (0.8s)
+  KRRA Conv... MRR=0.146 (13.9s)
+  assort Conv... MRR=0.472 (6.0s)
+  X2BEE Conv... MRR=0.164 (1.2s)
+  HotPotQA-24... MRR=0.909 (2.1s)
+  HotPotQA-200... MRR=0.853 (19.9s)
+  Allganize RAG-ko... MRR=0.959 (13.4s)
+  Allganize RAG-Eval... MRR=0.927 (11.7s)
+  PublicHealthQA... MRR=0.611 (5.0s)
+  AutoRAG... MRR=0.895 (20.3s)
+  KLUE-MRC... MRR=0.772 (1487.0s)
+  Ko-StrategyQA... MRR=0.645 (62.1s)
+  2Wiki-dev... MRR=0.837 (4521.4s)
+  MuSiQue-dev... MRR=0.698 (515.6s)
+  TREC-COVID... MRR=0.724 (77.2s)
+  FiQA... MRR=0.294 (325.2s)
+  SciFact... MRR=0.623 (64.5s)
+
+Dataset                 Corpus     MRR    P@10    R@10    nDCG      Hit    Time  Status
+-----------------------------------------------------------------------------------------------
+KRRA Easy                   20   0.967   0.591   0.857   0.866    20/20   10.3s  ✅
+KRRA Hard                   40   0.583   0.324   0.196   0.312    29/40   17.8s  ✅
+assort Easy                 15   0.856   0.100   0.933   0.875    14/15    3.5s  ✅
+assort Hard                 40   0.000   0.000   0.000   0.000     0/40    7.4s  ✅
+X2BEE Easy                  20   1.000   0.140   1.000   1.000    20/20    1.5s  ✅
+X2BEE Hard                  20   0.368   0.100   0.329   0.368     7/20    0.8s  ✅
+KRRA Conv                   30   0.146   0.058   0.073   0.073     8/30   13.9s  ✅
+assort Conv                 30   0.472   0.092   0.521   0.459    14/30    6.0s  ✅
+X2BEE Conv                  30   0.164   0.022   0.185   0.166     6/30    1.2s  ✅
+HotPotQA-24                226   0.909   0.192   0.958   0.847    24/24    2.1s  ✅
+HotPotQA-200             1,990   0.853   0.170   0.850   0.744  196/200   19.9s  ✅
+Allganize RAG-ko           200   0.959   0.106   0.995   0.967  199/200   13.4s  ✅
+Allganize RAG-Eval         300   0.927   0.099   0.973   0.938  292/300   11.7s  ✅
+PublicHealthQA              77   0.611   0.086   0.857   0.670    66/77    5.0s  ✅
+AutoRAG                    720   0.895   0.099   0.991   0.919  113/114   20.3s  ✅
+KLUE-MRC                 5,841   0.772   0.086   0.855   0.792 4992/5841 1487.0s  ✅
+Ko-StrategyQA            9,251   0.645   0.135   0.724   0.614  490/592   62.1s  ✅
+2Wiki-dev               56,687   0.837   0.144   0.608   0.620 11454/12576 4521.4s  ✅
+MuSiQue-dev             21,100   0.698   0.122   0.486   0.473 2123/2417  515.6s  ✅
+TREC-COVID             171,332   0.724   0.544   0.013   0.553    49/50   77.2s  ✅
+FiQA                    57,638   0.294   0.065   0.294   0.231  310/648  325.2s  ✅
+SciFact                  5,183   0.623   0.088   0.799   0.660  246/300   64.5s  ✅
+
+Results saved → /home/gpuuser/sonAIengine/synaptic-memory/eval/baselines/qa_latest.json

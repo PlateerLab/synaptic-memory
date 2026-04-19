@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "synaptic_version": "0.17.0",
-    "saved_at_utc": "2026-04-19T02:48:25+00:00",
+    "synaptic_version": "0.17.1",
+    "saved_at_utc": "2026-04-19T13:09:03+00:00",
     "corpus_md5": {
       "krra_chunks_jsonl": "missing",
       "krra_documents_jsonl": "missing",
@@ -24,17 +24,17 @@
     "note": "Baseline written by eval/run_all.py. The `_meta` block captures corpus + query file hashes so phantom regressions from drifting source data are easy to diagnose. If you see a score change after a code-only PR, compare the hashes first."
   },
   "KRRA Easy": {
-    "mrr": 0.975,
+    "mrr": 0.9667,
     "p_at_k": 0.5914,
     "r_at_k": 0.8572,
-    "ndcg": 0.8822,
+    "ndcg": 0.8664,
     "corpus_size": 20
   },
   "KRRA Hard": {
-    "mrr": 0.5887,
-    "p_at_k": 0.3312,
-    "r_at_k": 0.2048,
-    "ndcg": 0.3198,
+    "mrr": 0.5828,
+    "p_at_k": 0.3243,
+    "r_at_k": 0.1961,
+    "ndcg": 0.3124,
     "corpus_size": 40
   },
   "assort Easy": {
@@ -66,10 +66,10 @@
     "corpus_size": 20
   },
   "KRRA Conv": {
-    "mrr": 0.1659,
-    "p_at_k": 0.0592,
+    "mrr": 0.1464,
+    "p_at_k": 0.058,
     "r_at_k": 0.0733,
-    "ndcg": 0.0809,
+    "ndcg": 0.0732,
     "corpus_size": 30
   },
   "assort Conv": {
@@ -87,38 +87,94 @@
     "corpus_size": 30
   },
   "HotPotQA-24": {
-    "mrr": 0.9792,
-    "p_at_k": 0.1792,
-    "r_at_k": 0.8958,
-    "ndcg": 0.8982,
+    "mrr": 0.9094,
+    "p_at_k": 0.1917,
+    "r_at_k": 0.9583,
+    "ndcg": 0.8472,
     "corpus_size": 226
   },
+  "HotPotQA-200": {
+    "mrr": 0.8535,
+    "p_at_k": 0.17,
+    "r_at_k": 0.85,
+    "ndcg": 0.7445,
+    "corpus_size": 1990
+  },
   "Allganize RAG-ko": {
-    "mrr": 0.9833,
-    "p_at_k": 0.1,
-    "r_at_k": 1.0,
-    "ndcg": 0.9876,
+    "mrr": 0.9585,
+    "p_at_k": 0.1058,
+    "r_at_k": 0.995,
+    "ndcg": 0.9673,
     "corpus_size": 200
   },
   "Allganize RAG-Eval": {
-    "mrr": 0.9547,
-    "p_at_k": 0.0967,
-    "r_at_k": 0.9667,
-    "ndcg": 0.9577,
+    "mrr": 0.9273,
+    "p_at_k": 0.0992,
+    "r_at_k": 0.9733,
+    "ndcg": 0.9382,
     "corpus_size": 300
   },
   "PublicHealthQA": {
-    "mrr": 0.7481,
-    "p_at_k": 0.0883,
-    "r_at_k": 0.8831,
-    "ndcg": 0.7813,
+    "mrr": 0.6107,
+    "p_at_k": 0.0857,
+    "r_at_k": 0.8571,
+    "ndcg": 0.6703,
     "corpus_size": 77
   },
   "AutoRAG": {
-    "mrr": 0.8063,
-    "p_at_k": 0.093,
-    "r_at_k": 0.9298,
-    "ndcg": 0.8371,
+    "mrr": 0.8954,
+    "p_at_k": 0.0991,
+    "r_at_k": 0.9912,
+    "ndcg": 0.919,
     "corpus_size": 720
+  },
+  "KLUE-MRC": {
+    "mrr": 0.7723,
+    "p_at_k": 0.0859,
+    "r_at_k": 0.8546,
+    "ndcg": 0.7924,
+    "corpus_size": 5841
+  },
+  "Ko-StrategyQA": {
+    "mrr": 0.6451,
+    "p_at_k": 0.1353,
+    "r_at_k": 0.7242,
+    "ndcg": 0.6143,
+    "corpus_size": 9251
+  },
+  "2Wiki-dev": {
+    "mrr": 0.8373,
+    "p_at_k": 0.1443,
+    "r_at_k": 0.6078,
+    "ndcg": 0.6197,
+    "corpus_size": 56687
+  },
+  "MuSiQue-dev": {
+    "mrr": 0.6981,
+    "p_at_k": 0.1221,
+    "r_at_k": 0.4859,
+    "ndcg": 0.4726,
+    "corpus_size": 21100
+  },
+  "TREC-COVID": {
+    "mrr": 0.7243,
+    "p_at_k": 0.544,
+    "r_at_k": 0.0133,
+    "ndcg": 0.5533,
+    "corpus_size": 171332
+  },
+  "FiQA": {
+    "mrr": 0.2937,
+    "p_at_k": 0.0647,
+    "r_at_k": 0.2936,
+    "ndcg": 0.2308,
+    "corpus_size": 57638
+  },
+  "SciFact": {
+    "mrr": 0.6226,
+    "p_at_k": 0.0883,
+    "r_at_k": 0.7986,
+    "ndcg": 0.6603,
+    "corpus_size": 5183
   }
 }

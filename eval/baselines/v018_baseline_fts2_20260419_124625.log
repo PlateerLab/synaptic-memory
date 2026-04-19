@@ -1,0 +1,26 @@
+
+Running 22 benchmarks...
+  embedder: none
+  reranker: none
+  KRRA Easy... MRR=0.967 (9.9s)
+  KRRA Hard... MRR=0.583 (17.6s)
+  assort Easy... /home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:222: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['orders'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+/home/gpuuser/sonAIengine/synaptic-memory/eval/run_all.py:222: UserWarning: Profile /home/gpuuser/sonAIengine/synaptic-memory/eval/data/profiles/assort.toml: unknown NodeKind 'EVENT' for ontology_hints['broadcasts'] — skipping. Valid kinds: ['concept', 'entity', 'lesson', 'decision', 'rule', 'artifact', 'agent', 'task', 'sprint', 'tool_call', 'observation', 'reasoning', 'outcome', 'session', 'type_def', 'chunk', 'community']
+  profile = DomainProfile.load(profile_path)
+MRR=0.856 (3.5s)
+  assort Hard... MRR=0.000 (7.4s)
+  X2BEE Easy... MRR=1.000 (1.6s)
+  X2BEE Hard... MRR=0.368 (0.8s)
+  KRRA Conv... MRR=0.146 (13.8s)
+  assort Conv... MRR=0.472 (5.9s)
+  X2BEE Conv... MRR=0.164 (1.2s)
+  HotPotQA-24... MRR=0.875 (1.9s)
+  HotPotQA-200... MRR=0.834 (27.9s)
+  Allganize RAG-ko... MRR=0.947 (11.1s)
+  Allganize RAG-Eval... MRR=0.911 (8.0s)
+  PublicHealthQA... MRR=0.547 (4.3s)
+  AutoRAG... MRR=0.906 (21.9s)
+  KLUE-MRC... MRR=0.653 (2305.2s)
+  Ko-StrategyQA... MRR=0.637 (88.3s)
+  2Wiki-dev... 
