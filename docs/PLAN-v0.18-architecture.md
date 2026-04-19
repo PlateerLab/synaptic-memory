@@ -280,6 +280,32 @@ v0.17.1 까지 ship한 것:
 
 이들의 알고리즘적 통찰을 v0.18 calibration / hierarchical schema 설계에 흡수.
 
+## 7.1 Competitive scan — Graphify (safishamsi/graphify)
+
+2026-04 조사. 코드/멀티모달 corpus → NetworkX in-memory graph 변환 + MCP server. 동일 *agent + graph + MCP* 시장 정면 경쟁자.
+
+### Graphify 가 우리보다 잘 하는 것
+
+| 항목 | Graphify 구현 | Synaptic 현재 |
+|---|---|---|
+| Edge metadata | typed + confidence (`EXTRACTED` 1.0 / `INFERRED` scored / `AMBIGUOUS`) + provenance | structural + weight only |
+| Agent priming | auto-generated `GRAPH_REPORT.md` injected into context (top entities + community summary) | 없음 — agent 가 cold start |
+| Community layer | Leiden detection + per-community summary | CONCEPT 카테고리만 (수동) |
+| Multimodal | native pipeline (Whisper transcription + image/PDF/video) | 외부 변환기 의존 |
+| Hyperedges | 3+ 노드 묶는 design rationale 보존 | binary edges only |
+
+### 흡수 가치 (with Synaptic-native reform)
+
+5가지 모두 **Synaptic 구조에 자연 통합 가능** — Graphify 는 single-file JSON 인 반면 우리는 SQLite/Kuzu/PG 같은 production backend, hybrid retrieval, LLM-free indexing 원칙을 유지하면서 흡수.
+
+각 흡수 항목은 `docs/ROADMAP.md` v0.18.0+ "Graphify-inspired absorption track" 섹션 참조. 우선순위 / 일정은 v0.18 의 main track (Agent-Native B + Graph-Augmented Anchor A) 와 통합 관리.
+
+### 흡수 안 하는 것 (의도적)
+
+- **NetworkX in-memory + JSON 단일 파일 storage** — production scale 불가. 우리 multi-backend 유지.
+- **Indexing 시 Claude subagent 호출** — LLM-free indexing 원칙 위반. Synaptic 의 차별성 핵심.
+- **Tree-sitter AST 25-language 코드 파싱** — Synaptic 의 1차 도메인 (한국어 enterprise) 와 무관. 별도 extras 패키지로 community 기여 가능.
+
 ---
 
 ## 8. 문서 이력
