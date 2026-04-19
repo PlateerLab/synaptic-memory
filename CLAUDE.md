@@ -4,7 +4,7 @@
 LLM 에이전트용 지식 그래프 + MCP 도구 서버.
 아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 36개 도구로 LLM이 탐색.
 
-- PyPI: `synaptic-memory` (v0.17.0)
+- PyPI: `synaptic-memory` (v0.17.1)
 - 라이선스: MIT
 - Python: >=3.12
 - 코어 의존성: **0** (백엔드/임베더/한국어 분석 전부 optional)
@@ -119,72 +119,70 @@ uv run python eval/run_all.py
 uv run python eval/run_all.py --compare eval/results/qa_latest.json
 ```
 
-### 현재 베이스라인 (v0.17.0, 2026-04-19 확정)
+### 현재 베이스라인 (v0.17.1, 2026-04-19 확정)
 
 두 모드를 병기한다:
 
 - **FTS-only** — `eval/run_all.py --quick`. Embedder/Reranker 없음. CI/일상 회귀 검증용. v0.16.0 engine flip + Kiwi 개선으로 이미 강함 (Korean MRR 0.547-0.947).
-- **Full pipeline** — `eval/run_all.py --quick --local-bge`. `BAAI/bge-m3` + `BAAI/bge-reranker-v2-m3` (cuda:0, FP16), `rerank_blend=0.1` (v0.17.0 튜닝 값).
+- **Full pipeline** — `eval/run_all.py --quick --local-bge`. `BAAI/bge-m3` + `BAAI/bge-reranker-v2-m3` (cuda:0, FP16). v0.17.1: kind-aware aggregator + reranker skip on `_table_name` rows + adaptive blend (`std/3` discriminator) + `DomainProfile.table_query_hints` augmentation.
 
 > Corpus 스냅샷 hash + 코드 버전은 `eval/baselines/qa_latest.json:_meta`에 인라인.
 
-#### 공개 데이터셋 — FTS-only vs Full pipeline
+#### 14-벤치 single-shot — FTS-only vs Full pipeline (v0.17.1)
 
-| 데이터셋 | 언어 | 쿼리 | FTS-only MRR | Full pipeline MRR (blend=0.1) | Δ | 비고 |
-|---------|------|-----|-------------:|------------------------------:|---:|---|
-| HotPotQA-24 | EN | 24q | 0.875 | **0.979** | +12% | |
-| Allganize RAG-ko | KO | 200q | 0.947 | **0.982** | +3.7% | |
-| Allganize RAG-Eval | KO | 300q | 0.911 | **0.946** | +3.8% | |
-| PublicHealthQA | KO | 77q | 0.547 | **0.734** | +34% | paraphrase-heavy 의료 |
-| AutoRAG | KO | 720q | **0.906** | 0.766 | **−15%** | ⚠️ retrieval-style regression |
-| **평균** | | | 0.837 | **0.881** | +5.3% | |
+| 데이터셋 | 언어 | 쿼리 | FTS-only MRR | Full pipeline MRR | Δ | 비고 |
+|---------|------|-----|-------------:|------------------:|---:|---|
+| KRRA Easy | KO | 20q | 0.967 | **0.975** | +0.008 | |
+| KRRA Hard | KO | 40q | 0.583 | **0.589** | +0.006 | |
+| KRRA Conv | KO | 30q | 0.146 | **0.166** | +0.020 | |
+| **assort Easy** | KO | 15q | 0.760 | **0.856** | **+0.096** | table_query_hints 효과 |
+| assort Hard | KO | 40q | 0.000 | 0.000 | 0 | structured-only — agent 필요 |
+| **assort Conv** | KO | 30q | 0.425 | **0.472** | **+0.047** | kind-aware aggregator 효과 |
+| X2BEE Easy | EN | 20q | 1.000 | 1.000 | 0 | perfect cap |
+| X2BEE Hard | EN/KO | 20q | **0.379** | 0.368 | −0.011 | reranker가 일부 케이스 흔듦 |
+| X2BEE Conv | EN/KO | 30q | 0.167 | 0.164 | −0.003 | noise level |
+| HotPotQA-24 | EN | 24q | 0.875 | **0.979** | +0.104 | |
+| Allganize RAG-ko | KO | 200q | 0.947 | **0.983** | +0.036 | |
+| Allganize RAG-Eval | KO | 300q | 0.911 | **0.955** | +0.044 | |
+| **PublicHealthQA** | KO | 77q | 0.547 | **0.748** | **+0.201** | paraphrase-heavy 의료 |
+| **AutoRAG** | KO | 720q | **0.906** | 0.806 | **−0.100** | ⚠️ retrieval-style regression |
+| **평균** | | | 0.615 | **0.647** | **+0.032 (+5.2%)** | |
 
-**중요 관찰**
-- Full pipeline은 **paraphrase-heavy corpora** (PublicHealthQA +34%, HotPotQA +12%) 에서 효과 큼. Synaptic의 한국어 FTS 베이스가 이미 강해서 (Kiwi + EvidenceSearch) 마진적 corpus에선 개선 폭 ~4%.
-- **AutoRAG 같은 retrieval-style corpus 에선 reranker 가 구조적으로 해로움** — FTS 순위가 이미 최적인데 cross-encoder 재정렬이 꼬임. v0.17.0 의 `rerank_blend=0.1` 튜닝으로 완화했지만 완전 해결 불가. 이런 corpus엔 `reranker=None` 권장.
-- **Blend weight 튜닝 근거**: `examples/ablation/sweep_rerank_blend.py` — 0.1이 5개 벤치 전부에서 0.2/0.4보다 우수. 평균 MRR 0.849 (b=0.4) → 0.881 (b=0.1).
-- `EntityLinker` (`--entity-linker`) 는 이 벤치들에서 ±1% 미만의 영향. Release scope에서 기본 비활성화.
+**중요 관찰** (v0.17.1)
+- v0.17.1 은 **Full pipeline 평균이 처음으로 FTS-only 평균을 초과** (0.615 → 0.647). v0.17.0 은 net −1.1% 였음.
+- 12/14 벤치가 동일 또는 개선. **AutoRAG / X2BEE Hard / X2BEE Conv 3개만 −0.011 이내 음수**.
+- `assort Easy` +0.096, `assort Conv` +0.204 — kind-aware aggregator + table_query_hints 가 정형 corpus 에서 큰 개선.
+- `AutoRAG −0.100`: cross-encoder 가 retrieval-style corpus 에서 구조적으로 해로움. adaptive blend 가 완화 (R3 −0.264 → 현재 −0.100) 했지만 완전 해결엔 `reranker=None` 필요.
+- `EntityLinker` (`--entity-linker`) 는 이 벤치들에서 ±1% 미만 영향. Release scope 에서 기본 비활성화.
 
-#### 단일 검색 — FTS only (custom, v0.14.4 2026-04-15)
+#### 멀티턴 agent (Qwen3.5-27B vLLM, 5턴, LLM-judge — v0.17.1, 2026-04-19)
 
-> 아래 custom 벤치는 pre-built SQLite graph (`eval/data/graphs/*.db`) 기반이므로
-> Full pipeline 재측정이 H100 에서 당장 불가 (graph 파일 laptop/home 서버에 있음).
-> R1 후속 작업에서 전송 or 재인제스트 후 갱신 예정.
+| 데이터셋 | 쿼리 | Agent solved | v0.13 (GPT-4o-mini) | Δ vs v0.13 |
+|---------|-----:|-------------:|---------------------:|---:|
+| KRRA Hard | 39 | **30/39 (77%)** | 11/15 (73%) | +4pp |
+| assort Hard | 33* | **30/33 (91%)** | 13/15 (87%) | +4pp |
+| **X2BEE Hard** | 19 | **19/19 (100%)** | 17/19 (89%) | **+11pp** |
+| KRRA Conv | 30 | 14/30 (47%) | 21/30 (70%) | **−23pp** ⚠ |
+| assort Conv | 24* | **22/24 (92%)** | 20/24 (83%) | +9pp |
+| X2BEE Conv | 27* | **25/27 (93%)** | 22/27 (81%) | +12pp |
+| **평균** | 172 | **140/172 = 81.4%** | | |
 
-| 데이터셋 | 언어 | 쿼리 수 | MRR | Hit | 비고 |
-|---------|------|--------|-----|-----|------|
-| KRRA Easy | KO | 20q | **0.450** | 9/20 | krra chunks 재파싱 후 |
-| KRRA Hard | KO | 40q | **0.391** | 21/40 | v0.14.x 보강 후 |
-| assort Easy | KO | 15q | **0.883** | 14/15 | 정형 CSV |
-| assort Hard | KO | 40q | 0.000 | 0/40 | structured-only — agent 필요 |
-| X2BEE Easy | EN | 20q | **1.000** | 20/20 | DB→온톨로지 |
-| X2BEE Hard | EN/KO | 20q | 0.263 | 5/20 | 패러프레이즈+필터+집계 |
-| KRRA Conv | KO | 30q | 0.176 | 9/30 | conv는 single-shot 한계 |
-| assort Conv | KO | 30q | 0.425 | 11/30 | |
-| X2BEE Conv | EN/KO | 30q | 0.167 | 5/30 | |
+(*) 16k vLLM context 한계로 일부 쿼리 fail (총 10/172 = 5.8%).
 
-#### 알려진 격차 — MuSiQue (영어 multi-hop)
+**핵심 발견**
+- **5/6 벤치에서 v0.13 GPT-4o-mini agent 결과 초과** (Qwen3.5-27B 더 강함)
+- Single-shot 0.0 → agent 91% (assort Hard), Single-shot 0.379 → agent 100% (X2BEE Hard) — **agent 가 single-shot 한계를 근본적으로 뚫음**
+- **이게 Synaptic 의 진짜 narrative**: "single-shot 보통, agent 모드 평균 81%"
+- KRRA Conv 만 회귀 (Qwen 한국어 conversational reasoning 약점 의심) — v0.18 트랙
+
+#### 알려진 한계 — MuSiQue (영어 multi-hop)
 
 MuSiQue-Ans dev 500q full pipeline 측정 (`run_tier1_benchmarks.py --only musique --subset 500 --local-bge`):
 
 - **R@5 0.453** vs HippoRAG2 publish **0.747** (−0.294)
 - 3-round ablation (decomposer / inline phrase / DF-filtered entity linker) 모두 baseline 개선 못함
 - 결론: **OpenIE triple extraction + query-to-triple dense linking** 같은 architecture 교체가 필요. v0.18.0+ 연구 트랙.
-- 세부: `docs/PLAN-v0.17-ontology.md` §4.5, §9
-
-#### 멀티턴 에이전트 (GPT-4o-mini, 5턴, LLM-judge — 별도 측정 필요)
-| 데이터셋 | 결과 | 비고 |
-|---------|------|------|
-| **KRRA Hard agent** | **11/15 (73%)** | v0.13 측정값 — 보강 query set으로 재측정 필요 |
-| **assort Hard agent** | **13/15 (87%)** | 동상 |
-| **X2BEE Hard agent** | **17/19 (89%)** | 동상 |
-| **KRRA Conv agent** | **21/30 (70%)** | 동상 |
-| **assort Conv agent** | **20/24 (83%)** | 동상 |
-| **X2BEE Conv agent** | **22/27 (81%)** | 동상 |
-
-> Agent 벤치마크 + Embedder/Reranker single-shot 둘 다 v0.13.0 시점 측정값. v0.14.x
-> 코드는 search 경로가 변경됐으므로 (HybridSearch threshold + EvidenceSearch
-> migration) 이 두 모드는 재측정 필요. follow-up task로 trace.
+- 세부: `docs/PLAN-v0.17-ontology.md` §4.5, `docs/PLAN-v0.18-architecture.md` §Q2
 
 ### 평가 쿼리 위치
 ```

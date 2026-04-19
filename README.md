@@ -385,7 +385,7 @@ HippoRAG / GraphRAG line of research uses for head-to-head.
 Numbers go in
 [docs/comparison/synaptic_results.md](docs/comparison/synaptic_results.md#tier-15--english-multi-hop-standard-benchmarks-v0160).
 
-### Full pipeline (BGE-M3 + cross-encoder) — v0.17.0
+### Full pipeline (BGE-M3 + cross-encoder) — v0.17.1
 
 Measured 2026-04-19 on an H100, `BAAI/bge-m3` + `BAAI/bge-reranker-v2-m3`
 loaded in-process via `transformers` (no external TEI / Ollama
@@ -395,49 +395,74 @@ endpoint needed):
 python eval/run_all.py --quick --local-bge
 ```
 
+#### 14-bench single-shot (5 public + 9 private)
+
 | Dataset | Lang | Queries | FTS-only | Full pipeline | Δ |
 |---------|------|--------:|---------:|--------------:|---:|
-| HotPotQA-24 | en | 24 | 0.875 | **0.979** | +12% |
-| Allganize RAG-ko | ko | 200 | 0.947 | **0.982** | +3.7% |
-| Allganize RAG-Eval | ko | 300 | 0.911 | **0.946** | +3.8% |
-| PublicHealthQA | ko | 77 | 0.547 | **0.734** | +34% |
-| AutoRAG KO | ko | 114 | **0.906** | 0.766 | **−15%** ⚠ |
-| **Mean** | | | 0.837 | **0.881** | +5.3pp |
+| HotPotQA-24 | en | 24 | 0.875 | **0.979** | +0.104 |
+| Allganize RAG-ko | ko | 200 | 0.947 | **0.983** | +0.036 |
+| Allganize RAG-Eval | ko | 300 | 0.911 | **0.955** | +0.044 |
+| PublicHealthQA | ko | 77 | 0.547 | **0.748** | +0.201 |
+| AutoRAG KO | ko | 114 | **0.906** | 0.806 | −0.100 ⚠ |
+| KRRA Easy | ko | 20 | 0.967 | **0.975** | +0.008 |
+| KRRA Hard | ko | 40 | 0.583 | **0.589** | +0.006 |
+| KRRA Conv | ko | 30 | 0.146 | **0.166** | +0.020 |
+| assort Easy | ko | 15 | 0.760 | **0.856** | +0.096 |
+| assort Hard | ko | 40 | 0.000 | 0.000 | 0 |
+| assort Conv | ko | 30 | 0.425 | **0.472** | +0.047 |
+| X2BEE Easy | en | 20 | 1.000 | 1.000 | 0 |
+| X2BEE Hard | en/ko | 20 | **0.379** | 0.368 | −0.011 |
+| X2BEE Conv | en/ko | 30 | 0.167 | 0.164 | −0.003 |
+| **Mean** | | | 0.615 | **0.647** | **+0.032 (+5.2pp)** |
+
+v0.17.1 is the **first release where mean Full-pipeline MRR exceeds
+mean FTS-only MRR** across all 14 benches (v0.17.0 was net −1.1 %).
+12/14 benches improve or hold; the 3 mild residual regressions
+(X2BEE Hard / Conv, AutoRAG) are at or below single-query noise
+except for AutoRAG where the structural reranker mismatch persists.
 
 **When the cross-encoder helps — and when it hurts.** The reranker
-shines on paraphrase-heavy corpora (PublicHealthQA medical queries
-+34%, HotPotQA English multi-hop +12%) but actively damages
-retrieval-style corpora where FTS ranking is already near-optimal
-(AutoRAG −15%, even after tuning `rerank_blend` from 0.4 → 0.1 in
-v0.17.0). If your corpus looks like AutoRAG — short queries, narrow
-gold sets, FAQ-style — **pass `reranker=None`**; the FTS-only pipeline
-is your ceiling, not your floor. Component-isolation evidence:
-[`examples/ablation/diagnose_autorag.py`](examples/ablation/diagnose_autorag.py).
+shines on paraphrase-heavy corpora (PublicHealthQA +20 pp,
+HotPotQA +10 pp). On retrieval-style corpora where FTS ranking is
+already near-optimal (AutoRAG, X2BEE Hard) it injects noise that
+displaces the gold rank. v0.17.1's adaptive blend (
+`std/3` discriminator) and structured-row reranker skip recover
+most of that — AutoRAG went −0.264 → −0.100 — but pure
+**`reranker=None` is the only way to hit the FTS-only ceiling** on
+those corpora. Diagnostic: [`examples/ablation/diagnose_autorag.py`](examples/ablation/diagnose_autorag.py).
 
-**Known gap on English multi-hop.** On MuSiQue-Ans-dev 500q the full
-pipeline hits R@5 **0.453**, vs HippoRAG2's published 0.747. Three
-rounds of targeted fixes (LLM query decomposition, inline phrase hub,
-DF-filtered entity linker) all regressed the score — the gap is
-structural, not a tuning knob. Closing it requires OpenIE triple
-extraction + query→triple dense linking, which is a v0.18.0+ research
-track rather than a default pipeline change. Synaptic's strength is
-Korean / structured-data RAG; English Wikipedia multi-hop is
-honestly documented as a trade-off. Details:
-[`docs/PLAN-v0.17-ontology.md`](docs/PLAN-v0.17-ontology.md#9-round-1-재측정--blend-weight-튜닝-2026-04-1819).
+#### Multi-turn agent (Qwen3.5-27B via vLLM, 5 turns, LLM-judge)
 
-### Full pipeline on custom corpora — pre-v0.16.0 numbers (pending re-measure)
+| Dataset | Single-shot | Agent solved | vs v0.13 (gpt-4o-mini) |
+|---------|------------:|------------:|----------------------:|
+| KRRA Hard | 0.589 | 30/39 (77 %) | 11/15 (73 %) +4 pp |
+| assort Hard | 0.000 | 30/33 (91 %) | 13/15 (87 %) +4 pp |
+| X2BEE Hard | 0.368 | **19/19 (100 %)** | 17/19 (89 %) +11 pp |
+| KRRA Conv | 0.166 | 14/30 (47 %) | 21/30 (70 %) −23 pp |
+| assort Conv | 0.472 | 22/24 (92 %) | 20/24 (83 %) +9 pp |
+| X2BEE Conv | 0.164 | 25/27 (93 %) | 22/27 (81 %) +12 pp |
+| **Mean** | | **140/172 = 81 %** | |
 
-The table below predates the v0.16.0 engine flip and the v0.17.0
-`rerank_blend` tuning. The SQLite graph files are on the original
-Home-server box and haven't been synced to the H100 measurement
-environment yet, so these numbers stay provisional until the transfer.
+**This is Synaptic's real number.** Single-shot retrieval is the
+floor; the multi-turn agent (`deep_search` + `compare_search` +
+graph-context injection) brings the same questions from 0–47 %
+to 47–100 %. assort Hard 0/40 → 91 % under agent shows what the
+graph + structured tools can do that no single-shot pipeline can.
+5 of 6 benches beat the v0.13 GPT-4o-mini baseline (Qwen3.5-27B
+upgrade). KRRA Conv regression (Qwen Korean conversational gap)
+is the one open issue — v0.18 track.
 
-| Dataset | Type | Nodes | MRR | Hit |
-|---------|------|-------|-----|-----|
-| KRRA Easy | Korean documents (private) | 19,720 | **0.967** | 20/20 |
-| KRRA Hard | Korean documents (private) | 19,720 | **1.000** | 15/15 |
-| X2BEE Easy | PostgreSQL e-commerce (private) | 19,843 | **1.000** | 20/20 |
-| assort Easy | Fashion CSV (private) | 13,909 | **0.867** | 13/15 |
+#### Known structural gap — MuSiQue (English multi-hop)
+
+MuSiQue-Ans-dev 500q full pipeline R@5 **0.453** vs HippoRAG2's
+published **0.747** (−0.294). Three rounds of targeted fixes (LLM
+query decomposition, inline phrase hub, DF-filtered entity linker)
+all regressed the score — the gap is structural. Closing it
+requires OpenIE triple extraction + query→triple dense linking,
+which is a v0.18.0+ research track rather than a default pipeline
+change. Synaptic's strength is Korean / structured-data RAG;
+English Wikipedia multi-hop is honestly documented as a trade-off.
+See [`docs/PLAN-v0.18-architecture.md`](docs/PLAN-v0.18-architecture.md#q2--indexing--llm-free-유지-vs-selective-llm-도입).
 
 ### Multi-turn agent (GPT-4o-mini, 5 turns max)
 

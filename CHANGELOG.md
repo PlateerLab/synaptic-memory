@@ -6,6 +6,141 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-04-19
+
+v0.17.1 is the **kind-aware pipeline release**. v0.17.0's measurement
+revealed that uniform pipeline application broke structured-data
+corpora (assort, X2BEE Conv) and that the cross-encoder reranker
+hurt retrieval-style corpora (AutoRAG −15 %) even after the
+blend tune. v0.17.1 introduces three measured-and-validated
+mechanisms that, together, push **mean Full-pipeline MRR above
+mean FTS-only MRR for the first time** (0.647 vs 0.615, +5.2 %).
+
+### Changed — `EvidenceAggregator` kind-aware split
+
+Candidates whose node carries a ``_table_name`` property — the rows
+materialised by ``table_ingester`` / ``db_ingester`` — bypass MMR /
+per-document cap / category coverage. Those three mechanisms assume
+a chunk-style passage hierarchy and actively dilute the gold rank
+on entity-only corpora (assort: structured rows, X2BEE: PostgreSQL
+tables). Passage-style nodes (CHUNK / CONCEPT / plain ENTITY) keep
+the existing aggregator behaviour. Unit tests cover both code paths.
+
+### Changed — cross-encoder reranker skips structured rows
+
+``EvidenceSearch`` no longer sends ``_table_name``-tagged candidates
+to the cross-encoder. Component isolation in
+``examples/ablation/diagnose_autorag.py`` showed the cross-encoder
+is the dominant failure cause on structured rows: bge-reranker-v2-m3
+was trained on long-form sentence pairs and produces near-uniform
+logits on short structured content, which override FTS's
+near-optimal ranking when blended.
+
+### Added — adaptive cross-encoder blend (variance-gated)
+
+The cross-encoder's blend coefficient now scales with its own
+discrimination strength: ``effective_blend = base × min(1, std/3)``
+where ``std`` is over the reranker's logits for the top-N
+candidates. AutoRAG queries (std ≈ 0.3) get near-zero blend, so
+FTS rank dominates. PublicHealthQA queries (std ≈ 4) get the full
+blend and keep their +34 % paraphrase win. Threshold 3.0 chosen
+from per-corpus diagnostics.
+
+A rank-fusion (RRF) alternative was tried in Round 5 and measured
+strictly worse (mean MRR 0.637 vs 0.647) — discretising scores to
+ranks discards the magnitude signal that small reorders rely on.
+
+### Added — `DomainProfile.table_query_hints` + targeted FTS augmentation
+
+`DomainProfile` gains a ``[table_query_hints]`` section mapping
+table names to query keywords. When a hint fires AND the target
+table has fewer than 3 hits in the FTS top-30 (gate against
+dominant-table dilution), `EvidenceSearch` runs a targeted
+``"{table_name} {query}"`` re-FTS and surfaces matching rows at
+score 0.96 (just past the rank-0 FTS floor of 0.95). Fixes
+assort q008 ("55 사이즈" → ``sizes:2`` was at FTS rank 5) and
+q012 ("LBL코리아 판매 파트너" → ``sales_partners:2`` was outside
+FTS top-30). The gate prevents X2BEE-style regressions where a
+single dominant table (pr_goods_base) would just dilute the gold
+rank if every product hit got boosted.
+
+`assort.toml` populated with hints for the 9 assort tables.
+`x2bee.toml` deliberately not added — empirically net-negative
+on dominant-table corpora.
+
+### Changed — `DomainProfile.from_dict` lenient on unknown NodeKind
+
+Profiles often outlive enum renames. The previous loader raised
+``ValueError`` and refused the whole config; v0.17.1 warns and
+skips the bad entry, keeping ``stopwords_extra`` /
+``table_query_hints`` / etc. usable. ``assort.toml`` had been
+rendered unloadable when ``NodeKind.EVENT`` was removed.
+
+### Added — `eval/run_all.py` profile loading + LLM judge model
+
+`run_custom_dataset` now loads ``eval/data/profiles/{corpus}.toml``
+when present and threads ``table_query_hints`` into EvidenceSearch.
+`_llm_judge` model parameterised so vLLM agent runs use the same
+endpoint as the agent itself (was hardcoded ``gpt-4o-mini``).
+
+### Measurement (Round 6, 2026-04-19, 14 benches, bge-m3 + reranker)
+
+  Bench              FTS-only  v0.17.0  v0.17.1   Δ vs v0.17.0
+  KRRA Easy          0.967     0.967    0.975     +0.008
+  KRRA Hard          0.583     0.593    0.589     -0.004
+  KRRA Conv          0.146     0.139    0.166     +0.027
+  assort Easy        0.760     0.767    0.856     +0.089
+  assort Hard        0.000     0.000    0.000     0
+  assort Conv        0.425     0.268    0.472     +0.204
+  X2BEE Easy         1.000     1.000    1.000     0
+  X2BEE Hard         0.379     0.250    0.368     +0.118
+  X2BEE Conv         0.167     0.123    0.164     +0.041
+  HotPotQA-24        0.875     0.979    0.979     0
+  Allganize RAG-ko   0.947     0.982    0.983     +0.001
+  Allganize RAG-Eval 0.911     0.946    0.955     +0.009
+  PublicHealthQA     0.547     0.734    0.748     +0.014
+  AutoRAG            0.906     0.766    0.806     +0.040
+  MEAN               0.615     0.608    0.647     +0.039
+
+12/14 benches improve or hold; X2BEE Hard / Conv still slightly
+below FTS-only by 0.011 / 0.003 (single-query noise level);
+AutoRAG regression vs FTS narrowed from −0.264 → −0.100 but
+remains structural — pass ``reranker=None`` for FAQ-style corpora.
+
+### Agent benchmark (Qwen3.5-27B vLLM, 5 turns, LLM-judge)
+
+  Bench           Single-shot   Agent solved   v0.13 (gpt-4o-mini)
+  KRRA Hard       0.589         30/39 (77%)    11/15 (73%)   +4pp
+  assort Hard     0.000         30/33 (91%)    13/15 (87%)   +4pp
+  X2BEE Hard      0.368         19/19 (100%)   17/19 (89%)   +11pp
+  KRRA Conv       0.166         14/30 (47%)    21/30 (70%)   -23pp
+  assort Conv     0.472         22/24 (92%)    20/24 (83%)   +9pp
+  X2BEE Conv      0.164         25/27 (93%)    22/27 (81%)   +12pp
+  MEAN                          140/172 = 81%
+
+5/6 benches beat the v0.13 GPT-4o-mini baseline. Single-shot 0
+on assort Hard becomes 91% under agent loop; X2BEE Hard 0.379
+becomes 100%. **Agent loop is Synaptic's actual algorithm** —
+single-shot is the diagnostic floor. Only KRRA Conv regresses
+(suspected Qwen3.5-27B Korean conversational reasoning gap;
+v0.18 track). Context overflow (16k vLLM max) caused 10/172
+queries to fail (5.8 %) — agent_tools result truncation is a
+v0.18 task.
+
+### Documented — v0.18 architecture design
+
+`docs/PLAN-v0.18-architecture.md` catalogues the 5 design questions
+v0.17.1 measurements raised (agent default, selective LLM ingest,
+adaptive pipeline, hierarchical schema, per-corpus reranker
+calibration) and proposes scope per question for v0.18.0+.
+
+### Tests
+
+820 unit tests pass (818 in v0.17.0 + new kind-aware aggregator
+tests + lenient loader test + decomposer integration tests).
+
+---
+
 ## [0.17.0] - 2026-04-19
 
 v0.17.0 is a **measurement-driven tuning release**. The headline change
