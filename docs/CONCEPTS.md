@@ -69,14 +69,17 @@ GraphRAG** 같은 최근 연구의 결론입니다. "shallow expansion is enough
 | NodeKind | 용도 | 예시 |
 |----------|------|------|
 | `CONCEPT` | 카테고리 / 분류 | "규정 및 지침", "ESG" |
-| `DOCUMENT` | 문서 전체 | "2024년 경영 계획서" |
+| `ENTITY` | 문서 본체 / 정형 행 / 추출 엔티티 | "2024년 경영 계획서", `products:12800000` |
 | `CHUNK` | 문서 조각 | Doc의 512토큰 단위 |
-| `ENTITY` | 정형 데이터 행 / 추출 엔티티 | `products:12800000` |
-| `RULE` / `DECISION` / `OBSERVATION` | 지식 타입 (선택) | 초기 설계의 잔재 |
+| `TOOL_CALL` / `OBSERVATION` / `REASONING` / `OUTCOME` / `SESSION` | 에이전트 활동 | agent-loop 실행 로그 |
+| `RULE` / `DECISION` / `LESSON` | 지식 타입 (선택) | 초기 설계의 잔재 |
+| `TYPE_DEF` / `COMMUNITY` / `AGENT` / `TASK` / `SPRINT` / `ARTIFACT` | 온톨로지/메타 | 거의 미사용 |
 
-실제로는 **문서 그래프 (CONCEPT → DOCUMENT → CHUNK)** 와
-**정형 그래프 (ENTITY)** 가 병렬로 존재할 수 있습니다. 한 그래프에 섞어
-저장해도 됩니다.
+실제로는 **문서 그래프 (CONCEPT → ENTITY(문서) → CHUNK)** 와 **정형 그래프
+(ENTITY(행))** 가 병렬로 존재합니다. 전용 `DOCUMENT` kind 은 없고 문서
+본체도 `ENTITY` 를 씁니다 — `DomainProfile.ontology_hints` 로 카테고리별로
+다른 kind 을 매핑할 수 있습니다 ([`document_ingester.py`](../src/synaptic/extensions/document_ingester.py)
+line 326). 한 그래프에 섞어 저장해도 됩니다.
 
 ### 2-2. 엣지 종류 (EdgeKind)
 
@@ -92,21 +95,31 @@ GraphRAG** 같은 최근 연구의 결론입니다. "shallow expansion is enough
 
 ### 2-3. 엣지 가중치
 
-PPR (PersonalizedPageRank)이 엣지 가중치를 활용합니다:
+PPR (PersonalizedPageRank)이 엣지 가중치를 활용합니다
+([`ppr.py`](../src/synaptic/ppr.py) line 20 — 실제 값):
 
 ```python
-_EDGE_WEIGHTS: dict[EdgeKind, float] = {
-    EdgeKind.CAUSED: 1.0,       # 강한 인과
+_EDGE_TYPE_WEIGHTS: dict[EdgeKind, float] = {
+    EdgeKind.CAUSED: 1.0,            # 인과 — 강한 전파
     EdgeKind.RESULTED_IN: 1.0,
-    EdgeKind.PART_OF: 0.7,      # 중간
+    EdgeKind.DEPENDS_ON: 0.9,
+    EdgeKind.MENTIONS: 0.8,          # chunk → entity (phrase hub)
+    EdgeKind.EXTRACTED_FROM: 0.8,    # entity → chunk
+    EdgeKind.LEARNED_FROM: 0.8,
+    EdgeKind.PRODUCED: 0.8,
+    EdgeKind.PART_OF: 0.7,
+    EdgeKind.FOLLOWED_BY: 0.7,
     EdgeKind.CONTAINS: 0.6,
-    EdgeKind.MENTIONS: 0.5,
-    EdgeKind.RELATED: 0.4,      # 약함 (노이즈 방지)
-    EdgeKind.NEXT_CHUNK: 0.3,   # 최소 (청크→청크 노이즈 방지)
+    EdgeKind.INVOKED: 0.6,
+    EdgeKind.IS_A: 0.5,
+    EdgeKind.RELATED: 0.4,           # FK 관련 — 노이즈 방지
+    EdgeKind.SUPERSEDES: 0.3,
+    EdgeKind.NEXT_CHUNK: 0.3,        # 청크→청크 직접 전파 제한
+    EdgeKind.CONTRADICTS: 0.2,
 }
 ```
 
-같은 노드라도 어떤 엣지로 도달했느냐에 따라 점수가 다릅니다.
+같은 노드라도 어떤 엣지로 도달했느냐에 따라 점수가 다릅니다. MENTIONS/EXTRACTED_FROM 이 0.8 로 높은 이유는 이게 **phrase hub 를 통한 cross-document bridge** 의 주 경로이기 때문입니다 (§11 backfill 참조).
 
 ---
 
@@ -237,7 +250,7 @@ diverse = mmr(candidates, lambda_=0.7)  # 관련성 vs 다양성
 ```
 Agent System Prompt + Graph Metadata
   ↓
-LLM (GPT-4o-mini / Claude)
+LLM (Qwen3.5-27B vLLM / GPT-4o-mini / Claude)
   ↓
 도구 호출 (JSON tool_calls)
   ↓
@@ -249,6 +262,10 @@ LLM (GPT-4o-mini / Claude)
   ↓
 최종 답변
 ```
+
+v0.18-alpha 에서 `graph.chat()` 으로 공개 API가 되었다. 내부 벤치는
+자체 서빙 Qwen3.5-27B(vLLM) 로 172 쿼리 평균 81.4% 를 기록했다
+(세부: [COMPARISON.md §4-4](COMPARISON.md)).
 
 ### 4-2. Graph Metadata 주입
 
@@ -380,8 +397,19 @@ OBSERVATION = 3
 - `ontology_hints`: 카테고리 → NodeKind 매핑
 - `authority_by_kind`: 랭킹에 영향 (권위 있는 문서 가산점)
 
-**없어도 동작**합니다. ProfileGenerator가 자동 생성합니다 (3-tier: rule →
-classifier → LLM).
+**TOML 파일 없어도 동작**합니다. `ProfileGenerator` 가 자동 생성하는데,
+3-tier 중 **앞 두 tier는 LLM 없이 돌아갑니다**:
+
+1. **Rule tier** (항상 실행, LLM 0회) — 컬럼명·빈도·파일명 통계로
+   stopwords / locale / 패턴 추출.
+2. **Classifier tier** (optional, LLM 0회) — zero-shot 임베딩 유사도로
+   `ontology_hints` 를 로컬에서 채움.
+3. **LLM tier** (**optional**) — `LLMProvider` 를 명시적으로 주입한 경우에만
+   실행. 앞 tier 가 못 채운 필드를 bounded 샘플(기본 20행) 로 보강.
+
+즉 LLM 을 꽂지 않으면 rule + classifier 2-tier 로만 돌아가고, 대부분의
+코퍼스에서 충분합니다. LLM 은 ontology hints 의 마지막 정리 / locale 확정
+같은 edge case 보강용입니다.
 
 ---
 
@@ -769,7 +797,16 @@ fingerprint 재계산), `category_backfill=True` (카테고리 라벨 재추출)
 ## 12. 한계와 향후 방향
 
 ### 현재 한계
-- **멀티홉 질의 불안정**: GPT-4o-mini 같은 작은 모델은 2-3홉부터 오판
+- **영어 shortcut-heavy multi-hop 약점**: MuSiQue-Ans 500q 에서 R@5 0.453 vs
+  HippoRAG2 publish 0.747 (−0.294). 3-round ablation (decomposer / inline
+  phrase / DF-filtered entity linker) 모두 회복 못함. OpenIE triple 추출
+  기반 KG로의 아키텍처 교체가 v0.18+ 연구 트랙.
+- **KRRA Conv 멀티턴 회귀**: Qwen3.5-27B agent 에서 KRRA Conv 만 v0.13
+  GPT-4o-mini baseline 대비 −23pp. 한국어 conversational reasoning 의
+  Qwen 측 약점으로 추정. 나머지 5개 벤치는 모두 v0.13 초과 (평균 81.4%).
+- **AutoRAG Full pipeline 회귀**: retrieval-style 짧은 팩트 코퍼스에서
+  cross-encoder 가 구조적으로 해로움. v0.17.1 adaptive blend 로 −0.264
+  → −0.100 완화했지만 `reranker=None` 이 완전 해결. 사용자 가이드 사안.
 - **패러프레이즈**: 데이터에 없는 개념어는 임베딩으로도 한계
 - **평가 방식**: ID 매칭 기반 GT는 집계 쿼리에 부정확 (LLM-as-Judge 보완)
 - **CDC Oracle/MSSQL**: 아직 legacy full-reload만 (Phase 6 follow-up)
@@ -777,10 +814,12 @@ fingerprint 재계산), `category_backfill=True` (카테고리 라벨 재추출)
   보통 PK가 있으므로 큰 제약은 아님
 
 ### 로드맵 (ROADMAP.md)
-- CDC 기반 인크리멘털 인덱싱
+- OpenIE triple-based KG 실험 (MuSiQue multi-hop 회복용 아키텍처 교체)
 - Doc2Query++ 쿼리 확장
+- `graph.chat()` 안정화 + KRRA Conv 회귀 원인 조사
 - Multi-agent 협업 탐색
 - 평가 GT 자동 확장 도구
+- `backfill(force=True)` 옵션 (embedder 전환 시 강제 re-embed)
 
 ---
 

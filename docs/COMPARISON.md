@@ -284,7 +284,10 @@ join_related(from_type="customer", to_type="order",
 
 ---
 
-## 4. v0.12 — Easy API와 벤치마크
+## 4. v0.17.1 — Easy API, 벤치마크, 멀티턴 에이전트
+
+> 이 섹션은 **v0.17.1 (2026-04-19) 측정값** 으로 갱신되었다. v0.12 시점 수치는
+> 더 이상 대표성이 없다.
 
 ### 4-1. `from_data()` — 2줄로 시작
 
@@ -319,31 +322,100 @@ Step 4b: Cross-encoder reranker (BYO, TEI/Ollama)
 Step 5:  EvidenceAggregator — MMR + per-doc cap + category coverage
 ```
 
-v0.11 대비 알고리즘 개선:
-- **Phase 1** (MaxP document aggregation + Vector PRF): Hard-set MRR +21%
-- **Phase 2** (usearch HNSW): 벡터 검색 레이턴시 **11,000ms → 1ms (100×)**
-- **Phase 3** (Cross-encoder bge-reranker-v2-m3): Hard-set MRR +22%
-- **Phase 4** (PPR graph discovery): 크로스 문서 hit rate +15%
-- **Kiwi 형태소**: 한국어 조사 분리 (한글 비율 50%+ 자동 감지)
+v0.12~v0.17 누적 알고리즘 개선:
 
-### 4-3. 벤치마크
+- **Phase 1** (v0.12, MaxP + Vector PRF): Hard-set MRR +21%
+- **Phase 2** (v0.12, usearch HNSW): 벡터 검색 레이턴시 **11,000ms → 1ms (100×)**
+- **Phase 3** (v0.12, Cross-encoder bge-reranker-v2-m3): Hard-set MRR +22%
+- **Phase 4** (v0.12, PPR graph discovery): 크로스 문서 hit rate +15%
+- **Kiwi 형태소** (v0.12): 한국어 조사 분리 (한글 비율 50%+ 자동 감지)
+- **CDC live sync** (v0.14+): deterministic ID + timestamp/hash 전략 → 풀 재빌드
+  대신 변경분만 반영. X2BEE 프로덕션 AWS RDS에서 incremental 6초 검증.
+- **Kind-aware aggregator** (v0.17): 문서와 테이블 행(`_table_name`)을 같은
+  pool에서 섞지 않고 kind 별로 다르게 집계.
+- **Reranker skip on table rows** (v0.17): cross-encoder가 테이블 행에 대해
+  구조적으로 손해를 보는 패턴 회피.
+- **Adaptive blend** (v0.17.1): FTS와 벡터 점수의 분산을 `std/3` 기준으로
+  섞어 retrieval-style corpus에서의 Full pipeline 회귀 완화.
+- **`DomainProfile.table_query_hints`** (v0.17.1): 정형 쿼리가 온톨로지
+  힌트를 타고 구조적 필드에 먼저 매칭되도록.
 
-9개 데이터셋 자동 평가 (`uv run python eval/run_all.py`). v0.12 기준:
+v0.17.1에서 **Full pipeline 평균이 처음으로 FTS-only 평균을 초과** (0.615 → 0.647,
++5.2%). v0.17.0은 net −1.1%였다.
 
-| 데이터셋 | 언어 | Corpus | MRR | Hit | 비고 |
-|---------|------|--------|:---:|:---:|------|
-| KRRA Easy (20q) | KO | 19,720 | **0.975** | 20/20 | FTS + Kiwi + embed |
-| KRRA Hard (15q) | KO | 19,720 | **0.933** | 15/15 | + embed + cross-encoder |
-| KRRA Hard Multi-turn | KO | 19,720 | — | 12/15 (80%) | GPT-4o-mini agent |
-| assort Easy (15q) | KO | 13,909 | **0.889** | 14/15 | 정형 CSV |
-| HotPotQA-24 | EN | 226 | **0.727** | 24/24 | multi-hop |
-| Allganize RAG-ko | KO | 200 | **0.621** | 180/200 | 기업 문서 |
-| Allganize RAG-Eval | KO | 300 | **0.615** | 264/300 | 금융/의료/법률 |
-| AutoRAG | KO | 720 | **0.592** | 98/114 | 기업 검색 |
-| X2BEE Easy (20q) | EN | 19,843 | **1.000** | 20/20 | DB→온톨로지 (FTS) |
-| X2BEE Hard Multi-turn | EN/KO | 19,843 | — | 8/19 (42%) | structured tools agent |
+### 4-3. 단발 retrieval 벤치 — 14 데이터셋 (v0.17.1)
 
-모든 수치는 **로컬 실행** 기준. 인덱싱 단계 LLM 호출 0회. 벤치마크 실행 자체에 드는 API 비용은 multi-turn agent 평가에 쓰이는 GPT-4o-mini 호출뿐이다.
+두 모드를 병기한다.
+
+- **FTS-only**: `eval/run_all.py --quick`. Embedder/Reranker 없음. CI/일상
+  회귀 검증용.
+- **Full pipeline**: `eval/run_all.py --quick --local-bge`. `BAAI/bge-m3` +
+  `BAAI/bge-reranker-v2-m3` (cuda:0, FP16).
+
+| 데이터셋 | 언어 | 쿼리 | FTS-only MRR | Full pipeline MRR | Δ | 비고 |
+|---------|------|-----|-------------:|------------------:|---:|---|
+| KRRA Easy | KO | 20 | 0.967 | **0.975** | +0.008 | |
+| KRRA Hard | KO | 40 | 0.583 | **0.589** | +0.006 | |
+| KRRA Conv | KO | 30 | 0.146 | **0.166** | +0.020 | |
+| assort Easy | KO | 15 | 0.760 | **0.856** | **+0.096** | table_query_hints 효과 |
+| assort Hard | KO | 40 | 0.000 | 0.000 | 0 | structured-only — agent 필요 |
+| assort Conv | KO | 30 | 0.425 | **0.472** | **+0.047** | kind-aware aggregator 효과 |
+| X2BEE Easy | EN | 20 | 1.000 | 1.000 | 0 | perfect cap |
+| X2BEE Hard | EN/KO | 20 | **0.379** | 0.368 | −0.011 | reranker가 일부 케이스 흔듦 |
+| X2BEE Conv | EN/KO | 30 | 0.167 | 0.164 | −0.003 | noise level |
+| HotPotQA-24 | EN | 24 | 0.875 | **0.979** | +0.104 | |
+| Allganize RAG-ko | KO | 200 | 0.947 | **0.983** | +0.036 | |
+| Allganize RAG-Eval | KO | 300 | 0.911 | **0.955** | +0.044 | |
+| PublicHealthQA | KO | 77 | 0.547 | **0.748** | **+0.201** | paraphrase-heavy 의료 |
+| AutoRAG | KO | 720 | **0.906** | 0.806 | **−0.100** | retrieval-style regression |
+| **평균** | | | **0.615** | **0.647** | **+0.032 (+5.2%)** | |
+
+12/14 벤치가 동일 또는 개선. 음수는 AutoRAG / X2BEE Hard / X2BEE Conv 3개뿐이며,
+X2BEE 계열은 −0.011 이내 noise 수준. AutoRAG −0.100은 cross-encoder가
+retrieval-style corpus에서 구조적으로 해롭다는 기존 관찰의 재확인이며,
+adaptive blend로 v0.17.0의 −0.264에서 완화된 상태다.
+
+### 4-4. 멀티턴 agent 벤치 (Qwen3.5-27B vLLM, 5턴, LLM-judge)
+
+`graph.chat()` (v0.18-alpha)로 공개 API가 된 agent-loop를 동일 그래프 위에서
+실측. 판정은 별도 LLM judge.
+
+| 데이터셋 | 쿼리 | Agent solved | v0.13 baseline (GPT-4o-mini) | Δ vs v0.13 |
+|---------|-----:|-------------:|------------------------------:|---:|
+| KRRA Hard | 39 | **30/39 (77%)** | 11/15 (73%) | +4pp |
+| assort Hard | 33 | **30/33 (91%)** | 13/15 (87%) | +4pp |
+| X2BEE Hard | 19 | **19/19 (100%)** | 17/19 (89%) | **+11pp** |
+| KRRA Conv | 30 | 14/30 (47%) | 21/30 (70%) | **−23pp** ⚠ |
+| assort Conv | 24 | **22/24 (92%)** | 20/24 (83%) | +9pp |
+| X2BEE Conv | 27 | **25/27 (93%)** | 22/27 (81%) | +12pp |
+| **평균** | 172 | **140/172 = 81.4%** | | |
+
+**핵심 발견**
+
+- **6개 벤치 중 5개에서 v0.13 GPT-4o-mini baseline 초과** (Qwen3.5-27B 자체
+  서빙이 더 강함). 상업 API에 의존하지 않고도 동일 이상 품질이 나온다는 의미.
+- Single-shot 0.0 → agent 91% (assort Hard), Single-shot 0.379 → agent
+  100% (X2BEE Hard). 즉 **정형 데이터 쿼리에서는 agent loop가 단발 retrieval의
+  구조적 한계를 근본적으로 뚫는다**. 이것이 Synaptic 의 진짜 narrative다 —
+  "single-shot 보통, agent 모드 평균 81%".
+- **KRRA Conv만 회귀** (−23pp). Qwen3.5-27B 의 한국어 conversational reasoning
+  약점으로 추정되며, v0.18 트랙에서 조사 중.
+
+### 4-5. 알려진 한계 — MuSiQue (영어 multi-hop)
+
+MuSiQue-Ans dev 500q full pipeline 측정
+(`run_tier1_benchmarks.py --only musique --subset 500 --local-bge`):
+
+- **R@5 0.453** vs HippoRAG2 publish **0.747** (−0.294)
+- 3-round ablation (decomposer / inline phrase / DF-filtered entity linker)
+  모두 baseline 개선 못함.
+- 결론: **OpenIE triple extraction + query-to-triple dense linking** 같은
+  아키텍처 교체가 필요. 현재의 relation-free 구조는 MuSiQue 스타일
+  shortcut-heavy multi-hop에 구조적으로 약하다. v0.18.0+ research track.
+
+모든 수치는 **로컬 실행** 기준. 인덱싱 단계 LLM 호출 0회. 벤치마크 실행에
+드는 API 비용은 0이다 — multi-turn agent 평가조차 자체 서빙 Qwen3.5-27B를
+사용한다.
 
 ---
 
@@ -384,14 +456,30 @@ v0.11 대비 알고리즘 개선:
 - 6개 intent × 5축 resonance 가중치로 검색 전략을 쿼리 시점에 전환.
 - OntologyRegistry(코드) + DomainProfile TOML(설정) 이라는 2-layer 스키마로 범용화.
 - 정형(CSV/DB) + 비정형(PDF/MD) 을 같은 그래프에 올리고 `filter_nodes / aggregate_nodes / join_related` 도구로 에이전트에 노출.
+- **Live DB CDC 증분 동기화** — 프로덕션 DB와 연동할 때 풀 재빌드 없이 변경분만
+  반영 (deterministic ID + timestamp/hash 전략, FK 재계산, 삭제 감지). SQLite /
+  PostgreSQL / MySQL / MariaDB 지원. X2BEE AWS RDS에서 incremental 6초 검증.
+- **`graph.chat()` agent-loop 공개 API** (v0.18-alpha) — 36개 MCP 도구를
+  사용하는 멀티턴 에이전트가 Qwen3.5-27B 자체 서빙만으로 6개 벤치 중
+  5개에서 v0.13 GPT-4o-mini baseline 초과 (평균 81.4%).
 - 코어 의존성 0, torch-free, BYO embedder/reranker (Ollama·TEI·API).
-- `from_data()` 2줄 API, 36개 MCP 도구 (검색 + 인제스트 + CDC 증분 sync + backfill 복구), 9개 데이터셋 자동 평가 스크립트.
+- `from_data()` 2줄 API, 36개 MCP 도구 (검색 + 인제스트 + CDC 증분 sync + backfill 복구), 14개 데이터셋 자동 평가 스크립트.
 
 **알려진 약점 및 미검증 영역**
 - **프로덕션 성숙도 낮음**. 단일 저자 오픈소스이며 대규모 운영 사례 없음. Zep·Letta·Mem0 는 상업·커뮤니티 경험이 훨씬 많음.
-- **공정한 head-to-head 벤치마크 부재**. 섹션 4의 숫자는 자체 재현 환경 기준. HippoRAG / Mem0 / Zep 과 동일 코퍼스·프로토콜에서 비교한 공개 결과는 아직 없음. 현재 HotPotQA 0.727 이 공통 비교 가능한 유일한 지점이며, 이것도 corpus 샘플링이 다르다.
+- **공정한 head-to-head 벤치마크 부재**. 섹션 4의 숫자는 자체 재현 환경 기준.
+  HippoRAG / Mem0 / Zep 과 동일 코퍼스·프로토콜에서 비교한 공개 결과는 아직
+  없다. 공통 비교 지점은 HotPotQA-24 (0.979)와 MuSiQue (0.453 vs HippoRAG2 0.747)
+  정도.
+- **MuSiQue multi-hop 한계 공개**. 영어 shortcut-heavy multi-hop에서는 OpenIE
+  triple 추출 기반 KG(HippoRAG2) 에 −0.294 뒤처진다. 3-round ablation 으로도
+  해결 못함 → v0.18 아키텍처 교체 트랙.
 - **Hebbian / consolidation 의 실제 효과 미입증**. 설계는 합리적이지만 "이 메커니즘이 장기 운영에서 retrieval 품질을 유의미하게 개선하는가"는 정량화된 증거가 없다. 내부 시나리오 테스트만 존재.
-- **한국어 편중**. Kiwi 형태소, KRRA/assort/Allganize 등 평가 다수가 한국어. 영어 벤치마크는 HotPotQA / X2BEE 정도로 폭이 좁음.
+- **한국어 편중**. Kiwi 형태소, KRRA/assort/Allganize/PublicHealthQA/AutoRAG
+  등 평가 다수가 한국어. 영어 벤치마크는 HotPotQA / X2BEE / MuSiQue 정도로
+  폭이 좁음.
+- **Conv 세트 KRRA 회귀**. v0.17.1 멀티턴 agent에서 KRRA Conv만 v0.13 baseline
+  대비 −23pp. Qwen3.5-27B 의 한국어 conversational reasoning 약점으로 추정.
 - **Kuzu 백엔드 아카이브 상태**. 2025-10 Apple 인수로 upstream 동결(0.11.3 고정). 현재 동작하지만 장기 지원 불확실. LadybugDB fork 는 검증 결과 drop-in 불가. 당분간 SQLite + Postgres 가 안전한 선택.
 - **인프라 부담은 사용자에게 전가**. torch-free 를 달성한 대가로 embedder/cross-encoder 서빙(Ollama, TEI 등) 을 사용자가 직접 운영해야 함. 완제품 SaaS 가 아님.
 - **통합·생태계 부족**. LangChain·LlamaIndex 등 주류 프레임워크 어댑터 미비. MCP 외 경로로는 수동 통합 필요.

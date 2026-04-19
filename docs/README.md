@@ -20,8 +20,9 @@ LLM 에이전트, MCP 서버까지 순서대로 경험합니다.
 ## 🧠 내부 동작이 궁금한 분
 
 ### [CONCEPTS.md](CONCEPTS.md)
-3세대 GraphRAG란 무엇인지, 검색 파이프라인이 어떤 9단계를 거치는지, 왜
-SQLite를 기본으로 삼았는지 등 **설계 의사결정의 근거**를 담았습니다.
+3세대 GraphRAG란 무엇인지, 검색 파이프라인의 각 단계, CDC 라이브 DB
+동기화, Backfill 복구, 그리고 v0.17 에서 **측정 후 ship 하지 않은 4개
+접근** (measured negatives) 까지 담은 **설계 의사결정 근거 문서**.
 
 ### [ARCHITECTURE.md](ARCHITECTURE.md)
 뇌 신경망에서 영감받은 **초기 설계** 문서. Hebbian Learning, Memory
@@ -40,9 +41,16 @@ GraphRAG (Microsoft), LightRAG, LazyGraphRAG 등과의 비교. 어떤 차이가 
 ## 🗺 계획 / 로드맵
 
 ### [ROADMAP.md](ROADMAP.md)
-버전별 기능 추가 계획. 현재 배포 상태는 **v0.15.0**
-(CDC live DB sync + MCP ingest tools + `graph.backfill()` +
-`graph.search(engine="evidence")` opt-in, 36 MCP tools).
+버전별 기능 추가 계획. 현재 PyPI 최신은 **v0.17.2** (Apache-2.0 라이선스
+전환 + agent_loop ID-extraction fix). **v0.18-alpha** 에서 `graph.chat()`
+agent-loop 가 공개 API 로 승격됨.
+
+### [PLAN-v0.17-ontology.md](PLAN-v0.17-ontology.md)
+v0.17 ontology/정형 데이터 파이프라인 설계. MuSiQue 한계 논의 포함.
+
+### [PLAN-v0.18-architecture.md](PLAN-v0.18-architecture.md)
+v0.18 아키텍처 트랙 — `graph.chat()` 공개화, OpenIE triple 실험 등
+v0.17.1 가 제기한 5개 오픈 질문.
 
 ### [PLAN-v0.5-scale.md](PLAN-v0.5-scale.md)
 v0.5 스케일업 계획 (Kuzu/Qdrant 도입 등). 역사적 자료.
@@ -70,7 +78,7 @@ v0.5 스케일업 계획 (Kuzu/Qdrant 도입 등). 역사적 자료.
 | "DB에서 자동 인제스트" | [TUTORIAL.md §2-3](TUTORIAL.md#2-3-sql-db로-하면-fk까지-자동) |
 | "왜 SQLite에요?" | [CONCEPTS.md §5](CONCEPTS.md#5-왜-sqlite인가) |
 | "평가는 어떻게?" | [TUTORIAL.md §7](TUTORIAL.md#7-평가) |
-| "벤치마크 결과 보여줘" | [GUIDE.md §7](GUIDE.md#7-벤치마크-결과-v0130) |
+| "벤치마크 결과 보여줘" | [GUIDE.md §7](GUIDE.md#7-벤치마크-결과) · [COMPARISON.md §4](COMPARISON.md) |
 
 ---
 
