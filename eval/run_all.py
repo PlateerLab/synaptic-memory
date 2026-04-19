@@ -1013,6 +1013,224 @@ Reply with only YES or NO."""
         return False
 
 
+async def _agent_loop_run(
+    *,
+    client,
+    backend,
+    queries: list[dict],
+    model: str,
+    max_turns: int,
+    embedder,
+    judge: bool,
+    name: str,
+    id_field: str = "doc_id",
+) -> RunResult:
+    """Pure agent-loop measurement against a prepared backend + parsed
+    queries. Shared between ``run_agent_benchmark`` (custom datasets
+    with pre-built SQLite) and ``run_agent_benchmark_public`` (public
+    JSON corpora ingested transiently)."""
+    from synaptic.search_session import SearchSession, build_graph_context
+
+    graph_ctx = await build_graph_context(backend)
+    system = AGENT_SYSTEM + "\n\n" + graph_ctx
+
+    from synaptic.models import NodeKind as _NK
+
+    _sample = await backend.list_nodes(kind=_NK.ENTITY, limit=50_000)
+    known_tables: set[str] = set()
+    for _n in _sample:
+        _tbl = (_n.properties or {}).get("_table_name")
+        if _tbl:
+            known_tables.add(_tbl)
+
+    solved = 0
+    total = 0
+    total_turns = 0
+    total_calls = 0
+    t0 = time.time()
+
+    for q in queries:
+        query_text = q.get("query", "")
+        relevant = set(q.get("relevant_docs", []))
+        if not relevant or not query_text:
+            continue
+        total += 1
+
+        session = SearchSession(budget_tool_calls=max_turns * 3)
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": query_text},
+        ]
+
+        found_ids: set[str] = set()
+        turns_used = 0
+        final_answer = ""
+
+        for turn in range(max_turns):
+            turns_used = turn + 1
+            try:
+                resp = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    tools=AGENT_TOOLS,
+                    max_tokens=2048,
+                )
+            except Exception as exc:
+                print(f"    ⚠ API error: {exc}")
+                break
+
+            msg = resp.choices[0].message
+            if msg.tool_calls:
+                messages.append(msg.model_dump())
+                for tc in msg.tool_calls:
+                    fn = tc.function.name
+                    try:
+                        fn_args = json.loads(tc.function.arguments)
+                    except json.JSONDecodeError:
+                        fn_args = {}
+                    result = await _agent_dispatch(fn, fn_args, backend, session, embedder=embedder)
+                    total_calls += 1
+                    data = result.get("data", {})
+                    _extract_ids(data, found_ids, known_tables=known_tables)
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": json.dumps(result, ensure_ascii=False)[:5000],
+                        }
+                    )
+            else:
+                final_answer = msg.content or ""
+                break
+
+        total_turns += turns_used
+        id_hit = bool(found_ids & relevant)
+        hit = id_hit
+        judge_hit = False
+        if not id_hit and judge and final_answer:
+            judge_hit = await _llm_judge(
+                client, query_text, final_answer, list(relevant), model=model
+            )
+            if judge_hit:
+                hit = True
+
+        tag = "id" if id_hit else ("judge" if judge_hit else "miss")
+        print(
+            f"      [{q.get('qid', '?')}] turns={turns_used} found={len(found_ids)} "
+            f"hit={hit} ({tag})"
+        )
+        if hit:
+            solved += 1
+
+    elapsed = time.time() - t0
+    return RunResult(
+        name=name + " (agent)",
+        corpus_size=total,
+        mrr=solved / max(total, 1),
+        hit_rate=f"{solved}/{total}",
+        elapsed=elapsed,
+    )
+
+
+async def run_agent_benchmark_public(
+    cfg: DatasetConfig,
+    api_key: str,
+    model: str = "gpt-4o-mini",
+    max_turns: int = 3,
+    judge: bool = False,
+    llm_base_url: str | None = None,
+) -> RunResult:
+    """Public-dataset variant — ingests JSON corpus into a transient
+    SqliteGraphBackend, then runs the shared agent loop. Lets us
+    measure agent solved-rate on BEIR / 2Wiki / MuSiQue etc. that
+    don't ship a pre-built SQLite graph."""
+    if not cfg.path.exists():
+        return RunResult(name=cfg.name + " (agent)", error="file not found")
+
+    import os
+    import tempfile
+
+    os.environ["OPENAI_API_KEY"] = api_key or "ollama"
+
+    from openai import AsyncOpenAI
+    from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
+    client = AsyncOpenAI(base_url=llm_base_url) if llm_base_url else AsyncOpenAI()
+
+    with open(cfg.path, encoding="utf-8") as f:
+        data = json.load(f)
+    raw_corpus = data.get("corpus", data.get("documents", []))
+    queries_in = data.get("queries", [])
+    qrels = data.get("qrels", data.get("relevant_docs", {}))
+    if not raw_corpus or not queries_in:
+        return RunResult(name=cfg.name + " (agent)", error="empty dataset")
+
+    corpus: list[tuple[str, str, str]] = []
+    if isinstance(raw_corpus, dict):
+        for doc_id, doc in raw_corpus.items():
+            if isinstance(doc, dict):
+                corpus.append(
+                    (str(doc_id), str(doc.get("title", "")), str(doc.get("text", "")))
+                )
+            elif isinstance(doc, str):
+                corpus.append((str(doc_id), "", doc))
+
+    queries: list[dict] = []
+    if isinstance(queries_in, dict):
+        for qid, text in queries_in.items():
+            rel = qrels.get(qid, {})
+            ids = (
+                set(str(k) for k in rel.keys())
+                if isinstance(rel, dict)
+                else set(map(str, rel)) if isinstance(rel, list) else set()
+            )
+            if ids and text:
+                queries.append({"qid": str(qid), "query": str(text), "relevant_docs": list(ids)})
+
+    if not corpus or not queries:
+        return RunResult(name=cfg.name + " (agent)", error="could not parse corpus/queries")
+
+    tmp_db = tempfile.NamedTemporaryFile(
+        prefix=f"public_agent_{cfg.name.replace(' ', '_')}_",
+        suffix=".db",
+        delete=False,
+    )
+    tmp_db.close()
+    backend = SqliteGraphBackend(tmp_db.name)
+    await backend.connect()
+    graph = SynapticGraph(backend)
+
+    for doc_id, title, text in corpus:
+        if not text and not title:
+            continue
+        await graph.add(
+            title=title or doc_id,
+            content=text,
+            properties={"doc_id": doc_id},
+        )
+
+    try:
+        result = await _agent_loop_run(
+            client=client,
+            backend=backend,
+            queries=queries,
+            model=model,
+            max_turns=max_turns,
+            embedder=None,
+            judge=judge,
+            name=cfg.name,
+        )
+    finally:
+        await backend.close()
+        for ext in ("", ".hnsw", ".hnsw.meta.json"):
+            try:
+                os.unlink(tmp_db.name + ext)
+            except FileNotFoundError:
+                pass
+
+    return result
+
+
 async def run_agent_benchmark(
     cfg: DatasetConfig,
     api_key: str,
@@ -1345,6 +1563,13 @@ def _parse_args():
     p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
     p.add_argument("--agent-max-turns", type=int, default=5, help="Max turns per agent query")
     p.add_argument(
+        "--agent-public",
+        action="store_true",
+        help="Also run public datasets through the agent loop (default: "
+        "agent only runs custom Hard/Conv).  Useful for v0.18 generality "
+        "verification.",
+    )
+    p.add_argument(
         "--judge", action="store_true", help="Enable LLM-as-Judge fallback when ID matching fails"
     )
     return p.parse_args()
@@ -1475,6 +1700,43 @@ async def main():
                 except Exception as exc:
                     results.append(RunResult(name=cfg.name + " (agent)", error=str(exc)[:80]))
                     print(f"❌ {exc}")
+
+            # v0.18-prep — also run agent on public datasets when
+            # --agent-public is set. Skips the existing tiny HotPotQA-24
+            # (already covered as a Hard-style custom-bench analogue);
+            # respects --quick filter so the same flag combo works in
+            # both fast and full modes.
+            if args.agent_public:
+                public_pool = [
+                    d for d in PUBLIC_DATASETS
+                    if d.path.exists() and d.name != "HotPotQA-24"
+                    and (not args.quick or d.quick)
+                ]
+                for cfg in public_pool:
+                    print(
+                        f"  {cfg.name} public-agent (max {args.agent_max_turns} turns)...",
+                        end=" ",
+                        flush=True,
+                    )
+                    try:
+                        r = await run_agent_benchmark_public(
+                            cfg,
+                            api_key,
+                            model=args.agent_model,
+                            max_turns=args.agent_max_turns,
+                            judge=args.judge,
+                            llm_base_url=args.llm_base_url,
+                        )
+                        results.append(r)
+                        if r.error:
+                            print(f"❌ {r.error}")
+                        else:
+                            print(f"solved={r.hit_rate} ({r.elapsed:.1f}s)")
+                    except Exception as exc:
+                        results.append(
+                            RunResult(name=cfg.name + " (agent)", error=str(exc)[:80])
+                        )
+                        print(f"❌ {exc}")
 
     print_table(results, baseline)
     save_results(results, args.save)

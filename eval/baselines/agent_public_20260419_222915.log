@@ -1,0 +1,7 @@
+
+--agent-only: skipping single-shot retrieval
+
+Running 0 benchmarks...
+  embedder: none
+  reranker: none
+  KRRA Hard (agent, max 5 turns)... 
