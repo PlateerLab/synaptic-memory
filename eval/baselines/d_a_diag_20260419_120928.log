@@ -1,0 +1,41 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+=== AutoRAG (114q) — LLM reranker (D) ===
+corpus: 720, queries: 114
+Loading bge-m3 + bge-reranker-v2-m3 ...
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 4302.72it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  98%|█████████▊| 385/393 [00:00<00:00, 3848.37it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3897.43it/s]
+  baseline (bge embed + bge rer)      MRR=0.806  Hit=106/114  (29.1s)
+  FTS-only (ceiling on this corpus)   MRR=0.916  Hit=114/114  (7.2s)
+  D: bge embed + LLM rerank           MRR=0.793  Hit=114/114  (551.9s)
+
+=== KRRA Conv (30q) — HyDE (A) ===
+queries: 30, id_field: doc_id
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights:  92%|█████████▏| 360/391 [00:00<00:00, 3599.18it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 3655.53it/s]
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights:  80%|███████▉  | 313/393 [00:00<00:00, 3100.98it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 3263.78it/s]
+  baseline (bge embed + bge rer)      MRR=0.161  Hit=7/30  (13.8s)
+  A: HyDE embed + bge rer             MRR=0.161  Hit=7/30  (190.3s)
+Exception in thread Thread-2 (_connection_worker_thread):
+Traceback (most recent call last):
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/aiosqlite/core.py", line 66, in _connection_worker_thread
+    future.get_loop().call_soon_threadsafe(set_result, future, result)
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 844, in call_soon_threadsafe
+    self._check_closed()
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 545, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+    self.run()
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1012, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/gpuuser/sonAIengine/synaptic-memory/.venv/lib/python3.12/site-packages/aiosqlite/core.py", line 75, in _connection_worker_thread
+    future.get_loop().call_soon_threadsafe(set_exception, future, e)
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 844, in call_soon_threadsafe
+    self._check_closed()
+  File "/home/gpuuser/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 545, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
