@@ -1,0 +1,11 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+=== scifact ===
+Loading BEIR scifact (BeIR/scifact, split=test)...
+Generating corpus split:   0%|          | 0/5183 [00:00<?, ? examples/s]Generating corpus split: 100%|██████████| 5183/5183 [00:00<00:00, 46574.42 examples/s]
+Generating queries split:   0%|          | 0/1109 [00:00<?, ? examples/s]Generating queries split: 100%|██████████| 1109/1109 [00:00<00:00, 112801.51 examples/s]
+Generating train split:   0%|          | 0/919 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 919/919 [00:00<00:00, 73016.96 examples/s]
+Generating test split:   0%|          | 0/339 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 339/339 [00:00<00:00, 60256.35 examples/s]
+  → tests/benchmark/data/scifact.json  (7.6 MB, 5183 docs, 300 queries)
+
+Done. JSON files are gitignored; re-run this script on any clean clone.

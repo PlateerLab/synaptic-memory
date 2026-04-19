@@ -242,10 +242,95 @@ def build_2wiki(out_path: Path) -> None:
     )
 
 
+# --- BEIR subset (English domain diversity for v0.18 generality check) -----
+
+
+def _build_beir(corpus_repo: str, split: str, label: str, out_path: Path) -> None:
+    """Generic BEIR-style builder.
+
+    BEIR ships each dataset as 3 HuggingFace splits:
+      - ``corpus`` (doc_id, title, text)
+      - ``queries`` (qid, text)
+      - ``qrels/{split}`` (qid, doc_id, score)
+
+    The resulting JSON matches the schema run_all.py / run_tier1 expect.
+    """
+    from datasets import load_dataset
+
+    print(f"Loading BEIR {label} ({corpus_repo}, split={split})...")
+
+    corpus_ds = load_dataset(corpus_repo, "corpus", split="corpus")
+    queries_ds = load_dataset(corpus_repo, "queries", split="queries")
+    qrels_ds = load_dataset(f"BeIR/{label}-qrels", split=split)
+
+    corpus: dict[str, dict] = {}
+    for row in corpus_ds:
+        did = str(row["_id"])
+        corpus[did] = {
+            "title": str(row.get("title") or ""),
+            "text": str(row.get("text") or ""),
+        }
+
+    queries: dict[str, str] = {}
+    for row in queries_ds:
+        qid = str(row["_id"])
+        text = str(row.get("text") or "").strip()
+        if text:
+            queries[qid] = text
+
+    qrels: dict[str, dict[str, int]] = {}
+    for row in qrels_ds:
+        qid = str(row["query-id"])
+        did = str(row["corpus-id"])
+        score = int(row.get("score") or 0)
+        if score <= 0:
+            continue
+        qrels.setdefault(qid, {})[did] = score
+
+    queries = {q: t for q, t in queries.items() if q in qrels}
+
+    _write(
+        out_path,
+        {
+            "name": f"BEIR {label} {split}",
+            "source": f"huggingface: {corpus_repo}",
+            "corpus_size": len(corpus),
+            "query_size": len(queries),
+            "qrels_size": len(qrels),
+            "corpus": corpus,
+            "queries": queries,
+            "qrels": qrels,
+        },
+    )
+
+
+def build_trec_covid(out_path: Path) -> None:
+    """BEIR TREC-COVID — biomedical domain, 50 queries, ~171k docs.
+    Tests retrieval generality on English biomedical text — paraphrase-
+    heavy, technical vocabulary, very different from Wikipedia."""
+    _build_beir("BeIR/trec-covid", "test", "trec-covid", out_path)
+
+
+def build_fiqa(out_path: Path) -> None:
+    """BEIR FiQA — financial QA, 648 queries, ~57k docs.
+    Tests retrieval on a third English domain (finance) — short
+    factoid queries, varied document length."""
+    _build_beir("BeIR/fiqa", "test", "fiqa", out_path)
+
+
+def build_scifact(out_path: Path) -> None:
+    """BEIR SciFact — scientific claim verification, 300 queries,
+    ~5k docs. Small + tightly-bounded relevance."""
+    _build_beir("BeIR/scifact", "test", "scifact", out_path)
+
+
 BUILDERS = {
     "hotpotqa_full": (build_hotpotqa, "hotpotqa_full.json"),
     "musique": (build_musique, "musique_dev.json"),
     "2wiki": (build_2wiki, "2wiki_dev.json"),
+    "trec_covid": (build_trec_covid, "trec_covid.json"),
+    "fiqa": (build_fiqa, "fiqa.json"),
+    "scifact": (build_scifact, "scifact.json"),
 }
 
 

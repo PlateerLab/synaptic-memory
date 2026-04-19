@@ -153,6 +153,14 @@ PUBLIC_DATASETS = [
     DatasetConfig(name="AutoRAG", path=BENCHMARK_DIR / "autorag_retrieval.json", quick=True),
     DatasetConfig(name="KLUE-MRC", path=BENCHMARK_DIR / "klue_mrc.json", quick=False),
     DatasetConfig(name="Ko-StrategyQA", path=BENCHMARK_DIR / "ko_strategyqa.json", quick=False),
+    # v0.18 verification corpora — English domain diversity for
+    # "is this reform truly general?" check. Marked quick=False so the
+    # CI / quick mode stays fast; opt-in via removing --quick.
+    DatasetConfig(name="2Wiki-dev", path=BENCHMARK_DIR / "2wiki_dev.json", quick=False),
+    DatasetConfig(name="MuSiQue-dev", path=BENCHMARK_DIR / "musique_dev.json", quick=False),
+    DatasetConfig(name="TREC-COVID", path=BENCHMARK_DIR / "trec_covid.json", quick=False),
+    DatasetConfig(name="FiQA", path=BENCHMARK_DIR / "fiqa.json", quick=False),
+    DatasetConfig(name="SciFact", path=BENCHMARK_DIR / "scifact.json", quick=False),
 ]
 
 

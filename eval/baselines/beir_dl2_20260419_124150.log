@@ -1,0 +1,19 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+=== trec_covid ===
+Loading BEIR trec-covid (BeIR/trec-covid, split=test)...
+Generating corpus split:   0%|          | 0/171332 [00:00<?, ? examples/s]Generating corpus split: 100%|██████████| 171332/171332 [00:01<00:00, 170183.08 examples/s]Generating corpus split: 100%|██████████| 171332/171332 [00:01<00:00, 88847.26 examples/s] 
+Generating queries split:   0%|          | 0/50 [00:00<?, ? examples/s]Generating queries split: 100%|██████████| 50/50 [00:00<00:00, 4539.88 examples/s]
+Generating test split:   0%|          | 0/66336 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 66336/66336 [00:00<00:00, 343836.28 examples/s]
+  → tests/benchmark/data/trec_covid.json  (189.6 MB, 171332 docs, 50 queries)
+
+=== fiqa ===
+Loading BEIR fiqa (BeIR/fiqa, split=test)...
+Generating corpus split:   0%|          | 0/57638 [00:00<?, ? examples/s]Generating corpus split: 100%|██████████| 57638/57638 [00:00<00:00, 196193.10 examples/s]Generating corpus split: 100%|██████████| 57638/57638 [00:00<00:00, 95940.59 examples/s] 
+Generating queries split:   0%|          | 0/6648 [00:00<?, ? examples/s]Generating queries split: 100%|██████████| 6648/6648 [00:00<00:00, 390479.25 examples/s]
+Generating train split:   0%|          | 0/14166 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 14166/14166 [00:00<00:00, 915889.67 examples/s]
+Generating validation split:   0%|          | 0/1238 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 1238/1238 [00:00<00:00, 243347.47 examples/s]
+Generating test split:   0%|          | 0/1706 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 1706/1706 [00:00<00:00, 316250.45 examples/s]
+  → tests/benchmark/data/fiqa.json  (44.5 MB, 57638 docs, 648 queries)
+
+Done. JSON files are gitignored; re-run this script on any clean clone.
