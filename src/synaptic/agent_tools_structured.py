@@ -684,3 +684,165 @@ def _join_hints(
         )
     )
     return hints
+
+
+async def top_nodes_tool(
+    backend: StorageBackend,
+    session: SearchSession,
+    *,
+    table: str,
+    sort_by: str,
+    order: str = "desc",
+    limit: int = 5,
+    where_property: str = "",
+    where_op: str = "",
+    where_value: str = "",
+) -> ToolResult:
+    """Return the top N rows of a table ordered by a property.
+
+    Solves "가장 X한 상품", "top 5 sellers", "최근 Y 1위" patterns in
+    a single tool call. Previously the agent had to chain
+    ``aggregate_nodes(..., metric="max", metric_property="...")`` with
+    a group_by hack that worked but was non-obvious and frequently
+    mis-used — causing benchmarks a003, a039, a040 to fail on
+    assort Hard.
+
+    Args:
+        table: Table to rank (e.g. "products").
+        sort_by: Property name to order on (numeric comparison when
+            every value parses as a float; lexicographic otherwise).
+        order: ``"desc"`` (default) for highest-first, ``"asc"`` for
+            lowest-first.
+        limit: How many rows to return after ranking.
+        where_property: Optional pre-filter property. When set, rows
+            failing the ``(where_property, where_op, where_value)``
+            predicate are dropped BEFORE ranking.
+        where_op: One of the ``filter_nodes`` operators.
+        where_value: Comparison value for the pre-filter.
+
+    Examples:
+        - top_nodes(table="products", sort_by="cumulative_sales", order="desc", limit=5)
+        - top_nodes(table="products", sort_by="discount_rate", order="desc", limit=3,
+              where_property="season", where_op="==", where_value="25SS")
+        - top_nodes(table="broadcasts", sort_by="broadcast_date", order="desc", limit=1)
+    """
+    budget = _budget_check(session, "top_nodes")
+    if budget is not None:
+        return budget
+
+    if order not in ("asc", "desc"):
+        return ToolResult(
+            tool="top_nodes",
+            ok=False,
+            data={},
+            session=session.summary(),
+            error=f"order must be 'asc' or 'desc', got {order!r}",
+        )
+
+    try:
+        all_nodes = await backend.list_nodes(kind=None, limit=200_000)
+    except Exception as exc:
+        return ToolResult(
+            tool="top_nodes",
+            ok=False,
+            data={},
+            session=session.summary(),
+            error=f"list_nodes_failed: {exc}",
+        )
+
+    candidates: list[tuple[Any, float | str]] = []
+    for n in all_nodes:
+        props = n.properties or {}
+        if table and props.get("_table_name") != table:
+            continue
+        if where_property and where_op:
+            raw_w = props.get(where_property)
+            if raw_w is None or not _eval_op(where_op, raw_w, where_value):
+                continue
+        raw_sort = props.get(sort_by)
+        if raw_sort is None:
+            continue
+        try:
+            sort_key: float | str = float(raw_sort)
+        except (ValueError, TypeError):
+            sort_key = str(raw_sort)
+        candidates.append((n, sort_key))
+
+    if not candidates:
+        hints: list[Hint] = []
+        # Differentiate "column missing" vs "pre-filter too strict"
+        if where_property:
+            hints.append(
+                Hint(
+                    action="top_nodes",
+                    args={"table": table, "sort_by": sort_by, "order": order, "limit": limit},
+                    reason="0 rows under this WHERE — retry without the pre-filter",
+                )
+            )
+        hints.append(
+            Hint(
+                action="filter_nodes",
+                args={"table": table, "property": sort_by, "op": "contains", "value": ""},
+                reason=f"verify {sort_by!r} is a real column on {table!r}",
+            )
+        )
+        return ToolResult(
+            tool="top_nodes",
+            ok=True,
+            data={
+                "query": {
+                    "table": table,
+                    "sort_by": sort_by,
+                    "order": order,
+                    "limit": limit,
+                },
+                "total": 0,
+                "showing": 0,
+                "results": [],
+            },
+            hints=hints,
+            session=session.summary(),
+        )
+
+    # Sort. Keep stable — use (key, original_index) as tie-breaker.
+    # All keys compare consistently because we coerced to float xor str above;
+    # tiny mixed-type batches sort by str fallback.
+    try:
+        candidates.sort(key=lambda pair: pair[1], reverse=(order == "desc"))
+    except TypeError:
+        # Rare: mixed float and str sort keys in same batch. Fall back
+        # to string comparison so we still return SOMETHING useful.
+        candidates.sort(key=lambda pair: str(pair[1]), reverse=(order == "desc"))
+
+    top = candidates[:limit]
+    session.mark_seen(n.id for n, _ in top)
+
+    return ToolResult(
+        tool="top_nodes",
+        ok=True,
+        data={
+            "query": {
+                "table": table,
+                "sort_by": sort_by,
+                "order": order,
+                "limit": limit,
+                **(
+                    {"where": f"{where_property} {where_op} {where_value}"}
+                    if where_property
+                    else {}
+                ),
+            },
+            "total": len(candidates),
+            "showing": len(top),
+            "truncated": len(candidates) > len(top),
+            "results": [
+                {
+                    **_node_to_summary(n),
+                    "sort_value": sort_key if isinstance(sort_key, (int, float)) else str(sort_key),
+                }
+                for n, sort_key in top
+            ],
+        },
+        hints=[],
+        session=session.summary(),
+    )

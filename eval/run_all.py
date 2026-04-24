@@ -521,7 +521,8 @@ You are a research agent. Use the provided tools to answer the question.
 ## Tool selection (pick the RIGHT one first time)
 - Text question → deep_search(query, category="relevant category from metadata")
 - Price/date/attribute filter → filter_nodes(table, property, op, value)
-- "how many per X" / TOP N → aggregate_nodes(table, group_by, metric)
+- "가장 X한" / "top N" / "최대/최소" / "most / least / 최근" → top_nodes(table, sort_by, order, limit)
+- "how many per X" / bucketed summary → aggregate_nodes(table, group_by, metric)
 - "find related records" → join_related(from_value, fk_property, target_table)
 - Find by name/text → filter_nodes(table, property=name_column, op="contains", value="keyword")
 
@@ -550,7 +551,14 @@ Q: "50만원 이상 고가 상품"
 → filter_nodes(table="pr_goods_base", property="sales_prc", op=">=", value="500000")
 
 Q: "가장 많이 팔린 상품"
-→ aggregate_nodes(table="pr_goods_sold_hist", group_by="goods_no", metric="sum")
+→ top_nodes(table="products", sort_by="cumulative_sales", order="desc", limit=1)
+
+Q: "최근 방송 1위 상품"
+→ top_nodes(table="broadcasts", sort_by="broadcast_date", order="desc", limit=1)
+
+Q: "할인율 가장 높은 25SS 상품 3개"
+→ top_nodes(table="products", sort_by="discount_rate", order="desc", limit=3,
+       where_property="season", where_op="==", where_value="25SS")
 
 Q: "5점 리뷰가 가장 많은 상품"
 → aggregate_nodes(table="feedback", group_by="goods_no", metric="count", where_property="score", where_op="==", where_value="5")
@@ -745,6 +753,37 @@ AGENT_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "top_nodes",
+            "description": (
+                "Top-N rows of a table ordered by a column — single call for "
+                "'가장 X한', 'top N', '최대/최소', '최근' questions. Returns "
+                "node_title + sort_value on each result so you can chain "
+                "directly into join_related or get_document."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string"},
+                    "sort_by": {
+                        "type": "string",
+                        "description": "Numeric column to order by, e.g. 'cumulative_sales'",
+                    },
+                    "order": {
+                        "type": "string",
+                        "description": "'desc' (default) or 'asc'",
+                    },
+                    "limit": {"type": "integer", "description": "Max rows (default 5)"},
+                    "where_property": {"type": "string"},
+                    "where_op": {"type": "string"},
+                    "where_value": {"type": "string"},
+                },
+                "required": ["table", "sort_by"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_document",
             "description": "Read a full document.",
             "parameters": {
@@ -933,6 +972,7 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
         aggregate_nodes_tool,
         filter_nodes_tool,
         join_related_tool,
+        top_nodes_tool,
     )
     from synaptic.agent_tools_v2 import deep_search_tool
 
@@ -987,6 +1027,18 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             fk_property=args.get("fk_property", ""),
             target_table=args.get("target_table", ""),
             limit=int(args.get("limit", 20)),
+        )
+    elif name == "top_nodes":
+        r = await top_nodes_tool(
+            backend,
+            session,
+            table=args.get("table", ""),
+            sort_by=args.get("sort_by", ""),
+            order=args.get("order", "desc"),
+            limit=int(args.get("limit", 5)),
+            where_property=args.get("where_property", ""),
+            where_op=args.get("where_op", ""),
+            where_value=args.get("where_value", ""),
         )
     elif name == "get_document":
         r = await get_document_tool(backend, session, args["doc_id"], query=args.get("query", ""))

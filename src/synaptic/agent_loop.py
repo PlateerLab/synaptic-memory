@@ -93,14 +93,18 @@ Available tools
 - ``get_document(doc_id, query?)`` — full document chunks
 - ``filter_nodes(table, property, op, value, ...)`` — exact attribute filter
 - ``aggregate_nodes(table, group_by, metric, ...)`` — count / sum / avg
+- ``top_nodes(table, sort_by, order="desc", limit=5, ...)`` — top/bottom rows by a column in a single call (use this for "가장 X한", "top N", "최대/최소", "최근" questions — no need to compose aggregate_nodes).
 - ``join_related(from_value, fk_property, target_table, ...)`` — FK join
 
 Tips
 ====
 - If a search returns 0 results in Korean, try the English term — corpora
   often mix scripts (e.g. "치즈" → 0, "cheese" → many).
-- For "top N" / "most" / "least" questions, prefer ``aggregate_nodes``
-  with ``metric=count`` and ``order=desc``.
+- For "top N" / "most" / "least" questions, use ``top_nodes(table,
+  sort_by, order, limit)`` — one tool call returns the ranked rows
+  complete with node_title and ID, ready to chain into ``join_related``
+  or ``get_document``. ``aggregate_nodes`` is still the right answer
+  for "per-X counts" / bucketed summaries.
 - Prefer concrete IDs over titles when chaining tools.
 - **Relative time references** ("올해" / "내년도" / "this year" / "next year"):
   do NOT inject a specific year number into the search query — the corpus
@@ -254,6 +258,33 @@ AGENT_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "top_nodes",
+            "description": (
+                "Top-N rows of a table ordered by a column. Single call for "
+                "'가장 X한', 'top 5', '최대/최소', '최근' questions — no need to "
+                "compose aggregate_nodes + post-sort."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string"},
+                    "sort_by": {"type": "string"},
+                    "order": {
+                        "type": "string",
+                        "description": "'desc' (default) or 'asc'",
+                    },
+                    "limit": {"type": "integer"},
+                    "where_property": {"type": "string"},
+                    "where_op": {"type": "string"},
+                    "where_value": {"type": "string"},
+                },
+                "required": ["table", "sort_by"],
+            },
+        },
+    },
 ]
 
 
@@ -309,6 +340,7 @@ async def _dispatch_tool(
         aggregate_nodes_tool,
         filter_nodes_tool,
         join_related_tool,
+        top_nodes_tool,
     )
     from synaptic.agent_tools_v2 import deep_search_tool
 
@@ -374,6 +406,18 @@ async def _dispatch_tool(
                 fk_property=args.get("fk_property", ""),
                 target_table=args.get("target_table", ""),
                 limit=int(args.get("limit", 20)),
+            )
+        elif name == "top_nodes":
+            r = await top_nodes_tool(
+                backend,
+                session,
+                table=args.get("table", ""),
+                sort_by=args.get("sort_by", ""),
+                order=args.get("order", "desc"),
+                limit=int(args.get("limit", 5)),
+                where_property=args.get("where_property", ""),
+                where_op=args.get("where_op", ""),
+                where_value=args.get("where_value", ""),
             )
         else:
             return {"error": f"unknown tool: {name}"}
