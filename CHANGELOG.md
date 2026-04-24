@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — v0.18-β1: 0-result recovery hints for structured tools
+
+`filter_nodes`, `aggregate_nodes`, and `join_related` now emit
+`Hint` entries when they return 0 matches. The hints carry one
+concrete corrective action each:
+
+- `filter_nodes(op="==")` → suggest `op="contains"`
+- `filter_nodes(op="contains", multi-word value)` → suggest the first
+  keyword alone
+- `filter_nodes` generic 0-match → suggest `search(value)` as fallback
+- `aggregate_nodes` with a `where_*` pre-filter and 0 groups →
+  suggest retrying without the pre-filter
+- `aggregate_nodes` → suggest `filter_nodes` to verify the
+  `group_by` column name
+- `join_related` with 0 rows → suggest `filter_nodes` on the target
+  table to verify the FK column
+
+The hints surface through `project_tool_result`, and a single new
+line in `AGENT_SYSTEM` instructs the agent to follow the first hint
+before reissuing near-identical queries. The behaviour was added in
+response to observed retry-loops on Qwen3.5-27B benchmarks.
+
+6 new tests in `tests/test_agent_tools_hints.py`; the matching
+prompt line is in both `src/synaptic/agent_loop.py` and
+`eval/run_all.py` (the two `AGENT_SYSTEM` copies now carry the
+same α1-2 relative-time + multi-source guidance as well).
+
 ### Fixed — v0.18-C1: CDC schema-drift detection (silent-corruption P1)
 
 `syn_cdc_state.schema_fingerprint` has been stored since v0.14.0 but
