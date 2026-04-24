@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from synaptic.agent_tools import ToolResult, _budget_check, _node_to_summary
+from synaptic.agent_tools import Hint, ToolResult, _budget_check, _node_to_summary
 from synaptic.search_session import SearchSession
 
 if TYPE_CHECKING:
@@ -203,6 +203,48 @@ async def filter_nodes_tool(
 
     session.mark_seen(n.id for n in nodes)
 
+    hints: list[Hint] = []
+    # Empty-result recovery — the agent often retries with a subtly
+    # different predicate when told which alternatives to try. These
+    # hints surface through ``project_tool_result`` so the LLM sees
+    # them in the next turn.
+    if total == 0:
+        if op in ("==", "!=", "=") and isinstance(value, str) and value:
+            hints.append(
+                Hint(
+                    action="filter_nodes",
+                    args={
+                        "table": table,
+                        "property": property,
+                        "op": "contains",
+                        "value": value,
+                    },
+                    reason="0 exact matches — try contains for substring / partial match",
+                )
+            )
+        if op == "contains" and isinstance(value, str) and " " in value:
+            first_tok = value.split(maxsplit=1)[0]
+            if first_tok and first_tok != value:
+                hints.append(
+                    Hint(
+                        action="filter_nodes",
+                        args={
+                            "table": table,
+                            "property": property,
+                            "op": "contains",
+                            "value": first_tok,
+                        },
+                        reason="0 matches on the full phrase — try the first keyword alone",
+                    )
+                )
+        hints.append(
+            Hint(
+                action="search",
+                args={"query": str(value)},
+                reason=f"no structured match on property={property!r}; try FTS across all nodes",
+            )
+        )
+
     return ToolResult(
         tool="filter_nodes",
         ok=True,
@@ -214,7 +256,7 @@ async def filter_nodes_tool(
             "count": len(nodes),
             "results": [_node_to_summary(n) for n in nodes],
         },
-        hints=[],
+        hints=hints,
         session=session.summary(),
     )
 
@@ -408,9 +450,60 @@ async def aggregate_nodes_tool(
             "showing": len(groups),
             "truncated": total_groups > len(groups),
         },
-        hints=[],
+        hints=_aggregate_hints(
+            table=table,
+            group_by=group_by,
+            metric=metric,
+            where_property=where_property,
+            where_op=where_op,
+            where_value=where_value,
+            total_groups=total_groups,
+        ),
         session=session.summary(),
     )
+
+
+def _aggregate_hints(
+    *,
+    table: str,
+    group_by: str,
+    metric: str,
+    where_property: str,
+    where_op: str,
+    where_value: str,
+    total_groups: int,
+) -> list[Hint]:
+    """Recovery hints when aggregate_nodes returns 0 groups.
+
+    The most common failure modes are (a) the ``group_by`` column
+    doesn't exist in any row, (b) the ``where`` pre-filter is too
+    strict. Both are correctable with one more tool call if the agent
+    is told which direction to move.
+    """
+    if total_groups > 0:
+        return []
+    hints: list[Hint] = []
+    if where_property:
+        hints.append(
+            Hint(
+                action="aggregate_nodes",
+                args={
+                    "table": table,
+                    "group_by": group_by,
+                    "metric": metric,
+                },
+                reason="0 groups under this WHERE — retry without the pre-filter first to verify the group_by column",
+            )
+        )
+    if table:
+        hints.append(
+            Hint(
+                action="filter_nodes",
+                args={"table": table, "property": group_by, "op": "contains", "value": ""},
+                reason=f"verify {group_by!r} is a real column on {table!r} by listing a few rows",
+            )
+        )
+    return hints
 
 
 async def join_related_tool(
@@ -517,6 +610,38 @@ async def join_related_tool(
             "count": len(nodes),
             "results": [_node_to_summary(n) for n in nodes],
         },
-        hints=[],
+        hints=_join_hints(
+            fk_property=fk_property,
+            target_table=target_table,
+            target_values=target_values,
+            total=total,
+        ),
         session=session.summary(),
     )
+
+
+def _join_hints(
+    *,
+    fk_property: str,
+    target_table: str,
+    target_values: set[str],
+    total: int,
+) -> list[Hint]:
+    """Recovery hints when join_related returns 0 rows.
+
+    Typical cause: the ``fk_property`` name doesn't match the column
+    on ``target_table``. Suggest filter_nodes to list rows in the
+    target table so the agent can inspect real column names.
+    """
+    if total > 0 or not target_values:
+        return []
+    hints: list[Hint] = []
+    sample_val = next(iter(target_values))
+    hints.append(
+        Hint(
+            action="filter_nodes",
+            args={"table": target_table, "property": fk_property, "op": "==", "value": sample_val},
+            reason=f"0 joined rows — verify {fk_property!r} matches the FK column on {target_table!r}",
+        )
+    )
+    return hints
