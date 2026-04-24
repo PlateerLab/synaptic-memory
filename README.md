@@ -260,6 +260,11 @@ the synthesis choice to you.
 | `filter_nodes` | Property filter (>=, <=, contains) — returns `{total, showing}` for accurate counting |
 | `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG/MAX/MIN with optional WHERE pre-filter |
 | `join_related` | FK-based related record lookup — walks RELATED edges (O(degree)) |
+| `top_nodes` | **Single-call top-N ranking** — "가장 X한" / "top N" / "최대/최소" / "최근" questions without composing aggregate_nodes. Each row carries `sort_value` for chaining into join_related / filter_nodes(from_ids=...). v0.18-β2+. |
+
+All four structured tools emit `hints` on 0-result returns (alternate
+operator, dropped WHERE, fuzzy column match) so the agent's next turn
+gets a concrete corrective action instead of a retry loop.
 
 ### Ingest / CDC tools (v0.14.0+)
 Mid-conversation ingestion so Claude can teach itself new material without leaving the chat.
