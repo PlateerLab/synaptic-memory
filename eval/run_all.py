@@ -624,6 +624,13 @@ Q: "iPhone과 Galaxy Book의 판매 이력"
   unfiltered topic search returns too many candidates AND you have
   evidence the user wants a specific year.
 
+## "List all" / enumeration questions
+- Queries like "X 목록", "X 상품 전체", "list all X" need the COMPLETE
+  set, not one representative. Use ``filter_nodes(limit=100)`` (or
+  higher) and keep scanning. The GT for these often has 5-10 specific
+  rows; a limit=20 default plus a retry that narrows instead of
+  widening will miss half of them.
+
 ## Multi-source questions
 - Queries like "X 관련 자료", "X 관련 내용", "X 관련 정보" explicitly
   ask for MULTIPLE sources. A single document is rarely the complete

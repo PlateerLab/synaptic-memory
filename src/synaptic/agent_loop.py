@@ -120,6 +120,10 @@ Tips
   After the first ``deep_search`` returns a few hits, do at least one more
   ``search`` with paraphrased keywords before concluding. A single document
   is rarely the complete answer to such a request.
+- **"List all" / enumeration questions** ("X 목록", "X 상품 전체", "list all X")
+  need the COMPLETE set. Raise the ``limit`` on ``filter_nodes`` / ``top_nodes``
+  (e.g. 100) rather than the default 20. The GT for these patterns often
+  has 5-10 specific rows; a narrow retry loop misses them.
 - **When a tool returns 0 results, it also returns a ``hints`` array.**
   Each hint is a concrete corrective action (different operator, dropped
   WHERE, alternative column). Read the hints and follow the first one
