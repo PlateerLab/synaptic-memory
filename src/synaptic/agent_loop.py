@@ -81,7 +81,11 @@ Strategy
    structured tools — they're cheaper and exact.
 3. For multi-hop questions, chain tool calls: search → expand → search
    again with the new entity name.
-4. Stop calling tools as soon as you have enough evidence. Output a
+4. Emit independent probes in parallel within a single turn — the
+   tool-call protocol supports it and one round-trip is cheaper than
+   five. A compound question ("X의 Y 와 Z") should plan the 2-3 calls
+   it needs and send them together.
+5. Stop calling tools as soon as you have enough evidence. Output a
    short final answer in the user's language.
 
 Available tools

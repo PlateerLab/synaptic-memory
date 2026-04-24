@@ -1241,6 +1241,7 @@ from synaptic.agent_tools_structured import (
     aggregate_nodes_tool,
     filter_nodes_tool,
     join_related_tool,
+    top_nodes_tool,
 )
 from synaptic.agent_tools_v2 import (
     compare_search_tool,
@@ -1659,6 +1660,46 @@ async def agent_join_related(
         fk_property=fk_property,
         target_table=target_table,
         limit=limit,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+async def agent_top_nodes(
+    table: str,
+    sort_by: str,
+    order: str = "desc",
+    limit: int = 5,
+    where_property: str = "",
+    where_op: str = "",
+    where_value: str = "",
+    session_id: str = "",
+) -> dict[str, Any]:
+    """Return the top-N rows of ``table`` ordered by ``sort_by``.
+
+    Single-call primitive for "가장 X한", "top N", "최대/최소",
+    "최근" patterns. Each result carries ``sort_value`` so the
+    agent can chain directly into ``join_related`` or
+    ``get_document`` without re-probing.
+
+    Examples:
+      top_nodes(table="products", sort_by="cumulative_sales", order="desc", limit=5)
+      top_nodes(table="broadcasts", sort_by="broadcast_date", order="desc", limit=1)
+      top_nodes(table="products", sort_by="discount_rate", order="desc", limit=3,
+                where_property="season", where_op="==", where_value="25SS")
+    """
+    backend = await _ensure_backend()
+    session = await _session(session_id)
+    result = await top_nodes_tool(
+        backend,
+        session,
+        table=table,
+        sort_by=sort_by,
+        order=order,
+        limit=limit,
+        where_property=where_property,
+        where_op=where_op,
+        where_value=where_value,
     )
     return result.to_dict()
 
