@@ -55,9 +55,23 @@ GPT-4o-mini baseline 초과.
 | # | 작업 | 상태 |
 |---|------|---|
 | α1-1 | `graph.chat()` public API + session 관리 | ✅ ship (v0.18-alpha, commit `4fa7df7`) |
-| α1-2 | KRRA Conv **−23pp 회귀** 원인 조사 — Qwen 한국어 conversational 약점 또는 prompt 이슈 | ✅ 진단 완료 — FTS recall ceiling, query-time LLM rewrite (HyDE) 없이는 회복 불가 → v0.19+ |
+| α1-2 | KRRA Conv **−23pp 회귀** 원인 조사 — Qwen 한국어 conversational 약점 또는 prompt 이슈 | ✅ 진단 완료 — FTS recall ceiling + GT quality, HyDE 등 single-shot fix 로는 회복 불가, agent mode 에선 tool 개선 (β2) 으로 간접 접근 |
 | α1-3 | Agent-loop latency 감축 — 첫 1-2 turn priming 으로 탐색 turn 절약 | ✅ α2 snapshot priming 으로 ship |
-| α1-4 | Context overflow 회피 (현재 172q 중 10q = 5.8% vLLM 16k 초과로 fail) | ✅ ship — `project_tool_result` (commit TBD) |
+| α1-4 | Context overflow 회피 (현재 172q 중 10q = 5.8% vLLM 16k 초과로 fail) | ✅ ship — `project_tool_result` (commit `7513574`) |
+
+### β. 도구 ergonomic + agent recovery (v0.18-β)
+
+agent 벤치 관찰에서 나온 failure 패턴 대응. 각 항목은 단위 규모는 작지만
+retry loop / chain break / silent-0-result 같은 구조적 failure mode 를
+정리하는 의도.
+
+| # | 작업 | 상태 |
+|---|------|---|
+| β1-1 | 구조화 tool (filter/aggregate/join) 에 0-result recovery hints | ✅ ship — `6751aea`, `694b4d7`, `472982d`, `5483688` |
+| β1-2 | agent prompt 에 "hints array 를 무시 말고 first hint 를 실행" 가이드 | ✅ ship — `694b4d7` |
+| β2 | `top_nodes(table, sort_by, order, limit, where_*)` — single-call top-N ranking primitive (aggregate_nodes(max + group_by) 우회) | ✅ ship — `c98a4ee`, `5bc3110` |
+| β3 | Multi-tool batching 권장 prompt + error envelope 통일 | ✅ ship — `5bc3110`, `be4ecf5`, `d8320db` |
+| β4 | Projection 이 `sort_value` / `score` 보존 (top_nodes 결과 유의미하게) | ✅ ship — `752c2bf` |
 
 ### α2. G1 — Auto graph snapshot / agent priming ✅ ship
 
