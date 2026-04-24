@@ -192,6 +192,23 @@ async def filter_nodes_tool(
 
         total = len(matched_nodes)
         nodes = matched_nodes[:limit]
+
+        # Column presence check — used by the 0-result hint builder
+        # below to suggest the closest real column when the caller
+        # used a typo / near-miss name.
+        prop_present_on_table = False
+        table_columns: set[str] = set()
+        if total == 0 and table and property:
+            for n in all_nodes:
+                props = n.properties or {}
+                if props.get("_table_name") != table:
+                    continue
+                if property in props:
+                    prop_present_on_table = True
+                    break
+                for k in props:
+                    if not k.startswith("_"):
+                        table_columns.add(k)
     except Exception as exc:
         return ToolResult(
             tool="filter_nodes",
@@ -209,6 +226,28 @@ async def filter_nodes_tool(
     # hints surface through ``project_tool_result`` so the LLM sees
     # them in the next turn.
     if total == 0:
+        # Priority hint: column typo / near-miss. If ``property`` is
+        # missing on every row in ``table``, the op-level hints are
+        # useless — only a column rename will return rows. Emit
+        # fuzzy-match candidates first so the agent's next turn
+        # targets a real column.
+        if table and property and not prop_present_on_table and table_columns:
+            import difflib
+
+            candidates = difflib.get_close_matches(
+                property, sorted(table_columns), n=2, cutoff=0.5
+            )
+            for cand in candidates:
+                hints.append(
+                    Hint(
+                        action="filter_nodes",
+                        args={"table": table, "property": cand, "op": op, "value": value},
+                        reason=(
+                            f"column {property!r} not found on {table!r}; "
+                            f"did you mean {cand!r}?"
+                        ),
+                    )
+                )
         if op in ("==", "!=", "=") and isinstance(value, str) and value:
             hints.append(
                 Hint(

@@ -144,6 +144,57 @@ async def test_aggregate_with_results_no_hints():
 
 
 @pytest.mark.asyncio
+async def test_filter_with_misspelled_column_suggests_closest_real_column():
+    """Agent passes ``property="sale"`` when the real column is
+    ``selling_price``. Expect a fuzzy-match hint pointing to the
+    real column."""
+    backend = await _backend_with_rows(
+        [
+            {"id": "1", "selling_price": "100", "_table_name": "products"},
+            {"id": "2", "selling_price": "200", "_table_name": "products"},
+        ]
+    )
+    session = SearchSession(budget_tool_calls=5)
+    r = await filter_nodes_tool(
+        backend,
+        session,
+        table="products",
+        property="sell_price",  # typo / near-miss
+        op=">=",
+        value="100",
+    )
+    assert r.data["total"] == 0
+    reasons = [h.reason for h in r.hints]
+    # Must mention did-you-mean + the real column
+    joined = " | ".join(reasons)
+    assert "selling_price" in joined
+    assert "did you mean" in joined.lower()
+
+
+@pytest.mark.asyncio
+async def test_filter_with_valid_column_no_fuzzy_hint():
+    """When the column exists but values don't match, we should NOT
+    emit a fuzzy-column hint (that would mislead the agent)."""
+    backend = await _backend_with_rows(
+        [{"id": "1", "selling_price": "100", "_table_name": "products"}]
+    )
+    session = SearchSession(budget_tool_calls=5)
+    r = await filter_nodes_tool(
+        backend,
+        session,
+        table="products",
+        property="selling_price",
+        op=">=",
+        value="10000",  # no match
+    )
+    assert r.data["total"] == 0
+    reasons = [h.reason for h in r.hints]
+    joined = " | ".join(reasons)
+    # No "did you mean" — column is valid, just no matching rows
+    assert "did you mean" not in joined.lower()
+
+
+@pytest.mark.asyncio
 async def test_join_zero_rows_suggests_fk_verification():
     """join_related with a non-existent FK column should hint the
     agent to verify the FK column name via filter_nodes."""
