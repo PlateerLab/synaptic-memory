@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Before / after of the v0.18-β1 + β2 shipwork, measured on the local
 `Qwen3.5-27b` vLLM endpoint with `temperature=0` + `seed=42` so the gap
-is pure code-effect (zero sampling variance). Two datasets run to
+is pure code-effect (zero sampling variance). Three datasets run to
 establish generalization:
 
 | Benchmark | Baseline | v0.18-β1 | Δ |
