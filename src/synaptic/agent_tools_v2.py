@@ -131,11 +131,28 @@ async def deep_search_tool(
     # Build consolidated response
     hints: list[Hint] = []
     if not evidence:
+        # Decompose the query into its first content word and suggest
+        # a FTS fallback. "try a different category" as a literal arg
+        # (the prior hint) was being copied verbatim by the LLM and
+        # failing — executable hints work, meta-hints don't.
+        tokens = [t for t in query.split() if len(t) >= 2]
+        if tokens:
+            hints.append(
+                Hint(
+                    action="search",
+                    args={"query": tokens[0]},
+                    reason=(
+                        "deep_search found nothing — retry plain FTS on the "
+                        "first keyword alone; often the full question phrase "
+                        "over-constrains BM25"
+                    ),
+                )
+            )
         hints.append(
             Hint(
-                action="deep_search",
-                args={"query": query, "category": "try a different category"},
-                reason="no results — try rephrasing or filtering by category",
+                action="list_categories",
+                args={},
+                reason="inspect available categories, then retry deep_search with category= filter",
             )
         )
 
