@@ -208,6 +208,32 @@ async def test_top_nodes_from_ids_restricts_ranking_pool():
 
 
 @pytest.mark.asyncio
+async def test_top_nodes_result_feeds_extract_ids_correctly():
+    """The agent loop's _extract_ids must pick up the ranked titles so
+    the breakthrough query "가장 많이 팔린 상품의 리뷰" can surface the
+    winning product id into found_ids (which is what the bench matches
+    against GT)."""
+    from synaptic.agent_loop import _extract_ids
+
+    backend = await _backend_with_products()
+    session = SearchSession(budget_tool_calls=5)
+    r = await top_nodes_tool(
+        backend,
+        session,
+        table="products",
+        sort_by="cumulative_sales",
+        order="desc",
+        limit=3,
+    )
+    found: set[str] = set()
+    _extract_ids(r.data, found, known_tables={"products"})
+    # All three ranked titles must land in found_ids
+    assert "products:D" in found
+    assert "products:B" in found
+    assert "products:C" in found
+
+
+@pytest.mark.asyncio
 async def test_top_nodes_budget_enforcement():
     backend = await _backend_with_products()
     session = SearchSession(budget_tool_calls=0)  # exhausted
