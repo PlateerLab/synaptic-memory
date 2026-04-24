@@ -580,20 +580,34 @@ Q: "2023년 여름(6-8월) 판매"
 Q: "월별 매출 추이"
 → aggregate_nodes(table="sold_hist", group_by="sold_dtm", group_by_format="YYYY-MM", metric="count")
 
-## Multi-hop chaining — pass previous step's node_titles or group values as from_ids
+## Multi-hop chaining — pass previous step's node_titles / group values as from_ids
+Q: "가장 많이 팔린 상품의 리뷰"
+Step 1: top_nodes(table="products", sort_by="cumulative_sales", order="desc", limit=1)
+  → results[0]["title"] == "products:12800000", product_code="12800000"
+Step 2: join_related(from_value="12800000", fk_property="product_code", target_table="reviews")
+  → review rows for the top product
+
+Q: "최근 가장 많이 팔린 상품 중 핏 만족도 높은 것"
+Step 1: top_nodes(table="products", sort_by="cumulative_sales", order="desc", limit=10)
+  → list of top-10 products by sales
+Step 2: filter_nodes(from_ids=<those product titles>, property="fit_score", op=">=", value="4")
+  → filtered subset
+Step 3: top_nodes(from_ids=<survivors>, table="products", sort_by="cumulative_sales", order="desc", limit=1)
+  → the single winning product
+
 Q: "판매량 1위 상품의 리뷰 평점 평균"
-Step 1: aggregate_nodes(table="sold_hist", group_by="goods_no", metric="sum", metric_property="sold_qunt")
-  → top groups include {"group": "G00001", "node_title": "pr_goods_base:G00001"}
+Step 1: top_nodes(table="sold_hist", sort_by="sold_qunt", order="desc", limit=1)
+  → results[0]["title"] == "pr_goods_base:G00001"
 Step 2: aggregate_nodes(table="feedback", group_by="score", metric="count",
                          where_property="goods_no", where_op="==", where_value="G00001")
 
 Q: "5점 리뷰 최다 상품 중 가장 저렴한 것"
 Step 1: aggregate_nodes(table="feedback", group_by="goods_no", metric="count",
                          where_property="score", where_op="==", where_value="5")
-  → groups=[{node_title:"pr_goods_base:G00857"}, ...]
-Step 2: filter_nodes(from_ids=["pr_goods_base:G00857","pr_goods_base:G00472"],
-                      property="sales_prc", op=">=", value="0")
-  → then pick the cheapest from results
+  → groups sorted desc, top node_titles = ["pr_goods_base:G00857", "pr_goods_base:G00472", ...]
+Step 2: top_nodes(from_ids=["pr_goods_base:G00857","pr_goods_base:G00472"], table="pr_goods_base",
+                  sort_by="sales_prc", order="asc", limit=1)
+  → the single cheapest among the top-review products
 
 Q: "iPhone과 Galaxy Book의 판매 이력"
 → join_related(from_values=["G00007","G00003"], fk_property="goods_no", target_table="pr_goods_sold_hist")
