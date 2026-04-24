@@ -111,7 +111,11 @@ Tips
 - **"X 관련 자료 / 내용 / 정보" type questions** ask for *multiple* sources.
   After the first ``deep_search`` returns a few hits, do at least one more
   ``search`` with paraphrased keywords before concluding. A single document
-  is rarely the complete answer to such a request."""
+  is rarely the complete answer to such a request.
+- **When a tool returns 0 results, it also returns a ``hints`` array.**
+  Each hint is a concrete corrective action (different operator, dropped
+  WHERE, alternative column). Read the hints and follow the first one
+  before reissuing a near-identical query — that is what wastes turns."""
 
 
 AGENT_TOOLS = [

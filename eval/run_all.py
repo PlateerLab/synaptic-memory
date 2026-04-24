@@ -589,6 +589,28 @@ Q: "iPhone과 Galaxy Book의 판매 이력"
 ## Language fallback
 - If data contains English product names, try English keywords when Korean search returns 0
 - Example: "치즈" returns 0 → try "cheese" instead
+
+## Relative time references
+- Words like "올해" / "내년도" / "this year" / "next year" should NOT be
+  converted to literal year numbers in search queries. The corpus may
+  span multiple years — a hard "2024" filter throws away valid matches.
+- Search the topic WITHOUT the year first. Only narrow by year if the
+  unfiltered topic search returns too many candidates AND you have
+  evidence the user wants a specific year.
+
+## Multi-source questions
+- Queries like "X 관련 자료", "X 관련 내용", "X 관련 정보" explicitly
+  ask for MULTIPLE sources. A single document is rarely the complete
+  answer.
+- After the first deep_search / search returns 1-2 hits, run at least
+  one more search with paraphrased keywords before concluding.
+
+## When a tool returns 0 results
+- Every tool that returns 0 results also returns a ``hints`` array with
+  specific corrective actions (different operator, dropped WHERE,
+  alternative column). READ those hints and follow the first one
+  before reissuing the same query with minor changes — that's what
+  wastes turns.
 """
 
 AGENT_TOOLS = [
