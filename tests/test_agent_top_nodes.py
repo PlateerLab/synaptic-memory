@@ -148,6 +148,45 @@ async def test_top_nodes_invalid_order_returns_error():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "alias,expected_order",
+    [
+        ("DESC", "desc"),
+        ("descending", "desc"),
+        ("max", "desc"),
+        ("largest", "desc"),
+        ("top", "desc"),
+        ("ASC", "asc"),
+        ("ascending", "asc"),
+        ("min", "asc"),
+        ("smallest", "asc"),
+        ("bottom", "asc"),
+    ],
+)
+async def test_top_nodes_order_aliases_are_normalised(alias, expected_order):
+    """LLMs interchange 'DESC' / 'descending' / 'max' / 'top' with
+    'desc'. Tolerate all of them to avoid burning a turn on a wording
+    mismatch."""
+    backend = await _backend_with_products()
+    session = SearchSession(budget_tool_calls=5)
+    r = await top_nodes_tool(
+        backend,
+        session,
+        table="products",
+        sort_by="cumulative_sales",
+        order=alias,
+        limit=5,
+    )
+    assert r.ok is True
+    # Sanity: desc → highest first, asc → lowest first
+    vals = [x["sort_value"] for x in r.data["results"]]
+    if expected_order == "desc":
+        assert vals == sorted(vals, reverse=True)
+    else:
+        assert vals == sorted(vals)
+
+
+@pytest.mark.asyncio
 async def test_top_nodes_budget_enforcement():
     backend = await _backend_with_products()
     session = SearchSession(budget_tool_calls=0)  # exhausted

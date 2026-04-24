@@ -730,7 +730,17 @@ async def top_nodes_tool(
     if budget is not None:
         return budget
 
-    if order not in ("asc", "desc"):
+    # Normalise common LLM variants — Qwen3.5-27B free-text
+    # interchanges 'descending' / 'DESC' / 'max' / 'largest' /
+    # 'top' with the canonical 'desc' / 'asc' tokens. Map them
+    # instead of erroring so a single wording slip doesn't burn
+    # a turn.
+    _order_norm = (order or "desc").strip().lower()
+    if _order_norm in ("desc", "descending", "desc_order", "max", "largest", "highest", "top"):
+        order = "desc"
+    elif _order_norm in ("asc", "ascending", "asc_order", "min", "smallest", "lowest", "bottom"):
+        order = "asc"
+    else:
         return ToolResult(
             tool="top_nodes",
             ok=False,
