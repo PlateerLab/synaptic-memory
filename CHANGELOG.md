@@ -16,8 +16,9 @@ establish generalization:
 | Benchmark | Baseline | v0.18-β1 | Δ |
 |---|---:|---:|---:|
 | assort Hard (structured, 33q) | 26 / 33 = 79 % | **28 / 33 = 85 %** | **+2 queries, +6 pp, -19 % runtime (2105 → 1709 s)** |
-| KRRA Hard (text, 39q) | 30 / 39 = 77 % | **32 / 39 = 82 %** | **+2 queries, +5 pp** |
-| Combined | 56 / 72 = 78 % | **60 / 72 = 83 %** | **+4 queries, +5.6 pp** |
+| KRRA Hard (text-docs, 39q) | 30 / 39 = 77 % | **32 / 39 = 82 %** | **+2 queries, +5 pp** |
+| assort Conv (structured + conversational, 24q) | 22 / 24 = 92 % | 22 / 24 = 92 % | **±0 (no regression; runtime 1028 s)** |
+| **Combined (96 queries)** | **78 / 96 = 81 %** | **82 / 96 = 85 %** | **+4 queries, +4 pp across 3 benches, 0 regressions** |
 
 Generalization: both a structured-data bench (where `top_nodes`
 directly targets the failing query pattern) and a text-document bench
