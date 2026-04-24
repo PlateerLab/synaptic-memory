@@ -85,6 +85,11 @@ class TableSyncStats:
     fk_edges_removed: int = 0
     strategy: str = ""
     error: str | None = None
+    schema_changed: bool = False
+    """True when a source-schema drift was detected at the start of this sync
+    and the table was force-reloaded. Callers that surface sync results to
+    ops dashboards should highlight this — a drift means the *previous*
+    graph state for this table was stale."""
 
 
 @dataclass(slots=True)
@@ -205,6 +210,10 @@ class TimestampTableSyncer:
 
         col_defs = [{"name": c.name, "type": c.type} for c in schema.columns]
         prior_state = await self._store.load_state(self._source_url, schema.name)
+        current_fp = _schema_fingerprint(schema)
+        prior_state, stats.schema_changed = await _detect_and_reset_on_schema_drift(
+            self._store, self._source_url, prior_state, current_fp
+        )
         is_initial = prior_state is None
 
         # Change column: prefer the stored one (schema is authoritative
@@ -494,6 +503,12 @@ class HashTableSyncer:
         stats = TableSyncStats(table=schema.name, strategy="hash")
         col_defs = [{"name": c.name, "type": c.type} for c in schema.columns]
 
+        prior_state_for_drift = await self._store.load_state(self._source_url, schema.name)
+        current_fp = _schema_fingerprint(schema)
+        _, stats.schema_changed = await _detect_and_reset_on_schema_drift(
+            self._store, self._source_url, prior_state_for_drift, current_fp
+        )
+
         # Hash mode always does a full read — there is no watermark
         # to filter on. Pass `where_clause=None` so the SQLite
         # reader still applies the LIMIT but skips the WHERE.
@@ -642,3 +657,47 @@ def _schema_fingerprint(schema: TableSchema) -> str:
     parts = [f"{c.name}:{c.type}" for c in schema.columns]
     parts.sort()
     return "|".join(parts)
+
+
+async def _detect_and_reset_on_schema_drift(
+    store: SyncStateStore,
+    source_url: str,
+    prior_state: TableSyncState | None,
+    current_fingerprint: str,
+) -> tuple[TableSyncState | None, bool]:
+    """Compare prior vs current fingerprint; on mismatch, wipe state.
+
+    Returns ``(effective_prior_state, schema_changed)``. When drift is
+    detected, the state row and every PK-index entry for the table are
+    deleted so the downstream code sees an initial load and re-ingests
+    every row under the new schema.
+
+    Legacy rows pre-v0.14.1 carried an empty fingerprint; we treat
+    that as "unknown, don't force a reload" so upgrading Synaptic
+    without changing the source schema is a no-op.
+    """
+    if prior_state is None:
+        return None, False
+    prior_fp = prior_state.schema_fingerprint or ""
+    if not prior_fp:
+        # Legacy / missing fingerprint — skip comparison, do NOT force
+        # a reload. Next sync will write the new fingerprint.
+        return prior_state, False
+    if prior_fp == current_fingerprint:
+        return prior_state, False
+
+    logger.warning(
+        "schema drift detected on %s: fingerprint changed, forcing full "
+        "reload (prior=%r current=%r)",
+        prior_state.table_name,
+        prior_fp,
+        current_fingerprint,
+    )
+    # Wipe the PK index (so stale hashes / FK snapshots don't bleed
+    # into the new load) and the state row (so the downstream code
+    # takes the `is_initial = prior_state is None` branch).
+    prior_pks = await store.list_pks(source_url, prior_state.table_name)
+    if prior_pks:
+        await store.delete_pk_batch(source_url, prior_state.table_name, prior_pks)
+    await store.delete_state(source_url, prior_state.table_name)
+    return None, True

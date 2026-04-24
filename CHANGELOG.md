@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — v0.18-C1: CDC schema-drift detection (silent-corruption P1)
+
+`syn_cdc_state.schema_fingerprint` has been stored since v0.14.0 but
+never compared. An `ALTER TABLE` on the source DB (column add / rename /
+drop) slipped through: the watermark/hash state made every row look
+"already synced" under the old shape, so the new column silently
+vanished from the graph.
+
+Now both `TimestampTableSyncer.sync_table()` and
+`HashTableSyncer.sync_table()` compute the current fingerprint at sync
+start, compare to `prior_state.schema_fingerprint`, and on mismatch:
+
+1. Wipe the table's `syn_cdc_pk_index` rows (so stale hashes / FK
+   snapshots don't bleed in).
+2. Delete the `syn_cdc_state` row.
+3. Set `TableSyncStats.schema_changed = True` for observability.
+4. Fall through to the existing initial-load path — every row is
+   re-ingested under the new schema with stable deterministic IDs.
+
+Legacy state rows that pre-date the fingerprint (empty string) are
+treated as "unknown, no reload" so upgrading Synaptic on an existing
+graph is a no-op.
+
+4 new tests — 3 in `test_cdc_sync_timestamp.py` (drift detected,
+unchanged schema not flagged, empty legacy fingerprint skipped) and
+1 in `test_cdc_sync_hash.py` (hash-mode parity).
+
 ### Fixed — v0.18-α1-4: agent-loop tool-result context overflow
 
 Replaced naive `json.dumps(result, ensure_ascii=False)[:5000]` truncation at

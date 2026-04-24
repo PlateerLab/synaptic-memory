@@ -171,3 +171,34 @@ class TestHashSync:
         config = next(t for t in result.tables if t.table == "config")
         assert config.deleted == 1
         assert await graph.backend.count_nodes() == before - 1
+
+    async def test_schema_drift_triggers_full_reload(self, graph_and_src):
+        """Hash-mode counterpart to the timestamp-syncer drift test.
+
+        Without drift detection, an ``ALTER TABLE ADD COLUMN`` on the
+        source is invisible — every row's hash stays the same because
+        the new column is missing from the prior snapshot, and the
+        new value only lands in newly-inserted rows.
+        """
+        graph, conn_str, src_path = graph_and_src
+
+        con = sqlite3.connect(src_path)
+        con.execute("ALTER TABLE config ADD COLUMN note TEXT DEFAULT ''")
+        con.execute("UPDATE config SET note = ? WHERE id = 1", ("새로 추가된 노트",))
+        con.commit()
+        con.close()
+
+        result = await graph.sync_from_database(conn_str)
+        config = next(t for t in result.tables if t.table == "config")
+        assert config.schema_changed is True
+        # Every row is re-ingested as "added" because the PK index was
+        # wiped on drift.
+        assert config.added == 3
+
+        # The new column is present on the reloaded node.
+        from synaptic.extensions.cdc.ids import deterministic_row_id
+
+        pk_node_id = deterministic_row_id(conn_str, "config", "1")
+        reloaded = await graph.backend.get_node(pk_node_id)
+        assert reloaded is not None
+        assert reloaded.properties.get("note") == "새로 추가된 노트"

@@ -91,18 +91,17 @@ G2-G5 는 [v0.18 architecture doc](PLAN-v0.18-architecture.md) 에서 격하됨.
 
 ## Carry-over (v0.16~v0.17 에서 미완)
 
-### C1. CDC schema drift 감지
+### C1. CDC schema drift 감지 ✅ ship
 
-v0.14.0 CDC 에서 `syn_cdc_state.schema_fingerprint` 를 **저장하지만 비교하지
-않음**. `ALTER TABLE` 이 소스 DB 에 일어나도 sync 가 그대로 진행되고 결과는
-silent 하게 틀어짐. P1 gap.
+v0.14.0 CDC 에서 `syn_cdc_state.schema_fingerprint` 를 저장하지만 비교하지
+않아 `ALTER TABLE` 이 silent 하게 틀어지던 P1 gap. v0.18-C1 에서 해결.
 
-| # | 작업 |
-|---|------|
-| C1-1 | `TimestampTableSyncer` / `HashTableSyncer` 시작 시 `prior_state.schema_fingerprint` vs fresh 비교 |
-| C1-2 | 변경 감지 시 해당 테이블만 force full reload + state 초기화 |
-| C1-3 | `SyncResult.tables[i].schema_changed` 플래그 신설 |
-| C1-4 | 회귀 테스트 — 컬럼 추가/제거 시나리오 |
+| # | 작업 | 상태 |
+|---|------|---|
+| C1-1 | `TimestampTableSyncer` / `HashTableSyncer` 시작 시 `prior_state.schema_fingerprint` vs fresh 비교 | ✅ `_detect_and_reset_on_schema_drift` |
+| C1-2 | 변경 감지 시 해당 테이블만 force full reload + state 초기화 | ✅ `delete_pk_batch` + `delete_state` |
+| C1-3 | `SyncResult.tables[i].schema_changed` 플래그 신설 | ✅ `TableSyncStats.schema_changed` |
+| C1-4 | 회귀 테스트 — 컬럼 추가/제거 시나리오 | ✅ 4 tests (timestamp × 3 + hash × 1) |
 
 ### C2. PostgreSQL 백엔드 feature parity
 
