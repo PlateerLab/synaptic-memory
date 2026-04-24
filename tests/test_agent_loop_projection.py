@@ -182,6 +182,58 @@ def test_error_preserved():
     assert parsed["error"] == "bad op"
 
 
+def test_top_nodes_result_preserves_sort_value():
+    """sort_value on each result is load-bearing for the agent — it
+    needs the ranking itself, not just the ids. Projection must keep
+    it."""
+    r = {
+        "tool": "top_nodes",
+        "ok": True,
+        "data": {
+            "query": {"table": "products", "sort_by": "cumulative_sales", "order": "desc"},
+            "total": 5,
+            "results": [
+                {
+                    "id": "n1",
+                    "title": "products:A",
+                    "sort_value": 900.0,
+                    "preview": "X" * 500,
+                    "properties": {"product_code": "A", "season": "25SS"},
+                },
+                {
+                    "id": "n2",
+                    "title": "products:B",
+                    "sort_value": 500.0,
+                    "preview": "Y" * 500,
+                    "properties": {"product_code": "B", "season": "24FW"},
+                },
+            ],
+        },
+    }
+    out = project_tool_result(r)
+    parsed = json.loads(out)
+    results = parsed["data"]["results"]
+    assert results[0]["sort_value"] == 900.0
+    assert results[1]["sort_value"] == 500.0
+    assert results[0]["title"] == "products:A"
+    # Preview trimmed but sort_value intact
+    assert len(results[0]["preview"]) <= 121
+
+
+def test_search_score_preserved_through_projection():
+    """Existing ``search_tool`` results carry ``score`` — same contract."""
+    r = {
+        "tool": "search",
+        "ok": True,
+        "data": {
+            "results": [{"id": "a", "title": "A", "score": 0.87, "preview": "x"}],
+        },
+    }
+    out = project_tool_result(r)
+    parsed = json.loads(out)
+    assert parsed["data"]["results"][0]["score"] == 0.87
+
+
 def test_unknown_tool_result_still_projected():
     r = {
         "tool": "brand_new_tool",

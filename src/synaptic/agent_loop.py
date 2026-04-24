@@ -571,7 +571,13 @@ def _compact_properties(props: dict, *, max_entries: int = 8, max_value_chars: i
 
 
 def _project_result_item(r: dict) -> dict:
-    """Compact a single filter/search/join result to id + title + brief preview."""
+    """Compact a single filter/search/join/top result to id + title +
+    brief preview.
+
+    Preserves ``sort_value`` / ``score`` (both scalar, both load-
+    bearing for the agent's next step — without them a ``top_nodes``
+    result loses the ranking itself).
+    """
     if not isinstance(r, dict):
         return r
     out: dict[str, Any] = {}
@@ -579,6 +585,9 @@ def _project_result_item(r: dict) -> dict:
         out["id"] = r["id"]
     if "title" in r:
         out["title"] = r["title"]
+    for sig in ("sort_value", "score"):
+        if sig in r:
+            out[sig] = r[sig]
     preview = r.get("preview") or r.get("snippet") or ""
     if preview:
         out["preview"] = _truncate(str(preview), 120)
