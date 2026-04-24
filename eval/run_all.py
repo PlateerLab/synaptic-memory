@@ -46,6 +46,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from datetime import UTC
 
+from synaptic.agent_loop import project_tool_result
 from synaptic.graph import SynapticGraph
 from tests.benchmark.metrics import BenchmarkResult
 
@@ -1096,7 +1097,7 @@ async def _agent_loop_run(
                         {
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": json.dumps(result, ensure_ascii=False)[:5000],
+                            "content": project_tool_result(result),
                         }
                     )
             else:
@@ -1340,7 +1341,7 @@ async def run_agent_benchmark(
                         {
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": json.dumps(result, ensure_ascii=False)[:5000],
+                            "content": project_tool_result(result),
                         }
                     )
             else:
@@ -1564,6 +1565,12 @@ def _parse_args():
     p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
     p.add_argument("--agent-max-turns", type=int, default=5, help="Max turns per agent query")
     p.add_argument(
+        "--agent-dataset",
+        default=None,
+        help="Substring filter on dataset name for agent runs. "
+        'Example: --agent-dataset "KRRA Conv" runs just that one.',
+    )
+    p.add_argument(
         "--agent-public",
         action="store_true",
         help="Also run public datasets through the agent loop (default: "
@@ -1677,6 +1684,8 @@ async def main():
             print("  ⚠ --agent requires --openai-key/OPENAI_API_KEY env or --llm-base-url")
         else:
             agent_datasets = [d for d in CUSTOM_DATASETS if "Hard" in d.name or "Conv" in d.name]
+            if args.agent_dataset:
+                agent_datasets = [d for d in agent_datasets if args.agent_dataset in d.name]
             for cfg in agent_datasets:
                 print(
                     f"  {cfg.name} (agent, max {args.agent_max_turns} turns)...",
