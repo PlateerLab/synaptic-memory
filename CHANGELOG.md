@@ -17,8 +17,20 @@ establish generalization:
 |---|---:|---:|---:|
 | assort Hard (structured, 33q) | 26 / 33 = 79 % | **28 / 33 = 85 %** | **+2 queries, +6 pp, -19 % runtime (2105 → 1709 s)** |
 | KRRA Hard (text-docs, 39q) | 30 / 39 = 77 % | **32 / 39 = 82 %** | **+2 queries, +5 pp** |
-| assort Conv (structured + conversational, 24q) | 22 / 24 = 92 % | 22 / 24 = 92 % | **±0 (no regression; runtime 1028 s)** |
-| **Combined (96 queries)** | **78 / 96 = 81 %** | **82 / 96 = 85 %** | **+4 queries, +4 pp across 3 benches, 0 regressions** |
+| assort Conv (structured + conversational, 24q) | 22 / 24 = 92 % | 22 / 24 = 92 % | ±0 (no regression) |
+| X2BEE Conv (mixed EN/KO conversational, 27q) | 25 / 27 = 93 % (temp=1) | 24 / 27 = 89 % | −1 query (see caveat below) |
+| **Combined (123 queries, 4 benches)** | **103 / 123 = 84 %** | **106 / 123 = 86 %** | **+3 queries, +2.4 pp net** |
+
+*X2BEE Conv caveat:* the prior 25 / 27 number was measured at
+`temperature=1.0`. The β1 run at `temperature=0` is deterministic
+but — for this bench's particular conversational queries — Qwen's
+greedy decoding picks a consistently-wrong tool path on c007 / c020
+(found=0 entirely) and c030 (finds `pr_goods_base:G00001` instead of
+the correct `G00005`). Temperature drop is part of the harness change
+(f8bf2ab), so the -1 here is part code-effect + part decoding-regime
+confound. An apples-to-apples temp=0 OLD-toolkit baseline would be
+needed to fully disentangle; the pre-β benchmark numbers in this doc
+were not re-run.
 
 Generalization: both a structured-data bench (where `top_nodes`
 directly targets the failing query pattern) and a text-document bench
