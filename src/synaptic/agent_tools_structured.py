@@ -697,6 +697,7 @@ async def top_nodes_tool(
     where_property: str = "",
     where_op: str = "",
     where_value: str = "",
+    from_ids: list[str] | None = None,
 ) -> ToolResult:
     """Return the top N rows of a table ordered by a property.
 
@@ -719,12 +720,18 @@ async def top_nodes_tool(
             predicate are dropped BEFORE ranking.
         where_op: One of the ``filter_nodes`` operators.
         where_value: Comparison value for the pre-filter.
+        from_ids: Optional list of node titles / ids to restrict the
+            ranking to. Matches the ``filter_nodes`` / ``aggregate_nodes``
+            chaining convention — pass ``node_title`` values from a
+            prior tool result to compose steps.
 
     Examples:
         - top_nodes(table="products", sort_by="cumulative_sales", order="desc", limit=5)
         - top_nodes(table="products", sort_by="discount_rate", order="desc", limit=3,
               where_property="season", where_op="==", where_value="25SS")
         - top_nodes(table="broadcasts", sort_by="broadcast_date", order="desc", limit=1)
+        - top_nodes(from_ids=["products:12800028","products:12800049"],
+              table="products", sort_by="cumulative_sales", order="desc", limit=1)
     """
     budget = _budget_check(session, "top_nodes")
     if budget is not None:
@@ -760,10 +767,16 @@ async def top_nodes_tool(
             error=f"list_nodes_failed: {exc}",
         )
 
+    id_filter: set[str] | None = None
+    if from_ids:
+        id_filter = {str(fid) for fid in from_ids}
+
     candidates: list[tuple[Any, float | str]] = []
     for n in all_nodes:
         props = n.properties or {}
         if table and props.get("_table_name") != table:
+            continue
+        if id_filter is not None and n.title not in id_filter and n.id not in id_filter:
             continue
         if where_property and where_op:
             raw_w = props.get(where_property)

@@ -780,6 +780,11 @@ AGENT_TOOLS = [
                     "where_property": {"type": "string"},
                     "where_op": {"type": "string"},
                     "where_value": {"type": "string"},
+                    "from_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional — restrict ranking to these node_titles (multi-hop chaining)",
+                    },
                 },
                 "required": ["table", "sort_by"],
             },
@@ -1043,6 +1048,7 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             where_property=args.get("where_property", ""),
             where_op=args.get("where_op", ""),
             where_value=args.get("where_value", ""),
+            from_ids=args.get("from_ids") or None,
         )
     elif name == "get_document":
         r = await get_document_tool(backend, session, args["doc_id"], query=args.get("query", ""))

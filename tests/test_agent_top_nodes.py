@@ -187,6 +187,27 @@ async def test_top_nodes_order_aliases_are_normalised(alias, expected_order):
 
 
 @pytest.mark.asyncio
+async def test_top_nodes_from_ids_restricts_ranking_pool():
+    """Multi-hop chaining — pass node_titles from a prior step and rank
+    only within that subset."""
+    backend = await _backend_with_products()
+    session = SearchSession(budget_tool_calls=5)
+    # Rank only the two specific products we "carried over".
+    r = await top_nodes_tool(
+        backend,
+        session,
+        table="products",
+        sort_by="cumulative_sales",
+        order="desc",
+        limit=5,
+        from_ids=["products:A", "products:C"],
+    )
+    assert r.data["total"] == 2
+    titles = [x["title"] for x in r.data["results"]]
+    assert titles == ["products:C", "products:A"]  # C has 300, A has 100
+
+
+@pytest.mark.asyncio
 async def test_top_nodes_budget_enforcement():
     backend = await _backend_with_products()
     session = SearchSession(budget_tool_calls=0)  # exhausted

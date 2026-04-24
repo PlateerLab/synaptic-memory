@@ -1673,6 +1673,7 @@ async def agent_top_nodes(
     where_property: str = "",
     where_op: str = "",
     where_value: str = "",
+    from_ids: list[str] | None = None,
     session_id: str = "",
 ) -> dict[str, Any]:
     """Return the top-N rows of ``table`` ordered by ``sort_by``.
@@ -1700,6 +1701,7 @@ async def agent_top_nodes(
         where_property=where_property,
         where_op=where_op,
         where_value=where_value,
+        from_ids=from_ids,
     )
     return result.to_dict()
 
