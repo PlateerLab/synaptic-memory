@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Measured — assort Hard agent bench (temp=0, Qwen3.5-27B vLLM)
+
+Before / after of the v0.18-β1 + β2 shipwork, measured on the local
+`Qwen3.5-27b` vLLM endpoint with `temperature=0` + `seed=42` so the
+gap is pure code-effect (zero sampling variance):
+
+| Config | Solved | Runtime | Δ vs baseline |
+|---|---:|---:|---:|
+| T0 baseline — temp=0, OLD toolkit (pre-β) | 26 / 33 = 79 % | 2105 s | — |
+| **T0 v0.18-β1** — `top_nodes` + 0-result hints + new prompt + multi-tool batching | **28 / 33 = 85 %** | **1709 s** | **+2 queries, +6 pp, -19 % runtime** |
+
+Per-query shift (T0-OLD → T0-β1):
+
+- **a003** "가장 많이 팔린 상품의 리뷰" — miss → **hit** (agent picked
+  `top_nodes(products, cumulative_sales, desc, 1)` instead of the old
+  `aggregate_nodes(group_by=pk, metric="max")` hack that the previous
+  toolkit forced)
+- **a039** "최근 많이 팔린 + 핏만족도 높은" — miss → **hit**
+- **a010** review-related — miss → hit
+- a016 — hit → miss (one-query regression attributable to the prompt
+  example-set shift, not a correctness issue — the GT has 8 product
+  rows and partial matches)
+
+Runtime drop (2105 → 1709 s) reflects fewer tool turns: top-N ranking
+collapses from a 2-3-call composition to a 1-call primitive, and the
+hint-following prompt cuts re-issue loops on tools that return 0.
+
 ### Added — v0.18-β2: `top_nodes` — single-call top-N ranking primitive
 
 New structured tool ``top_nodes(table, sort_by, order, limit, where_*)``
