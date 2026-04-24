@@ -185,6 +185,11 @@ hatch 로 유지 중 (`src/synaptic/search.py` + `agent_search.py` 에 잔존).
 
 ### 검색 품질
 
+- **Compound agent tools** — β2 의 ``top_nodes`` 연장선. "X 의 Y" 같은
+  rank → join 패턴을 ``rank_and_join(rank_table, rank_by, join_fk,
+  target_table)`` 한 방에 해결. β track 에서 agent turn 을 줄인 것의
+  한계를 넘어 **구조적 multi-hop 을 single-call 화**. 측정 근거가 쌓이면
+  primitive 로 승격, 없으면 매크로 프롬프트 패턴으로만 남김.
 - **Doc2Query++** — 인제스트 시 문서당 예상 쿼리 5개 LLM 생성 →
   properties 에 저장 → FTS 인덱싱. PublicHealthQA 같은 도메인 특화
   recall 개선.
