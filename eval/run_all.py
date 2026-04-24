@@ -50,6 +50,16 @@ from synaptic.agent_loop import project_tool_result
 from synaptic.graph import SynapticGraph
 from tests.benchmark.metrics import BenchmarkResult
 
+# Diagnostic escape hatch — set SYN_EVAL_NO_PROJECT=1 to fall back to the
+# old json.dumps(result)[:5000] truncation for α1-4 A/B measurement.
+_PROJECT_ENABLED = os.environ.get("SYN_EVAL_NO_PROJECT") != "1"
+
+
+def _project_or_legacy(result: dict) -> str:
+    if _PROJECT_ENABLED:
+        return project_tool_result(result)
+    return json.dumps(result, ensure_ascii=False)[:5000]
+
 # --- Dataset registry ---
 
 BENCHMARK_DIR = REPO_ROOT / "tests" / "benchmark" / "data"
@@ -1075,6 +1085,8 @@ async def _agent_loop_run(
                     messages=messages,
                     tools=AGENT_TOOLS,
                     max_tokens=2048,
+                    temperature=0.0,
+                    seed=42,
                 )
             except Exception as exc:
                 print(f"    ⚠ API error: {exc}")
@@ -1097,7 +1109,7 @@ async def _agent_loop_run(
                         {
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": project_tool_result(result),
+                            "content": _project_or_legacy(result),
                         }
                     )
             else:
@@ -1318,6 +1330,8 @@ async def run_agent_benchmark(
                     messages=messages,
                     tools=AGENT_TOOLS,
                     max_tokens=2048,
+                    temperature=0.0,
+                    seed=42,
                 )
             except Exception as exc:
                 print(f"    ⚠ API error: {exc}")
@@ -1341,7 +1355,7 @@ async def run_agent_benchmark(
                         {
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": project_tool_result(result),
+                            "content": _project_or_legacy(result),
                         }
                     )
             else:
