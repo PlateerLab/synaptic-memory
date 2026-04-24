@@ -231,6 +231,39 @@ v0.17.1 까지 ship한 것:
 - Agent latency 완화: batch agent runner (`synaptic agent batch <queries.json>`)
 - README 전면 재구성
 
+#### 4.3.β v0.18-β: tool ergonomic + agent recovery (shipped)
+Observed agent benchmark failure modes (assort Hard 7/33 miss at temp=0,
+consistently on a003 '가장 많이 팔린 상품의 리뷰', a039 '최근 많이 팔린 +
+핏만족도', a040 '방송 많았던 상품의 색상별 판매') traced to two root
+causes:
+
+1. **Multi-hop top-N ranking required composing
+   `aggregate_nodes(group_by=<pk>, metric="max", metric_property=<col>)`**
+   — non-obvious even to humans, regularly mis-used by Qwen3.5-27B.
+   *Fix:* new primitive tool ``top_nodes(table, sort_by, order, limit,
+   where_*, from_ids)`` that ranks a table by a column in one call.
+2. **Tools returned 0 results silently** when operator / column /
+   where clause was slightly wrong, leading to retry loops with
+   near-identical variants.
+   *Fix:* every structured tool now emits ``hints`` on 0-match
+   pointing at the specific corrective action (contains vs ==,
+   first-token vs full phrase, drop-WHERE, fuzzy-column match).
+   Agent prompt explicitly instructs to follow the first hint before
+   reissuing.
+
+Additional ergonomic improvements:
+- ``project_tool_result`` preserves ``sort_value`` / ``score`` so the
+  ranking itself survives context compression
+- Unified error-envelope shape on dispatch failures (same shape as
+  success results — no more inconsistent projection fallback)
+- ``top_nodes`` tolerates order aliases (DESC / largest / top / min / etc.)
+- Multi-tool batching prompt guidance (independent probes in parallel
+  within one turn)
+
+Shipped in commits `6751aea` → `053db48` (13 commits spanning 2026-04-25
+session). Measurement: assort Hard temp=0 T0_PROJ baseline 26/33, β1
+run TBD at session end.
+
 ### 4.4 **Entity resolution at ingest**
 - 중복 entity 검출 + canonical / variant 표시
 - title clustering + property similarity
