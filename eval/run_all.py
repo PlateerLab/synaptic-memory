@@ -1047,7 +1047,14 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
     elif name == "get_document":
         r = await get_document_tool(backend, session, args["doc_id"], query=args.get("query", ""))
     else:
-        return {"error": f"unknown: {name}"}
+        return {
+            "tool": name,
+            "ok": False,
+            "data": {},
+            "error": f"unknown_tool: {name!r}",
+            "hints": [],
+            "session": {},
+        }
     return r.to_dict()
 
 
