@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — v0.18-β2: `top_nodes` — single-call top-N ranking primitive
+
+New structured tool ``top_nodes(table, sort_by, order, limit, where_*)``
+that returns the top-N rows of a table ordered by a column in a single
+call. Closes a reliability gap on multi-hop agent benchmarks.
+
+Why this matters:
+
+  - Questions like "가장 많이 팔린 상품의 리뷰" (assort Hard a003),
+    "최근 가장 많이 팔린 + 핏만족도 높은" (a039), "방송 횟수가 가장
+    많았던 상품의 색상별 판매" (a040) all start with a top-N ranking.
+  - Previously the agent had to compose
+    ``aggregate_nodes(group_by=<pk>, metric="max", metric_property=<col>)``
+    and then extract ``groups[0].node_title`` — a pattern Qwen3.5-27B
+    mis-uses frequently (the three benchmarks above all fail this way
+    on the measured baseline).
+  - ``top_nodes`` is a direct primitive: ``results[0].title`` is the
+    answer, and each row carries ``sort_value`` + properties ready to
+    chain into ``join_related`` / ``get_document``.
+
+Wiring:
+
+  - ``src/synaptic/agent_tools_structured.py`` — ``top_nodes_tool``
+    (list_nodes scan + sort, with the same ``where_*`` pre-filter
+    semantics as ``filter_nodes``).
+  - ``src/synaptic/agent_loop.py`` — AGENT_TOOLS entry + dispatcher
+    + prompt guidance.
+  - ``eval/run_all.py`` — AGENT_TOOLS entry + dispatcher + prompt
+    guidance + worked examples for "가장 X한", "최근 Y 1위",
+    "할인율 가장 높은 25SS 3개".
+  - ``src/synaptic/mcp/server.py`` — registered as the
+    ``knowledge_top_nodes`` MCP tool.
+
+0-result path emits hints: missing-column (verify via filter_nodes
+listing), over-strict WHERE (retry without the pre-filter). 7 new
+unit tests cover desc/asc, pre-filter, missing column, strict where,
+invalid order, budget exhaustion. 891/891 existing tests still green.
+
+The agent prompt also now explicitly preferrrs parallel tool calls
+within a single turn — measured Qwen behaviour is one-tool-per-turn
+by default, which wastes context budget on compound questions.
+
 ### Added — v0.18-β1: 0-result recovery hints for structured tools
 
 `filter_nodes`, `aggregate_nodes`, and `join_related` now emit
