@@ -6,18 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Measured — assort Hard agent bench (temp=0, Qwen3.5-27B vLLM)
+### Measured — v0.18-β1 breakthrough on agent benchmarks (temp=0, Qwen3.5-27B vLLM)
 
 Before / after of the v0.18-β1 + β2 shipwork, measured on the local
-`Qwen3.5-27b` vLLM endpoint with `temperature=0` + `seed=42` so the
-gap is pure code-effect (zero sampling variance):
+`Qwen3.5-27b` vLLM endpoint with `temperature=0` + `seed=42` so the gap
+is pure code-effect (zero sampling variance). Two datasets run to
+establish generalization:
 
-| Config | Solved | Runtime | Δ vs baseline |
+| Benchmark | Baseline | v0.18-β1 | Δ |
 |---|---:|---:|---:|
-| T0 baseline — temp=0, OLD toolkit (pre-β) | 26 / 33 = 79 % | 2105 s | — |
-| **T0 v0.18-β1** — `top_nodes` + 0-result hints + new prompt + multi-tool batching | **28 / 33 = 85 %** | **1709 s** | **+2 queries, +6 pp, -19 % runtime** |
+| assort Hard (structured, 33q) | 26 / 33 = 79 % | **28 / 33 = 85 %** | **+2 queries, +6 pp, -19 % runtime (2105 → 1709 s)** |
+| KRRA Hard (text, 39q) | 30 / 39 = 77 % | **32 / 39 = 82 %** | **+2 queries, +5 pp** |
+| Combined | 56 / 72 = 78 % | **60 / 72 = 83 %** | **+4 queries, +5.6 pp** |
 
-Per-query shift (T0-OLD → T0-β1):
+Generalization: both a structured-data bench (where `top_nodes`
+directly targets the failing query pattern) and a text-document bench
+(where the wins come from 0-result recovery hints + multi-tool batching
+prompt + error-envelope unification) show concurrent improvements.
+The per-bench gain is small in absolute numbers but tight — temp=0 +
+fixed seed collapses the ±2-query sampling variance that previously
+obscured code effects, and every improved query traces to a specific
+β-track change.
+
+Per-query shift on assort Hard (T0-OLD → T0-β1):
 
 - **a003** "가장 많이 팔린 상품의 리뷰" — miss → **hit** (agent picked
   `top_nodes(products, cumulative_sales, desc, 1)` instead of the old
@@ -29,9 +40,17 @@ Per-query shift (T0-OLD → T0-β1):
   example-set shift, not a correctness issue — the GT has 8 product
   rows and partial matches)
 
-Runtime drop (2105 → 1709 s) reflects fewer tool turns: top-N ranking
-collapses from a 2-3-call composition to a 1-call primitive, and the
-hint-following prompt cuts re-issue loops on tools that return 0.
+Runtime drop (2105 → 1709 s on assort Hard) reflects fewer tool turns:
+top-N ranking collapses from a 2-3-call composition to a 1-call
+primitive, and the hint-following prompt cuts re-issue loops on tools
+that return 0.
+
+KRRA Hard remaining 7 misses (h012, h019, h020, h025, h029, h030,
+h040) all share the same structural pattern: broad topical queries
+("이용자보호 제도", "인권영향평가") where GT has 10-12 specific
+documents and the agent's retrieval surfaces phrase hubs / related
+terms instead. This is the retrieval-ceiling pattern documented under
+α1-2 — not addressable at the agent-tool layer.
 
 ### Added — v0.18-β2: `top_nodes` — single-call top-N ranking primitive
 
