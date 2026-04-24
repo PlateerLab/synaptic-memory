@@ -424,10 +424,24 @@ async def _dispatch_tool(
                 where_value=args.get("where_value", ""),
             )
         else:
-            return {"error": f"unknown tool: {name}"}
+            return {
+                "tool": name,
+                "ok": False,
+                "data": {},
+                "error": f"unknown_tool: {name!r}",
+                "hints": [],
+                "session": {},
+            }
     except Exception as exc:
         logger.warning("tool dispatch %s failed: %s", name, exc)
-        return {"error": f"{name}: {type(exc).__name__}: {exc}"}
+        return {
+            "tool": name,
+            "ok": False,
+            "data": {},
+            "error": f"{type(exc).__name__}: {exc}",
+            "hints": [],
+            "session": {},
+        }
     return r.to_dict()
 
 
