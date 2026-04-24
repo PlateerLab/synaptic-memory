@@ -55,9 +55,9 @@ GPT-4o-mini baseline 초과.
 | # | 작업 | 상태 |
 |---|------|---|
 | α1-1 | `graph.chat()` public API + session 관리 | ✅ ship (v0.18-alpha, commit `4fa7df7`) |
-| α1-2 | KRRA Conv **−23pp 회귀** 원인 조사 — Qwen 한국어 conversational 약점 또는 prompt 이슈 | 🟡 진행 |
-| α1-3 | Agent-loop latency 감축 — 첫 1-2 turn priming 으로 탐색 turn 절약 | 🟡 G1 항목 참조 |
-| α1-4 | Context overflow 회피 (현재 172q 중 10q = 5.8% vLLM 16k 초과로 fail) | 🔴 미착수 |
+| α1-2 | KRRA Conv **−23pp 회귀** 원인 조사 — Qwen 한국어 conversational 약점 또는 prompt 이슈 | ✅ 진단 완료 — FTS recall ceiling, query-time LLM rewrite (HyDE) 없이는 회복 불가 → v0.19+ |
+| α1-3 | Agent-loop latency 감축 — 첫 1-2 turn priming 으로 탐색 turn 절약 | ✅ α2 snapshot priming 으로 ship |
+| α1-4 | Context overflow 회피 (현재 172q 중 10q = 5.8% vLLM 16k 초과로 fail) | ✅ ship — `project_tool_result` (commit TBD) |
 
 ### α2. G1 — Auto graph snapshot / agent priming ✅ ship
 

@@ -488,6 +488,241 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
                 found_ids.add(candidate)
 
 
+_TOOL_RESULT_BUDGET = 4000
+"""Default char budget for a single projected tool-result message.
+
+~1000 tokens. Five turns of tool results stay well under 16k vLLM
+max_model_len even with system prompt + user query + assistant
+responses overhead.
+"""
+
+
+def _truncate(s: str, cap: int) -> str:
+    return s if len(s) <= cap else s[: cap - 1] + "…"
+
+
+def _compact_properties(props: dict, *, max_entries: int = 8, max_value_chars: int = 80) -> dict:
+    """Trim a node properties dict to a small scalar subset.
+
+    Keeps only scalar values, drops verbose or nested entries.
+    """
+    out: dict[str, Any] = {}
+    if not isinstance(props, dict):
+        return out
+    for k, v in props.items():
+        if len(out) >= max_entries:
+            break
+        if isinstance(v, str | int | float | bool):
+            sv = str(v)
+            out[k] = _truncate(sv, max_value_chars)
+    return out
+
+
+def _project_result_item(r: dict) -> dict:
+    """Compact a single filter/search/join result to id + title + brief preview."""
+    if not isinstance(r, dict):
+        return r
+    out: dict[str, Any] = {}
+    if "id" in r:
+        out["id"] = r["id"]
+    if "title" in r:
+        out["title"] = r["title"]
+    preview = r.get("preview") or r.get("snippet") or ""
+    if preview:
+        out["preview"] = _truncate(str(preview), 120)
+    props = _compact_properties(r.get("properties") or {})
+    if props:
+        out["properties"] = props
+    return out
+
+
+def _project_evidence_item(e: dict) -> dict:
+    if not isinstance(e, dict):
+        return e
+    out: dict[str, Any] = {}
+    for src in ("id", "node_id", "document_id"):
+        if src in e:
+            out["id"] = e[src]
+            break
+    if "title" in e:
+        out["title"] = e["title"]
+    snippet = e.get("snippet") or e.get("content") or e.get("preview") or ""
+    if snippet:
+        out["snippet"] = _truncate(str(snippet), 180)
+    props = _compact_properties(e.get("properties") or {}, max_entries=3)
+    if props:
+        out["properties"] = props
+    return out
+
+
+def _project_document_excerpt(ex: dict) -> dict:
+    if not isinstance(ex, dict):
+        return ex
+    out: dict[str, Any] = {}
+    doc = ex.get("document") or {}
+    if isinstance(doc, dict):
+        compact_doc: dict[str, Any] = {}
+        if "id" in doc:
+            compact_doc["id"] = doc["id"]
+        if "title" in doc:
+            compact_doc["title"] = doc["title"]
+        props = _compact_properties(doc.get("properties") or {}, max_entries=3)
+        if props:
+            compact_doc["properties"] = props
+        if compact_doc:
+            out["document"] = compact_doc
+    chunks = ex.get("chunks") or ex.get("top_chunks") or []
+    if isinstance(chunks, list) and chunks:
+        out["chunks"] = [_project_chunk_item(c) for c in chunks[:3]]
+    return out
+
+
+def _project_chunk_item(c: dict) -> dict:
+    if not isinstance(c, dict):
+        return c
+    out: dict[str, Any] = {}
+    if "id" in c:
+        out["id"] = c["id"]
+    if "title" in c:
+        out["title"] = c["title"]
+    text = c.get("text") or c.get("content") or c.get("preview") or ""
+    if text:
+        out["text"] = _truncate(str(text), 300)
+    return out
+
+
+def _project_data(tool: str, data: dict) -> dict:
+    """Route-table dispatch — tool-specific shape trimming."""
+    if not isinstance(data, dict):
+        return data
+    out = dict(data)
+
+    if "results" in out and isinstance(out["results"], list):
+        out["results"] = [_project_result_item(r) for r in out["results"]]
+
+    if "evidence" in out and isinstance(out["evidence"], list):
+        out["evidence"] = [_project_evidence_item(e) for e in out["evidence"]]
+
+    if "merged_evidence" in out and isinstance(out["merged_evidence"], list):
+        out["merged_evidence"] = [_project_evidence_item(e) for e in out["merged_evidence"]]
+
+    if "document_excerpts" in out and isinstance(out["document_excerpts"], list):
+        out["document_excerpts"] = [_project_document_excerpt(x) for x in out["document_excerpts"]]
+
+    if "expanded_neighbours" in out and isinstance(out["expanded_neighbours"], list):
+        out["expanded_neighbours"] = [_project_result_item(n) for n in out["expanded_neighbours"]]
+
+    if "neighbours" in out and isinstance(out["neighbours"], list):
+        out["neighbours"] = [_project_result_item(n) for n in out["neighbours"]]
+
+    # get_document returns {"document": {...}, "chunks": [...]}
+    if isinstance(out.get("document"), dict):
+        out["document"] = _project_result_item(out["document"])
+    if isinstance(out.get("chunks"), list):
+        out["chunks"] = [_project_chunk_item(c) for c in out["chunks"]]
+
+    # aggregate_nodes groups are already compact; no-op unless huge.
+    return out
+
+
+def _overflow_stub(tool: str, ok: bool) -> str:
+    """Last-resort envelope used when shrinking can't fit the budget.
+
+    Always valid JSON, always stable size. Losing the data is better
+    than silently corrupting a conversation with chopped-mid-value
+    JSON (the pre-v0.18 failure mode that caused agent retry loops).
+    """
+    return json.dumps(
+        {
+            "tool": tool,
+            "ok": ok,
+            "data": {"_overflow": True},
+            "error": "tool_result_exceeded_context_budget",
+        },
+        ensure_ascii=False,
+    )
+
+
+def _shrink_lists(data: dict, max_chars: int, envelope: dict) -> str:
+    """Iteratively halve list lengths inside ``data`` until envelope fits."""
+    list_keys = (
+        "results",
+        "evidence",
+        "merged_evidence",
+        "document_excerpts",
+        "expanded_neighbours",
+        "neighbours",
+        "chunks",
+        "groups",
+        "sub_results",
+    )
+    for _ in range(10):
+        serialized = json.dumps(envelope, ensure_ascii=False)
+        if len(serialized) <= max_chars:
+            return serialized
+        shrunk = False
+        for key in list_keys:
+            v = data.get(key)
+            if isinstance(v, list) and len(v) > 1:
+                # Halve, floor at 1 once we're under the mercy point.
+                new_len = max(1, len(v) // 2)
+                data[key] = v[:new_len]
+                data["_trimmed_for_context"] = True
+                shrunk = True
+        if not shrunk:
+            break
+    serialized = json.dumps(envelope, ensure_ascii=False)
+    if len(serialized) <= max_chars:
+        return serialized
+    return _overflow_stub(envelope.get("tool", ""), envelope.get("ok", False))
+
+
+def project_tool_result(result: dict | Any, *, max_chars: int = _TOOL_RESULT_BUDGET) -> str:
+    """Project a tool result to a compact JSON string within ``max_chars``.
+
+    Replaces naive ``json.dumps(result)[:5000]`` truncation. Goals:
+
+    - Keep JSON structurally valid — never chop mid-value.
+    - Preserve identifiers (``id``, ``title``, ``doc_id``) so the agent
+      can chain tool calls.
+    - Drop high-volume low-signal fields (``tags``, nested properties,
+      raw chunk bodies beyond a short preview).
+    - Cap list lengths iteratively if the projected shape still exceeds
+      the budget.
+
+    Downstream note: ``_extract_ids`` runs *before* this projection, so
+    ID collection is unaffected.
+    """
+    if not isinstance(result, dict):
+        # Fallback for unexpected shapes — ensure output is valid JSON.
+        try:
+            encoded = json.dumps(result, ensure_ascii=False)
+        except (TypeError, ValueError):
+            encoded = json.dumps(str(result), ensure_ascii=False)
+        if len(encoded) <= max_chars:
+            return encoded
+        # Truncate the underlying *value*, then re-encode — preserves JSON validity.
+        headroom = max(0, max_chars - 10)
+        if isinstance(result, str):
+            return json.dumps(_truncate(result, headroom), ensure_ascii=False)
+        return json.dumps({"_overflow": True}, ensure_ascii=False)
+
+    tool = result.get("tool", "")
+    data = _project_data(tool, result.get("data") or {})
+    envelope: dict[str, Any] = {"tool": tool, "ok": result.get("ok", True), "data": data}
+    err = result.get("error")
+    if err:
+        envelope["error"] = err
+    hints = result.get("hints")
+    if hints:
+        envelope["hints"] = hints[:3]
+
+    serialized = json.dumps(envelope, ensure_ascii=False)
+    if len(serialized) <= max_chars:
+        return serialized
+    return _shrink_lists(data, max_chars, envelope)
+
+
 # --- Public API ----------------------------------------------------
 
 
@@ -589,7 +824,7 @@ async def run_agent_loop(
                     {
                         "role": "tool",
                         "tool_call_id": tc.id,
-                        "content": json.dumps(result, ensure_ascii=False)[:5000],
+                        "content": project_tool_result(result),
                     }
                 )
         else:

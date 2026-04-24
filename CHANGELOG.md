@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — v0.18-α1-4: agent-loop tool-result context overflow
+
+Replaced naive `json.dumps(result, ensure_ascii=False)[:5000]` truncation at
+the agent-loop → tool-result message boundary with a structured projection
+(`synaptic.agent_loop.project_tool_result`). The old slice frequently chopped
+mid-value, producing invalid JSON that confused the tool-calling agent and
+triggered retry loops; combined with accumulating verbose payloads across
+turns, this caused roughly 10/172 = 5.8 % of agent queries to exceed vLLM's
+16k `max_model_len`.
+
+New behaviour:
+
+- Per-tool projection trims the heaviest fields — preview → 120 chars,
+  property values → top-8 scalars × 80 chars, chunk text → 300 chars,
+  `evidence[].snippet` → 180 chars — while keeping every `id` / `title` /
+  `doc_id` the agent needs for chaining. `_extract_ids` still runs on the
+  raw (pre-projection) result, so ID collection is unchanged.
+- Default budget is now 4 000 chars (~1 000 tokens). Oversize results
+  trigger iterative list-halving instead of mid-JSON truncation, marking
+  the result `_trimmed_for_context: true` so the agent knows it saw a
+  sample.
+- Last-resort stub `{"tool": ..., "ok": ..., "data": {"_overflow": true},
+  "error": "tool_result_exceeded_context_budget"}` — always valid JSON.
+
+14 new unit tests in `tests/test_agent_loop_projection.py` lock the shape
+and the per-budget size guarantee.
+
 ### Added — v0.18-α2: Auto graph snapshot (Graphify G1 absorption)
 
 New `synaptic.snapshot` module + `synaptic-snapshot` CLI + `knowledge_snapshot`
