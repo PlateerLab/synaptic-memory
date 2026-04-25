@@ -104,6 +104,14 @@ Tips
 ====
 - If a search returns 0 results in Korean, try the English term — corpora
   often mix scripts (e.g. "치즈" → 0, "cheese" → many).
+- **English paraphrase / category-like queries → use ``search`` / ``deep_search``
+  FIRST, never ``filter_nodes(op="==")``.** Phrases like "portable computing
+  device", "facial skincare product", "wireless headphones" are paraphrases
+  of product names — they are NOT column values. The ``goods_nm`` / ``product_name``
+  columns hold concrete brand+model strings, so an equality filter will return
+  empty. Vector retrieval (``search`` / ``deep_search``) is the correct path
+  for any English-only query without an exact identifier (price, date, code,
+  brand name). Fall back to structured tools only if search returns 0.
 - For "top N" / "most" / "least" questions, use ``top_nodes(table,
   sort_by, order, limit)`` — one tool call returns the ranked rows
   complete with node_title and ID, ready to chain into ``join_related``

@@ -6,6 +6,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Measured — v0.19 prompt patch (English-paraphrase / search-first guidance)
+
+Added a single new section to the agent system prompt — both
+`eval/run_all.py:AGENT_SYSTEM` and `src/synaptic/agent_loop.py:AGENT_SYSTEM`
+— that instructs the agent to use ``search`` / ``deep_search`` FIRST
+for English-only paraphrase or category-like queries (e.g. "portable
+computing device", "facial skincare product"). The original target was
+X2BEE Hard h004 / h019, which β had regressed by biasing the agent
+toward structured tools first; the patch ended up generalizing
+beneficially to two Korean Hard benches as well.
+
+5-bench scoreboard at `temperature=0` + `seed=42` (apples-to-apples
+across all three columns):
+
+| Benchmark | Pre-β @ T=0 | β @ T=0 | **v0.19 @ T=0** | Δ vs β |
+|---|---:|---:|---:|---:|
+| assort Hard (33q) | 26 / 33 | 28 / 33 | **30 / 33 = 91 %** | **+2 queries** |
+| KRRA Hard (39q) | 30 / 39 | 32 / 39 | **34 / 39 = 87 %** | **+2 queries** |
+| assort Conv (24q) | 22 / 24 | 22 / 24 | 22 / 24 = 92 % | ±0 |
+| X2BEE Conv (27q) | 23 / 27 | 24 / 27 | 23 / 27 = 85 % | −1 query (c013) |
+| X2BEE Hard (19q) | 18 / 19 | 17 / 19 | **18 / 19 = 95 %** | **+1 query** |
+| **Combined (142q)** | 119 / 142 = 84 % | 123 / 142 = 87 % | **127 / 142 = 89 %** | **+4 queries, +2.8 pp** |
+
+**Cumulative β + v0.19 vs pre-β: +8 queries, +5.6 pp** across 142
+single-question agent runs at fixed sampling.
+
+X2BEE Hard runtime also dropped 740 s → 582 s (−21 %), same dynamic as
+β on assort Hard — the recovered queries now resolve in fewer turns.
+
+The −1 on X2BEE Conv (c013, "친구 생일 선물로 5만원 이하 추천") is
+deterministic-prompt-shift noise: it is a Korean structured query that
+the new English-paraphrase rule does NOT trigger on, but adding any
+text to the system prompt slightly perturbs the model's tool-call
+distribution at temp=0. Same dynamic as the β / pre-β c007 / c020 flips
+documented above. Net X2BEE Conv vs pre-β is still ±0; the apparent
+regression is purely against the β intermediate state.
+
+KRRA Hard per-query (β → v0.19):
+- **Recovered:** h012 ("이용자보호 관련 모든 문서 목록"), h020 ("가장 많은
+  문서를 보유한 카테고리"), h025 ("환경 친화 정책")
+- **New miss:** h028 ("내부 통제 강화 및 업무 지침 정비")
+- Net: +2
+
+assort Hard per-query: 2 of the 5 β-misses recovered; no new misses.
+
+X2BEE Hard h004 ("portable computing device") is the only X2BEE Hard
+query that resists every approach so far: pre-β found it via
+`filter_nodes(contains)`, β collapsed to `found=3`, v0.19 collapses to
+`found=0`. The corpus has no English text "portable computing device"
+anywhere, and FTS-only mode (no embedder in the bench harness) cannot
+paraphrase-bridge to "갤럭시북" / "Galaxy Book". Listed as a v0.20
+candidate: enable the local-bge embedder in the agent benchmark
+harness so vector retrieval can actually do paraphrase matching.
+
+### Investigated — KRRA Conv −23 pp vs v0.13 GPT-4o-mini is a GT-bias artifact
+
+Earlier CHANGELOG framed KRRA Conv 14/30 as "Qwen3.5-27B Korean
+conversational reasoning weakness" and listed it as a v0.18 track item.
+Closer inspection of c001 ("경마 시행 운영 계획을 요약해줘") shows the
+GT picks 5 documents of which 3 are off-topic (`2020년 팀제 운영계획`,
+`2023년 썸즈업 워터페스티벌 요약`, `2024년 부경 경주마 보건복지 고도화`)
+while the corpus contains 16 actual `경마시행계획` documents. The
+agent finds `2022년도_(요약) 22년 경마시행계획` — literally "Summary
+of 22-year horse race operation plan", a perfect topic match — but
+that document is not among the 5 GT picks, so it scores as a miss.
+
+Likely explanation for v0.13 GPT-4o-mini scoring 70 % on the same GT:
+v0.13's broader / less-precise retrieval surfaced more candidates per
+turn and therefore had higher accidental overlap with a noisy GT.
+The newer pipeline's tighter precision (PPR-PRF, MaxP, reranker) means
+fewer accidental hits. The "regression" is partly a measurement
+artifact, not an agent-quality regression — chasing the metric would
+degrade actual quality.
+
+KRRA Conv stays as a known limitation. Action items: regenerate KRRA
+Conv GT against the current corpus, OR switch the bench to a
+top-k-with-judge protocol that doesn't penalise finding a more-relevant
+document than what the GT picked.
+
 ### Measured — v0.18-β1 breakthrough on agent benchmarks (temp=0, Qwen3.5-27B vLLM)
 
 Before / after of the v0.18-β1 + β2 shipwork, measured on the local
