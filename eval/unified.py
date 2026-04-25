@@ -126,12 +126,39 @@ _ENUMERATION_HINTS = (
 )
 
 _MULTI_HOP_HINTS = (
+    # Possessive / filter chain markers
     "의 ",  # "X의 Y" possessive often signals chain
     " 중 ",  # "X 중 Y" filter then operate
     " 에서 ",  # "X에서 Y" location/source then attribute
+    # Korean composition markers (KRRA multihop style)
+    "와 ",  # "X와 Y" — pairs / co-occurrence
+    "과 ",  # "X과 Y" — same, after consonant
+    "수립에서",  # "establishment in" — composition
+    "구축과",  # "construction with" — composition
+    "관련된",  # "related" — link
+    "현황과",  # "status with" — composition
+    "교차",  # "intersection" — explicit cross-cutting
+    # English connectors
     "and the ",
     "whose ",
     "which has ",
+    "combined with",
+    "in relation to",
+)
+
+# Query file stems whose every query is multi-hop by construction.
+# These are explicitly authored as multi-hop benchmarks; the classifier
+# heuristics underestimate them because the connector vocabulary is
+# academic ("교차" / "수립에서") rather than colloquial ("의/중/에서").
+_MULTI_HOP_FILES: frozenset[str] = frozenset(
+    {
+        "krra_multihop",
+        "musique",
+        "musique_ans",
+        "hotpotqa",
+        "hotpotqa_24",
+        "2wikimultihop",
+    }
 )
 
 _SUMMARIZATION_HINTS = (
@@ -387,12 +414,19 @@ def load_query_files(directory: Path = QUERIES_DIR) -> dict[str, list[dict]]:
 
 
 def _classify_qfile(qfile_stem: str, queries: list[dict]) -> dict[str, QueryDimensions]:
-    """Classify every query in a file. Return qid → dimensions."""
+    """Classify every query in a file. Return qid → dimensions.
+
+    File-level defaults (e.g. ``krra_multihop`` → ``recall_type=multi_hop``)
+    are applied before per-query overrides so an academically-phrased
+    multi-hop query whose connectors don't match the regex still gets
+    counted in the right slice.
+    """
     domain_map = {
         "krra": "krra",
         "krra_hard": "krra",
         "krra_conversational": "krra",
         "krra_multihop": "krra",
+        "krra_graph": "krra",
         "assort": "assort",
         "assort_hard": "assort",
         "assort_conversational": "assort",
@@ -401,16 +435,27 @@ def _classify_qfile(qfile_stem: str, queries: list[dict]) -> dict[str, QueryDime
         "x2bee_conversational": "x2bee",
     }
     domain = domain_map.get(qfile_stem, qfile_stem)
+
+    # File-level default dimensions — applied as base, then per-query
+    # ``dimensions: {...}`` block (if present) overrides individual fields.
+    file_defaults: dict[str, Any] = {}
+    if qfile_stem in _MULTI_HOP_FILES:
+        file_defaults["recall_type"] = RecallType.MULTI_HOP.value
+        # Use ``hop_count`` floor of 2 — these benchmarks are authored
+        # to require 2+ hops by construction.
+        file_defaults["hop_count"] = 2
+
     out: dict[str, QueryDimensions] = {}
     for q in queries:
         qid = q.get("qid", "")
         if not qid:
             continue
+        explicit = {**file_defaults, **q.get("dimensions", {})}
         out[qid] = classify_query(
             q.get("query", ""),
             domain=domain,
             relevant_docs=q.get("relevant_docs", []),
-            explicit=q.get("dimensions", {}),
+            explicit=explicit,
         )
     return out
 
