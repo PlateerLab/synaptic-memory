@@ -6,6 +6,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Measured — v0.21 Phase 1.5/1.6: cross-domain federation bench (3/12 = 25 % baseline)
+
+End-to-end demo of the Phase 1 stack — Phase 1.4 MetaCorpus combiner +
+Phase 1.5 ``validation: domain_coverage`` scoring path + per-domain
+node tally helper. The agent runs against the combined corpus
+(``metacorpus.sqlite`` = krra + assort + x2bee, 123,877 nodes) on the
+12 cross-domain queries from ``eval/data/queries/cross_domain.json``
+and is scored by per-domain coverage of its found_ids instead of
+doc-id matching.
+
+**Result: 3 / 12 hits = 25 % cross-domain coverage**, runtime 1151 s.
+
+Per-query split:
+
+| qid | required domains | got | hit |
+|---|---|---|:---:|
+| xd001 | assort, krra | krra=112, assort=0 | ✗ |
+| xd002 | krra, x2bee | krra=80, x2bee=0 | ✗ |
+| xd003 | assort, krra | krra=51, assort=0 | ✗ |
+| xd004 | krra, x2bee | krra=48, x2bee=0 | ✗ |
+| xd005 | assort, krra | krra=80, assort=0 | ✗ |
+| xd006 | assort, krra (EN) | krra=96, assort=0 | ✗ |
+| **xd007** | **krra, x2bee (EN)** | **krra=91, x2bee=20** | **✓** |
+| **xd008** | **assort, krra** | **krra=100, assort=10** | **✓** |
+| **xd009** | **krra, x2bee** | **krra=12, x2bee=30** | **✓** |
+| xd010 | krra, x2bee, assort | krra=74, x2bee=56, assort=0 | ✗ (2 of 3) |
+| xd011 | assort, krra (EN) | krra=36, assort=0 | ✗ |
+| xd012 | krra, x2bee, assort | krra=83, x2bee=0, assort=0 | ✗ |
+
+Pattern: **cross-domain succeeds when the query keywords hit distinct
+domain-anchored content** ("user feedback records" → x2bee feedback
+table; "방송 마케팅" → assort broadcasts table). It fails when one
+domain has explicit category coverage that dominates FTS ranking
+(ESG/carbon → KRRA's ``ESG 및 지속가능성`` category). All-or-nothing
+``min_docs_per_domain=1`` validation is harsh — 3-domain queries
+(xd010, xd012) covered 2/3 but still scored as miss; partial-credit
+scoring is a v0.21+ refinement candidate.
+
+Combined UnifiedScore on the v0.20.1 + cross-domain logs: **0.7205**
+across 209 queries (all 8 dimensions covered for the first time):
+
+```
+  lang:ko        hit=0.849  n=172   (strong)
+  lang:en        hit=0.333  n=  3   (under-covered, 3 EN cross-domain queries only)
+  lang:mixed     hit=0.824  n= 34
+  multi_hop      hit=0.756  n= 45
+  enumeration    hit=0.859  n= 92
+  structured     hit=0.888  n= 98
+  cross_domain   hit=0.250  n= 12   ← NEW BASELINE — was 0% no-coverage
+  cross_language hit=0.784  n= 37
+```
+
+Saved to ``eval/baselines/unified-v021-with-cross-domain.json`` for
+future ``--compare`` runs.
+
+**Phase 2 target**: domain-aware agent (system-prompt enumeration of
+available domains + intent classifier routing fan-out searches across
+multiple domains rather than one) — should lift cross_domain from
+0.25 to 0.50+ which would add ≥0.025 to UnifiedScore.
+
+**Phase 1 status**: complete. The framework correctly identified the
+real architectural gap (single-domain search bias) instead of hiding
+it in per-bench numbers.
+
 ### Measured — v0.20.1: prompt revert recovers + improves on v0.19
 
 After the v0.20 cursor follow-through prompt was reverted (commit

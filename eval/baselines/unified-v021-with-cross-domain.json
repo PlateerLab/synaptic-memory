@@ -1,0 +1,108 @@
+{
+  "unified_score": 0.7205177538454509,
+  "query_count": 209,
+  "n_hits": 175,
+  "per_dimension": {
+    "lang:ko": {
+      "n_queries": 172,
+      "n_hits": 146,
+      "hit_rate": 0.8488,
+      "weight": 0.3
+    },
+    "lang:en": {
+      "n_queries": 3,
+      "n_hits": 1,
+      "hit_rate": 0.3333,
+      "weight": 0.1
+    },
+    "lang:mixed": {
+      "n_queries": 34,
+      "n_hits": 28,
+      "hit_rate": 0.8235,
+      "weight": 0.05
+    },
+    "recall:multi_hop": {
+      "n_queries": 45,
+      "n_hits": 34,
+      "hit_rate": 0.7556,
+      "weight": 0.15
+    },
+    "recall:enumeration": {
+      "n_queries": 92,
+      "n_hits": 79,
+      "hit_rate": 0.8587,
+      "weight": 0.1
+    },
+    "structured": {
+      "n_queries": 98,
+      "n_hits": 87,
+      "hit_rate": 0.8878,
+      "weight": 0.1
+    },
+    "cross_domain": {
+      "n_queries": 12,
+      "n_hits": 3,
+      "hit_rate": 0.25,
+      "weight": 0.1
+    },
+    "cross_language": {
+      "n_queries": 37,
+      "n_hits": 29,
+      "hit_rate": 0.7838,
+      "weight": 0.1
+    }
+  },
+  "per_bench": {
+    "v020-assort-conv": {
+      "n_queries": 7,
+      "n_hits": 6,
+      "hit_rate": 0.8571
+    },
+    "v020-assort-hard": {
+      "n_queries": 33,
+      "n_hits": 29,
+      "hit_rate": 0.8788
+    },
+    "v020-krra-hard": {
+      "n_queries": 39,
+      "n_hits": 31,
+      "hit_rate": 0.7949
+    },
+    "v020-x2bee-conv": {
+      "n_queries": 27,
+      "n_hits": 23,
+      "hit_rate": 0.8519
+    },
+    "v020-x2bee-hard": {
+      "n_queries": 19,
+      "n_hits": 18,
+      "hit_rate": 0.9474
+    },
+    "v0201-assort-hard": {
+      "n_queries": 33,
+      "n_hits": 32,
+      "hit_rate": 0.9697
+    },
+    "v0201-krra-hard": {
+      "n_queries": 39,
+      "n_hits": 33,
+      "hit_rate": 0.8462
+    },
+    "v021-cross-domain": {
+      "n_queries": 12,
+      "n_hits": 3,
+      "hit_rate": 0.25
+    }
+  },
+  "weights": {
+    "lang:ko": 0.3,
+    "lang:en": 0.1,
+    "lang:mixed": 0.05,
+    "recall:multi_hop": 0.15,
+    "recall:enumeration": 0.1,
+    "structured": 0.1,
+    "cross_domain": 0.1,
+    "cross_language": 0.1
+  },
+  "notes": []
+}

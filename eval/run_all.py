@@ -147,6 +147,19 @@ CUSTOM_DATASETS = [
         is_custom=True,
         quick=True,
     ),
+    # Phase 1: forward-looking cross-domain federation eval. Runs the agent
+    # against the combined MetaCorpus (krra + assort + x2bee) and scores by
+    # per-domain coverage instead of doc-id matching. Requires
+    # ``eval/data/metacorpus.sqlite`` to exist — build with
+    # ``uv run python eval/build_metacorpus.py``. Not in --quick by default
+    # (forces an explicit opt-in via --agent-dataset "Cross-Domain").
+    DatasetConfig(
+        name="Cross-Domain",
+        path=EVAL_DIR / "data" / "metacorpus.sqlite",
+        query_path=EVAL_DIR / "data" / "queries" / "cross_domain.json",
+        is_custom=True,
+        quick=False,
+    ),
 ]
 
 # Public datasets (in-memory, from benchmark JSON)
@@ -1124,6 +1137,133 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
     return r.to_dict()
 
 
+async def _count_domains_for_ids(backend: Any, found_ids: set[str]) -> dict[str, int]:
+    """Look up each found id's ``properties._domain_id`` and tally per domain.
+
+    The agent's ``found_ids`` is a heterogeneous bag — see
+    ``src/synaptic/agent_loop.py:_extract_ids``. It contains all of:
+
+      - real node ids (``chunk_<hash>`` / ``doc_<hash>`` / ``cat_<hash>``
+        / ``phrase_<hash>``) — resolve via direct ``get_node``
+      - bare 16-char hex hashes copied from ``properties.doc_id`` —
+        resolve only via ``properties_json LIKE '%"doc_id": "<hash>"%'``
+        SQL scan (the property has whitespace; matters for the LIKE)
+      - title strings like ``"products:G00007"`` or
+        ``"ESG 및 지속가능성"`` — resolve via title equality
+      - aggregate group composites (``"table:value"``)
+
+    A naive ``get_node`` only resolves the first bucket — and since
+    typical agent runs surface mostly titles + raw doc_id hashes, the
+    naive helper reports near-zero domain coverage even when the
+    underlying corpus IS multi-domain. Fix: bulk-resolve via raw SQL
+    over ``properties_json``, ``id``, and ``title`` in one pass.
+    """
+    counts: dict[str, int] = {}
+    if not found_ids:
+        return counts
+
+    # Cap the lookup cost — agents can collect 500+ ids on enumeration
+    # queries, but per-domain coverage is settled by the first ~few.
+    candidates = list(found_ids)[:500]
+
+    # Reach down to SqliteGraphBackend's underlying connection. The
+    # protocol abstraction doesn't expose bulk lookup — but every
+    # current bench backend is sqlite-flavoured, so this is fine for
+    # the bench harness. If we ever need this on a non-sqlite backend
+    # we'll add a ``backend.bulk_resolve_domains`` method.
+    db = None
+    db_method = getattr(backend, "_db", None)
+    if callable(db_method):
+        try:
+            db = db_method()
+        except Exception:
+            db = None
+    if db is None:
+        db = getattr(backend, "_conn", None)
+    if db is None:
+        # Fallback: per-id get_node, slow but correct
+        for nid in candidates:
+            try:
+                node = await backend.get_node(nid)
+            except Exception:  # noqa: S112 — best-effort lookup; missing nodes are expected
+                continue
+            if node:
+                dom = (node.properties or {}).get("_domain_id", "")
+                if dom:
+                    counts[dom] = counts.get(dom, 0) + 1
+        return counts
+
+    # SqliteGraphBackend uses aiosqlite — db.execute returns awaitable
+    import aiosqlite
+
+    if not isinstance(db, aiosqlite.Connection):
+        # Sync fallback (MemoryBackend etc.)
+        for nid in candidates:
+            try:
+                node = await backend.get_node(nid)
+            except Exception:  # noqa: S112 — best-effort lookup; missing nodes are expected
+                continue
+            if node:
+                dom = (node.properties or {}).get("_domain_id", "")
+                if dom:
+                    counts[dom] = counts.get(dom, 0) + 1
+        return counts
+
+    # Bulk lookup: one query that matches ANY id by id / title / doc_id
+    # property. We chunk to avoid SQL parameter limits.
+    seen_node_ids: set[str] = set()
+    chunk = 100
+    for i in range(0, len(candidates), chunk):
+        batch = candidates[i : i + chunk]
+        placeholders = ",".join("?" * len(batch))
+        # Match a candidate string against id, title, OR doc_id property
+        # (with the whitespace-sensitive JSON pattern). Use UNION to
+        # dedupe at the SQL level.
+        sql = f"""
+            SELECT DISTINCT id, json_extract(properties_json, '$._domain_id') AS dom
+            FROM syn_nodes WHERE id IN ({placeholders})
+            UNION
+            SELECT DISTINCT id, json_extract(properties_json, '$._domain_id') AS dom
+            FROM syn_nodes WHERE title IN ({placeholders})
+        """
+        try:
+            cur = await db.execute(sql, [*batch, *batch])
+            rows = await cur.fetchall()
+            await cur.close()
+        except Exception:
+            rows = []
+        for nid, dom in rows:
+            if nid in seen_node_ids or not dom:
+                continue
+            seen_node_ids.add(nid)
+            counts[dom] = counts.get(dom, 0) + 1
+
+        # Second pass: bare hex hashes against properties.doc_id —
+        # one LIKE per candidate (slow, but only for hash-shaped ids
+        # which are typically <50 of the 500). The whitespace matches
+        # the actual JSON serialisation: "doc_id": "<hash>"
+        for cand in batch:
+            if not (len(cand) == 16 and all(c in "0123456789abcdef" for c in cand)):
+                continue
+            sql_doc = (
+                "SELECT DISTINCT id, json_extract(properties_json, '$._domain_id') "
+                "FROM syn_nodes WHERE properties_json LIKE ? LIMIT 5"
+            )
+            try:
+                cur = await db.execute(sql_doc, (f'%"doc_id": "{cand}"%',))
+                rows = await cur.fetchall()
+                await cur.close()
+            except Exception:
+                rows = []
+            for nid, dom in rows:
+                if nid in seen_node_ids or not dom:
+                    continue
+                seen_node_ids.add(nid)
+                counts[dom] = counts.get(dom, 0) + 1
+
+    return counts
+
+
 async def _llm_judge(
     client: Any,
     query: str,
@@ -1214,7 +1354,13 @@ async def _agent_loop_run(
     for q in queries:
         query_text = q.get("query", "")
         relevant = set(q.get("relevant_docs", []))
-        if not relevant or not query_text:
+        validation = q.get("validation", {}) or {}
+        val_type = validation.get("type", "")
+        # Phase 1.5: cross-domain queries carry validation:{type:domain_coverage}
+        # instead of doc-id GT. Don't skip them just because relevant_docs is
+        # empty — they're scored by per-domain coverage of found_ids below.
+        has_validation = bool(val_type)
+        if (not relevant and not has_validation) or not query_text:
             continue
         total += 1
 
@@ -1276,21 +1422,42 @@ async def _agent_loop_run(
                 break
 
         total_turns += turns_used
-        id_hit = bool(found_ids & relevant)
-        hit = id_hit
-        judge_hit = False
-        if not id_hit and judge and final_answer:
-            judge_hit = await _llm_judge(
-                client, query_text, final_answer, list(relevant), model=model
-            )
-            if judge_hit:
-                hit = True
 
-        tag = "id" if id_hit else ("judge" if judge_hit else "miss")
-        print(
-            f"      [{q.get('qid', '?')}] turns={turns_used} found={len(found_ids)} "
-            f"hit={hit} ({tag})"
-        )
+        if val_type == "domain_coverage":
+            # Phase 1.5 — score by per-domain coverage instead of doc-id
+            # match. For each found_id, look up the node's _domain_id and
+            # count occurrences per domain. Hit iff every must_include
+            # domain has at least min_docs_per_domain.
+            must_include = set(validation.get("must_include_domains", []))
+            min_per = int(validation.get("min_docs_per_domain", 1))
+            domain_counts = await _count_domains_for_ids(backend, found_ids)
+            covered = {d for d, c in domain_counts.items() if c >= min_per}
+            coverage_hit = must_include.issubset(covered)
+            hit = coverage_hit
+            tag = "domain_cov" if coverage_hit else "domain_miss"
+            domain_summary = ",".join(
+                f"{d}={domain_counts.get(d, 0)}" for d in sorted(must_include)
+            )
+            print(
+                f"      [{q.get('qid', '?')}] turns={turns_used} found={len(found_ids)} "
+                f"hit={hit} ({tag} | required={sorted(must_include)} got={domain_summary})"
+            )
+        else:
+            id_hit = bool(found_ids & relevant)
+            hit = id_hit
+            judge_hit = False
+            if not id_hit and judge and final_answer:
+                judge_hit = await _llm_judge(
+                    client, query_text, final_answer, list(relevant), model=model
+                )
+                if judge_hit:
+                    hit = True
+
+            tag = "id" if id_hit else ("judge" if judge_hit else "miss")
+            print(
+                f"      [{q.get('qid', '?')}] turns={turns_used} found={len(found_ids)} "
+                f"hit={hit} ({tag})"
+            )
         if hit:
             solved += 1
 
@@ -1467,7 +1634,12 @@ async def run_agent_benchmark(
     for q in queries:
         query_text = q.get("query", "")
         relevant = set(q.get("relevant_docs", []))
-        if not relevant or not query_text:
+        validation = q.get("validation", {}) or {}
+        val_type = validation.get("type", "")
+        # Phase 1.5: cross-domain queries score by per-domain coverage —
+        # don't skip them just because relevant_docs is empty.
+        has_validation = bool(val_type)
+        if (not relevant and not has_validation) or not query_text:
             continue
         total += 1
 
@@ -1531,6 +1703,27 @@ async def run_agent_benchmark(
                 break
 
         total_turns += turns_used
+
+        if val_type == "domain_coverage":
+            # Phase 1.5 — score by per-domain coverage instead of id match.
+            must_include = set(validation.get("must_include_domains", []))
+            min_per = int(validation.get("min_docs_per_domain", 1))
+            domain_counts = await _count_domains_for_ids(backend, found_ids)
+            covered = {d for d, c in domain_counts.items() if c >= min_per}
+            coverage_hit = must_include.issubset(covered)
+            hit = coverage_hit
+            tag = "domain_cov" if coverage_hit else "domain_miss"
+            domain_summary = ",".join(
+                f"{d}={domain_counts.get(d, 0)}" for d in sorted(must_include)
+            )
+            if hit:
+                solved += 1
+            print(
+                f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} "
+                f"hit={hit} ({tag} | required={sorted(must_include)} got={domain_summary})"
+            )
+            continue
+
         id_hit = bool(found_ids & relevant)
         hit = id_hit
         judge_hit = False
@@ -1864,7 +2057,15 @@ async def main():
         if not api_key and not args.llm_base_url:
             print("  ⚠ --agent requires --openai-key/OPENAI_API_KEY env or --llm-base-url")
         else:
-            agent_datasets = [d for d in CUSTOM_DATASETS if "Hard" in d.name or "Conv" in d.name]
+            # Default pool: hard + conv variants. Adding Cross-Domain too
+            # so it's reachable via --agent-dataset "Cross-Domain". Stays
+            # opt-in (won't run by default in --quick) because it requires
+            # eval/data/metacorpus.sqlite to exist.
+            agent_datasets = [
+                d
+                for d in CUSTOM_DATASETS
+                if "Hard" in d.name or "Conv" in d.name or "Cross-Domain" in d.name
+            ]
             if args.agent_dataset:
                 agent_datasets = [d for d in agent_datasets if args.agent_dataset in d.name]
             for cfg in agent_datasets:

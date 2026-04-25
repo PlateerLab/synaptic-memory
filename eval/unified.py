@@ -511,12 +511,22 @@ def _classify_qfile(qfile_stem: str, queries: list[dict]) -> dict[str, QueryDime
 
 
 def load_bench_log(log_path: Path) -> list[tuple[str, str, bool]]:
-    """Parse a bench .log file → list of (bench_name, qid, hit)."""
+    """Parse a bench .log file → list of (bench_name, qid, hit).
+
+    Accepts qids of the form ``<1-3 lowercase letters><3-4 digits>``
+    (e.g. ``h004`` for KRRA Hard, ``xd012`` for Cross-Domain). Reads
+    the standard "[qid] turns=N found=M hit=True/False" line emitted
+    by both ``run_agent_benchmark`` and the cross-domain validation
+    path — both formats start identically; the rest of the line
+    (tag / domain summary) is parser-agnostic.
+    """
     import re
 
     out: list[tuple[str, str, bool]] = []
     bench_name = log_path.stem
-    pat = re.compile(r"\[(?P<qid>[a-z]\d{3})\]\s+turns=\d+\s+found=\d+\s+hit=(?P<hit>True|False)")
+    pat = re.compile(
+        r"\[(?P<qid>[a-z]{1,3}\d{3,4})\]\s+turns=\d+\s+found=\d+\s+hit=(?P<hit>True|False)"
+    )
     with log_path.open() as fh:
         for line in fh:
             m = pat.search(line)
