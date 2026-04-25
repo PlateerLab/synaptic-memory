@@ -10,27 +10,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Before / after of the v0.18-β1 + β2 shipwork, measured on the local
 `Qwen3.5-27b` vLLM endpoint with `temperature=0` + `seed=42` so the gap
-is pure code-effect (zero sampling variance). Three datasets run to
-establish generalization:
+is pure code-effect (zero sampling variance). Five datasets run for
+full disentanglement — every baseline is the **same code at the same
+sampling regime**, so each Δ is attributable to the β-track changes
+alone.
 
-| Benchmark | Baseline | v0.18-β1 | Δ |
+| Benchmark | Pre-β @ T=0 | β @ T=0 | Δ |
 |---|---:|---:|---:|
 | assort Hard (structured, 33q) | 26 / 33 = 79 % | **28 / 33 = 85 %** | **+2 queries, +6 pp, -19 % runtime (2105 → 1709 s)** |
 | KRRA Hard (text-docs, 39q) | 30 / 39 = 77 % | **32 / 39 = 82 %** | **+2 queries, +5 pp** |
-| assort Conv (structured + conversational, 24q) | 22 / 24 = 92 % | 22 / 24 = 92 % | ±0 (no regression) |
-| X2BEE Conv (mixed EN/KO conversational, 27q) | 25 / 27 = 93 % (temp=1) | 24 / 27 = 89 % | −1 query (see caveat below) |
-| **Combined (123 queries, 4 benches)** | **103 / 123 = 84 %** | **106 / 123 = 86 %** | **+3 queries, +2.4 pp net** |
+| assort Conv (structured + conv, 24q) | 22 / 24 = 92 % | 22 / 24 = 92 % | ±0 (no regression) |
+| X2BEE Conv (mixed EN/KO conv, 27q) | 23 / 27 = 85 % | **24 / 27 = 89 %** | **+1 query, +4 pp** |
+| X2BEE Hard (paraphrase, 19q) | 18 / 19 = 95 % | 17 / 19 = 89 % | −1 query (see h004/h019 note below) |
+| **Combined (142 queries, 5 benches)** | **119 / 142 = 84 %** | **123 / 142 = 87 %** | **+4 queries, +2.8 pp net** |
 
-*X2BEE Conv caveat:* the prior 25 / 27 number was measured at
-`temperature=1.0`. The β1 run at `temperature=0` is deterministic
-but — for this bench's particular conversational queries — Qwen's
-greedy decoding picks a consistently-wrong tool path on c007 / c020
-(found=0 entirely) and c030 (finds `pr_goods_base:G00001` instead of
-the correct `G00005`). Temperature drop is part of the harness change
-(f8bf2ab), so the -1 here is part code-effect + part decoding-regime
-confound. An apples-to-apples temp=0 OLD-toolkit baseline would be
-needed to fully disentangle; the pre-β benchmark numbers in this doc
-were not re-run.
+*Disentanglement note:* an earlier draft of this section reported
+X2BEE Conv as `25/27 (temp=1) → 24/27 (temp=0) = -1`, which mixed a
+code change with a sampling-regime change. The pre-β baseline has
+since been re-measured against the same code at SHA `caeab94` with the
+*same* `temp=0 + seed=42` patch applied, isolating the β code effect.
+Result: X2BEE Conv goes from −1 (confounded) to **+1 (true code-effect
+gain)**; the apparent regression was 100 % temperature confound. X2BEE
+Hard moves from "−2 vs the temp=1 19/19 number" to **−1 vs the proper
+T=0 18/19 baseline**, so 50 % of that apparent regression was also
+temp confound and only 1 query is a true code regression.
+
+X2BEE Hard h004/h019 — both pure English paraphrase queries
+("portable computing device" → Galaxy Book G00003; "facial skincare
+product" → CLA Mask G00002/G00006) where pre-β agent fell into a
+`search`-first path that hit, while β agent (with the new structured-
+tool prompt examples + recovery hints) tries `filter_nodes` /
+`top_nodes` first and burns its turn budget on those before reaching
+`search`. Trade-off accepted for v0.18-β: the same prompt direction
+that wins +5 queries across structured / Korean / mixed corpora costs
+1 query on pure-English paraphrase. v0.19+ candidate: query-language
+detection in the agent system prompt to gate which tool examples are
+shown.
+
+X2BEE Conv per-query diff (pre-β @ T=0 → β @ T=0):
+
+- **c006**, **c023**, **c026** — miss → **hit** (β gained, 3 queries)
+- c007, c020 — hit → miss (β lost, 2 queries)
+- c030 — miss → miss (unchanged; both regimes hit `G00001` /
+  `pr_sales_base:150.0` instead of `G00005`)
+
+Net X2BEE Conv: **+3 / −2 = +1**. Real ergonomic improvement, not
+sampling noise — and the gained queries trace directly to β changes
+(c006 benefits from the multi-tool batching prompt; c023/c026 benefit
+from 0-result recovery hints that surface a fallback path the pre-β
+agent gave up on).
 
 Generalization: both a structured-data bench (where `top_nodes`
 directly targets the failing query pattern) and a text-document bench
