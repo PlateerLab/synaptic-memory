@@ -1,0 +1,81 @@
+{
+  "unified_score": 0.7028170463416366,
+  "query_count": 72,
+  "n_hits": 65,
+  "per_dimension": {
+    "lang:ko": {
+      "n_queries": 61,
+      "n_hits": 57,
+      "hit_rate": 0.9344,
+      "weight": 0.3
+    },
+    "lang:en": {
+      "n_queries": 0,
+      "n_hits": 0,
+      "hit_rate": 0.0,
+      "weight": 0.1
+    },
+    "lang:mixed": {
+      "n_queries": 11,
+      "n_hits": 8,
+      "hit_rate": 0.7273,
+      "weight": 0.05
+    },
+    "recall:multi_hop": {
+      "n_queries": 12,
+      "n_hits": 10,
+      "hit_rate": 0.8333,
+      "weight": 0.15
+    },
+    "recall:enumeration": {
+      "n_queries": 35,
+      "n_hits": 32,
+      "hit_rate": 0.9143,
+      "weight": 0.1
+    },
+    "structured": {
+      "n_queries": 33,
+      "n_hits": 32,
+      "hit_rate": 0.9697,
+      "weight": 0.1
+    },
+    "cross_domain": {
+      "n_queries": 0,
+      "n_hits": 0,
+      "hit_rate": 0.0,
+      "weight": 0.1
+    },
+    "cross_language": {
+      "n_queries": 11,
+      "n_hits": 8,
+      "hit_rate": 0.7273,
+      "weight": 0.1
+    }
+  },
+  "per_bench": {
+    "v0201-assort-hard": {
+      "n_queries": 33,
+      "n_hits": 32,
+      "hit_rate": 0.9697
+    },
+    "v0201-krra-hard": {
+      "n_queries": 39,
+      "n_hits": 33,
+      "hit_rate": 0.8462
+    }
+  },
+  "weights": {
+    "lang:ko": 0.3,
+    "lang:en": 0.1,
+    "lang:mixed": 0.05,
+    "recall:multi_hop": 0.15,
+    "recall:enumeration": 0.1,
+    "structured": 0.1,
+    "cross_domain": 0.1,
+    "cross_language": 0.1
+  },
+  "notes": [
+    "NO_COVERAGE axis=lang:en weight=0.10",
+    "NO_COVERAGE axis=cross_domain weight=0.10"
+  ]
+}

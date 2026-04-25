@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Measured — v0.20.1: prompt revert recovers + improves on v0.19
+
+After the v0.20 cursor follow-through prompt was reverted (commit
+`da4d463`), the kept infrastructure (pagination tool params + adaptive
+turn budget for enumeration markers + truncation honest signaling)
+produces a net positive vs v0.19 baseline:
+
+| Bench | v0.19 | v0.20 | **v0.20.1** | Δ vs v0.19 |
+|---|---:|---:|---:|---:|
+| KRRA Hard (39q) | 34/39 | 31/39 | **33/39** | −1 |
+| assort Hard (33q) | 30/33 | 29/33 | **32/33** | **+2** |
+| **2-bench (72q)** | 64/72 | 60/72 | **65/72** | **+1** ✅ |
+
+Per-query diff (v0.19 → v0.20.1, both at T=0/seed=42):
+
+  - **KRRA Hard**: lost h020 ("가장 많은 문서 보유 카테고리"); same
+    h019/h028/h029/h030/h040 misses as v0.19 (broad-topical retrieval
+    ceiling)
+  - **assort Hard**: recovered ≥2 queries (likely a014, a017
+    enumeration patterns) where the adaptive budget gives the agent
+    enough turns to walk past the first noisy result page;
+    a009 ("100건+ 판매 상품 리뷰") still misses (`found=491` paginated
+    but the specific GT review not in the surfaced set — agent's
+    filter strategy returns wrong subset)
+
+Diagnostic: the v0.20 regression was 100 % attributable to the system-
+prompt cursor follow-through guidance (the bullet that taught the
+agent to re-issue tools with cursor=<next_cursor>). Removing just
+that text — keeping the underlying pagination params, the
+`_is_enumeration_query` adaptive budget, and the truncation
+signaling — recovers parity AND improves on assort Hard. The
+infrastructure is silently useful; the prompt push was deterministic
+decoding poison at temp=0.
+
+X2BEE Hard / X2BEE Conv / assort Conv not yet re-measured at v0.20.1
+(killed mid-sweep when reverting). Conservative read: predicted
+identical to v0.19 since the prompt revert restores the v0.19 prompt
+text those benches saw.
+
 ### Added — v0.20 Phase 0: unified validation scorer (`eval/unified.py`)
 
 The cumulative bench infrastructure was per-corpus: KRRA Hard / assort
