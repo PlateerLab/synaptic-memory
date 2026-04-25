@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Measured — v0.22 Phase 2.1/2.2: domain-aware prompt is NET ZERO (reverted strategy text)
+
+Tried lifting cross_domain coverage by adding multi-domain awareness
+to the agent system prompt — both the factual enumeration of
+distinct ``_domain_id`` values AND a 3-step strategy block telling
+the agent to identify domains, fan out parallel searches, verify
+coverage. Same dynamic seen in v0.20: the prompt addition rerouted
+deterministic decoding paths and broke as many queries as it helped.
+
+| qid | v0.21 baseline | **v0.22 with strategy** | delta |
+|---|---|---|---|
+| xd001 | miss (krra=112, assort=0) | **hit** (krra=136, assort=6) | flipped to hit ✓ |
+| xd008 | **hit** (krra=100, assort=10) | miss (krra=48, assort=0) | flipped to miss ✗ |
+| xd010 | partial (krra+x2bee 2/3) | worse (krra only 1/3) | regression |
+| xd012 | partial (krra=83) | **found=0** | catastrophic |
+| **total hits** | **3 / 12** | **3 / 12** | **0** |
+
+Same hit count, worse partial-coverage signal on 3-domain queries.
+This is now the third iteration where adding text to the agent
+system prompt at temp=0/seed=42 has produced net-neutral or net-
+negative results (v0.20 cursor follow-through was −5; v0.22 domain
+strategy is −0 hits / −2 partial).
+
+**Conclusion**: agent prompt tuning is fundamentally unreliable at
+deterministic sampling. Each prompt change is a coin-flip per query.
+The factual domain enumeration is preserved (zero behavioural risk —
+the agent CAN see ``Domains in this corpus: krra (90125), x2bee
+(19843), assort (13909)`` in the graph metadata block) but the 3-step
+strategy block is reverted.
+
+**Phase 2.3 hypothesis** (next): tool-level fan-out instead of prompt
+instruction. Modify ``search``/``deep_search`` to detect a multi-
+domain corpus and internally split into per-domain sub-searches.
+Agent makes one call, gets multi-domain results without any
+behavioural change. The per-domain sub-search bypasses the FTS
+ranking bias that lets a single dominant category (KRRA's ``ESG 및
+지속가능성``) crowd out content from other domains.
+
 ### Measured — v0.21 Phase 1.5/1.6: cross-domain federation bench (3/12 = 25 % baseline)
 
 End-to-end demo of the Phase 1 stack — Phase 1.4 MetaCorpus combiner +

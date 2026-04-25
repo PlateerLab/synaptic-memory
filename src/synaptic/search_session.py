@@ -236,6 +236,34 @@ async def build_graph_context(backend: StorageBackend) -> str:
         # Total counts
         total_docs = await backend.count_nodes(kind=None)
 
+        # Per-domain breakdown (Phase 2.1) — surface distinct
+        # ``properties._domain_id`` values so the agent can plan
+        # cross-domain queries. Empty when the corpus has only one
+        # (or no) domain tag — back-compat with single-domain corpora.
+        domains_summary = ""
+        try:
+            # Direct SQL avoids the list_nodes(limit=10K) sampling bias
+            # that returns one domain's worth of contiguous rows on a
+            # MetaCorpus where domains are ordered. Falls back silently
+            # for non-sqlite backends.
+            db_method = getattr(backend, "_db", None)
+            domain_counts: dict[str, int] = {}
+            if callable(db_method):
+                db = db_method()
+                cur = await db.execute(
+                    "SELECT json_extract(properties_json, '$._domain_id') AS dom, COUNT(*) "
+                    "FROM syn_nodes WHERE dom IS NOT NULL GROUP BY dom ORDER BY 2 DESC LIMIT 10"
+                )
+                for dom, cnt in await cur.fetchall():
+                    if dom:
+                        domain_counts[dom] = int(cnt)
+                await cur.close()
+            if len(domain_counts) >= 2:
+                parts = [f"{d} ({c})" for d, c in domain_counts.items()]
+                domains_summary = ", ".join(parts)
+        except Exception:
+            pass
+
         # Count nodes by kind to distinguish document vs structured graphs.
         # Structured entities are identified by the ``_table_name`` property
         # stamped by TableIngester / DbIngester — raw ENTITY nodes from
@@ -255,6 +283,16 @@ async def build_graph_context(backend: StorageBackend) -> str:
             f"Total nodes: {total_docs}",
             "Use category names above as the 'category' parameter in search.",
         ]
+
+        # Multi-domain corpus → just enumerate the domains. Verbose
+        # strategy text was tested in v0.22 and net-zero on hit-rate
+        # while degrading partial coverage on 3-domain queries — same
+        # deterministic-prompt-shift dynamic seen at v0.20. Keeping
+        # only the factual enumeration so the agent CAN see them
+        # without being pushed toward a specific decoding path.
+        if domains_summary:
+            lines.append("")
+            lines.append(f"Domains in this corpus: {domains_summary}")
 
         # --- Structured data: table schemas ---
         # Detect tables from _table_name property and sample columns.
