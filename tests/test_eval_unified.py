@@ -254,7 +254,7 @@ def test_korean_query_in_english_corpus_marked_cross_language():
     assert dims["z002"].cross_language is True
 
 
-def test_korean_query_in_korean_corpus_NOT_cross_language():
+def test_korean_query_in_korean_corpus_not_cross_language():
     """Sanity guard — pure-domain queries must not get the flag."""
     from eval.unified import _classify_qfile
 
