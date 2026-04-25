@@ -6,6 +6,147 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — v0.20 Phase 0: unified validation scorer (`eval/unified.py`)
+
+The cumulative bench infrastructure was per-corpus: KRRA Hard / assort
+Hard / X2BEE / MuSiQue each reported a single MRR-or-hit number, and
+ship/no-ship judgements relied on summing those across releases. This
+hides cross-cutting regressions: a feature that wins enumeration but
+loses broad-topical retrieval shows up as "+2 here, -3 there" with no
+single metric explaining the trade-off.
+
+`eval/unified.py` introduces a dimension-tagged composite. Each query
+is auto-classified along seven axes:
+
+  - `language` (ko / en / mixed)
+  - `recall_type` (single / top_n / multi_hop / enumeration / summary)
+  - `hop_count`
+  - `structured_pct`
+  - `enumeration` (explicit "all/모두/전체/list all" markers)
+  - `cross_domain`
+  - `cross_language`
+
+The scorer aggregates per-axis hit-rate and produces a single
+**UnifiedScore** ∈ [0, 1] as a weighted average of axis hit-rates.
+Default weights: ko 0.30, en 0.10, mixed 0.05, multi_hop 0.15,
+enumeration 0.10, structured 0.10, cross_domain 0.10, cross_language
+0.10.
+
+Critical invariant locked in tests
+(`tests/test_eval_unified.py`): the enumeration classifier here is
+bit-identical with `src/synaptic/agent_loop.py:_is_enumeration_query`,
+so every query that triggers the agent's adaptive turn budget is
+*also* counted in the enumeration recall slice. Any drift is a
+reporting bug.
+
+First UnifiedScore measurement on the v0.20 partial bench logs:
+
+```
+UnifiedScore: 0.598
+  lang:ko        hit=0.870 (n=69)   ✓
+  lang:en        hit=—     (n=0)    ✗ NO COVERAGE — agent bench has no EN
+  recall:multi_hop  hit=0.818 (n=11) ✓
+  recall:enumeration hit=0.861 (n=43) ✓
+  structured     hit=0.897 (n=39)   ✓
+  cross_domain   hit=—     (n=0)    ✗ NO COVERAGE — no cross-corpus queries
+  cross_language hit=—     (n=0)    ✗ NO COVERAGE — no EN→KO paraphrase queries
+```
+
+The 0.60 ceiling at full Korean / structured competence — caused by
+30% of weight sitting on three uncovered axes — is exactly the
+reporting we want. Phase 0.3 / 0.4 author Korean multi-hop +
+cross-domain / cross-language query sets to fill the coverage gaps.
+Phase 0.5 then re-measures every prior release against the new
+unified metric so progression is judged on a single number going
+forward.
+
+Tests: 22 new (classifier alignment with agent loop, weight
+normalisation, axis no-coverage flagging, default-weight ceiling
+sanity).
+
+### Measured — v0.20 Phase A: honest result on partial 2-bench data
+
+Two of the five planned v0.20 benches completed before the parallel
+sweep was killed (vLLM contention with 5 concurrent agents); the
+remaining three were re-run individually but only the first 3-4
+queries of each survived in the log files as of this write. So this
+section reports the partial measurement honestly:
+
+| Bench | v0.19 @ T=0 | **v0.20 @ T=0** | Δ |
+|---|---:|---:|---:|
+| KRRA Hard (39q) | 34 / 39 = 87 % | **31 / 39 = 79 %** | **−3** |
+| assort Hard (33q) | 30 / 33 = 91 % | **29 / 33 = 88 %** | **−1** |
+| **Combined (2 benches, 72q)** | **64 / 72 = 89 %** | **60 / 72 = 83 %** | **−4** |
+
+Per-query diff KRRA Hard:
+
+  - **adaptive turn budget fired correctly** on h012 (`turns=12` vs
+    prior 5) — feature works as designed
+  - **h012 still misses** though: agent paginated 20 phrase-hub nodes
+    ("이용자보호 과제", "한국마사회 이용자보호") rather than documents.
+    Different problem (entity-linker bias surfaces hubs above docs in
+    FTS rank) — pagination ≠ better recall when the wrong set is
+    being paginated
+  - **NEW misses h012, h025, h031** (vs v0.19) — same deterministic-
+    prompt-shift dynamic seen in v0.19 X2BEE Conv c013: adding cursor
+    follow-through guidance to the system prompt reroutes some
+    Korean structured queries down different deterministic paths
+    even though the new rule technically targets only enumeration
+
+Net read: Phase A's pagination + adaptive budget *succeeds at its
+direct target* (adaptive budget fires, cursor parameter wires through
+correctly, 14 + 20 + 1 = 35 new tests lock the contract) but
+**regresses overall agent quality on the existing per-bench scoring**.
+This is exactly the measurement gap that motivates Phase 0:
+single-bench numbers can't tell us whether enumeration recall went
+up faster than broad-topical retrieval went down. The unified scorer
+shipped above will resolve it after Phase 0.3 / 0.4 add the missing
+query coverage.
+
+The Phase A code itself is correct, tested, and additive. We choose
+to ship it and re-evaluate under the unified metric rather than
+revert.
+
+### Added — v0.20 Phase A: pagination protocol + adaptive enumeration budget
+
+The first ship of the v0.20+ track ("multi-domain ontology + multi-turn
+exhaustive recall"). Targets the structural ceiling that left enumeration
+queries unsolved in earlier versions: agent had no way to retrieve
+results [21, total] when ``filter_nodes`` capped at 20 with only a
+``truncated=true`` boolean.
+
+**1. Pagination on all four structured tools.**
+``filter_nodes`` / ``aggregate_nodes`` / ``top_nodes`` / ``join_related``
+all gain an opaque ``cursor`` parameter and emit ``has_more`` +
+``next_cursor`` + ``offset`` in their response. Stateless: agent re-issues
+the same tool with ``cursor=<next_cursor>`` to advance. Pages are
+disjoint — no dedup needed.
+
+**2. Adaptive turn budget for enumeration queries.**
+``run_agent_loop`` now sniffs the query for enumeration markers
+(``모두`` / ``전체`` / ``목록`` / ``리스트`` / ``전수`` / ``list all`` /
+``every`` / ``all of the`` / ``all the`` / ``show me all`` / leading
+``모든``). Detected → ``max_turns`` bumps from 5 to 15 so the agent
+has room to walk the cursor. Caller-provided ``max_turns > 5`` always
+wins. Conservative classifier biased toward recall — a single marker
+flips the budget.
+
+**3. Honest truncation signaling.**
+``project_tool_result`` already shrunk lists to fit the 4 KB context
+budget; previously it set a single ``_trimmed_for_context: true``
+boolean. Now also records ``_truncated_from: {results: 200, evidence: 50}``
+— per-list pre-shrink size — so the agent can tell whether one item
+was dropped or 199.
+
+**4. Prompt updates.**
+Both ``AGENT_SYSTEM`` prompts (``src/synaptic/agent_loop.py`` and
+``eval/run_all.py``) now include explicit pagination guidance with a
+worked multi-step example: ``top_nodes → join_related (cursor=)``
+loop for "100건 이상 판매 상품의 리뷰 모두" pattern.
+
+Test coverage: +35 tests (14 pagination contract, 20 enumeration
+classifier, 1 truncation signal). Full suite: 940 pass.
+
 ### Measured — v0.19 prompt patch (English-paraphrase / search-first guidance)
 
 Added a single new section to the agent system prompt — both

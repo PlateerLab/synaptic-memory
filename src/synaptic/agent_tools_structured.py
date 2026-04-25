@@ -46,6 +46,22 @@ _OPS = {
 }
 
 
+def _decode_cursor(cursor: str | None) -> int:
+    """Parse an opaque pagination cursor to an integer offset.
+
+    Cursors are emitted by the structured tools as ``str(next_offset)``.
+    Invalid / negative values fall back to 0 so a malformed cursor
+    degrades to "first page" rather than erroring out a multi-turn loop.
+    """
+    if cursor is None:
+        return 0
+    try:
+        n = int(str(cursor).strip())
+    except (ValueError, TypeError):
+        return 0
+    return max(0, n)
+
+
 def _eval_op(op: str, raw_val: object, value: str) -> bool:
     """Evaluate a comparison operator against a property value.
 
@@ -96,6 +112,7 @@ async def filter_nodes_tool(
     op: str = "contains",
     value: str,
     limit: int = 20,
+    cursor: str | None = None,
     from_ids: list[str] | None = None,
 ) -> ToolResult:
     """Filter nodes by a typed property value.
@@ -113,7 +130,12 @@ async def filter_nodes_tool(
         value: Value to compare against. For ``date_range`` use
             ``YYYY-MM-DD..YYYY-MM-DD``. For ``starts_with`` pass the
             prefix (useful for month buckets: ``2023-12``).
-        limit: Max results to return.
+        limit: Max results to return per page.
+        cursor: Opaque continuation token from a prior call's
+            ``next_cursor``. When set, returns the *next* page of the
+            same filter (i.e. results [cursor, cursor+limit) of the
+            sorted match list). Use this for "list all X" queries when
+            the prior call returned ``has_more=true``.
         from_ids: Optional list of node titles/IDs to restrict the
             search to — used for multi-hop chaining (pass previous
             step's ``node_title`` or title values).
@@ -124,6 +146,7 @@ async def filter_nodes_tool(
         - filter_nodes(property="broadcast_date", op="starts_with", value="2024-11")
         - filter_nodes(property="sold_dtm", op="date_range", value="2023-06-01..2023-08-31")
         - filter_nodes(from_ids=["products:12800000","products:12800004"], property="discount_rate", op=">", value="30")
+        - filter_nodes(table="reviews", property="goods_no", op="==", value="G00001", limit=20, cursor="20")  # second page
     """
     budget = _budget_check(session, "filter_nodes")
     if budget is not None:
@@ -191,7 +214,11 @@ async def filter_nodes_tool(
                 matched_nodes.append(n)
 
         total = len(matched_nodes)
-        nodes = matched_nodes[:limit]
+        offset = _decode_cursor(cursor)
+        nodes = matched_nodes[offset : offset + limit]
+        next_offset = offset + len(nodes)
+        has_more = next_offset < total
+        next_cursor = str(next_offset) if has_more else None
 
         # Column presence check — used by the 0-result hint builder
         # below to suggest the closest real column when the caller
@@ -291,7 +318,10 @@ async def filter_nodes_tool(
             "filter": {"table": table, "property": property, "op": op, "value": value},
             "total": total,
             "showing": len(nodes),
+            "offset": offset,
             "truncated": total > len(nodes),
+            "has_more": has_more,
+            "next_cursor": next_cursor,
             "count": len(nodes),
             "results": [_node_to_summary(n) for n in nodes],
         },
@@ -313,6 +343,7 @@ async def aggregate_nodes_tool(
     where_value: str = "",
     group_by_format: str = "",
     limit: int = 50,
+    cursor: str | None = None,
     from_ids: list[str] | None = None,
 ) -> ToolResult:
     """Aggregate nodes by a property — GROUP BY + COUNT/SUM/AVG/MAX/MIN.
@@ -458,7 +489,11 @@ async def aggregate_nodes_tool(
 
         groups.sort(key=lambda g: -g["value"])
         total_groups = len(groups)
-        groups = groups[:limit]
+        offset = _decode_cursor(cursor)
+        groups = groups[offset : offset + limit]
+        next_offset = offset + len(groups)
+        has_more = next_offset < total_groups
+        next_cursor = str(next_offset) if has_more else None
     except Exception as exc:
         return ToolResult(
             tool="aggregate_nodes",
@@ -487,7 +522,10 @@ async def aggregate_nodes_tool(
             "groups": groups,
             "total_groups": total_groups,
             "showing": len(groups),
-            "truncated": total_groups > len(groups),
+            "offset": offset,
+            "truncated": total_groups > (offset + len(groups)),
+            "has_more": has_more,
+            "next_cursor": next_cursor,
         },
         hints=_aggregate_hints(
             table=table,
@@ -553,6 +591,7 @@ async def join_related_tool(
     fk_property: str,
     target_table: str,
     limit: int = 20,
+    cursor: str | None = None,
     from_values: list[str] | None = None,
 ) -> ToolResult:
     """Follow a foreign key relationship to find related nodes.
@@ -621,7 +660,11 @@ async def join_related_tool(
                 seen.add(n.id)
 
         total = len(matched_nodes)
-        nodes = matched_nodes[:limit]
+        offset = _decode_cursor(cursor)
+        nodes = matched_nodes[offset : offset + limit]
+        next_offset = offset + len(nodes)
+        has_more = next_offset < total
+        next_cursor = str(next_offset) if has_more else None
     except Exception as exc:
         return ToolResult(
             tool="join_related",
@@ -645,7 +688,10 @@ async def join_related_tool(
             },
             "total": total,
             "showing": len(nodes),
-            "truncated": total > len(nodes),
+            "offset": offset,
+            "truncated": total > (offset + len(nodes)),
+            "has_more": has_more,
+            "next_cursor": next_cursor,
             "count": len(nodes),
             "results": [_node_to_summary(n) for n in nodes],
         },
@@ -697,6 +743,7 @@ async def top_nodes_tool(
     where_property: str = "",
     where_op: str = "",
     where_value: str = "",
+    cursor: str | None = None,
     from_ids: list[str] | None = None,
 ) -> ToolResult:
     """Return the top N rows of a table ordered by a property.
@@ -837,7 +884,11 @@ async def top_nodes_tool(
         # to string comparison so we still return SOMETHING useful.
         candidates.sort(key=lambda pair: str(pair[1]), reverse=(order == "desc"))
 
-    top = candidates[:limit]
+    offset = _decode_cursor(cursor)
+    top = candidates[offset : offset + limit]
+    next_offset = offset + len(top)
+    has_more = next_offset < len(candidates)
+    next_cursor = str(next_offset) if has_more else None
     session.mark_seen(n.id for n, _ in top)
 
     return ToolResult(
@@ -857,7 +908,10 @@ async def top_nodes_tool(
             },
             "total": len(candidates),
             "showing": len(top),
-            "truncated": len(candidates) > len(top),
+            "offset": offset,
+            "truncated": len(candidates) > (offset + len(top)),
+            "has_more": has_more,
+            "next_cursor": next_cursor,
             "results": [
                 {
                     **_node_to_summary(n),

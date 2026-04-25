@@ -157,6 +157,37 @@ def test_oversized_result_triggers_list_shrink():
     assert parsed["data"].get("_trimmed_for_context") is True
 
 
+def test_truncation_records_original_list_size():
+    """Phase A — truncation must report how many items were dropped so
+    the agent can decide whether to call next_batch / paginate."""
+    r = {
+        "tool": "filter_nodes",
+        "ok": True,
+        "data": {
+            "total": 2000,
+            "showing": 200,
+            "results": [
+                {
+                    "id": f"p{i}",
+                    "title": f"Product {i}",
+                    "preview": "X" * 200,
+                }
+                for i in range(200)
+            ],
+        },
+    }
+    out = project_tool_result(r, max_chars=1500)
+    parsed = json.loads(out)
+    assert parsed["data"]["_trimmed_for_context"] is True
+    # The original size of the projected list (200) must be recorded so
+    # the agent can compare what it saw vs what was actually returned
+    # by the tool.
+    truncated_from = parsed["data"]["_truncated_from"]
+    assert truncated_from["results"] == 200
+    # And the visible count is now smaller
+    assert len(parsed["data"]["results"]) < truncated_from["results"]
+
+
 def test_budget_default_is_reasonable():
     # Sanity: 4000 chars ≈ 1000 tokens — 4 turns fits in 16k with slack.
     assert 2000 <= _TOOL_RESULT_BUDGET <= 5000

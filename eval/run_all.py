@@ -643,12 +643,38 @@ Q: "iPhone과 Galaxy Book의 판매 이력"
   unfiltered topic search returns too many candidates AND you have
   evidence the user wants a specific year.
 
-## "List all" / enumeration questions
-- Queries like "X 목록", "X 상품 전체", "list all X" need the COMPLETE
-  set, not one representative. Use ``filter_nodes(limit=100)`` (or
-  higher) and keep scanning. The GT for these often has 5-10 specific
-  rows; a limit=20 default plus a retry that narrows instead of
-  widening will miss half of them.
+## "List all" / enumeration questions — paginate with cursor
+- Queries like "X 목록", "X 상품 전체", "list all X", "모두/전체"
+  need the COMPLETE set, not a representative sample. Strategy:
+  1. First call: filter_nodes / aggregate_nodes / top_nodes / join_related
+     with limit=100.
+  2. Read the result: if has_more=true, the response includes
+     next_cursor (a short token like "100").
+  3. Issue the SAME tool with the SAME args plus cursor=<next_cursor>.
+     Keep going until has_more=false (or you've gathered enough).
+- Each follow-through page is disjoint from prior pages — no
+  deduplication needed on your side.
+- Total/total_groups stays constant across pages; "showing" is the
+  size of the current page only. Use total to plan how many follow-
+  throughs you need.
+
+Q: "이용자보호 관련 모든 문서 목록"
+Step 1: filter_nodes(table="documents", property="category",
+                     op="contains", value="이용자보호", limit=100)
+   → total=27, showing=27, has_more=false  (one call sufficed)
+
+Q: "100건 이상 판매 상품의 리뷰 모두"
+Step 1: top_nodes(table="products", sort_by="cumulative_sales",
+                  order="desc", limit=100,
+                  where_property="cumulative_sales", where_op=">=",
+                  where_value="100")
+   → results = top-100 products sorted by sales
+Step 2: join_related(from_values=<all 100 product codes>,
+                     fk_property="goods_no", target_table="reviews",
+                     limit=100)
+   → has_more=true, next_cursor="100", total=247
+Step 3: join_related(... same args ..., cursor="100")
+Step 4: join_related(... same args ..., cursor="200")  → has_more=false
 
 ## Multi-source questions
 - Queries like "X 관련 자료", "X 관련 내용", "X 관련 정보" explicitly
@@ -720,6 +746,10 @@ AGENT_TOOLS = [
                         "type": "integer",
                         "description": "Max results to return (default 20). Use higher for listings.",
                     },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Pagination token from a prior call's next_cursor — pass to fetch the NEXT page when has_more=true. Use for 'list all X' queries.",
+                    },
                     "from_ids": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -759,6 +789,10 @@ AGENT_TOOLS = [
                         "description": "Date bucket format: 'YYYY', 'YYYY-MM', 'YYYY-MM-DD'. Use for monthly/yearly aggregation on datetime columns.",
                     },
                     "limit": {"type": "integer", "description": "Max groups (default 50)"},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Pagination token from a prior call's next_cursor.",
+                    },
                     "from_ids": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -789,6 +823,10 @@ AGENT_TOOLS = [
                         "description": "Target table e.g. pr_goods_sold_hist",
                     },
                     "limit": {"type": "integer", "description": "Max results (default 20)"},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Pagination token from a prior call's next_cursor.",
+                    },
                 },
                 "required": ["fk_property", "target_table"],
             },
@@ -820,6 +858,10 @@ AGENT_TOOLS = [
                     "where_property": {"type": "string"},
                     "where_op": {"type": "string"},
                     "where_value": {"type": "string"},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Pagination token from a prior call's next_cursor.",
+                    },
                     "from_ids": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -1050,6 +1092,7 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             op=args.get("op", "contains"),
             value=args.get("value", ""),
             limit=int(args.get("limit", 20)),
+            cursor=args.get("cursor"),
             from_ids=args.get("from_ids") or None,
         )
     elif name == "aggregate_nodes":
@@ -1065,6 +1108,7 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             where_value=args.get("where_value", ""),
             group_by_format=args.get("group_by_format", ""),
             limit=int(args.get("limit", 50)),
+            cursor=args.get("cursor"),
             from_ids=args.get("from_ids") or None,
         )
     elif name == "join_related":
@@ -1076,6 +1120,7 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             fk_property=args.get("fk_property", ""),
             target_table=args.get("target_table", ""),
             limit=int(args.get("limit", 20)),
+            cursor=args.get("cursor"),
         )
     elif name == "top_nodes":
         r = await top_nodes_tool(
@@ -1088,6 +1133,7 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
             where_property=args.get("where_property", ""),
             where_op=args.get("where_op", ""),
             where_value=args.get("where_value", ""),
+            cursor=args.get("cursor"),
             from_ids=args.get("from_ids") or None,
         )
     elif name == "get_document":
@@ -1198,7 +1244,15 @@ async def _agent_loop_run(
             continue
         total += 1
 
-        session = SearchSession(budget_tool_calls=max_turns * 3)
+        # Adaptive budget: enumeration queries ("X 모두/전체/목록",
+        # "list all X") get 3x the turns so the agent can walk
+        # pagination cursors. Mirror src/synaptic/agent_loop.py.
+        from synaptic.agent_loop import _is_enumeration_query
+
+        eff_max_turns = (
+            15 if (max_turns <= 5 and _is_enumeration_query(query_text)) else max_turns
+        )
+        session = SearchSession(budget_tool_calls=eff_max_turns * 3)
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": query_text},
@@ -1208,7 +1262,7 @@ async def _agent_loop_run(
         turns_used = 0
         final_answer = ""
 
-        for turn in range(max_turns):
+        for turn in range(eff_max_turns):
             turns_used = turn + 1
             try:
                 resp = await client.chat.completions.create(
@@ -1443,7 +1497,15 @@ async def run_agent_benchmark(
             continue
         total += 1
 
-        session = SearchSession(budget_tool_calls=max_turns * 3)
+        # Adaptive budget: enumeration queries ("X 모두/전체/목록",
+        # "list all X") get 3x the turns so the agent can walk
+        # pagination cursors. Mirror src/synaptic/agent_loop.py.
+        from synaptic.agent_loop import _is_enumeration_query
+
+        eff_max_turns = (
+            15 if (max_turns <= 5 and _is_enumeration_query(query_text)) else max_turns
+        )
+        session = SearchSession(budget_tool_calls=eff_max_turns * 3)
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": query_text},
@@ -1453,7 +1515,7 @@ async def run_agent_benchmark(
         turns_used = 0
         final_answer = ""
 
-        for turn in range(max_turns):
+        for turn in range(eff_max_turns):
             turns_used = turn + 1
             try:
                 resp = await client.chat.completions.create(

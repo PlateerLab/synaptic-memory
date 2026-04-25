@@ -66,6 +66,41 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agent-loop")
 
 
+# --- Adaptive turn budget detection --------------------------------
+
+# Tokens that mark a query as wanting the *complete* result set rather
+# than a representative sample. Multilingual on purpose: covers Korean
+# enumeration markers (모두/전체/목록/리스트), the "모든 X" prefix
+# pattern, and the English "list all" / "every" / "all of the" forms.
+# Order doesn't matter — a single substring match flips the budget.
+_ENUMERATION_TOKENS = (
+    "모두", "전체", "목록", "리스트", "list all", "전수",
+    "every ", "all of the ", "all the ", "show me all",
+)
+
+
+def _is_enumeration_query(query: str) -> bool:
+    """True when ``query`` asks for the complete set of matches.
+
+    Used by :func:`run_agent_loop` to bump ``max_turns`` from 5 to 15
+    on enumeration queries so the agent has budget to walk pagination
+    cursors. Conservative — false positives only spend a few extra
+    turns; false negatives leave the agent stuck mid-pagination.
+    """
+    if not query:
+        return False
+    q = query.lower().strip()
+    if any(tok in q for tok in _ENUMERATION_TOKENS):
+        return True
+    # Korean "모든 X" / "모든X": "모든" near the start (within first 6 chars)
+    # almost always signals enumeration. Restricting to start avoids
+    # matching unrelated occurrences mid-sentence.
+    head = q[:6]
+    if "모든" in head:
+        return True
+    return False
+
+
 # --- System prompt + tool schema -----------------------------------
 
 
@@ -128,10 +163,17 @@ Tips
   After the first ``deep_search`` returns a few hits, do at least one more
   ``search`` with paraphrased keywords before concluding. A single document
   is rarely the complete answer to such a request.
-- **"List all" / enumeration questions** ("X 목록", "X 상품 전체", "list all X")
-  need the COMPLETE set. Raise the ``limit`` on ``filter_nodes`` / ``top_nodes``
-  (e.g. 100) rather than the default 20. The GT for these patterns often
-  has 5-10 specific rows; a narrow retry loop misses them.
+- **"List all" / enumeration questions** ("X 목록", "X 상품 전체", "list all X",
+  "모두", "전체") need the COMPLETE set. The structured tools are paginated:
+  every result includes ``has_more: bool`` and ``next_cursor: str | None``.
+  Strategy:
+    1. First call: raise ``limit`` (e.g. 100).
+    2. If ``has_more=true``, re-issue the SAME tool with the SAME args plus
+       ``cursor=<next_cursor>``. Pages are disjoint — no dedup needed.
+    3. Repeat until ``has_more=false`` or you have enough results.
+  ``total`` (or ``total_groups``) is the size of the matched set and stays
+  constant across pages — use it to plan how many follow-through calls
+  you need.
 - **When a tool returns 0 results, it also returns a ``hints`` array.**
   Each hint is a concrete corrective action (different operator, dropped
   WHERE, alternative column). Read the hints and follow the first one
@@ -224,6 +266,10 @@ AGENT_TOOLS = [
                     },
                     "value": {"type": "string"},
                     "limit": {"type": "integer"},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Continuation token from a prior call's next_cursor — pass to fetch the next page of the same filter.",
+                    },
                     "from_ids": {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["property", "op", "value"],
@@ -250,6 +296,10 @@ AGENT_TOOLS = [
                         "description": "Date bucket format: 'YYYY', 'YYYY-MM', 'YYYY-MM-DD'.",
                     },
                     "limit": {"type": "integer"},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Continuation token from a prior call's next_cursor.",
+                    },
                     "from_ids": {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["group_by"],
@@ -269,6 +319,10 @@ AGENT_TOOLS = [
                     "fk_property": {"type": "string"},
                     "target_table": {"type": "string"},
                     "limit": {"type": "integer"},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Continuation token from a prior call's next_cursor.",
+                    },
                 },
                 "required": ["fk_property", "target_table"],
             },
@@ -296,6 +350,10 @@ AGENT_TOOLS = [
                     "where_property": {"type": "string"},
                     "where_op": {"type": "string"},
                     "where_value": {"type": "string"},
+                    "cursor": {
+                        "type": "string",
+                        "description": "Continuation token from a prior call's next_cursor.",
+                    },
                     "from_ids": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -401,6 +459,7 @@ async def _dispatch_tool(
                 op=args.get("op", "contains"),
                 value=args.get("value", ""),
                 limit=int(args.get("limit", 20)),
+                cursor=args.get("cursor"),
                 from_ids=args.get("from_ids") or None,
             )
         elif name == "aggregate_nodes":
@@ -416,6 +475,7 @@ async def _dispatch_tool(
                 where_value=args.get("where_value", ""),
                 group_by_format=args.get("group_by_format", ""),
                 limit=int(args.get("limit", 50)),
+                cursor=args.get("cursor"),
                 from_ids=args.get("from_ids") or None,
             )
         elif name == "join_related":
@@ -427,6 +487,7 @@ async def _dispatch_tool(
                 fk_property=args.get("fk_property", ""),
                 target_table=args.get("target_table", ""),
                 limit=int(args.get("limit", 20)),
+                cursor=args.get("cursor"),
             )
         elif name == "top_nodes":
             r = await top_nodes_tool(
@@ -439,6 +500,7 @@ async def _dispatch_tool(
                 where_property=args.get("where_property", ""),
                 where_op=args.get("where_op", ""),
                 where_value=args.get("where_value", ""),
+                cursor=args.get("cursor"),
                 from_ids=args.get("from_ids") or None,
             )
         else:
@@ -737,7 +799,16 @@ def _overflow_stub(tool: str, ok: bool) -> str:
 
 
 def _shrink_lists(data: dict, max_chars: int, envelope: dict) -> str:
-    """Iteratively halve list lengths inside ``data`` until envelope fits."""
+    """Iteratively halve list lengths inside ``data`` until envelope fits.
+
+    On the way down, records the *original* length of every list we
+    shrank under ``data["_truncated_from"]`` so the agent (and the
+    test suite) can tell that, e.g. ``results`` started as 214 items
+    even though only 5 are visible. Without this, a `truncated=true`
+    flag tells the agent something was dropped but nothing about
+    how much — which is precisely the failure mode that left the
+    pre-Phase-A agent giving up after the first page.
+    """
     list_keys = (
         "results",
         "evidence",
@@ -749,6 +820,7 @@ def _shrink_lists(data: dict, max_chars: int, envelope: dict) -> str:
         "groups",
         "sub_results",
     )
+    original_lens: dict[str, int] = {}
     for _ in range(10):
         serialized = json.dumps(envelope, ensure_ascii=False)
         if len(serialized) <= max_chars:
@@ -757,10 +829,13 @@ def _shrink_lists(data: dict, max_chars: int, envelope: dict) -> str:
         for key in list_keys:
             v = data.get(key)
             if isinstance(v, list) and len(v) > 1:
+                if key not in original_lens:
+                    original_lens[key] = len(v)
                 # Halve, floor at 1 once we're under the mercy point.
                 new_len = max(1, len(v) // 2)
                 data[key] = v[:new_len]
                 data["_trimmed_for_context"] = True
+                data["_truncated_from"] = original_lens
                 shrunk = True
         if not shrunk:
             break
@@ -873,6 +948,13 @@ async def run_agent_loop(
         t = (n.properties or {}).get("_table_name")
         if t:
             known_tables.add(t)
+
+    # Adaptive budget for enumeration queries — "list all X" / "X 모두" /
+    # "X 전체" patterns need more turns to exhaust pagination cursors.
+    # Triple the budget when detected; honour explicit caller override
+    # (caller-provided max_turns > default 5 wins).
+    if max_turns <= 5 and _is_enumeration_query(query):
+        max_turns = 15
 
     session = SearchSession(budget_tool_calls=max_turns * 3)
     messages = [
