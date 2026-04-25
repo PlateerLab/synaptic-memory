@@ -229,6 +229,54 @@ def test_query_count_matches_total_items():
     assert rep.n_hits == 7
 
 
+# --- Cross-domain spec file (Phase 1 success criteria) -------------
+
+
+def test_cross_domain_query_file_loads_and_all_flagged():
+    """`eval/data/queries/cross_domain.json` is the forward-looking
+    spec for Phase 1 (multi-domain federation). Every query in it
+    MUST classify as cross_domain=True so the dimension scorer has
+    coverage for that axis once the bench harness can actually run
+    them. If a future edit to that file accidentally breaks the
+    cross_domain flag, this test catches it."""
+    from eval.unified import _classify_qfile, load_query_files
+
+    queries = load_query_files()
+    assert "cross_domain" in queries, "cross_domain.json must exist for Phase 1 spec"
+    dims = _classify_qfile("cross_domain", queries["cross_domain"])
+    assert len(dims) >= 10, f"expected ≥10 cross-domain queries, found {len(dims)}"
+    n_cd = sum(1 for d in dims.values() if d.cross_domain)
+    assert n_cd == len(dims), (
+        f"all cross_domain queries must carry cross_domain=true; "
+        f"found {n_cd}/{len(dims)}"
+    )
+    # Some should also be cross_language (English queries against
+    # Korean corpora — exercises both axes simultaneously)
+    n_cl = sum(1 for d in dims.values() if d.cross_language)
+    assert n_cl >= 2, (
+        f"expected ≥2 cross_domain queries that are ALSO cross_language; "
+        f"found {n_cl}"
+    )
+
+
+def test_cross_domain_validation_field_present():
+    """Each cross-domain query specifies a ``validation`` block with
+    domain_coverage requirements. This is read by the (future) bench
+    harness to score domain-coverage instead of doc-id matching. The
+    field shape must stay stable so harness-side parsing is reliable."""
+    import json
+    from pathlib import Path
+
+    p = Path(__file__).parent.parent / "eval" / "data" / "queries" / "cross_domain.json"
+    data = json.loads(p.read_text())
+    qs = data["queries"]
+    for q in qs:
+        v = q.get("validation", {})
+        assert v.get("type") == "domain_coverage", q["qid"]
+        assert isinstance(v.get("must_include_domains"), list), q["qid"]
+        assert v.get("min_docs_per_domain", 0) >= 1, q["qid"]
+
+
 # --- Cross-language inference (file-level corpus lang) -------------
 
 

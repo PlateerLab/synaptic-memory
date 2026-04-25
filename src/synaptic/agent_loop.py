@@ -163,17 +163,10 @@ Tips
   After the first ``deep_search`` returns a few hits, do at least one more
   ``search`` with paraphrased keywords before concluding. A single document
   is rarely the complete answer to such a request.
-- **"List all" / enumeration questions** ("X 목록", "X 상품 전체", "list all X",
-  "모두", "전체") need the COMPLETE set. The structured tools are paginated:
-  every result includes ``has_more: bool`` and ``next_cursor: str | None``.
-  Strategy:
-    1. First call: raise ``limit`` (e.g. 100).
-    2. If ``has_more=true``, re-issue the SAME tool with the SAME args plus
-       ``cursor=<next_cursor>``. Pages are disjoint — no dedup needed.
-    3. Repeat until ``has_more=false`` or you have enough results.
-  ``total`` (or ``total_groups``) is the size of the matched set and stays
-  constant across pages — use it to plan how many follow-through calls
-  you need.
+- **"List all" / enumeration questions** ("X 목록", "X 상품 전체", "list all X")
+  need the COMPLETE set. Raise the ``limit`` on ``filter_nodes`` / ``top_nodes``
+  (e.g. 100) rather than the default 20. The GT for these patterns often
+  has 5-10 specific rows; a narrow retry loop misses them.
 - **When a tool returns 0 results, it also returns a ``hints`` array.**
   Each hint is a concrete corrective action (different operator, dropped
   WHERE, alternative column). Read the hints and follow the first one

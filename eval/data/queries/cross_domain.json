@@ -1,0 +1,172 @@
+{
+  "dataset": "Cross-domain federated queries (Phase 1 spec)",
+  "description": "Forward-looking queries that REQUIRE multi-domain federation to answer. Each query expects evidence from 2+ corpora simultaneously (e.g. KRRA legal policy + assort/X2BEE product data). Not runnable today: needs the federated multi-corpus backend planned in Phase 1 (Node.domain_id + DomainProfile composition + per-domain routing). Each query is the success criterion for Phase 1 to ship — when Phase 1 lands, these queries must surface evidence from at least the listed must_include_domains.",
+  "source": "synthetic — authored to define Phase 1 success",
+  "source_url": "internal",
+  "source_description": "Cross-domain queries spanning KRRA (legal/admin), assort (Korean ecommerce), X2BEE (mixed Korean/English ecommerce)",
+  "queries": [
+    {
+      "qid": "xd001",
+      "query": "환경 친화 / ESG 관련 정책과 친환경 상품을 모두 종합해서 알려줘",
+      "description": "KRRA ESG 정책 문서 + ecommerce eco-friendly 라벨 상품 cross-domain enumeration",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "enumeration",
+        "enumeration": true,
+        "hop_count": 2
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "assort"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd002",
+      "query": "고객 정보 보호 정책과 실제 회원 데이터 처리 방식 비교",
+      "description": "KRRA 개인정보 보호 정책 + ecommerce 고객 테이블 구조 — 정책 vs 구현",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "multi_hop",
+        "hop_count": 3
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "x2bee"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd003",
+      "query": "인권경영 가이드라인을 따르는 상품/서비스가 있나",
+      "description": "KRRA 인권경영 카테고리 + ecommerce 상품 컴플라이언스 라벨",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "single",
+        "hop_count": 2
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "assort"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd004",
+      "query": "복지 및 교육 정책과 직원 만족도 관련 데이터를 합쳐서 보여줘",
+      "description": "KRRA 복지/교육 정책 카테고리 + ecommerce 직원/고객 만족도 (review/feedback) 결합",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "multi_hop",
+        "hop_count": 2
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "x2bee"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd005",
+      "query": "운영계획에 명시된 업무 KPI 와 실제 매출 데이터의 관계",
+      "description": "KRRA 운영계획 카테고리 + assort/X2BEE 매출 통계 — 계획 vs 실적",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "multi_hop",
+        "hop_count": 3,
+        "structured_pct": 0.5
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "assort"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd006",
+      "query": "ESG and sustainability policies plus eco-friendly product offerings",
+      "description": "Cross-domain + cross-language: English query for content in Korean (KRRA + assort) corpora",
+      "dimensions": {
+        "cross_domain": true,
+        "cross_language": true,
+        "language": "en",
+        "recall_type": "enumeration",
+        "enumeration": false
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "assort"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd007",
+      "query": "regulations on customer data handling alongside actual user feedback records",
+      "description": "Cross-domain + cross-language: English query targeting KRRA legal + X2BEE user feedback",
+      "dimensions": {
+        "cross_domain": true,
+        "cross_language": true,
+        "language": "en",
+        "recall_type": "multi_hop",
+        "hop_count": 2
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "x2bee"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd008",
+      "query": "규정 및 지침에 정의된 마케팅 가이드라인과 실제 방송 마케팅 실적",
+      "description": "KRRA 규정 카테고리 + assort 방송 (broadcast) 데이터 — 마케팅 영역",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "multi_hop",
+        "hop_count": 2,
+        "structured_pct": 0.5
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "assort"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd009",
+      "query": "행사/대회 운영 계획과 그에 연계된 상품 판매 데이터",
+      "description": "KRRA 승마 행사/대회 계획 + assort/X2BEE 행사 연계 상품 판매",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "multi_hop",
+        "hop_count": 2
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "x2bee"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd010",
+      "query": "인권 침해 사례 가이드라인과 실제 고객 불만 데이터를 비교해줘",
+      "description": "KRRA 인권경영 정책 (RULE/DECISION) + assort/X2BEE 고객 불만/리뷰 (review/feedback) — 정책 적용 검증",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "multi_hop",
+        "hop_count": 3
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "x2bee", "assort"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd011",
+      "query": "carbon emission reduction policy across operations and product catalog",
+      "description": "Cross-domain + cross-language: English query → Korean policy docs + product attributes",
+      "dimensions": {
+        "cross_domain": true,
+        "cross_language": true,
+        "language": "en",
+        "recall_type": "enumeration",
+        "enumeration": false
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "assort"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    },
+    {
+      "qid": "xd012",
+      "query": "ESG 정책 모든 도메인에서 종합",
+      "description": "Cross-domain enumeration: KRRA + assort + X2BEE 3 코퍼스 모두에서 ESG 관련 evidence 수집",
+      "dimensions": {
+        "cross_domain": true,
+        "language": "ko",
+        "recall_type": "enumeration",
+        "enumeration": true,
+        "hop_count": 1
+      },
+      "validation": {"type": "domain_coverage", "must_include_domains": ["krra", "assort", "x2bee"], "min_docs_per_domain": 1},
+      "relevant_docs": []
+    }
+  ]
+}

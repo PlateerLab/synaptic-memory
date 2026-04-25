@@ -466,6 +466,9 @@ def _classify_qfile(qfile_stem: str, queries: list[dict]) -> dict[str, QueryDime
         "x2bee": "x2bee",
         "x2bee_hard": "x2bee",
         "x2bee_conversational": "x2bee",
+        # cross_domain.json carries the cross_domain=true flag in
+        # per-query dimensions block; domain stays generic
+        "cross_domain": "multi",
     }
     domain = domain_map.get(qfile_stem, qfile_stem)
 
