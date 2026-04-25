@@ -161,6 +161,39 @@ _MULTI_HOP_FILES: frozenset[str] = frozenset(
     }
 )
 
+# Primary corpus language per query file stem. Used to infer
+# ``cross_language`` when query language ≠ corpus language. A KRRA
+# (pure Korean corpus) query in English IS cross-language; an X2BEE
+# query in English is partially cross-language (the corpus mixes
+# both); a HotPotQA query in English is NOT cross-language. Without
+# this map, the classifier can't distinguish.
+_FILE_CORPUS_LANG: dict[str, str] = {
+    # Pure Korean corpora
+    "krra": "ko",
+    "krra_hard": "ko",
+    "krra_conversational": "ko",
+    "krra_multihop": "ko",
+    "krra_graph": "ko",
+    "assort": "ko",
+    "assort_hard": "ko",
+    "assort_conversational": "ko",
+    "allganize_rag_ko": "ko",
+    "allganize_rag_eval": "ko",
+    "publichealthqa_ko": "ko",
+    "autorag_retrieval": "ko",
+    # Mixed Korean + English corpora
+    "x2bee": "mixed",
+    "x2bee_hard": "mixed",
+    "x2bee_conversational": "mixed",
+    # Pure English corpora
+    "hotpotqa": "en",
+    "hotpotqa_24": "en",
+    "musique": "en",
+    "musique_ans": "en",
+    "2wikimultihop": "en",
+    "klue_mrc": "ko",  # KLUE is Korean
+}
+
 _SUMMARIZATION_HINTS = (
     "요약",
     "summary",
@@ -445,18 +478,32 @@ def _classify_qfile(qfile_stem: str, queries: list[dict]) -> dict[str, QueryDime
         # to require 2+ hops by construction.
         file_defaults["hop_count"] = 2
 
+    corpus_lang = _FILE_CORPUS_LANG.get(qfile_stem, "")
+
     out: dict[str, QueryDimensions] = {}
     for q in queries:
         qid = q.get("qid", "")
         if not qid:
             continue
         explicit = {**file_defaults, **q.get("dimensions", {})}
-        out[qid] = classify_query(
+        dim = classify_query(
             q.get("query", ""),
             domain=domain,
             relevant_docs=q.get("relevant_docs", []),
             explicit=explicit,
         )
+        # Cross-language: query language ≠ corpus primary language.
+        # Skip if explicit override already set it.
+        if "cross_language" not in q.get("dimensions", {}) and corpus_lang:
+            if corpus_lang == "ko" and dim.language in ("en", "mixed"):
+                dim.cross_language = True
+            elif corpus_lang == "en" and dim.language in ("ko", "mixed"):
+                dim.cross_language = True
+            elif corpus_lang == "mixed" and dim.language == "en":
+                # An English query against a mixed corpus is partially
+                # cross-language; tag it so the slice has coverage.
+                dim.cross_language = True
+        out[qid] = dim
     return out
 
 

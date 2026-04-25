@@ -229,6 +229,57 @@ def test_query_count_matches_total_items():
     assert rep.n_hits == 7
 
 
+# --- Cross-language inference (file-level corpus lang) -------------
+
+
+def test_english_query_in_korean_corpus_marked_cross_language():
+    """An English query in `krra_hard` (pure Korean corpus) must be
+    flagged cross_language so the dimension scorer sees that we DO
+    have some test coverage for the cross-language axis — currently
+    X2BEE Hard h004 ('portable computing device') is the prototype."""
+    from eval.unified import _classify_qfile
+
+    queries = [{"qid": "z001", "query": "portable computing device", "relevant_docs": ["d1"]}]
+    dims = _classify_qfile("krra_hard", queries)
+    assert dims["z001"].cross_language is True
+
+
+def test_korean_query_in_english_corpus_marked_cross_language():
+    """The mirror direction — a Korean query in HotPotQA (pure EN
+    corpus) should also flag cross_language."""
+    from eval.unified import _classify_qfile
+
+    queries = [{"qid": "z002", "query": "유저 보호 정책", "relevant_docs": ["d1"]}]
+    dims = _classify_qfile("hotpotqa_24", queries)
+    assert dims["z002"].cross_language is True
+
+
+def test_korean_query_in_korean_corpus_NOT_cross_language():
+    """Sanity guard — pure-domain queries must not get the flag."""
+    from eval.unified import _classify_qfile
+
+    queries = [{"qid": "z003", "query": "말 복지 향상", "relevant_docs": ["d1"]}]
+    dims = _classify_qfile("krra_hard", queries)
+    assert dims["z003"].cross_language is False
+
+
+def test_explicit_cross_language_override_respected():
+    """``dimensions: {cross_language: false}`` should win even if the
+    inference rule says True — author-supplied tags are authoritative."""
+    from eval.unified import _classify_qfile
+
+    queries = [
+        {
+            "qid": "z004",
+            "query": "portable computing device",
+            "relevant_docs": ["d1"],
+            "dimensions": {"cross_language": False},
+        }
+    ]
+    dims = _classify_qfile("krra_hard", queries)
+    assert dims["z004"].cross_language is False
+
+
 @pytest.mark.parametrize(
     "korean_query",
     [
