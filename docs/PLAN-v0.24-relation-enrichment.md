@@ -119,7 +119,19 @@ finreg-전용 `link_finreg_references.py`를 corpus-agnostic 메커니즘으로 
 → "프로파일에 식별자 속성 1~2줄 + `from_data()` → multi-hop 관계 자동
 구축; 부적합 corpus 엔 무해한 no-op" 가 코드로 참.
 
-추가 관계종 (별표 ANNEX, cross-law, 법률↔시행령 IMPLEMENTS)은 후속 과제.
+### WS-A 확장: cross-scope 참조 해소 ✅ (commit 3ddb179)
+
+intra-scope 링킹은 같은 scope 안만 연결한다. 자기 target scope를 직접
+명시하는 인용(「은행법」 제5조 — 다른 법령 인용)은 미해소이거나, 더 나쁘게
+citing 법령의 동명 조문으로 오결합됐다.
+
+- `reference_crossscope_pattern` — named group `scope`+`key` 정규식.
+  cross-scope 패스가 먼저 돌고, 그 span 은 intra 매처에서 제외 → 오결합 방지.
+- finreg: 7,293 intra-law + **840 cross-law** REFERENCES 엣지. **52/59
+  법령이 하나의 연결된 법률 그래프**로 (이전엔 분리된 섬). 오결합 ~1,134개
+  제거 (cross-law 인용을 citing 법령으로 잘못 해소한 것).
+
+별표 ANNEX, 법률↔시행령 IMPLEMENTS 는 후속 과제.
 
 ## 3. Phase 3 — 규모 & 일반성 검증 (측정 1회)
 
