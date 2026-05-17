@@ -439,6 +439,21 @@ class DocumentIngester:
 
                 prev_chunk_node_id = chunk_node_id
 
+        # Structural reference linking — when the profile declares a clean
+        # target inventory (``reference_key_property``), turn explicit
+        # cross-references in document text into REFERENCES edges so
+        # multi-hop "follow the citation" retrieval is a single graph hop.
+        # The linker gates itself off on corpora without a clean target
+        # inventory, so running it unconditionally here is safe: it is a
+        # no-op unless the profile opts in *and* the corpus qualifies.
+        from synaptic.extensions.structural_reference_linker import (
+            StructuralReferenceLinker,
+        )
+
+        ref_stats = await StructuralReferenceLinker(self._profile).link(self._backend)
+        if not ref_stats.gated:
+            stats.edges_created += ref_stats.edges_created
+
         stats.elapsed_seconds = time.time() - t0
         return stats
 

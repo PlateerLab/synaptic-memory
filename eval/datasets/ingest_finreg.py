@@ -104,21 +104,9 @@ async def main() -> int:
     print(f"  Documents:  {stats.documents_ingested}")
     print(f"  Chunks:     {stats.chunks_created}")
     print(f"  Categories: {stats.categories_created}")
+    # edges_created includes the REFERENCES edges — DocumentIngester now
+    # runs StructuralReferenceLinker itself (gated on the profile).
     print(f"  Edges:      {stats.edges_created}")
-
-    # WS-A — profile-driven cross-reference edges. The finreg profile
-    # declares a clean article-number target inventory, so this writes
-    # REFERENCES edges (gates itself off on corpora that don't).
-    from synaptic.extensions.structural_reference_linker import StructuralReferenceLinker
-
-    ref_stats = await StructuralReferenceLinker(profile).link(backend)
-    if ref_stats.gated:
-        print(f"  REFERENCES: gated — {ref_stats.gate_reason}")
-    else:
-        print(
-            f"  REFERENCES: {ref_stats.edges_created} edges "
-            f"(raw={ref_stats.raw_matches} unresolved={ref_stats.unresolved})"
-        )
     print(f"  Graph:      {GRAPH}")
     print(f"{'=' * 56}")
 
