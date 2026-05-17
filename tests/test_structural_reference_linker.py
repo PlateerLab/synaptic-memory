@@ -165,6 +165,24 @@ async def test_crossscope_resolves_to_named_scope():
 
 
 @pytest.mark.asyncio
+async def test_with_references_factory_enables_linker():
+    """DomainProfile.with_references() is enough to activate the linker."""
+    backend = MemoryBackend()
+    a = _article("은행법", "제3조", "제5조에 따라 처리한다.")
+    b = _article("은행법", "제5조", "제5조 본문")
+    await backend.save_node(a)
+    await backend.save_node(b)
+
+    profile = DomainProfile.with_references(
+        key_property="article_no", scope_property="law"
+    )
+    stats = await StructuralReferenceLinker(profile).link(backend)
+
+    assert not stats.gated
+    assert stats.edges_created == 1
+
+
+@pytest.mark.asyncio
 async def test_edges_deduplicated():
     backend = MemoryBackend()
     a = _article("은행법", "제3조", "제5조에 따라, 그리고 다시 제5조에 의거하여 처리한다.")

@@ -217,6 +217,38 @@ async def main():
 asyncio.run(main())
 ```
 
+### Option D: relation ontology (multi-hop)
+
+When your documents cite each other by a canonical identifier — statute
+article numbers, standard clause codes, manual section ids — Synaptic
+turns those citations into `REFERENCES` graph edges so the agent can
+follow them. Still **zero LLM at index time** — it is rule-based
+extraction, auto-derived from your corpus's own identifier values.
+
+```python
+from synaptic import SynapticGraph
+from synaptic.extensions.domain_profile import DomainProfile
+
+# Each document carries its identifier in an `article_no` property,
+# scoped by `law`. That is all the configuration needed.
+graph = await SynapticGraph.from_data(
+    "./statutes.jsonl",
+    profile=DomainProfile.with_references(
+        key_property="article_no", scope_property="law"
+    ),
+)
+```
+
+The linker is **self-gating**: if the corpus has no clean identifier
+inventory it writes nothing (no-op), so this is safe to leave on.
+Measured impact — multi-hop retrieval went from **0% (vanilla RAG) to
+83%** on a financial-statute corpus:
+[`docs/REPORT-rag-vs-synaptic.md`](docs/REPORT-rag-vs-synaptic.md).
+
+> Requirement: each document must carry the identifier as a node
+> property. Structured input (JSONL with `properties`) provides it
+> directly; raw text files do not — relation linking needs identifiers.
+
 ---
 
 ## Indexing cost comparison

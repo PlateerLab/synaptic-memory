@@ -306,6 +306,56 @@ class DomainProfile:
         """Locale-only English profile."""
         return cls(name=name, locale="en")
 
+    @classmethod
+    def with_references(
+        cls,
+        *,
+        key_property: str,
+        scope_property: str = "",
+        crossscope_pattern: str | None = None,
+        name: str = "references",
+        locale: str = "multi",
+    ) -> DomainProfile:
+        """One-call profile that enables structural cross-reference linking.
+
+        This is the minimal profile for building a multi-hop relation
+        ontology — no TOML file, no hand-written regex. Declare which
+        node property holds each document's canonical identifier and
+        :class:`StructuralReferenceLinker` turns in-text citations into
+        ``REFERENCES`` edges automatically during ingest.
+
+        Args:
+            key_property: Node property holding the canonical identifier
+                each document is cited by (e.g. ``"article_no"``,
+                ``"clause_id"``). The corpus's documents must carry it.
+            scope_property: Optional property to scope resolution within
+                (e.g. ``"law"`` — a "제5조" citation resolves inside the
+                same statute). Empty means global resolution.
+            crossscope_pattern: Optional regex with named groups
+                ``scope`` and ``key`` for citations that name their own
+                target scope (e.g. ``「(?P<scope>[^」]+)」\\s*(?P<key>...)``).
+            name: Profile name.
+            locale: ``"ko"`` / ``"en"`` / ``"multi"``.
+
+        Example::
+
+            graph = await SynapticGraph.from_data(
+                "./statutes/",
+                profile=DomainProfile.with_references(
+                    key_property="article_no", scope_property="law"
+                ),
+            )
+        """
+        return cls(
+            name=name,
+            locale=locale,
+            reference_key_property=key_property,
+            reference_scope_property=scope_property,
+            reference_crossscope_pattern=(
+                re.compile(crossscope_pattern) if crossscope_pattern else None
+            ),
+        )
+
     # --- Serialization ---
 
     def to_dict(self) -> dict[str, object]:
