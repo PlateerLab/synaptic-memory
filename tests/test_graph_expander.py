@@ -291,3 +291,38 @@ class TestNoOpPaths:
         results = await expander.expand(anchors=anchors, seed_nodes=[])
         # No crash, just an empty expansion
         assert results == []
+
+
+@pytest.mark.asyncio
+async def test_references_expansion_surfaces_cited_document():
+    """A REFERENCES edge from a seed pulls the cited document into the
+    expansion with reason ``"references"`` (v0.24 WS-A)."""
+    backend = MemoryBackend()
+    await backend.connect()
+    a = Node(id="art_a", kind=NodeKind.ENTITY, title="Article A", content="cites B")
+    b = Node(id="art_b", kind=NodeKind.ENTITY, title="Article B", content="body")
+    await backend.save_node(a)
+    await backend.save_node(b)
+    await backend.save_edge(
+        Edge(source_id="art_a", target_id="art_b", kind=EdgeKind.REFERENCES)
+    )
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[a])
+
+    by_id = {r.node.id: r for r in results}
+    assert "art_b" in by_id
+    assert by_id["art_b"].reason == "references"
+    assert by_id["art_b"].anchor_hit == "art_a"
+
+
+@pytest.mark.asyncio
+async def test_references_expansion_noop_without_edges():
+    """No REFERENCES edges → expansion is unaffected (no crash, no extras)."""
+    backend = MemoryBackend()
+    await backend.connect()
+    a = Node(id="solo", kind=NodeKind.ENTITY, title="Solo", content="x")
+    await backend.save_node(a)
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[a])
+    assert [r.reason for r in results] == ["seed"]

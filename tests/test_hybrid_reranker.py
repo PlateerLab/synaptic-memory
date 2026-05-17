@@ -205,3 +205,38 @@ class TestOutputShape:
         scored = reranker.rerank(expanded=expanded)
         reasons = {s.node.id: s.reason for s in scored}
         assert reasons == {"x": "chunk_next", "y": "seed"}
+
+
+class TestReferenceCompanionLift:
+    """v0.24 WS-B — a REFERENCES-expanded node is lifted to a fraction of
+    its anchor seed's score so it survives reranking despite zero lexical
+    overlap with the query."""
+
+    def test_reference_node_lifted_to_anchor_fraction(self):
+        reranker = HybridReranker()
+        seed = _node("seed_a")
+        ref = _node("ref_b")
+        expanded = [
+            ExpandedNode(node=seed, reason="seed"),
+            ExpandedNode(node=ref, reason="references", anchor_hit="seed_a"),
+        ]
+        scored = reranker.rerank(expanded=expanded, fts_scores={"seed_a": 1.0})
+        by_id = {s.node.id: s for s in scored}
+        # ref_b has no lexical/semantic signal — without the lift its total
+        # is ~0; with the lift it sits at 0.9× its anchor's total.
+        assert by_id["ref_b"].total >= 0.9 * by_id["seed_a"].total - 1e-6
+
+    def test_lift_requires_anchor(self):
+        """A references node with no anchor_hit is not lifted."""
+        reranker = HybridReranker()
+        seed = _node("seed_a")
+        orphan = _node("orphan_ref")
+        expanded = [
+            ExpandedNode(node=seed, reason="seed"),
+            ExpandedNode(node=orphan, reason="references"),  # no anchor_hit
+        ]
+        scored = reranker.rerank(expanded=expanded, fts_scores={"seed_a": 1.0})
+        by_id = {s.node.id: s for s in scored}
+        # No anchor → no companion lift → orphan stays well below what an
+        # anchored references node would reach (0.9× the anchor).
+        assert by_id["orphan_ref"].total < 0.9 * by_id["seed_a"].total

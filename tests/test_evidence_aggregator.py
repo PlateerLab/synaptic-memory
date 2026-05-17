@@ -368,3 +368,45 @@ class TestKindAwareSplit:
         # Cap=1 under passage path should drop the second
         assert len(result) == 1
         assert result[0].node.id == "phrase_einstein"
+
+
+class TestReferenceCompanionAttach:
+    """v0.24 WS-B — a REFERENCES companion rides into top-k *with* the
+    document that cites it, even when its own score is too low to be
+    selected on merit and k is already full."""
+
+    def test_companion_attached_with_anchor(self):
+        agg = EvidenceAggregator()
+        chosen = ScoredCandidate(
+            node=_node("anchor", doc_id="anchor"),
+            total=0.9, lexical=0.9, semantic=0.0, graph=0.5, structural=0.0,
+            reason="seed",
+        )
+        companion = ScoredCandidate(
+            node=_node("cited", doc_id="cited"),
+            total=0.05, lexical=0.0, semantic=0.0, graph=0.1, structural=0.0,
+            reason="references", anchor_id="anchor",
+        )
+        filler = _scored("filler", total=0.5, doc_id="filler")
+
+        # k=2: on merit the picks would be anchor (0.9) + filler (0.5).
+        result = agg.aggregate(scored=[chosen, companion, filler], k=2)
+        ids = {e.node.id for e in result}
+        assert "anchor" in ids
+        assert "cited" in ids  # rode in as anchor's companion despite k=2
+
+    def test_companion_not_attached_to_wrong_anchor(self):
+        """A references node only attaches to its own anchor_id."""
+        agg = EvidenceAggregator()
+        chosen = ScoredCandidate(
+            node=_node("anchor", doc_id="anchor"),
+            total=0.9, lexical=0.9, semantic=0.0, graph=0.5, structural=0.0,
+            reason="seed",
+        )
+        orphan = ScoredCandidate(
+            node=_node("other", doc_id="other"),
+            total=0.05, lexical=0.0, semantic=0.0, graph=0.1, structural=0.0,
+            reason="references", anchor_id="someone_else",
+        )
+        result = agg.aggregate(scored=[chosen, orphan], k=1)
+        assert {e.node.id for e in result} == {"anchor"}
