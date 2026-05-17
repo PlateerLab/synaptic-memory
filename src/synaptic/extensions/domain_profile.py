@@ -258,6 +258,27 @@ class DomainProfile:
     # misses when the query doesn't match the title verbatim.
     enrich_document_content: bool = True
     document_preview_chars: int = 600
+    # --- Structural reference linking (WS-A) ---
+    # When a corpus has a *clean target inventory* — every document
+    # carries a canonical, low-collision identifier (a statute article
+    # number, a standard clause code, a manual section id) — explicit
+    # cross-references in document text can be turned into REFERENCES
+    # edges without an LLM. ``StructuralReferenceLinker`` consumes these
+    # three fields; all empty/None means "no structural reference
+    # linking" (the default — safe for any corpus).
+    #
+    # ``reference_token_pattern`` — regex matching a reference token in
+    #   text; its *full match* must equal a target node's key value
+    #   (e.g. ``제\d+조(?:의\d+)?`` matches "제30조", and a node's
+    #   ``article_no`` property is stored as "제30조").
+    # ``reference_key_property`` — node property holding that canonical
+    #   key. Empty disables linking.
+    # ``reference_scope_property`` — optional; references resolve only
+    #   among nodes sharing this property value (e.g. "law", so a
+    #   citation resolves within the same statute). Empty = global.
+    reference_token_pattern: re.Pattern[str] | None = None
+    reference_key_property: str = ""
+    reference_scope_property: str = ""
 
     def stopwords(self) -> frozenset[str]:
         """Effective stopword set = locale default ∪ extra."""
@@ -480,6 +501,18 @@ class DomainProfile:
                     continue
                 table_query_hints[table_name] = [str(h) for h in hints if isinstance(h, str) and h]
 
+        ref_token_raw = data.get("reference_token_pattern", "")
+        reference_token_pattern: re.Pattern[str] | None = None
+        if isinstance(ref_token_raw, str) and ref_token_raw:
+            try:
+                reference_token_pattern = re.compile(ref_token_raw)
+            except re.error as exc:
+                msg = (
+                    f"Profile {path}: invalid reference_token_pattern "
+                    f"{ref_token_raw!r} — {exc}"
+                )
+                raise ValueError(msg) from exc
+
         return cls(
             name=name,
             locale=locale,
@@ -496,6 +529,9 @@ class DomainProfile:
             table_query_hints=table_query_hints,
             enrich_document_content=bool(data.get("enrich_document_content", True)),
             document_preview_chars=int(data.get("document_preview_chars", 600)),
+            reference_token_pattern=reference_token_pattern,
+            reference_key_property=str(data.get("reference_key_property", "")),
+            reference_scope_property=str(data.get("reference_scope_property", "")),
         )
 
 

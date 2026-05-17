@@ -15,6 +15,15 @@ max_df_ratio = 0.3
 min_phrase_len = 2
 max_phrase_len = 20
 
+# Structural reference linking (WS-A) — statute articles cite each other
+# by canonical number ("제30조"). Each article node stores its number in
+# `article_no` and its statute in `law`. That is all that is needed:
+# StructuralReferenceLinker derives the citation matcher from the actual
+# `article_no` values present in the corpus (no hand-written regex), and
+# resolves each citation within the same `law`.
+reference_key_property = "article_no"
+reference_scope_property = "law"
+
 # Legal-boilerplate stopwords layered on the ko locale default.
 stopwords_extra = [
     "개정",
