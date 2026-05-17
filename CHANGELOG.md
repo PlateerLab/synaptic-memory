@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### v0.24 — Relation enrichment: multi-hop retrieval (RAG 0% → synaptic 83%)
+
+Built a financial-statute corpus (`finreg` — law.go.kr, 4,417 articles)
+and measured vanilla RAG head-to-head against the agent on the same
+corpus, GT, LLM-judge, and model. Result: **single-hop is a 94% tie;
+multi-hop is RAG 0% vs synaptic-memory 83%.** Single-shot retrieval
+cannot follow a cross-reference; the agent + relation graph can.
+Full report: `docs/REPORT-rag-vs-synaptic.md`.
+
+**Added**
+- `EdgeKind.REFERENCES` — explicit document cross-reference edges.
+- `StructuralReferenceLinker` — profile-driven, LLM-free cross-reference
+  edge builder. The matcher is **auto-derived from the corpus's own
+  identifier values** (no hand-written regex per corpus). A
+  **clean-target gate** makes it safe anywhere — it no-ops where the
+  identifier inventory is noisy (the v0.23 ReferenceLinker failure
+  mode, now prevented in code). Runs automatically inside
+  `DocumentIngester.ingest()`, so every `from_data()` path gets it.
+  Cross-scope resolution links citations that name their own target
+  ("「은행법」 제5조"): finreg → 7,293 intra + 840 cross-law edges,
+  52/59 statutes connected.
+- GraphExpander `_expand_references` — REFERENCES neighbours expanded as
+  retrieval candidates with budget priority.
+- Reranker reference-companion lift + aggregator companion attach — a
+  cited document survives in top-k alongside the document citing it.
+- `eval/rag_baseline.py` — vanilla RAG head-to-head runner.
+- finreg dataset scripts (`eval/datasets/`); `eval/run_all.py` agent
+  benchmark parallelised (`--agent-concurrency`, 5h → ~14min) +
+  multi-hop strict scoring.
+- `docs/REPORT-rag-vs-synaptic.md`, `docs/PLAN-v0.24-relation-enrichment.md`.
+
+**Fixed**
+- `get_document` was structurally broken on chunk-only corpora —
+  recovered via CONTAINS-parent hop + `doc_id`-property resolution.
+  KRRA Conv agent regression 14/30 → 21/30.
+
+**Measured negative**
+- WS-D (surfacing references in tool results) — 100→98/120, no effect,
+  reverted. Measured-negative discipline: a mechanism that does not
+  move the number is not shipped.
+
 ### Measured — v0.22 Phase 2.1/2.2: domain-aware prompt is NET ZERO (reverted strategy text)
 
 Tried lifting cross_domain coverage by adding multi-domain awareness

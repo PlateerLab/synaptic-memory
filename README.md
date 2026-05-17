@@ -342,6 +342,29 @@ Data source: [allganize/RAG-Evaluation-Dataset-KO](https://huggingface.co/datase
 > rank invariance rose from 54.5 % → **100 %**, bit-wise top-10
 > identical from 51.5 % → **96 %**, with MRR drift exactly zero.
 
+### RAG vs synaptic-memory — multi-hop retrieval (v0.24)
+
+Vanilla RAG (chunk → top-k → one LLM answer) measured head-to-head
+against the synaptic-memory agent on the same corpus, ground truth,
+LLM-judge, and model (`finreg` — 4,417 Korean financial-statute
+articles):
+
+```
+Query type                 vanilla RAG    synaptic-memory
+-----------------------------------------------------------
+single-hop (1 article)          94%             94%
+multi-hop (follow citation)      0%             83%
+```
+
+A statute article that cites another article ("제30조에 따라 …") is a
+**multi-hop** query: the cited provision shares no query vocabulary, so
+single-shot retrieval structurally cannot reach it. synaptic-memory
+turns cross-references into `REFERENCES` graph edges
+([`StructuralReferenceLinker`](src/synaptic/extensions/structural_reference_linker.py),
+LLM-free, auto-derived from the corpus) and the agent follows them.
+Full report — including limits and what does *not* help:
+[`docs/REPORT-rag-vs-synaptic.md`](docs/REPORT-rag-vs-synaptic.md).
+
 ### Head-to-head vs Mem0 / Cognee / HippoRAG2
 
 A runnable harness (BEIR-style corpus, same MRR / R@10 scoring code
@@ -535,6 +558,7 @@ Agent tools (36) → MCP server → LLM agent
 | [docs/TUTORIAL.en.md](docs/TUTORIAL.en.md) | **30-minute hands-on walkthrough (English)** |
 | [docs/TUTORIAL.md](docs/TUTORIAL.md) | 30-minute hands-on walkthrough (Korean) |
 | [docs/CONCEPTS.md](docs/CONCEPTS.md) | 3rd-gen GraphRAG + pipeline internals |
+| [docs/REPORT-rag-vs-synaptic.md](docs/REPORT-rag-vs-synaptic.md) | **RAG vs synaptic-memory — measured head-to-head (multi-hop)** |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Original neural-inspired design |
 | [docs/COMPARISON.md](docs/COMPARISON.md) | vs GraphRAG / LightRAG / LazyGraphRAG |
 | [docs/comparison/synaptic_results.md](docs/comparison/synaptic_results.md) | Reproducible Synaptic numbers with provenance |
