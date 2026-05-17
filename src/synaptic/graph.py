@@ -307,6 +307,7 @@ class SynapticGraph:
         data_path: str,
         *,
         db: str = "synaptic.db",
+        profile: object | None = None,
         embed_url: str | None = None,
         embed_model: str = "qwen3-embedding:4b",
     ) -> SynapticGraph:
@@ -340,6 +341,21 @@ class SynapticGraph:
             # Bring your own chunker (no xgen-doc2chunk needed)
             chunks = my_parser.split("manual.pdf")
             graph = await SynapticGraph.from_chunks(chunks)
+
+            # Ontology relations — pass a profile that declares the
+            # document identifier so cross-references become graph edges
+            graph = await SynapticGraph.from_data(
+                "./statutes/", profile="profiles/finreg.toml"
+            )
+
+        Args:
+            profile: Optional :class:`DomainProfile` (or a TOML path).
+                When omitted, a profile is auto-generated from samples —
+                that builds the Category→Document→Chunk hierarchy but
+                **not** typed relation edges. To get REFERENCES edges
+                (multi-hop ontology) the profile must declare
+                ``reference_key_property``; the auto-generated one never
+                does. See ``docs/PLAN-v0.24-relation-enrichment.md``.
         """
         from pathlib import Path
 
@@ -382,51 +398,62 @@ class SynapticGraph:
             msg = f"No data files found at {data_path}"
             raise FileNotFoundError(msg)
 
-        # Auto-generate profile from samples
-        samples: list[str] = []
-        categories: list[str] = []
-        for f in files[:5]:
-            if f.suffix == ".csv":
-                import csv
+        # A caller-supplied profile is what enables ontology relation
+        # enrichment (REFERENCES edges): the auto-generated profile never
+        # declares ``reference_key_property``, so without an explicit
+        # profile the one-line API only builds the Category→Document→
+        # Chunk hierarchy. Accepts a DomainProfile instance or a TOML path.
+        if isinstance(profile, str):
+            from synaptic.extensions.domain_profile import DomainProfile
 
-                with f.open(encoding="utf-8") as fh:
-                    reader = csv.DictReader(fh)
-                    for i, row in enumerate(reader):
-                        if i >= 20:
-                            break
-                        samples.append(" ".join(str(v) for v in row.values()))
-            elif f.suffix == ".jsonl":
-                import json
+            profile = DomainProfile.load(profile)
 
-                with f.open(encoding="utf-8") as fh:
-                    for i, line in enumerate(fh):
-                        if i >= 20:
-                            break
-                        d = json.loads(line)
-                        content = d.get("content", d.get("text", d.get("title", "")))
-                        if content:
-                            samples.append(str(content)[:500])
-                        cat = d.get("category", "")
-                        if cat:
-                            categories.append(str(cat))
-            elif f.suffix.lower() in _DOC_EXTS:
-                try:
-                    from synaptic.extensions.doc_loader import load_document
+        if profile is None:
+            # Auto-generate a profile from samples of the input files.
+            samples: list[str] = []
+            categories: list[str] = []
+            for f in files[:5]:
+                if f.suffix == ".csv":
+                    import csv
 
-                    doc_chunks = load_document(f)
-                    for d in doc_chunks[:20]:
-                        samples.append(str(d.get("content", ""))[:500])
-                    if doc_chunks and doc_chunks[0].get("category"):
-                        categories.append(str(doc_chunks[0]["category"]))
-                except ImportError:
-                    pass  # xgen-doc2chunk is optional
+                    with f.open(encoding="utf-8") as fh:
+                        reader = csv.DictReader(fh)
+                        for i, row in enumerate(reader):
+                            if i >= 20:
+                                break
+                            samples.append(" ".join(str(v) for v in row.values()))
+                elif f.suffix == ".jsonl":
+                    import json
 
-        gen = ProfileGenerator()
-        profile = await gen.generate(
-            name=path.stem,
-            samples=samples,
-            categories=categories if categories else None,
-        )
+                    with f.open(encoding="utf-8") as fh:
+                        for i, line in enumerate(fh):
+                            if i >= 20:
+                                break
+                            d = json.loads(line)
+                            content = d.get("content", d.get("text", d.get("title", "")))
+                            if content:
+                                samples.append(str(content)[:500])
+                            cat = d.get("category", "")
+                            if cat:
+                                categories.append(str(cat))
+                elif f.suffix.lower() in _DOC_EXTS:
+                    try:
+                        from synaptic.extensions.doc_loader import load_document
+
+                        doc_chunks = load_document(f)
+                        for d in doc_chunks[:20]:
+                            samples.append(str(d.get("content", ""))[:500])
+                        if doc_chunks and doc_chunks[0].get("category"):
+                            categories.append(str(doc_chunks[0]["category"]))
+                    except ImportError:
+                        pass  # xgen-doc2chunk is optional
+
+            gen = ProfileGenerator()
+            profile = await gen.generate(
+                name=path.stem,
+                samples=samples,
+                categories=categories if categories else None,
+            )
 
         # Ingest each file
         for f in files:
