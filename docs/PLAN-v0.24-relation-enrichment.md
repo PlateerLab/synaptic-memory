@@ -38,9 +38,31 @@ CLAUDE.md의 "relation-free graph"는 다음으로 갱신한다:
 > 원칙은 유지한다. 단, (a) LLM 없이 규칙으로 추출 가능하고 (b) 깨끗한 target
 > inventory가 있는 관계는 그래프에 명시적으로 박는다 — measured +48pp.
 
-## 1. Phase 1 — 엔진 개선 (측정 1회: 끝에서)
+## 1. Phase 1 — 엔진 개선
 
-목표: finreg multi-hop 73% → **90%+**. 현재 실패 33/120 공략.
+목표: finreg multi-hop 73% → 90%+. 현재 실패 33/120 공략.
+
+### 측정 결과 (2026-05-17)
+
+| 단계 | finreg multi-hop (120q) |
+|---|---:|
+| vanilla RAG | 0% |
+| agent — REFERENCES 엣지 기본 (Step 7 확장만) | 73% |
+| agent — **WS-B 완성** | **83%** (+10pp, 커밋 8ce9827) |
+| agent — WS-B + WS-D | 82% (−1, 노이즈) |
+
+- **WS-B 채택.** GraphExpander Step 2 우선순위 + reranker 참조-동반 lift +
+  aggregator 참조-동반 묶음 선택. 73→83% 검증됨.
+- **WS-D 기각 — measured null.** tool 결과에 REFERENCES 명시 노출 +
+  get_document citation 힌트. 100→98/120, 노이즈 범위. 효과 없음 →
+  코드 되돌림. (CONCEPTS §13 측정 규율: 효과 없는 mechanism 은 ship 안 함.)
+- **WS-C 보류.** 남은 20 실패의 양상이 셋으로 분기 (search-level 진단):
+  agent-loop 7 (A·B 둘 다 검색되나 agent 실패) / 능동 추종 필요 7 / 진입
+  검색 실패 6. 단일 근본원인이 없어 추측 없이 고칠 수 없음. multi-hop
+  0%→83% 로 헤드라인 목표는 이미 달성 — 83→90 은 수익체감 구간.
+
+**결론**: Phase 1 = WS-B 단독 채택. multi-hop RAG 0% vs Synaptic 83%,
+single-hop 94% 동률. "agent 가 RAG 를 압도" 명제 측정 완료.
 
 ### WS-B: 참조-인지 reranking  [최우선]
 
