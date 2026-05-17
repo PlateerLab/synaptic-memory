@@ -279,6 +279,15 @@ class DomainProfile:
     reference_token_pattern: re.Pattern[str] | None = None
     reference_key_property: str = ""
     reference_scope_property: str = ""
+    # ``reference_crossscope_pattern`` — optional regex with named groups
+    #   ``scope`` and ``key`` for citations that name their *own* target
+    #   scope, e.g. a statute article citing a different statute
+    #   (「은행법」 제5조). The captured ``scope`` is matched against the
+    #   same ``reference_scope_property`` index, so cross-document
+    #   references resolve too. Spans matched here are excluded from the
+    #   intra-scope matcher so a "제5조" inside such a citation is not
+    #   mis-resolved to the citing document's own scope.
+    reference_crossscope_pattern: re.Pattern[str] | None = None
 
     def stopwords(self) -> frozenset[str]:
         """Effective stopword set = locale default ∪ extra."""
@@ -330,6 +339,11 @@ class DomainProfile:
                 if self.reference_token_pattern is not None
                 else ""
             ),
+            "reference_crossscope_pattern": (
+                self.reference_crossscope_pattern.pattern
+                if self.reference_crossscope_pattern is not None
+                else ""
+            ),
         }
         return out
 
@@ -360,6 +374,7 @@ class DomainProfile:
             "reference_key_property",
             "reference_scope_property",
             "reference_token_pattern",
+            "reference_crossscope_pattern",
         ):
             ref_val = data.get(ref_key, "")
             if ref_val:
@@ -516,17 +531,18 @@ class DomainProfile:
                     continue
                 table_query_hints[table_name] = [str(h) for h in hints if isinstance(h, str) and h]
 
-        ref_token_raw = data.get("reference_token_pattern", "")
-        reference_token_pattern: re.Pattern[str] | None = None
-        if isinstance(ref_token_raw, str) and ref_token_raw:
+        def _opt_pattern(field_name: str) -> re.Pattern[str] | None:
+            raw = data.get(field_name, "")
+            if not isinstance(raw, str) or not raw:
+                return None
             try:
-                reference_token_pattern = re.compile(ref_token_raw)
+                return re.compile(raw)
             except re.error as exc:
-                msg = (
-                    f"Profile {path}: invalid reference_token_pattern "
-                    f"{ref_token_raw!r} — {exc}"
-                )
+                msg = f"Profile {path}: invalid {field_name} {raw!r} — {exc}"
                 raise ValueError(msg) from exc
+
+        reference_token_pattern = _opt_pattern("reference_token_pattern")
+        reference_crossscope_pattern = _opt_pattern("reference_crossscope_pattern")
 
         return cls(
             name=name,
@@ -545,6 +561,7 @@ class DomainProfile:
             enrich_document_content=bool(data.get("enrich_document_content", True)),
             document_preview_chars=int(data.get("document_preview_chars", 600)),
             reference_token_pattern=reference_token_pattern,
+            reference_crossscope_pattern=reference_crossscope_pattern,
             reference_key_property=str(data.get("reference_key_property", "")),
             reference_scope_property=str(data.get("reference_scope_property", "")),
         )

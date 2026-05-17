@@ -144,30 +144,47 @@ class StructuralReferenceLinker:
         # --- Scan node text, resolve references, build edges ---
         edges: list[Edge] = []
         seen: set[tuple[str, str]] = set()
-        for n in nodes:
-            props = n.properties or {}
-            scope = props.get(scope_prop, "") if scope_prop else ""
-            for m in matcher.finditer(n.content or ""):
-                token = m.group(0)
-                stats.raw_matches += 1
-                target_id = resolved_index.get((scope, token))
-                if target_id is None:
-                    stats.unresolved += 1
-                    continue
-                if target_id == n.id:
-                    continue  # self-reference
-                key = (n.id, target_id)
-                if key in seen:
-                    continue
-                seen.add(key)
-                edges.append(
-                    Edge(
-                        source_id=n.id,
-                        target_id=target_id,
-                        kind=EdgeKind.REFERENCES,
-                        weight=1.0,
-                    )
+
+        def _emit(src_id: str, target_id: str | None) -> None:
+            if target_id is None:
+                stats.unresolved += 1
+                return
+            if target_id == src_id or (src_id, target_id) in seen:
+                return
+            seen.add((src_id, target_id))
+            edges.append(
+                Edge(
+                    source_id=src_id,
+                    target_id=target_id,
+                    kind=EdgeKind.REFERENCES,
+                    weight=1.0,
                 )
+            )
+
+        crossscope = p.reference_crossscope_pattern
+        for n in nodes:
+            content = n.content or ""
+            scope = (n.properties or {}).get(scope_prop, "") if scope_prop else ""
+
+            # Cross-scope first — citations that name their own target
+            # scope ("「은행법」 제5조"). Record their spans so the
+            # intra-scope matcher does not mis-resolve the "제5조" inside
+            # them to the citing document's own scope.
+            cross_spans: list[tuple[int, int]] = []
+            if crossscope is not None:
+                for m in crossscope.finditer(content):
+                    stats.raw_matches += 1
+                    cross_spans.append(m.span())
+                    gd = m.groupdict()
+                    _emit(n.id, resolved_index.get((gd.get("scope", ""), gd.get("key", ""))))
+
+            # Intra-scope — a bare key resolves within the citing
+            # document's own scope, skipping spans already claimed above.
+            for m in matcher.finditer(content):
+                if any(s <= m.start() < e for s, e in cross_spans):
+                    continue
+                stats.raw_matches += 1
+                _emit(n.id, resolved_index.get((scope, m.group(0))))
 
         if edges:
             await backend.save_edges_batch(edges)

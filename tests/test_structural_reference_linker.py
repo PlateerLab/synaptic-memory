@@ -142,6 +142,29 @@ async def test_token_pattern_override():
 
 
 @pytest.mark.asyncio
+async def test_crossscope_resolves_to_named_scope():
+    """A '「보험업법」 제5조' citation resolves into 보험업법, not the citing law."""
+    backend = MemoryBackend()
+    citing = _article("은행법", "제8조", "「보험업법」 제5조에 따라 처리한다.")
+    bank5 = _article("은행법", "제5조", "은행법 제5조 본문")
+    ins5 = _article("보험업법", "제5조", "보험업법 제5조 본문")
+    for n in (citing, bank5, ins5):
+        await backend.save_node(n)
+
+    profile = _profile(
+        reference_crossscope_pattern=re.compile(
+            r"「(?P<scope>[^」]+)」\s*(?P<key>제\d+조(?:의\d+)?)"
+        )
+    )
+    await StructuralReferenceLinker(profile).link(backend)
+
+    edges = await backend.get_edges(citing.id, direction="outgoing")
+    targets = {e.target_id for e in edges if e.kind == EdgeKind.REFERENCES}
+    # Resolves to 보험업법 제5조 only — NOT the citing law's own 제5조.
+    assert targets == {ins5.id}
+
+
+@pytest.mark.asyncio
 async def test_edges_deduplicated():
     backend = MemoryBackend()
     a = _article("은행법", "제3조", "제5조에 따라, 그리고 다시 제5조에 의거하여 처리한다.")

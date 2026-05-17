@@ -23,6 +23,12 @@ max_phrase_len = 20
 # resolves each citation within the same `law`.
 reference_key_property = "article_no"
 reference_scope_property = "law"
+# Cross-law citations name their own target statute in 「」 brackets
+# ("「은행법」 제5조"). The bracketed name equals the target node's `law`
+# value, so the captured (scope, key) resolves against the same index —
+# connecting the 59 statutes into one graph instead of disconnected
+# islands. Captured groups MUST be named `scope` and `key`.
+reference_crossscope_pattern = "「(?P<scope>[^」]+)」\\s*(?P<key>제\\d+조(?:의\\d+)?)"
 
 # Legal-boilerplate stopwords layered on the ko locale default.
 stopwords_extra = [
