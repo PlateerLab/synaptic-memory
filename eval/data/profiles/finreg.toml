@@ -1,0 +1,32 @@
+# 금융 법령/규정 (financial-sector statutes) DomainProfile
+#
+# Corpus: Korean financial statutes scraped from law.go.kr — one 조(article)
+# per document. Heavily cross-referential ("제15조제2항에 따라", "별표 3"),
+# which is the multi-hop retrieval territory the agent benchmark targets.
+#
+# Loaded via DomainProfile.load("eval/data/profiles/finreg.toml").
+
+name = "finreg"
+locale = "ko"
+
+# Articles are short (most < 1,500 chars); keep phrase extraction tight.
+min_df = 3
+max_df_ratio = 0.3
+min_phrase_len = 2
+max_phrase_len = 20
+
+# Legal-boilerplate stopwords layered on the ko locale default.
+stopwords_extra = [
+    "개정",
+    "신설",
+    "삭제",
+    "본문",
+    "각호",
+    "각목",
+    "해당",
+    "경우",
+    "다음",
+    "대통령령",
+    "총리령",
+    "부령",
+]

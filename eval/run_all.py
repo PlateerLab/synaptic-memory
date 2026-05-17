@@ -160,6 +160,24 @@ CUSTOM_DATASETS = [
         is_custom=True,
         quick=False,
     ),
+    # 금융 법령/규정 corpus — 4,417 조문 scraped from law.go.kr. Heavily
+    # cross-referential; finreg multihop is the cross-reference reasoning
+    # benchmark single-shot RAG structurally cannot solve. Built via
+    # eval/datasets/{build,ingest,gen_finreg_queries}.py. Opt-in (not --quick).
+    DatasetConfig(
+        name="finreg",
+        path=EVAL_DIR / "data" / "finreg_graph.sqlite",
+        query_path=EVAL_DIR / "data" / "queries" / "finreg.json",
+        is_custom=True,
+        quick=False,
+    ),
+    DatasetConfig(
+        name="finreg multihop",
+        path=EVAL_DIR / "data" / "finreg_graph.sqlite",
+        query_path=EVAL_DIR / "data" / "queries" / "finreg_multihop.json",
+        is_custom=True,
+        quick=False,
+    ),
 ]
 
 # Public datasets (in-memory, from benchmark JSON)
@@ -1599,6 +1617,7 @@ async def run_agent_benchmark(
     embed_model: str = "qwen3-embedding:4b",
     judge: bool = False,
     llm_base_url: str | None = None,
+    agent_concurrency: int = 12,
 ) -> RunResult:
     """Run multi-turn agent on a custom dataset's hard queries."""
     if not cfg.query_path or not cfg.query_path.exists():
@@ -1659,13 +1678,15 @@ async def run_agent_benchmark(
     queries = gt.get("queries", [])
     id_field = gt.get("id_field", "doc_id")
 
-    solved = 0
-    total = 0
-    total_turns = 0
-    total_calls = 0
     t0 = time.time()
+    from synaptic.agent_loop import _is_enumeration_query
 
-    for q in queries:
+    # Queries are independent — run them concurrently against the LLM
+    # endpoint (vLLM batches happily). A semaphore caps in-flight agent
+    # loops; the sqlite backend serialises its own reads safely.
+    sem = asyncio.Semaphore(max(1, agent_concurrency))
+
+    async def _run_one(q: dict) -> dict | None:
         query_text = q.get("query", "")
         relevant = set(q.get("relevant_docs", []))
         validation = q.get("validation", {}) or {}
@@ -1674,14 +1695,11 @@ async def run_agent_benchmark(
         # don't skip them just because relevant_docs is empty.
         has_validation = bool(val_type)
         if (not relevant and not has_validation) or not query_text:
-            continue
-        total += 1
+            return None
 
         # Adaptive budget: enumeration queries ("X 모두/전체/목록",
         # "list all X") get 3x the turns so the agent can walk
         # pagination cursors. Mirror src/synaptic/agent_loop.py.
-        from synaptic.agent_loop import _is_enumeration_query
-
         eff_max_turns = (
             15 if (max_turns <= 5 and _is_enumeration_query(query_text)) else max_turns
         )
@@ -1690,53 +1708,51 @@ async def run_agent_benchmark(
             {"role": "system", "content": system},
             {"role": "user", "content": query_text},
         ]
-
         found_ids: set[str] = set()
         turns_used = 0
         final_answer = ""
+        calls = 0
 
-        for turn in range(eff_max_turns):
-            turns_used = turn + 1
-            try:
-                resp = await client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    tools=AGENT_TOOLS,
-                    max_tokens=2048,
-                    temperature=0.0,
-                    seed=42,
-                )
-            except Exception as exc:
-                print(f"    ⚠ API error: {exc}")
-                break
-
-            msg = resp.choices[0].message
-            if msg.tool_calls:
-                messages.append(msg.model_dump())
-                for tc in msg.tool_calls:
-                    fn = tc.function.name
-                    try:
-                        fn_args = json.loads(tc.function.arguments)
-                    except json.JSONDecodeError:
-                        fn_args = {}
-                    result = await _agent_dispatch(fn, fn_args, backend, session, embedder=embedder)
-                    total_calls += 1
-                    # Extract ALL possible identifiers from result
-                    data = result.get("data", {})
-                    _extract_ids(data, found_ids, known_tables=known_tables)
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": _project_or_legacy(result),
-                        }
+        async with sem:
+            for turn in range(eff_max_turns):
+                turns_used = turn + 1
+                try:
+                    resp = await client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        tools=AGENT_TOOLS,
+                        max_tokens=2048,
+                        temperature=0.0,
+                        seed=42,
                     )
-            else:
-                # Agent gave a text answer — no more tool calls.
-                final_answer = msg.content or ""
-                break
+                except Exception as exc:
+                    print(f"    ⚠ API error: {exc}")
+                    break
 
-        total_turns += turns_used
+                msg = resp.choices[0].message
+                if msg.tool_calls:
+                    messages.append(msg.model_dump())
+                    for tc in msg.tool_calls:
+                        fn = tc.function.name
+                        try:
+                            fn_args = json.loads(tc.function.arguments)
+                        except json.JSONDecodeError:
+                            fn_args = {}
+                        result = await _agent_dispatch(
+                            fn, fn_args, backend, session, embedder=embedder
+                        )
+                        calls += 1
+                        _extract_ids(result.get("data", {}), found_ids, known_tables=known_tables)
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": _project_or_legacy(result),
+                            }
+                        )
+                else:
+                    final_answer = msg.content or ""
+                    break
 
         if val_type == "domain_coverage":
             # Phase 1.5 — score by per-domain coverage instead of id match.
@@ -1744,48 +1760,62 @@ async def run_agent_benchmark(
             min_per = int(validation.get("min_docs_per_domain", 1))
             domain_counts = await _count_domains_for_ids(backend, found_ids)
             covered = {d for d, c in domain_counts.items() if c >= min_per}
-            coverage_hit = must_include.issubset(covered)
-            hit = coverage_hit
-            tag = "domain_cov" if coverage_hit else "domain_miss"
+            hit = must_include.issubset(covered)
+            tag = "domain_cov" if hit else "domain_miss"
             domain_summary = ",".join(
                 f"{d}={domain_counts.get(d, 0)}" for d in sorted(must_include)
             )
-            if hit:
-                solved += 1
-            print(
+            line = (
                 f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} "
                 f"hit={hit} ({tag} | required={sorted(must_include)} got={domain_summary})"
             )
-            continue
+            return {"hit": hit, "turns": turns_used, "calls": calls, "line": line}
 
         # Bug #3: expand found_ids with doc_ids resolved from titles /
         # internal node ids the tools returned.
         for _f in list(found_ids):
             found_ids |= docid_index.get(_f, set())
 
-        id_hit = bool(found_ids & relevant)
+        # Multi-hop is scored strict: every GT article must be retrieved,
+        # and the lenient judge fallback is disabled — the point is whether
+        # the cross-referenced provision was actually reached.
+        is_multi = q.get("type") == "multi_hop"
+        id_hit = relevant.issubset(found_ids) if is_multi else bool(found_ids & relevant)
         hit = id_hit
         judge_hit = False
         # LLM-as-Judge fallback: if ID matching failed but agent produced
         # an answer, check whether the answer is semantically correct.
-        if not id_hit and judge and final_answer:
+        if not id_hit and not is_multi and judge and final_answer:
             judge_hit = await _llm_judge(
                 client, query_text, final_answer, list(relevant), model=model
             )
             if judge_hit:
                 hit = True
-        if hit:
-            solved += 1
-        # Debug: show progress per query
         tag = "id" if id_hit else ("judge" if judge_hit else "miss")
         if not hit and found_ids:
-            print(
-                f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} hit=False | relevant={relevant} | sample_found={list(found_ids)[:3]}"
+            line = (
+                f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} "
+                f"hit=False | relevant={relevant} | sample_found={list(found_ids)[:3]}"
             )
         else:
-            print(
-                f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} hit={hit} ({tag})"
+            line = (
+                f"      [{q.get('qid', '')}] turns={turns_used} found={len(found_ids)} "
+                f"hit={hit} ({tag})"
             )
+        return {"hit": hit, "turns": turns_used, "calls": calls, "line": line}
+
+    per_query = await asyncio.gather(*[_run_one(q) for q in queries])
+
+    solved = total = total_turns = total_calls = 0
+    for r in per_query:
+        if r is None:
+            continue
+        total += 1
+        total_turns += r["turns"]
+        total_calls += r["calls"]
+        if r["hit"]:
+            solved += 1
+        print(r["line"])
 
     elapsed = time.time() - t0
     await backend.close()
@@ -1985,6 +2015,12 @@ def _parse_args():
     p.add_argument("--agent-model", default="gpt-4o-mini", help="Agent LLM model")
     p.add_argument("--agent-max-turns", type=int, default=5, help="Max turns per agent query")
     p.add_argument(
+        "--agent-concurrency",
+        type=int,
+        default=12,
+        help="Number of agent queries run concurrently against the LLM endpoint",
+    )
+    p.add_argument(
         "--agent-dataset",
         default=None,
         help="Substring filter on dataset name for agent runs. "
@@ -2111,7 +2147,10 @@ async def main():
             agent_datasets = [
                 d
                 for d in CUSTOM_DATASETS
-                if "Hard" in d.name or "Conv" in d.name or "Cross-Domain" in d.name
+                if "Hard" in d.name
+                or "Conv" in d.name
+                or "Cross-Domain" in d.name
+                or "finreg" in d.name
             ]
             if args.agent_dataset:
                 agent_datasets = [d for d in agent_datasets if args.agent_dataset in d.name]
@@ -2131,6 +2170,7 @@ async def main():
                         embed_model=args.embed_model,
                         judge=args.judge,
                         llm_base_url=args.llm_base_url,
+                        agent_concurrency=args.agent_concurrency,
                     )
                     results.append(r)
                     if r.error:
