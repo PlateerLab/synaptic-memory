@@ -1620,6 +1620,21 @@ async def run_agent_benchmark(
         if _tbl:
             known_tables.add(_tbl)
 
+    # Bug #3 fix: agent tools surface node titles + internal node ids
+    # (e.g. "doc_abc", "chunk_xyz", "2024년도_... #1"), but GT
+    # ``relevant_docs`` are bare ``doc_id`` *property* values. Build a
+    # one-time reverse index {title|node_id -> {doc_id}} so a correct
+    # retrieval scores as a hit regardless of which surface form the
+    # tool returned.
+    docid_index: dict[str, set[str]] = {}
+    for _n in await backend.list_nodes(kind=None, limit=500_000):
+        _did = (_n.properties or {}).get("doc_id")
+        if not _did:
+            continue
+        docid_index.setdefault(_n.id, set()).add(_did)
+        if _n.title:
+            docid_index.setdefault(_n.title, set()).add(_did)
+
     with open(cfg.query_path, encoding="utf-8") as f:
         gt = json.load(f)
     queries = gt.get("queries", [])
@@ -1723,6 +1738,11 @@ async def run_agent_benchmark(
                 f"hit={hit} ({tag} | required={sorted(must_include)} got={domain_summary})"
             )
             continue
+
+        # Bug #3: expand found_ids with doc_ids resolved from titles /
+        # internal node ids the tools returned.
+        for _f in list(found_ids):
+            found_ids |= docid_index.get(_f, set())
 
         id_hit = bool(found_ids & relevant)
         hit = id_hit

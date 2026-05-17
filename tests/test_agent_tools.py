@@ -317,6 +317,53 @@ class TestGetDocumentTool:
         assert session.has_seen("chunk_r1a")
         assert session.has_seen("chunk_r1b")
 
+    async def test_get_document_by_bare_doc_id_property(self):
+        """search/deep_search expose the doc_id *property* (an opaque
+        hash) which differs from the node id. get_document must resolve
+        it by scanning for the carrying node."""
+        backend = MemoryBackend()
+        # node id and doc_id property deliberately differ
+        await backend.save_node(
+            Node(
+                id="doc_node_xyz",
+                kind=NodeKind.ENTITY,
+                title="규정 문서",
+                content="본문",
+                tags=["document"],
+                properties={"doc_id": "abc123hash"},
+                level=ConsolidationLevel.L0_RAW,
+            )
+        )
+        await backend.save_node(
+            Node(
+                id="chunk_x0",
+                kind=NodeKind.CHUNK,
+                title="규정 문서 #0",
+                content="청크 내용",
+                tags=["chunk"],
+                properties={"doc_id": "abc123hash", "chunk_index": "0"},
+                level=ConsolidationLevel.L0_RAW,
+            )
+        )
+        await backend.save_edge(
+            Edge(id="c0", source_id="doc_node_xyz", target_id="chunk_x0",
+                 kind=EdgeKind.CONTAINS)
+        )
+        session = SearchSession()
+        result = await get_document_tool(backend, session, "abc123hash")
+        assert result.ok is True
+        assert result.data["document"]["title"] == "규정 문서"
+        assert result.data["chunk_count"] == 1
+
+    async def test_get_document_by_chunk_id_hops_to_parent(self):
+        """Passing a chunk node id resolves to the parent document."""
+        backend = await _fresh_backend()
+        session = SearchSession()
+        result = await get_document_tool(backend, session, "chunk_r1a")
+        assert result.ok is True
+        assert result.data["document"]["id"] == "doc_r1"
+        assert result.data["chunk_count"] == 2
+
 
 # --- list_categories_tool ---
 

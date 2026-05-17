@@ -455,6 +455,44 @@ def _doc_id_of(node: Node) -> str:
 # --- Tool 3: get_document ---
 
 
+async def _parent_via_contains(
+    backend: StorageBackend, chunk_id: str
+) -> Node | None:
+    """Return the document node that CONTAINS ``chunk_id``, if any."""
+    edges = await backend.get_edges(chunk_id, direction="both")
+    for e in edges:
+        if e.kind == EdgeKind.CONTAINS and e.target_id == chunk_id:
+            return await backend.get_node(e.source_id)
+    return None
+
+
+async def _resolve_by_doc_id_property(
+    backend: StorageBackend, doc_id: str
+) -> Node | None:
+    """Resolve a bare ``doc_id`` property value to a document node.
+
+    ``search``/``deep_search`` results expose the ``doc_id`` *property*
+    (an opaque hash), which is not a node id and is not present in any
+    text index — so ``get_node`` and ``search_fuzzy`` both miss it. Scan
+    the graph (same approach as the structured tools) and prefer a node
+    tagged ``document``; on chunk-only corpora fall back to any node
+    carrying the ``doc_id`` and hop to its CONTAINS parent.
+    """
+    nodes = await backend.list_nodes(kind=None, limit=200_000)
+    chunk_match: Node | None = None
+    for n in nodes:
+        if (n.properties or {}).get("doc_id") != doc_id:
+            continue
+        if "document" in (n.tags or []):
+            return n  # the document node itself — best match
+        if chunk_match is None:
+            chunk_match = n
+    if chunk_match is not None:
+        parent = await _parent_via_contains(backend, chunk_match.id)
+        return parent if parent is not None else chunk_match
+    return None
+
+
 async def get_document_tool(
     backend: StorageBackend,
     session: SearchSession,
@@ -483,18 +521,23 @@ async def get_document_tool(
     if budget is not None:
         return budget
 
-    # The agent may hand us either the doc_node_id (e.g. "doc_abc") or
-    # the raw doc_id from properties. Try the direct lookup first.
+    # The agent may hand us any of three id namespaces:
+    #   1. a document node id   ("doc_abc")
+    #   2. a chunk node id      ("chunk_abc")  — hop to its parent
+    #   3. a bare `doc_id` *property* value — what search/deep_search
+    #      results actually expose. This is NOT a node id, so the direct
+    #      lookup misses; resolve it by scanning for the carrying node.
     doc_node: Node | None = await backend.get_node(doc_id)
+
+    if doc_node is not None and doc_node.kind == NodeKind.CHUNK:
+        # Agent passed a chunk id — hop to the parent document via the
+        # incoming CONTAINS edge so we return the whole document.
+        parent = await _parent_via_contains(backend, doc_node.id)
+        if parent is not None:
+            doc_node = parent
+
     if doc_node is None:
-        # Fall back: use search_fuzzy to find by doc_id string instead
-        # of loading all nodes into memory. Much cheaper on large corpora.
-        candidates = await backend.search_fuzzy(doc_id, limit=50)
-        for n in candidates:
-            props = n.properties or {}
-            if props.get("doc_id") == doc_id and "document" in (n.tags or []):
-                doc_node = n
-                break
+        doc_node = await _resolve_by_doc_id_property(backend, doc_id)
 
     if doc_node is None:
         return ToolResult(
@@ -511,6 +554,11 @@ async def get_document_tool(
     chunk_ids = [e.target_id for e in edges if e.kind == EdgeKind.CONTAINS][:max_chunks]
 
     chunks = await backend.get_nodes_batch(chunk_ids)
+
+    # Chunk-only corpus with no parent document — return the node itself
+    # so the agent still gets content instead of an empty result.
+    if not chunks and doc_node.kind == NodeKind.CHUNK:
+        chunks = [doc_node]
 
     chunks.sort(key=lambda c: int((c.properties or {}).get("chunk_index", "0") or "0"))
 
