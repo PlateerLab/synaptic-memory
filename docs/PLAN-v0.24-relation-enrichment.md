@@ -93,23 +93,33 @@ GraphExpander는 REFERENCES를 retrieval에 수동 반영한다. agent가 능동
   annotation 추가.
 - agent가 `follow(node, "references")`를 쓰도록 tool hint 강화.
 
-## 2. Phase 2 — 관계 강화 일반화 (측정 1회)
+## 2. Phase 2 — 관계 강화 일반화 ✅ 완료
 
-finreg-전용 `eval/datasets/link_finreg_references.py`를 재사용 가능한
-범용 메커니즘으로 승격.
+finreg-전용 `link_finreg_references.py`를 corpus-agnostic 메커니즘으로 승격.
 
-### WS-A: StructuralReferenceLinker
+### WS-A: StructuralReferenceLinker ✅ (commit 5069a06, ee785eb)
 
-- 범용 extension: DomainProfile이 `reference_patterns`(정규식) +
-  `target_resolver`(clean target index 빌더) 스펙을 주입.
-- **clean-target gate** — target inventory가 깨끗하지 않으면 no-op.
+- 범용 extension `structural_reference_linker.py`. DomainProfile이
+  `reference_key_property` (+ optional `reference_scope_property`)만
+  선언하면 동작.
+- **매처 자동 도출** — corpus의 실제 key 값들("제1조"…"제561조")에서
+  alternation 매처를 빌드. corpus별 정규식 손수 작성 불요. (하드코딩 회피)
+  `reference_token_pattern`은 surface-form 불일치 시의 optional override.
+- **clean-target gate** — key 충돌률 > 10%면 자기 차단 + no-op.
   ReferenceLinker(v0.23) measured negative의 교훈을 코드로 강제.
-- 추가 관계종:
-  - 별표·서식 참조 (ANNEX)
-  - cross-law 참조 (「은행법」 제X조 → 타 법령 조문)
-  - 법률 ↔ 시행령 ↔ 시행규칙 위임 관계 (IMPLEMENTS)
-- GraphExpander `_expand_references`는 이미 범용 — 재사용.
-- v0.23 ReferenceLinker는 이 메커니즘으로 흡수/대체 검토.
+- `DocumentIngester.ingest()`에 hook — `from_data()` 포함 모든 인제스트
+  경로가 자동 적용. v0.23 ReferenceLinker 대체.
+
+**실측 검증 (실제 그래프, end-to-end)**:
+- finreg (clean target inventory): 8,427 REFERENCES 엣지 생성. 손으로 짠
+  전용 스크립트(8,393)와 동등.
+- KRRA (clean citation-key 없음): 게이트가 3가지 경우 모두 안전하게
+  no-op — 설정 없음 / key=category (99% 충돌) / key=doc_id (94% 충돌).
+
+→ "프로파일에 식별자 속성 1~2줄 + `from_data()` → multi-hop 관계 자동
+구축; 부적합 corpus 엔 무해한 no-op" 가 코드로 참.
+
+추가 관계종 (별표 ANNEX, cross-law, 법률↔시행령 IMPLEMENTS)은 후속 과제.
 
 ## 3. Phase 3 — 규모 & 일반성 검증 (측정 1회)
 

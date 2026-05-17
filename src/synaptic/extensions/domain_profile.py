@@ -323,6 +323,13 @@ class DomainProfile:
             "document_preview_chars": self.document_preview_chars,
             "ontology_hints": {k: v.value.upper() for k, v in self.ontology_hints.items()},
             "authority_by_kind": {k.value.upper(): v for k, v in self.authority_by_kind.items()},
+            "reference_key_property": self.reference_key_property,
+            "reference_scope_property": self.reference_scope_property,
+            "reference_token_pattern": (
+                self.reference_token_pattern.pattern
+                if self.reference_token_pattern is not None
+                else ""
+            ),
         }
         return out
 
@@ -349,6 +356,14 @@ class DomainProfile:
         lines.append(f"max_df_ratio = {data['max_df_ratio']}")
         lines.append(f"min_phrase_len = {data['min_phrase_len']}")
         lines.append(f"max_phrase_len = {data['max_phrase_len']}")
+        for ref_key in (
+            "reference_key_property",
+            "reference_scope_property",
+            "reference_token_pattern",
+        ):
+            ref_val = data.get(ref_key, "")
+            if ref_val:
+                lines.append(f'{ref_key} = "{_toml_escape(str(ref_val))}"')
         lines.append("")
 
         for key in (
