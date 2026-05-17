@@ -66,6 +66,7 @@ logger = logging.getLogger("hybrid-reranker")
 
 _REASON_PRIOR: dict[str, float] = {
     "seed": 1.00,
+    "references": 0.85,
     "document_chunk": 0.70,
     "chunk_next": 0.55,
     "entity_mention": 0.50,
@@ -73,6 +74,14 @@ _REASON_PRIOR: dict[str, float] = {
     "ppr_discovery": 0.45,
     "category_sibling": 0.40,
 }
+
+# A document reached via a REFERENCES edge points *elsewhere* — by nature
+# it shares little query vocabulary with the citing document, so lexical +
+# semantic score it near-zero and it is reranked out even when the citing
+# document is a strong hit. Lift each reference-expanded node to this
+# fraction of its anchor seed's total so a cited provision survives in
+# top-k alongside the document that cites it.
+_REFERENCE_COMPANION_FACTOR = 0.9
 
 
 @dataclass(slots=True)
@@ -101,6 +110,7 @@ class ScoredCandidate:
     graph: float
     structural: float
     reason: str
+    anchor_id: str = ""
 
 
 @dataclass(slots=True)
@@ -275,6 +285,7 @@ class HybridReranker:
                     graph=graph,
                     structural=struct,
                     reason=ex.reason,
+                    anchor_id=ex.anchor_hit or "",
                 )
             )
 
@@ -299,6 +310,21 @@ class HybridReranker:
                 if len(siblings) > 1:
                     coverage = 0.05 * math.log(len(siblings) + 1)
                     s.total = min(1.0, s.total + coverage)
+
+        # --- Reference-companion lift ---
+        # Lift each REFERENCES-expanded node to a fraction of its anchor
+        # seed's score so a cited document survives in top-k next to the
+        # document that cites it. The lift is proportional, so it is
+        # self-gating: a weak citing seed cannot promote its citations.
+        by_id = {s.node.id: s for s in scored}
+        for ex in expanded:
+            if ex.reason != "references" or not ex.anchor_hit:
+                continue
+            cand = by_id.get(ex.node.id)
+            anchor = by_id.get(ex.anchor_hit)
+            if cand is None or anchor is None:
+                continue
+            cand.total = max(cand.total, _REFERENCE_COMPANION_FACTOR * anchor.total)
 
         scored.sort(key=lambda s: s.total, reverse=True)
         return scored

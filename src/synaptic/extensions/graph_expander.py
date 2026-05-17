@@ -164,24 +164,33 @@ class GraphExpander:
         for node in seed_nodes:
             state.add(ExpandedNode(node=node, reason="seed", hops=0))
 
-        # Step 2 — walk category siblings. Categories are a cheap way
+        # Step 2 — REFERENCES edges (explicit document cross-references,
+        # e.g. a statute article citing another article). Runs first
+        # among the expansion paths: a cited document is the highest-value
+        # neighbour there is, so it must get budget priority over cheaper
+        # category / chunk expansion. Turns "follow the citation"
+        # multi-hop retrieval into a single structural hop.
+        # No-op on corpora without REFERENCES edges.
+        await self._expand_references(seed_nodes, state)
+
+        # Step 3 — walk category siblings. Categories are a cheap way
         # to surface cross-document context that lexical FTS misses.
         await self._expand_category_siblings(anchors, state)
 
-        # Step 3 — for every seed document, pull its chunks; for every
+        # Step 4 — for every seed document, pull its chunks; for every
         # seed chunk, pull its parent document (and its sibling chunks).
         # This is the "stay inside the same document" expansion.
         await self._expand_document_scope(seed_nodes, state)
 
-        # Step 4 — chunk-next sequence walk. Cheap and often useful for
+        # Step 5 — chunk-next sequence walk. Cheap and often useful for
         # narrative documents where the relevant answer spans neighbours.
         await self._expand_chunk_next(seed_nodes, state)
 
-        # Step 5 — entity mentions. Only triggers if the corpus has
+        # Step 6 — entity mentions. Only triggers if the corpus has
         # ENTITY hub nodes (post-processed by EntityLinker).
         await self._expand_entity_mentions(seed_nodes, state)
 
-        # Step 6 — RELATED edges (FK relationships for structured data).
+        # Step 7 — RELATED edges (FK relationships for structured data).
         # For ENTITY nodes from TableIngester/DbIngester, RELATED edges
         # represent foreign-key relationships (e.g., product→sales,
         # product→reviews). These are valuable for cross-table discovery.
@@ -401,6 +410,53 @@ class GraphExpander:
                     ExpandedNode(
                         node=other,
                         reason="related",
+                        hops=1,
+                        anchor_hit=seed.id,
+                    )
+                )
+                added += 1
+
+    async def _expand_references(
+        self,
+        seed_nodes: list[Node],
+        state: _ExpansionState,
+    ) -> None:
+        """Walk REFERENCES edges from seed nodes (explicit cross-references).
+
+        REFERENCES edges connect a document to another document it
+        explicitly cites (e.g. a statute article → the article it
+        invokes). Surfacing the cited document alongside the citing one
+        makes "follow the citation" multi-hop retrieval a single hop —
+        single-shot search alone cannot reach the cited document when the
+        query shares no vocabulary with it.
+
+        No-op on corpora without REFERENCES edges. Capped per seed.
+        """
+        for seed in seed_nodes:
+            if state.is_full():
+                return
+            try:
+                edges = await self._backend.get_edges(seed.id, direction="both")
+            except Exception as exc:
+                logger.debug("reference expansion failed for %s: %s", seed.id, exc)
+                continue
+
+            added = 0
+            for edge in edges:
+                if state.is_full() or added >= state.budget.max_per_anchor:
+                    break
+                if edge.kind != EdgeKind.REFERENCES:
+                    continue
+                other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
+                if state.contains(other_id):
+                    continue
+                other = await self._backend.get_node(other_id)
+                if other is None:
+                    continue
+                state.add(
+                    ExpandedNode(
+                        node=other,
+                        reason="references",
                         hops=1,
                         anchor_hit=seed.id,
                     )

@@ -70,6 +70,9 @@ class EdgeKind(StrEnum):
     MENTIONS = "mentions"
     EXTRACTED_FROM = "extracted_from"
     NEXT_CHUNK = "next_chunk"
+    # Explicit cross-reference between documents (e.g. a statute article
+    # citing another article). Traversable via the agent ``follow`` tool.
+    REFERENCES = "references"
 
 
 @dataclass(slots=True)

@@ -67,6 +67,10 @@ logger = logging.getLogger("evidence-aggregator")
 
 _TOKEN = re.compile(r"[A-Za-z가-힣]{2,}")
 
+# Max REFERENCES-companion documents pulled in alongside a single chosen
+# node, to bound fan-out on heavily cross-referential corpora.
+_MAX_COMPANIONS_PER_ANCHOR = 3
+
 
 def _tokens(text: str) -> set[str]:
     if not text:
@@ -262,12 +266,21 @@ class EvidenceAggregator:
             best_idx = -1
             best_adj = -math.inf
             for i, cand in enumerate(remaining):
+                # A node reached via a REFERENCES edge is a deliberate
+                # cross-reference, not a redundant near-duplicate — yet
+                # cited documents in the same corpus share boilerplate
+                # vocabulary, so MMR's Jaccard similarity wrongly flags
+                # them as duplicates and skips them. Reference companions
+                # bypass the diversity *skip* (they are never eliminated
+                # as duplicates) but still compete on the normal MMR-
+                # adjusted score, so they cannot crowd out the seeds.
+                is_reference = cand.reason == "references"
                 cand_tokens = _tokens(cand.node.content)
                 sim_max = max(
                     (_jaccard(cand_tokens, t) for t in selected_tokens),
                     default=0.0,
                 )
-                if sim_max >= self._sim_threshold:
+                if sim_max >= self._sim_threshold and not is_reference:
                     continue
                 adjusted = self._lambda * cand.total - (1.0 - self._lambda) * sim_max
 
@@ -289,6 +302,27 @@ class EvidenceAggregator:
             selected_tokens.append(_tokens(evidence.node.content))
             if evidence.document_id:
                 doc_counts[evidence.document_id] = doc_counts.get(evidence.document_id, 0) + 1
+
+            # Companion attach — a document the chosen node explicitly
+            # cites (REFERENCES edge) rides in *with* it as a bundle.
+            # This is the multi-hop payload: a cited provision shares no
+            # query vocabulary with the query, so it can only enter as a
+            # companion of the document that cites it. Bypasses MMR /
+            # per-doc cap; capped per anchor to bound fan-out.
+            companions = [
+                c
+                for c in remaining
+                if c.reason == "references" and c.anchor_id == chosen.node.id
+            ]
+            for comp in companions[:_MAX_COMPANIONS_PER_ANCHOR]:
+                remaining.remove(comp)
+                comp_ev = _make_evidence(comp, reason="reference_companion")
+                selected.append(comp_ev)
+                selected_tokens.append(_tokens(comp_ev.node.content))
+                if comp_ev.document_id:
+                    doc_counts[comp_ev.document_id] = (
+                        doc_counts.get(comp_ev.document_id, 0) + 1
+                    )
 
         return selected
 
