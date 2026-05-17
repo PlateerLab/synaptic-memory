@@ -317,6 +317,7 @@ async def run_public_dataset(
     embedder: object | None = None,
     reranker: object | None = None,
     entity_linker_cfg: tuple[int, float] | None = None,
+    reference_linker: bool = False,
 ) -> RunResult:
     """Run a public benchmark dataset — full pipeline: ingest → index → search.
 
@@ -427,6 +428,24 @@ async def run_public_dataset(
             max_links_per_source=15,
         )
         await linker.link(backend, source_kind=_NK.CONCEPT)
+
+    # Post-hoc connective-pattern typed-edge extraction (Korean only).
+    if reference_linker:
+        from synaptic.extensions.domain_profile import DomainProfile
+        from synaptic.extensions.reference_linker import ReferenceLinker
+        from synaptic.models import NodeKind as _NK
+
+        ref_linker = ReferenceLinker(
+            DomainProfile(name=f"{cfg.name}-eval", locale="multi")
+        )
+        ref_stats = await ref_linker.link(backend, source_kind=_NK.CONCEPT)
+        print(
+            f"  [ReferenceLinker {cfg.name}] {ref_stats.edges_created} edges "
+            f"{ref_stats.by_kind} | raw={ref_stats.raw_matches} "
+            f"unresolved={ref_stats.unresolved} "
+            f"targets={ref_stats.target_index_size}",
+            flush=True,
+        )
 
     # Parse queries — support both list and BEIR dict format
     qrels = data.get("relevant_docs", data.get("qrels", {}))
@@ -1930,6 +1949,13 @@ def _parse_args():
         "graphs are left untouched.",
     )
     p.add_argument(
+        "--reference-linker",
+        action="store_true",
+        help="Run post-hoc connective-pattern ReferenceLinker on each public "
+        "benchmark corpus — emits typed semantic edges (DEPENDS_ON/CAUSED/"
+        "SUPERSEDES/CONTRADICTS). Korean corpora only; no-ops elsewhere.",
+    )
+    p.add_argument(
         "--entity-min-df",
         type=int,
         default=2,
@@ -2061,6 +2087,7 @@ async def main():
                     embedder=shared_embedder,
                     reranker=shared_reranker,
                     entity_linker_cfg=entity_linker_cfg,
+                    reference_linker=args.reference_linker,
                 )
             results.append(r)
             if r.error:

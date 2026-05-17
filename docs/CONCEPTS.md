@@ -889,7 +889,19 @@ Blend sweep (5 벤치 × 3 blend, `sweep_rerank_blend.py`):
 
 **현재 상태**: commit `7472dc0` 에서 default 0.1 로 변경. 5 벤치 평균 +3.2pp. Retrieval-style corpus 는 여전히 FTS-only 가 ceiling (AutoRAG 0.906 vs full-pipeline 0.766). 사용자 가이드에 "corpus 유형별 reranker opt-in/opt-out" 권고.
 
-### 13.5 교훈 한줄 요약
+### 13.5 ReferenceLinker (접속어 패턴 typed 엣지) — KRRA 정밀도 ~50%, 게이트 미통과
+
+가설: 한국어 접속어(`…에 따라`→`DEPENDS_ON`, `…로 인해`→`CAUSED`, `…를 개정`→`SUPERSEDES`, `…와 달리`→`CONTRADICTS`)를 LLM 없이 스캔해 typed 시맨틱 엣지를 corpus 에 추가한다. 설계: `PLAN-v0.23-reference-linker.md`.
+
+측정 (KRRA `krra_graph.sqlite`, CHUNK 18,600 스캔):
+- 접속어 패턴은 강하게 작동 — raw match 5,965건.
+- window + clean-dict 필터 후 해소율 91.9%, typed 엣지 5,484개 생성.
+- 그러나 20-샘플 검수 정밀도 **~50%** — §7 게이트(≤10% 오결합) 미통과.
+- 원인: 타깃이 되는 ENTITY phrase-hub 70,405개가 깨끗한 엔티티가 아님 (`하는 계약`, `준하여 지급한다`, `직급별로 근무평` 등 문법 파편). 어미 필터는 5%만 제거. 타깃을 깨끗한 CONCEPT 카테고리(155개)로 좁히면 정밀도는 오르나 엣지 11개 — recall 무용.
+
+**현재 상태**: `--reference-linker` flag 로 opt-in, default-off. 접속어 타이핑(어떤 관계인가)은 LLM-free 로 작동하나, 타깃 해소(무엇을 가리키는가)는 깨끗한 엔티티 인벤토리 없이 불가. `PLAN-v0.18` §Q2 OpenIE 트랙이 clean entity/triple 노드를 만들면 그 위에서 재측정 가치 있음.
+
+### 13.6 교훈 한줄 요약
 
 > **"Mechanism 추가 = 품질 개선" 이라는 전제는 corpus 유형에 따라 부합하지 않는다.**
 > FTS 랭킹이 이미 near-optimal 인 corpus 에서 bridging / reranking / decomposition
