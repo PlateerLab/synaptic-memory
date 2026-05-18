@@ -8,13 +8,18 @@
 
 ## 헤드라인
 
-같은 corpus, 같은 LLM-judge, 같은 모델로 vanilla RAG와 synaptic-memory를
-정면 비교한 결과:
+같은 corpus·GT·LLM-judge·모델로 vanilla RAG, **HippoRAG2**(학술 graph+PPR
+베이스라인), synaptic-memory 를 정면 비교한 결과:
 
-| 쿼리 유형 | vanilla RAG | synaptic-memory | 차이 |
+| 쿼리 유형 | vanilla RAG | HippoRAG2 | synaptic-memory |
 |---|---:|---:|---:|
-| single-hop (조문 1개로 답) | 94% | 94% | 동률 |
-| **multi-hop (조문 상호참조 추종)** | **0%** | **83%** | **+83pp** |
+| single-hop (조문 1개로 답) | 94% | — | 94% |
+| **multi-hop (조문 상호참조 추종)** | **0%** | **25%** | **83%** |
+
+multi-hop 120문항, 동일 finreg corpus(4,417 조문). HippoRAG2 는 LLM OpenIE
+로 퍼지 엔티티 triple 을 추출해 PPR 로 검색 — vanilla RAG(0%)보다는 낫지만
+"제30조" 같은 정확한 상호참조를 깨끗한 엣지로 잡지 못해 25% 에 그친다.
+synaptic 은 상호참조를 `REFERENCES` 엣지로 정확히 1-hop 화 → 83%.
 
 ## 결론
 
@@ -108,6 +113,35 @@ EvidenceAggregator) 위에서 도는 멀티턴 agent. agent는 `search` /
   인용 조문을 후보로 끌어온다. +48pp.
 - **WS-B 83%** — 인용 조문은 질의와 어휘가 겹치지 않아 재랭킹에서 탈락하던
   문제를 "참조-동반 lift + 묶음 선택"으로 해결. +10pp.
+
+### HippoRAG2 — named 경쟁자 head-to-head (25%)
+
+vanilla RAG 는 "단발 검색" 베이스라인이다. "최고 GraphRAG"를 주장하려면
+다른 *그래프* 시스템도 이겨야 한다. HippoRAG2(NeurIPS'24 / ICML'25 —
+LLM-추출 엔티티 그래프 위의 Personalized PageRank)를 동일 finreg
+corpus(4,417 조문)·동일 120 multi-hop GT·strict 채점으로 측정했다.
+
+| 시스템 | multi-hop solved |
+|---|---:|
+| vanilla RAG | 0/120 (0%) |
+| HippoRAG2 | 30/120 (25%) |
+| synaptic-memory | 100/120 (83%) |
+
+- 셋업: HippoRAG2 의 OpenIE 추출 LLM 은 synaptic agent 벤치와 동일한
+  로컬 vLLM Qwen3.6-27B. HippoRAG2 는 한국어 임베더가 없어(contriever /
+  NV-Embed-v2 / GritLM — 전부 영어), 공정성을 위해 synaptic full
+  pipeline 과 같은 급의 한국어 임베더(bge-m3)를 어댑터로 주입했다 —
+  HippoRAG 의 그래프 알고리즘을 임베더 부재로 불리하게 만들지 않기 위함.
+- HippoRAG2 인덱싱: 4,417 조문 → 10,732 노드 + 20,143 triple 추출.
+- **왜 25% 인가**: HippoRAG2 는 LLM OpenIE 로 *퍼지 엔티티 triple*
+  (`금융감독원장`, `과징금` …)을 뽑는다. "제30조" 라는 정확한 상호참조는
+  엔티티가 아니라 *구조*다 — OpenIE 가 깨끗한 엣지로 잡지 못한다. PPR 이
+  엔티티 공유를 통해 A·B 를 가끔 잇지만 불안정하다. synaptic 은 인용을
+  `REFERENCES` 엣지로 정확히 1-hop 화한다.
+- 정직 조항: HippoRAG2 의 OpenIE 프롬프트는 영어 튜닝이다(Qwen 은
+  다국어라 20k triple 을 정상 추출했지만, 한국어 법령에서 영어 대비
+  약간의 불리함은 가능). 그럼에도 25% vs 83% 격차는 임베더·프롬프트
+  요인으로 설명되지 않는 구조적 차이다.
 
 ### 실패 분석 — 남은 20건
 

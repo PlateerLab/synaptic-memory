@@ -18,21 +18,27 @@ v0.24 에서 측정된 사실:
 그건 index-time LLM 을 부른다. v0.25 는 비용 포지션을 깨지 않고 — 레인을
 좁혀 그 안에서 최고가 된다.
 
-## 1. WS-2 (우선) — 경쟁자 head-to-head, 외부 증거
+## 1. WS-2 — 경쟁자 head-to-head ✅ 완료
 
-가장 고레버리지. 새 메커니즘 0 — 이미 있는 결과(0→83%)와 비교 하베스로
-"최고"를 입증한다.
+**측정 완료 (HippoRAG2, 2026-05-18)**:
 
-- `docs/comparison/` 의 기존 경쟁자 하베스를 finreg multi-hop corpus 에
-  적용. **GraphRAG / LightRAG / HippoRAG2** 를 같은 corpus·GT·judge 로 측정.
-- 가설(검증 대상): 경쟁자들은 조문 상호참조 구조를 안 쓰므로 multi-hop 에서
-  낮게 나온다 → synaptic 의 압도가 *named 경쟁자 대비*로 입증된다.
-- corpus 출처는 law.go.kr(공개·권위)이고 빌드 스크립트가 재현 가능 →
-  "self-built 라 못 믿겠다"를 차단.
-- 산출물: `docs/comparison/` 에 cross-reference corpus 결과표 + `REPORT-
-  rag-vs-synaptic.md` 에 경쟁자 열 추가.
-- **정직 조항**: 경쟁자가 예상보다 잘 나오면 그대로 보고한다. measured
-  discipline.
+| 시스템 | finreg multi-hop (120q) |
+|---|---:|
+| vanilla RAG | 0% |
+| HippoRAG2 (NeurIPS'24 graph+PPR) | 25% |
+| synaptic-memory | 83% |
+
+- HippoRAG2 를 동일 finreg corpus(4,417 조문)·동일 120 GT·strict 채점으로
+  측정. OpenIE LLM 은 동일 vLLM Qwen3.6-27B. 공정성 위해 한국어 임베더
+  (bge-m3)를 어댑터로 주입(HippoRAG 기본은 영어 임베더뿐).
+- HippoRAG2 는 LLM OpenIE 로 퍼지 엔티티 triple 을 추출 → "제30조" 같은
+  정확한 상호참조를 깨끗한 엣지로 못 잡아 25%. synaptic 의 `REFERENCES`
+  엣지는 인용을 정확히 1-hop 화 → 83%.
+- **결론**: named 학술 경쟁자 대비 동일 조건 재현 가능 측정에서 83% vs
+  25% — "교차참조 corpus 최고 GraphRAG" 가 외부 증거로 입증됨.
+- 재현: `examples/benchmark_vs_competitors/finreg_hipporag.py`.
+  결과: `docs/REPORT-rag-vs-synaptic.md` §헤드라인, §B.3.
+- 미수행: GraphRAG / LightRAG (HippoRAG2 1종으로 핵심 입증 — 추가는 후속).
 
 ## 2. WS-1 — typed 구조 관계 (온톨로지 깊이)
 
