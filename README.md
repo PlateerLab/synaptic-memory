@@ -257,12 +257,15 @@ Measured impact — multi-hop retrieval went from **0% (vanilla RAG) to
 |----------|-----------------|-----------|
 | GraphRAG-style (MS GraphRAG, Cognee, Graphiti) | LLM extracts entities + relations + community summaries | Highest recall on narrative corpora, but every new document costs LLM tokens |
 | LightRAG-style | LLM deferred to query time | Less index cost, but each query pays |
-| **Synaptic** | **None.** Structural + statistical signals only (FK, NEXT_CHUNK, phrase DF hubs, MENTIONS) | Cheapest, deterministic, but won't synthesize new relations on its own |
+| **Synaptic** | **None.** Structural + statistical signals (FK, NEXT_CHUNK, phrase DF hubs, MENTIONS) + rule-based REFERENCES edges | Cheapest, deterministic; extracts explicit cross-references but won't *LLM-synthesize* fuzzy semantic relations |
 
 No LLM at indexing. The graph is a search index, not a knowledge base.
-If you need LLM-synthesized summaries on top of the graph, layer them
-with your own agent — Synaptic gives you the primitives and leaves
-the synthesis choice to you.
+Cross-references that documents state explicitly (statute article
+citations, clause codes) are turned into `REFERENCES` edges with
+zero LLM (see [Option D](#option-d-relation-ontology-multi-hop)). What
+Synaptic does *not* do is LLM-synthesize fuzzy semantic relations or
+community summaries — if you need those, layer them with your own
+agent; Synaptic gives you the primitives.
 
 > **v0.16.0+**: `graph.search()` defaults to the hybrid
 > EvidenceSearch pipeline (BM25 + HNSW + PPR + cross-encoder + MMR).
