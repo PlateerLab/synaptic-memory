@@ -34,6 +34,10 @@ _dsn: str = ""
 _source_dsn: str = ""  # Default source DB for CDC sync tools (optional)
 _embed_url: str = ""
 _embed_model: str = "default"
+_reranker: Any = None
+_rerank_url: str = ""
+_rerank_backend: str = "vllm"
+_rerank_model: str = "BAAI/bge-reranker-v2-m3"
 # Vector cascade tuning — see synaptic.search.HybridSearch docstring
 # for the per-embedder cosine distribution guide. None means "use
 # the package default" (DEFAULT_VECTOR_MIN_COSINE / RELATIVE_DROP),
@@ -59,7 +63,7 @@ def _get_init_lock() -> asyncio.Lock:
 
 async def _ensure_graph() -> Any:
     """Lazy-initialize the SynapticGraph on first use (concurrency-safe)."""
-    global _graph, _backend, _embedder
+    global _graph, _backend, _embedder, _reranker
 
     # Fast path: already initialised. No lock needed because `_graph`
     # is only assigned once and never reset at runtime.
@@ -96,6 +100,18 @@ async def _ensure_graph() -> Any:
             _embedder = OpenAIEmbeddingProvider(api_base=_embed_url, model=_embed_model)
             logger.info("Embedder configured: %s (model=%s)", _embed_url, _embed_model)
 
+        # Cross-encoder reranker — connect to a vLLM / Ollama / TEI server.
+        if _rerank_url:
+            from synaptic.extensions.reranker_cross import reranker_from_url
+
+            _reranker = reranker_from_url(
+                _rerank_url, backend=_rerank_backend, model=_rerank_model
+            )
+            logger.info(
+                "Reranker configured: %s (backend=%s, model=%s)",
+                _rerank_url, _rerank_backend, _rerank_model,
+            )
+
         # Wire the cross-document bridge mechanism.
         #
         # Without these, ingesting N files produces N isolated clusters
@@ -119,6 +135,7 @@ async def _ensure_graph() -> Any:
             tag_extractor=RegexTagExtractor(),
             ontology=build_agent_ontology(),
             embedder=_embedder,
+            reranker=_reranker,
             chunk_entity_index=ChunkEntityIndex(),
             phrase_extractor=PhraseExtractor(),
             vector_min_cosine=_vector_min_cosine,
@@ -184,7 +201,9 @@ async def knowledge_search(
     # legacy `graph.search` codepath stay independent.
     from synaptic.extensions.evidence_search import EvidenceSearch
 
-    searcher = EvidenceSearch(backend=graph.backend, embedder=_embedder)
+    searcher = EvidenceSearch(
+        backend=graph.backend, embedder=_embedder, reranker=_reranker
+    )
     result = await searcher.search(
         query,
         k=limit,
@@ -1523,6 +1542,7 @@ async def agent_deep_search(
         limit=limit,
         category=category or None,
         embedder=_embedder,
+        reranker=_reranker,
     )
     return result.to_dict()
 
@@ -1709,6 +1729,7 @@ async def agent_top_nodes(
 def main() -> None:
     """Entry point for synaptic-mcp command."""
     global _db_path, _dsn, _source_dsn, _embed_url, _embed_model
+    global _rerank_url, _rerank_backend, _rerank_model
     global _vector_min_cosine, _vector_relative_drop
 
     if "--version" in sys.argv:
@@ -1730,6 +1751,11 @@ def main() -> None:
             "                             Examples: http://localhost:8080/v1 (vLLM/llama.cpp)\n"
             "                                       http://localhost:11434/v1 (Ollama)\n"
             "  --embed-model NAME         Embedding model name (default: 'default')\n"
+            "  --rerank-url URL           Cross-encoder reranker server base URL\n"
+            "                             Examples: http://localhost:8001 (vLLM --task score)\n"
+            "                                       http://localhost:11434 (Ollama)\n"
+            "  --rerank-backend NAME      Reranker wire format: vllm (default), ollama, tei\n"
+            "  --rerank-model NAME        Reranker model name (default: BAAI/bge-reranker-v2-m3)\n"
             "  --vector-min-cosine FLOAT  Absolute noise floor for vector cascade (default 0.10)\n"
             "  --vector-relative-drop FLOAT\n"
             "                             Fraction below the top vector hit that is still\n"
@@ -1756,6 +1782,12 @@ def main() -> None:
             _embed_url = args[i + 1]
         elif arg == "--embed-model" and i + 1 < len(args):
             _embed_model = args[i + 1]
+        elif arg == "--rerank-url" and i + 1 < len(args):
+            _rerank_url = args[i + 1]
+        elif arg == "--rerank-backend" and i + 1 < len(args):
+            _rerank_backend = args[i + 1]
+        elif arg == "--rerank-model" and i + 1 < len(args):
+            _rerank_model = args[i + 1]
         elif arg == "--vector-min-cosine" and i + 1 < len(args):
             try:
                 _vector_min_cosine = float(args[i + 1])
@@ -1787,6 +1819,11 @@ def main() -> None:
     )
     if _embed_url:
         logger.info("Embedding: %s (model=%s)", _embed_url, _embed_model)
+    if _rerank_url:
+        logger.info(
+            "Reranking: %s (backend=%s, model=%s)",
+            _rerank_url, _rerank_backend, _rerank_model,
+        )
     server.run()
 
 

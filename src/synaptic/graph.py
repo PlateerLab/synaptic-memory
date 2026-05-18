@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import unicodedata
 from difflib import SequenceMatcher
 from time import time
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 
 def _nfc(s: str) -> str:
@@ -98,6 +101,7 @@ class SynapticGraph:
         "_cache",
         "_chunk_entity_index",
         "_classifier",
+        "_connected",
         "_consolidation",
         "_corpus_size",
         "_embedder",
@@ -154,6 +158,46 @@ class SynapticGraph:
         self._reranker = reranker
         self._agent_search = AgentSearch(hybrid=self._search)
         self._corpus_size = 0
+        # Tracks whether this graph has connected its backend, so
+        # connect() is idempotent and the one-line constructors (which
+        # connect eagerly) don't double-connect via ``async with``.
+        self._connected = False
+
+    # --- Lifecycle ---
+
+    async def connect(self) -> None:
+        """Connect the underlying storage backend. Idempotent.
+
+        Gives every graph a uniform lifecycle regardless of how it was
+        built: the ``memory()`` / ``sqlite()`` / ``full()`` factories
+        return an unconnected graph — call this (or use ``async with``)
+        instead of reaching into ``graph.backend``.
+        """
+        if self._connected:
+            return
+        connect = getattr(self._backend, "connect", None)
+        if connect is not None:
+            await connect()
+        self._connected = True
+
+    async def close(self) -> None:
+        """Close the underlying storage backend and release its resources.
+
+        Safe to call more than once. Pairs with the one-line
+        constructors (which connect the backend for you) so a caller
+        never has to reach into ``graph.backend`` to clean up.
+        """
+        close = getattr(self._backend, "close", None)
+        if close is not None:
+            await close()
+        self._connected = False
+
+    async def __aenter__(self) -> SynapticGraph:
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.close()
 
     # --- Factory methods ---
 
@@ -187,7 +231,7 @@ class SynapticGraph:
         Example::
 
             graph = SynapticGraph.sqlite("knowledge.db")
-            await graph.backend.connect()
+            await graph.connect()
             await graph.add("Hello", "World")
         """
         from synaptic.backends.sqlite import SQLiteBackend
@@ -218,7 +262,7 @@ class SynapticGraph:
         Example::
 
             graph = SynapticGraph.kuzu("knowledge.kuzu")
-            await graph.backend.connect()
+            await graph.connect()
             await graph.add("Hello", "World")
         """
         from synaptic.backends.kuzu import KuzuBackend
@@ -301,15 +345,94 @@ class SynapticGraph:
 
     # --- Easy API ---
 
+    @staticmethod
+    async def _open_backend(backend: StorageBackend | None, db: str) -> StorageBackend:
+        """Resolve the storage backend for a one-line constructor.
+
+        When ``backend`` is given it is used as-is — the caller owns its
+        connection lifecycle (same contract as the ``SynapticGraph``
+        constructor). When omitted, a SQLite graph backend is created at
+        ``db`` and connected. This is what lets the one-line API target
+        Postgres / Kuzu / Composite instead of being locked to SQLite.
+        """
+        if backend is not None:
+            return backend
+        from synaptic.backends.sqlite_graph import SqliteGraphBackend
+
+        b = SqliteGraphBackend(db)
+        await b.connect()
+        return b
+
+    @staticmethod
+    async def _embed_all_nodes(backend: StorageBackend, embedder: object) -> None:
+        """Embed every node in the graph in batches.
+
+        Shared by ``from_data`` / ``from_chunks`` / ``from_database`` so
+        the embedding pass exists in exactly one place.
+        """
+        nodes = await backend.list_nodes(kind=None, limit=100_000)
+        for i in range(0, len(nodes), 32):
+            batch = nodes[i : i + 32]
+            texts = [f"{n.title}\n{(n.content or '')[:300]}" for n in batch]
+            try:
+                vecs = await embedder.embed_batch(texts)  # type: ignore[attr-defined]
+                for n, v in zip(batch, vecs):
+                    if v:
+                        n.embedding = v
+                        await backend.save_node(n)
+            except Exception:
+                logger.warning("embedding pass failed for a batch", exc_info=True)
+
+    @classmethod
+    async def _finalize(
+        cls,
+        backend: StorageBackend,
+        *,
+        embed_url: str | None,
+        embed_model: str,
+        rerank_url: str | None = None,
+        rerank_backend: str = "vllm",
+        rerank_model: str = "BAAI/bge-reranker-v2-m3",
+    ) -> SynapticGraph:
+        """Run the optional embedding pass and assemble the graph.
+
+        Builds the embedder / reranker from URLs and — crucially —
+        wires both into the returned graph so query-time vector search
+        and reranking work without the caller re-supplying them.
+        """
+        embedder: object | None = None
+        if embed_url:
+            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
+            embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
+            await cls._embed_all_nodes(backend, embedder)
+
+        reranker: object | None = None
+        if rerank_url:
+            from synaptic.extensions.reranker_cross import reranker_from_url
+
+            reranker = reranker_from_url(
+                rerank_url, backend=rerank_backend, model=rerank_model
+            )
+
+        graph = cls(backend, embedder=embedder, reranker=reranker)
+        # The one-line path connected the backend in _open_backend.
+        graph._connected = True
+        return graph
+
     @classmethod
     async def from_data(
         cls,
         data_path: str,
         *,
         db: str = "synaptic.db",
+        backend: StorageBackend | None = None,
         profile: object | None = None,
         embed_url: str | None = None,
         embed_model: str = "qwen3-embedding:4b",
+        rerank_url: str | None = None,
+        rerank_backend: str = "vllm",
+        rerank_model: str = "BAAI/bge-reranker-v2-m3",
     ) -> SynapticGraph:
         """ONE-LINE graph construction from any data source.
 
@@ -349,6 +472,11 @@ class SynapticGraph:
             )
 
         Args:
+            backend: Optional pre-built :class:`StorageBackend` — pass a
+                connected Postgres / Kuzu / Composite backend to target
+                it instead of the default SQLite. When given, the caller
+                owns its connection lifecycle. When omitted, a SQLite
+                graph backend is created at ``db``.
             profile: Optional :class:`DomainProfile` (or a TOML path).
                 When omitted, a profile is auto-generated from samples —
                 that builds the Category→Document→Chunk hierarchy but
@@ -356,10 +484,27 @@ class SynapticGraph:
                 (multi-hop ontology) the profile must declare
                 ``reference_key_property``; the auto-generated one never
                 does. See ``docs/PLAN-v0.24-relation-enrichment.md``.
+            embed_url: OpenAI-compatible ``/v1`` base URL for the
+                embedder. When set, nodes are embedded at ingest time
+                and the embedder is wired into the returned graph for
+                query-time vector search.
+            rerank_url: Base URL of a cross-encoder reranker server.
+                When set, a reranker is wired into the returned graph
+                (EvidenceSearch step 4b). ``rerank_backend`` selects
+                the wire format — ``"vllm"`` (default; ``vllm serve
+                <model> --task score``), ``"ollama"``, or ``"tei"``.
+
+        Example with a vLLM-served reranker::
+
+            graph = await SynapticGraph.from_data(
+                "./docs/",
+                embed_url="http://localhost:8000/v1",
+                rerank_url="http://localhost:8001",
+                rerank_model="BAAI/bge-reranker-v2-m3",
+            )
         """
         from pathlib import Path
 
-        from synaptic.backends.sqlite_graph import SqliteGraphBackend
         from synaptic.extensions.document_ingester import (
             DocumentIngester,
             JsonlDocumentSource,
@@ -368,8 +513,7 @@ class SynapticGraph:
         from synaptic.extensions.table_ingester import TableIngester
 
         path = Path(data_path)
-        backend = SqliteGraphBackend(db)
-        await backend.connect()
+        backend = await cls._open_backend(backend, db)
 
         # Detect data type and ingest. Document loader handles a wide
         # range of office formats (PDF, DOCX, PPTX, XLSX, HWP, MD, …)
@@ -515,27 +659,14 @@ class SynapticGraph:
                 finally:
                     Path(tmp.name).unlink(missing_ok=True)
 
-        # Optional: embed all nodes
-        if embed_url:
-            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
-
-            embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
-            nodes = await backend.list_nodes(kind=None, limit=100_000)
-            batch_size = 32
-            for i in range(0, len(nodes), batch_size):
-                batch = nodes[i : i + batch_size]
-                texts = [f"{n.title}\n{(n.content or '')[:300]}" for n in batch]
-                try:
-                    vecs = await embedder.embed_batch(texts)
-                    for n, v in zip(batch, vecs):
-                        if v:
-                            n.embedding = v
-                            await backend.save_node(n)
-                except Exception:
-                    pass
-
-        graph_obj = cls(backend)
-        return graph_obj
+        return await cls._finalize(
+            backend,
+            embed_url=embed_url,
+            embed_model=embed_model,
+            rerank_url=rerank_url,
+            rerank_backend=rerank_backend,
+            rerank_model=rerank_model,
+        )
 
     @classmethod
     async def from_chunks(
@@ -543,9 +674,13 @@ class SynapticGraph:
         chunks: list[dict],
         *,
         db: str = "synaptic.db",
+        backend: StorageBackend | None = None,
         profile: object | None = None,
         embed_url: str | None = None,
         embed_model: str = "qwen3-embedding:4b",
+        rerank_url: str | None = None,
+        rerank_backend: str = "vllm",
+        rerank_model: str = "BAAI/bge-reranker-v2-m3",
     ) -> SynapticGraph:
         """Ingest pre-parsed / pre-chunked documents directly.
 
@@ -574,9 +709,14 @@ class SynapticGraph:
             db: SQLite path for the new graph.
             profile: Optional DomainProfile. When omitted, a profile
                 is auto-generated from the first 20 chunks.
+            backend: Optional pre-built :class:`StorageBackend` (see
+                :meth:`from_data`). Defaults to SQLite at ``db``.
             embed_url: OpenAI-compatible endpoint to embed nodes after
-                ingest. Skipped when None.
+                ingest. When set, the embedder is also wired into the
+                returned graph for query-time vector search.
             embed_model: Embedder model name.
+            rerank_url: Optional cross-encoder reranker server URL — see
+                :meth:`from_data` for ``rerank_backend`` / ``rerank_model``.
 
         Example::
 
@@ -595,15 +735,13 @@ class SynapticGraph:
         # Lazy imports — keep top-level synaptic import light.
         from pathlib import Path as _Path
 
-        from synaptic.backends.sqlite_graph import SqliteGraphBackend
         from synaptic.extensions.document_ingester import (
             DocumentIngester,
             JsonlDocumentSource,
         )
         from synaptic.extensions.profile_generator import ProfileGenerator
 
-        backend = SqliteGraphBackend(db)
-        await backend.connect()
+        backend = await cls._open_backend(backend, db)
 
         # Auto-generate a profile from the first 20 chunks if the
         # caller didn't supply one. Same path as from_data().
@@ -652,25 +790,14 @@ class SynapticGraph:
         finally:
             _Path(tmp.name).unlink(missing_ok=True)
 
-        # Optional embedding pass — same logic as from_data().
-        if embed_url:
-            from synaptic.extensions.embedder import OpenAIEmbeddingProvider
-
-            embedder = OpenAIEmbeddingProvider(api_base=embed_url, model=embed_model)
-            nodes = await backend.list_nodes(kind=None, limit=100_000)
-            for i in range(0, len(nodes), 32):
-                batch = nodes[i : i + 32]
-                texts = [f"{n.title}\n{(n.content or '')[:300]}" for n in batch]
-                try:
-                    vecs = await embedder.embed_batch(texts)
-                    for n, v in zip(batch, vecs):
-                        if v:
-                            n.embedding = v
-                            await backend.save_node(n)
-                except Exception:
-                    pass
-
-        return cls(backend)
+        return await cls._finalize(
+            backend,
+            embed_url=embed_url,
+            embed_model=embed_model,
+            rerank_url=rerank_url,
+            rerank_backend=rerank_backend,
+            rerank_model=rerank_model,
+        )
 
     @classmethod
     async def from_database(
@@ -678,9 +805,15 @@ class SynapticGraph:
         connection_string: str,
         *,
         db: str = "synaptic.db",
+        backend: StorageBackend | None = None,
         tables: list[str] | None = None,
         row_limit: int = 500_000,
         mode: str = "full",
+        embed_url: str | None = None,
+        embed_model: str = "qwen3-embedding:4b",
+        rerank_url: str | None = None,
+        rerank_backend: str = "vllm",
+        rerank_model: str = "BAAI/bge-reranker-v2-m3",
     ) -> SynapticGraph:
         """ONE-LINE graph construction from a relational database.
 
@@ -717,14 +850,26 @@ class SynapticGraph:
             # Incremental sync mode
             graph = await SynapticGraph.from_database("sqlite:///shop.db", mode="cdc")
             result = await graph.sync_from_database("sqlite:///shop.db")
+
+            # With vector search + reranker (parity with from_data)
+            graph = await SynapticGraph.from_database(
+                "sqlite:///shop.db",
+                embed_url="http://localhost:8000/v1",
+                rerank_url="http://localhost:8001",
+            )
+
+        Args:
+            backend: Optional pre-built :class:`StorageBackend` for the
+                graph store — see :meth:`from_data`. Defaults to SQLite.
+            embed_url / rerank_url: Optional embedder / reranker server
+                URLs — same semantics as :meth:`from_data`.
         """
-        from synaptic.backends.sqlite_graph import SqliteGraphBackend
         from synaptic.extensions.db_ingester import DbIngester
 
-        backend = SqliteGraphBackend(db)
-        await backend.connect()
+        backend = await cls._open_backend(backend, db)
         graph = cls(backend)
         ingester = DbIngester()
+        cdc_done = False
 
         if mode not in ("full", "cdc", "auto"):
             msg = f"Unknown mode={mode!r}; expected 'full', 'cdc', or 'auto'"
@@ -759,8 +904,8 @@ class SynapticGraph:
                     tables=tables,
                     row_limit=row_limit,
                 )
-                return graph
-            if connection_string.startswith("postgresql"):
+                cdc_done = True
+            elif connection_string.startswith("postgresql"):
                 await ingester.sync_from_postgres(
                     connection_string,
                     graph,
@@ -768,8 +913,10 @@ class SynapticGraph:
                     tables=tables,
                     row_limit=row_limit,
                 )
-                return graph
-            if connection_string.startswith("mysql") or connection_string.startswith("mariadb"):
+                cdc_done = True
+            elif connection_string.startswith("mysql") or connection_string.startswith(
+                "mariadb"
+            ):
                 await ingester.sync_from_mysql(
                     connection_string,
                     graph,
@@ -777,11 +924,13 @@ class SynapticGraph:
                     tables=tables,
                     row_limit=row_limit,
                 )
-                return graph
+                cdc_done = True
             # Other dialects fall through to the legacy ingest_from_*
             # path with deterministic IDs (no incremental sync yet).
 
-        if connection_string.startswith("sqlite"):
+        if cdc_done:
+            pass
+        elif connection_string.startswith("sqlite"):
             # sqlite:///path or sqlite:path
             db_path = _parse_sqlite_url(connection_string)
             stats = await ingester.ingest_from_sqlite(
@@ -823,16 +972,66 @@ class SynapticGraph:
             msg = f"Unsupported database: {connection_string.split(':', maxsplit=1)[0]}. Use sqlite://, postgresql://, mysql://, oracle://, mssql://"
             raise ValueError(msg)
 
-        import logging
+        if not cdc_done:
+            logging.getLogger("db-ingester").info(
+                "from_database: %d tables, %d rows, %d nodes, %.1fs",
+                stats.tables_ingested,
+                stats.total_rows,
+                stats.total_nodes,
+                stats.elapsed_seconds,
+            )
 
-        logging.getLogger("db-ingester").info(
-            "from_database: %d tables, %d rows, %d nodes, %.1fs",
-            stats.tables_ingested,
-            stats.total_rows,
-            stats.total_nodes,
-            stats.elapsed_seconds,
+        return await cls._finalize(
+            backend,
+            embed_url=embed_url,
+            embed_model=embed_model,
+            rerank_url=rerank_url,
+            rerank_backend=rerank_backend,
+            rerank_model=rerank_model,
         )
-        return graph
+
+    # --- Synchronous constructors ---
+    #
+    # Thin blocking wrappers for callers not running an event loop
+    # (plain scripts, notebooks doing a one-time build). They only
+    # cover graph *construction* — the returned graph's methods
+    # (search, add, …) remain async.
+
+    @staticmethod
+    def _run_sync(coro: object) -> SynapticGraph:
+        """Run a constructor coroutine to completion on a fresh loop.
+
+        Raises a clear error when called from inside a running event
+        loop, where ``asyncio.run`` would deadlock — use the async
+        constructor directly there.
+        """
+        import asyncio
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)  # type: ignore[arg-type]
+        coro.close()  # type: ignore[attr-defined]
+        msg = (
+            "*_sync() cannot run inside an active event loop "
+            "(e.g. Jupyter / async code) — await the async constructor instead."
+        )
+        raise RuntimeError(msg)
+
+    @classmethod
+    def from_data_sync(cls, *args: object, **kwargs: object) -> SynapticGraph:
+        """Blocking wrapper for :meth:`from_data` — same arguments."""
+        return cls._run_sync(cls.from_data(*args, **kwargs))  # type: ignore[arg-type]
+
+    @classmethod
+    def from_chunks_sync(cls, *args: object, **kwargs: object) -> SynapticGraph:
+        """Blocking wrapper for :meth:`from_chunks` — same arguments."""
+        return cls._run_sync(cls.from_chunks(*args, **kwargs))  # type: ignore[arg-type]
+
+    @classmethod
+    def from_database_sync(cls, *args: object, **kwargs: object) -> SynapticGraph:
+        """Blocking wrapper for :meth:`from_database` — same arguments."""
+        return cls._run_sync(cls.from_database(*args, **kwargs))  # type: ignore[arg-type]
 
     async def sync_from_database(
         self,
@@ -1328,6 +1527,9 @@ class SynapticGraph:
         limit: int = 10,
         embedding: list[float] | None = None,
         engine: str = "evidence",
+        rerank: bool | None = None,
+        fts_seed_limit: int | None = None,
+        per_document_cap: int | None = None,
     ) -> SearchResult:
         """Hybrid search across the graph.
 
@@ -1355,6 +1557,16 @@ class SynapticGraph:
                   ``stages_used`` semantics; **deprecated, scheduled
                   for removal in v0.17.0**.
 
+            rerank: Per-call cross-encoder reranker override (evidence
+                engine only). ``None`` uses the graph's configured
+                reranker; ``False`` skips reranking for this query even
+                when one is wired; ``True`` is the same as ``None``.
+            fts_seed_limit: Per-call FTS seed-pool size. ``None`` uses
+                the ``max(20, limit * 3)`` default heuristic.
+            per_document_cap: Per-call cap on evidence items from any
+                single document — lower = more source diversity.
+                ``None`` uses the pipeline default (2).
+
         Returns:
             ``SearchResult`` regardless of which engine was used —
             the evidence-engine path runs through an internal adapter
@@ -1369,7 +1581,13 @@ class SynapticGraph:
 
         # Modern path — default from v0.16.0.
         if engine == "evidence":
-            return await self._search_via_evidence(query, limit=limit)
+            return await self._search_via_evidence(
+                query,
+                limit=limit,
+                rerank=rerank,
+                fts_seed_limit=fts_seed_limit,
+                per_document_cap=per_document_cap,
+            )
 
         if engine != "legacy":
             msg = f"Unknown search engine {engine!r}; expected 'legacy' or 'evidence'."
@@ -1479,7 +1697,15 @@ class SynapticGraph:
             stages_used=result.stages_used + ["rerank"],
         )
 
-    async def _search_via_evidence(self, query: str, *, limit: int) -> SearchResult:
+    async def _search_via_evidence(
+        self,
+        query: str,
+        *,
+        limit: int,
+        rerank: bool | None = None,
+        fts_seed_limit: int | None = None,
+        per_document_cap: int | None = None,
+    ) -> SearchResult:
         """Run the modern evidence pipeline and adapt its result to the
         legacy ``SearchResult`` shape.
 
@@ -1491,20 +1717,26 @@ class SynapticGraph:
         """
         from synaptic.extensions.evidence_search import EvidenceSearch
 
+        # rerank=False disables the cross-encoder for this query only.
+        active_reranker = None if rerank is False else self._reranker
         searcher = EvidenceSearch(
             backend=self._backend,
             embedder=self._embedder,
             phrase_extractor=self._phrase_extractor,
-            reranker=self._reranker,
+            reranker=active_reranker,
             decomposer=self._query_decomposer,
         )
-        ev_result = await searcher.search(
-            query,
-            k=limit,
+        search_kwargs: dict[str, object] = {
+            "k": limit,
             # Match the over-fetch heuristic agent_search_tool uses so
             # the reranker sees a richer pool than ``limit`` itself.
-            fts_seed_limit=max(20, limit * 3),
-        )
+            "fts_seed_limit": fts_seed_limit
+            if fts_seed_limit is not None
+            else max(20, limit * 3),
+        }
+        if per_document_cap is not None:
+            search_kwargs["per_document_cap"] = per_document_cap
+        ev_result = await searcher.search(query, **search_kwargs)
 
         # Adapter: Evidence (node + score + reason) → ActivatedNode
         # (node + activation + resonance). The legacy callers rely on

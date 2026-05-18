@@ -355,3 +355,88 @@ class TestCustomKind:
         node = await graph.add("Y", "y", kind=NodeKind.LESSON)
         assert node.kind == NodeKind.LESSON
         assert node.kind == "lesson"  # StrEnum == str
+
+
+class _SpyBackend(MemoryBackend):
+    """MemoryBackend that counts connect() / close() calls."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.close_calls = 0
+        self.connect_calls = 0
+
+    async def connect(self) -> None:
+        self.connect_calls += 1
+        await super().connect()
+
+    async def close(self) -> None:
+        self.close_calls += 1
+        await super().close()
+
+
+class TestGraphLifecycle:
+    async def test_close_closes_backend(self) -> None:
+        backend = _SpyBackend()
+        await SynapticGraph(backend).close()
+        assert backend.close_calls == 1
+
+    async def test_close_is_idempotent(self) -> None:
+        backend = _SpyBackend()
+        g = SynapticGraph(backend)
+        await g.close()
+        await g.close()  # second call must not raise
+        assert backend.close_calls == 2
+
+    async def test_connect_is_idempotent(self) -> None:
+        backend = _SpyBackend()
+        g = SynapticGraph(backend)
+        await g.connect()
+        await g.connect()  # flag-guarded — backend connected only once
+        assert backend.connect_calls == 1
+
+    async def test_async_context_manager_connects_and_closes(self) -> None:
+        backend = _SpyBackend()
+        async with SynapticGraph(backend) as g:
+            assert g is not None
+            assert backend.connect_calls == 1
+        assert backend.close_calls == 1
+
+
+class _SpyReranker:
+    """Records every rerank() call so tests can assert it ran (or didn't)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def rerank(self, query: str, documents: list[str]) -> list[float]:
+        self.calls += 1
+        return [1.0 - i * 0.01 for i in range(len(documents))]
+
+
+class TestSearchRuntimeOptions:
+    async def _graph(self, reranker: object) -> SynapticGraph:
+        backend = MemoryBackend()
+        await backend.connect()
+        g = SynapticGraph(backend, reranker=reranker)
+        for i in range(6):
+            await g.add(f"Doc {i}", f"content about retrieval topic {i}", kind=NodeKind.CONCEPT)
+        return g
+
+    async def test_default_search_uses_reranker(self) -> None:
+        spy = _SpyReranker()
+        g = await self._graph(spy)
+        await g.search("retrieval topic", limit=5)
+        assert spy.calls > 0
+
+    async def test_rerank_false_skips_reranker(self) -> None:
+        spy = _SpyReranker()
+        g = await self._graph(spy)
+        await g.search("retrieval topic", limit=5, rerank=False)
+        assert spy.calls == 0
+
+    async def test_per_call_options_run_without_error(self) -> None:
+        g = await self._graph(_SpyReranker())
+        result = await g.search(
+            "retrieval topic", limit=3, fts_seed_limit=40, per_document_cap=1
+        )
+        assert result is not None

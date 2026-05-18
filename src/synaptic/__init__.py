@@ -14,7 +14,7 @@ Quick Start
 2. SQLite (lightweight production)::
 
     graph = SynapticGraph.sqlite("knowledge.db")
-    await graph.backend.connect()
+    await graph.connect()
     await graph.add("Deploy Policy", "Auto-deploy after PR merge", kind=NodeKind.RULE)
 
 3. Full-featured (LLM classification + embedding + relation detection)::
@@ -27,7 +27,7 @@ Quick Start
         llm=OllamaLLMProvider(model="gemma3:4b"),
         embed_api_base="http://localhost:8080/v1",
     )
-    await graph.backend.connect()
+    await graph.connect()
 
 Backends
 --------

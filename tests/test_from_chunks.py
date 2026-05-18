@@ -99,3 +99,62 @@ class TestFromChunks:
         titles = [n.title for n in nodes if n.title]
         # Auto-derived title should contain "Apollo" from the first line
         assert any("Apollo" in t for t in titles)
+
+
+class TestFromChunksWiring:
+    """The one-line constructors must wire the embedder / reranker into
+    the *returned* graph — not just use them at ingest time."""
+
+    async def test_embedder_wired_into_returned_graph(self, tmp_db):
+        # An unreachable embed_url: the ingest-time embedding pass fails
+        # gracefully, but the embedder must still be attached so that
+        # query-time vector search has it.
+        graph = await SynapticGraph.from_chunks(
+            [{"content": "a test chunk for wiring"}],
+            db=tmp_db,
+            embed_url="http://localhost:1/v1",
+        )
+        assert graph._embedder is not None
+
+    async def test_no_embedder_when_url_omitted(self, tmp_db):
+        graph = await SynapticGraph.from_chunks(
+            [{"content": "a test chunk"}], db=tmp_db
+        )
+        assert graph._embedder is None
+
+    async def test_reranker_wired_into_returned_graph(self, tmp_db):
+        graph = await SynapticGraph.from_chunks(
+            [{"content": "a test chunk for reranker wiring"}],
+            db=tmp_db,
+            rerank_url="http://localhost:1",
+        )
+        from synaptic.extensions.reranker_cross import VLLMReranker
+
+        assert isinstance(graph._reranker, VLLMReranker)
+
+    async def test_caller_supplied_backend_is_used(self):
+        from synaptic.backends.memory import MemoryBackend
+
+        backend = MemoryBackend()
+        await backend.connect()
+        graph = await SynapticGraph.from_chunks(
+            [{"content": "chunk on a caller-supplied backend"}],
+            backend=backend,
+        )
+        assert graph._backend is backend
+
+
+class TestSyncConstructors:
+    def test_from_chunks_sync_builds_graph(self, tmp_db):
+        # Called from a plain (non-async) test — the sync wrapper must
+        # spin its own loop and return a ready graph.
+        graph = SynapticGraph.from_chunks_sync(
+            [{"content": "a chunk built via the sync facade"}], db=tmp_db
+        )
+        assert graph is not None
+        assert graph._backend is not None
+
+    async def test_sync_constructor_rejects_running_loop(self, tmp_db):
+        # Inside an event loop asyncio.run would deadlock — must raise.
+        with pytest.raises(RuntimeError, match="event loop"):
+            SynapticGraph.from_chunks_sync([{"content": "x"}], db=tmp_db)

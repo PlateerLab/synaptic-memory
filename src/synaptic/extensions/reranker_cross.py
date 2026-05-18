@@ -11,10 +11,14 @@ the single highest-impact quality improvement in modern IR because:
 The protocol is BYO (bring your own): the library never ships a
 model. Users inject any reranker that implements ``RerankerProtocol``:
 
+- ``VLLMReranker`` → vLLM ``/rerank`` endpoint (``--task score``)
 - ``OllamaReranker`` → Ollama ``/api/rerank`` endpoint
 - ``TEIReranker`` → HuggingFace TEI ``/rerank``
-- ``CohereReranker`` → Cohere Rerank API
+- ``FlashRankReranker`` → CPU-only, no torch / GPU
 - ``MockReranker`` → for tests
+
+``reranker_from_url(url, backend=...)`` builds the right URL-backed
+class from a backend name (``"vllm"`` / ``"ollama"`` / ``"tei"``).
 
 Example::
 
@@ -148,6 +152,90 @@ class TEIReranker:
             if 0 <= idx < len(scores):
                 scores[idx] = float(r.get("score", 0.0))
         return scores
+
+
+class VLLMReranker:
+    """vLLM reranker via the ``/rerank`` endpoint (vLLM 0.6.2+).
+
+    vLLM serves cross-encoder / score models with ``--task score`` and
+    exposes a Jina/Cohere-compatible rerank API. The endpoint differs
+    from Ollama's only in the path (``/rerank`` vs ``/api/rerank``);
+    the request and response shapes are the same.
+
+    ``base_url`` may be a bare host (``http://host:8000``) or an
+    OpenAI-style root (``http://host:8000/v1``) — vLLM accepts both
+    ``/rerank`` and ``/v1/rerank``.
+
+    Usage::
+
+        # vllm serve BAAI/bge-reranker-v2-m3 --task score --port 8000
+        reranker = VLLMReranker(
+            base_url="http://localhost:8000",
+            model="BAAI/bge-reranker-v2-m3",
+        )
+        scores = await reranker.rerank("query", ["doc1", "doc2"])
+    """
+
+    __slots__ = ("_model", "_timeout", "_url")
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8000",
+        *,
+        model: str = "BAAI/bge-reranker-v2-m3",
+        timeout: int = 60,
+    ) -> None:
+        self._url = base_url.rstrip("/") + "/rerank"
+        self._model = model
+        self._timeout = timeout
+
+    async def rerank(self, query: str, documents: list[str]) -> list[float]:
+        if not documents:
+            return []
+        import aiohttp
+
+        payload = {"model": self._model, "query": query, "documents": documents}
+        timeout = aiohttp.ClientTimeout(total=self._timeout)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(self._url, json=payload) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    logger.warning("vLLM rerank failed (%d): %s", resp.status, body[:200])
+                    return [0.0] * len(documents)
+                data = await resp.json()
+
+        # vLLM returns: {"results": [{"index": 0, "relevance_score": 0.9}, ...]}
+        scores = [0.0] * len(documents)
+        for r in data.get("results", []):
+            idx = r.get("index", 0)
+            if 0 <= idx < len(scores):
+                scores[idx] = float(r.get("relevance_score", 0.0))
+        return scores
+
+
+def reranker_from_url(
+    base_url: str,
+    *,
+    backend: str = "vllm",
+    model: str = "BAAI/bge-reranker-v2-m3",
+    timeout: int = 60,
+) -> RerankerProtocol:
+    """Build a URL-backed reranker by backend name.
+
+    ``backend`` is one of ``"vllm"``, ``"ollama"``, ``"tei"`` — the
+    three reranker servers whose wire formats differ. This is the
+    single entry point the one-line API and the MCP server use so a
+    caller only ever supplies a URL plus a backend name.
+    """
+    b = backend.lower()
+    if b == "vllm":
+        return VLLMReranker(base_url, model=model, timeout=timeout)
+    if b == "ollama":
+        return OllamaReranker(base_url, model=model, timeout=timeout)
+    if b == "tei":
+        return TEIReranker(base_url, timeout=timeout)
+    msg = f"unknown reranker backend {backend!r} — expected 'vllm', 'ollama', or 'tei'"
+    raise ValueError(msg)
 
 
 class FlashRankReranker:
