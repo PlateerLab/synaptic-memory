@@ -473,16 +473,25 @@ async def _resolve_by_doc_id_property(
 
     ``search``/``deep_search`` results expose the ``doc_id`` *property*
     (an opaque hash), which is not a node id and is not present in any
-    text index — so ``get_node`` and ``search_fuzzy`` both miss it. Scan
-    the graph (same approach as the structured tools) and prefer a node
-    tagged ``document``; on chunk-only corpora fall back to any node
-    carrying the ``doc_id`` and hop to its CONTAINS parent.
+    text index — so ``get_node`` and ``search_fuzzy`` both miss it.
+
+    Prefer the backend's indexed ``find_nodes_by_property`` (a C-level
+    JSON scan returning only matches); fall back to a full ``list_nodes``
+    scan only on backends that lack it. Prefer a node tagged
+    ``document``; on chunk-only corpora fall back to any node carrying
+    the ``doc_id`` and hop to its CONTAINS parent.
     """
-    nodes = await backend.list_nodes(kind=None, limit=200_000)
+    finder = getattr(backend, "find_nodes_by_property", None)
+    if finder is not None:
+        nodes = await finder("doc_id", doc_id, limit=2000)
+    else:
+        nodes = [
+            n
+            for n in await backend.list_nodes(kind=None, limit=200_000)
+            if (n.properties or {}).get("doc_id") == doc_id
+        ]
     chunk_match: Node | None = None
     for n in nodes:
-        if (n.properties or {}).get("doc_id") != doc_id:
-            continue
         if "document" in (n.tags or []):
             return n  # the document node itself — best match
         if chunk_match is None:

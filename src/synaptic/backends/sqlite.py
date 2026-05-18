@@ -437,6 +437,26 @@ class SQLiteBackend:
             rows = await cur.fetchall()
         return [_row_to_node(r) for r in rows]
 
+    async def find_nodes_by_property(
+        self, key: str, value: str, *, limit: int = 1000
+    ) -> list[Node]:
+        """Return nodes whose ``properties[key] == value``.
+
+        Uses SQLite's ``json_extract`` so the filter runs in C and only
+        matching rows are materialised — far cheaper than loading every
+        node into Python to scan. Not index-backed (an arbitrary
+        property key cannot be pre-indexed), but avoids the O(N) Python
+        object construction a full ``list_nodes`` scan pays.
+        """
+        db = self._db()
+        sql = (
+            "SELECT * FROM syn_nodes "
+            "WHERE json_extract(properties_json, '$.' || ?) = ? LIMIT ?"
+        )
+        async with db.execute(sql, (key, value, limit)) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_node(r) for r in rows]
+
     # --- Edge CRUD ---
 
     async def save_edge(self, edge: Edge) -> None:

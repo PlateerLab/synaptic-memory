@@ -155,3 +155,27 @@ class TestSQLiteVectorSearch:
         loaded = await sqlite.get_node("persist")
         assert loaded is not None
         assert loaded.embedding == [0.5, 0.5, 0.5]
+
+
+class TestFindNodesByProperty:
+    async def test_finds_matching_property(self, sqlite: SQLiteBackend) -> None:
+        await sqlite.save_node(
+            Node(id="a", kind=NodeKind.CHUNK, properties={"doc_id": "h1", "law": "X"})
+        )
+        await sqlite.save_node(
+            Node(id="b", kind=NodeKind.CHUNK, properties={"doc_id": "h1", "law": "X"})
+        )
+        await sqlite.save_node(
+            Node(id="c", kind=NodeKind.CHUNK, properties={"doc_id": "h2"})
+        )
+        hits = await sqlite.find_nodes_by_property("doc_id", "h1")
+        assert {n.id for n in hits} == {"a", "b"}
+
+    async def test_no_match_returns_empty(self, sqlite: SQLiteBackend) -> None:
+        await sqlite.save_node(Node(id="a", properties={"doc_id": "h1"}))
+        assert await sqlite.find_nodes_by_property("doc_id", "nope") == []
+
+    async def test_respects_limit(self, sqlite: SQLiteBackend) -> None:
+        for i in range(5):
+            await sqlite.save_node(Node(id=f"n{i}", properties={"k": "v"}))
+        assert len(await sqlite.find_nodes_by_property("k", "v", limit=3)) == 3
