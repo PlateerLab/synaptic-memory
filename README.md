@@ -241,8 +241,9 @@ graph = await SynapticGraph.from_data(
 
 The linker is **self-gating**: if the corpus has no clean identifier
 inventory it writes nothing (no-op), so this is safe to leave on.
-Measured impact — multi-hop retrieval went from **0% (vanilla RAG) to
-83%** on a financial-statute corpus:
+Measured impact — on a financial-statute multi-hop corpus, retrieval
+goes from **32% (standard dense RAG)** / **31% (HippoRAG2)** to
+**73% (synaptic)** — 2.3× the nearest competitor:
 [`docs/REPORT-rag-vs-synaptic.md`](docs/REPORT-rag-vs-synaptic.md).
 
 > Requirement: each document must carry the identifier as a node
@@ -377,27 +378,31 @@ Data source: [allganize/RAG-Evaluation-Dataset-KO](https://huggingface.co/datase
 > rank invariance rose from 54.5 % → **100 %**, bit-wise top-10
 > identical from 51.5 % → **96 %**, with MRR drift exactly zero.
 
-### RAG vs synaptic-memory — multi-hop retrieval (v0.24)
+### RAG vs HippoRAG2 vs synaptic-memory — multi-hop retrieval (v0.25)
 
-Vanilla RAG (chunk → top-k → one LLM answer) measured head-to-head
-against the synaptic-memory agent on the same corpus, ground truth,
-LLM-judge, and model (`finreg` — 4,417 Korean financial-statute
-articles):
+RAG (chunk → top-k → one LLM answer), HippoRAG2 (NeurIPS'24 LLM-entity
+graph + PPR), and the synaptic-memory agent measured head-to-head on
+the same corpus, ground truth, and strict scoring (`finreg` — 4,417
+Korean financial-statute articles, 120 multi-hop queries):
 
 ```
-Query type                 vanilla RAG    synaptic-memory
------------------------------------------------------------
-single-hop (1 article)          94%             94%
-multi-hop (follow citation)      0%             83%
+System                        multi-hop solved
+---------------------------------------------------
+RAG  (FTS / BM25)                   0/120   (0%)
+RAG  (dense, bge-m3)               39/120  (32%)
+HippoRAG2 (LLM graph + PPR)        37/120  (31%)
+synaptic-memory (agent)            88/120  (73%)
 ```
 
 A statute article that cites another article ("제30조에 따라 …") is a
 **multi-hop** query: the cited provision shares no query vocabulary, so
-single-shot retrieval structurally cannot reach it. synaptic-memory
-turns cross-references into `REFERENCES` graph edges
+single-shot retrieval structurally cannot reach it. Notably, **HippoRAG2
+ties plain dense RAG (31% ≈ 32%)** — an LLM-extracted *entity* graph
+cannot capture an exact *structural* citation. synaptic-memory turns
+cross-references into `REFERENCES` graph edges
 ([`StructuralReferenceLinker`](src/synaptic/extensions/structural_reference_linker.py),
-LLM-free, auto-derived from the corpus) and the agent follows them.
-Full report — including limits and what does *not* help:
+LLM-free, auto-derived from the corpus) and the agent follows them —
+2.3× the nearest competitor. Full report, model notes, and limits:
 [`docs/REPORT-rag-vs-synaptic.md`](docs/REPORT-rag-vs-synaptic.md).
 
 ### Head-to-head vs Mem0 / Cognee / HippoRAG2

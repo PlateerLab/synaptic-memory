@@ -51,6 +51,13 @@ QDIR = REPO_ROOT / "eval" / "data" / "queries"
 
 _REF_RE = re.compile(r"제(\d+)조(?:의(\d+))?")
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
+# A "제N조" citation is a genuine *intra-law* reference only when it is not
+# qualified by another instrument. Skip it if the few chars before it carry
+# a 「」 bracket (names another statute) or end in a 법/령/규칙/예규/고시/규정
+# token (refers to the parent/related instrument, e.g. "법 제192조" inside a
+# 시행령). The graph's StructuralReferenceLinker applies the same discipline;
+# accepting qualified citations as same-law pairs is what corrupted the GT.
+_QUALIFIED_CITATION_RE = re.compile(r"(?:」|법|령|규칙|예규|고시|규정)\s*$")
 
 _SINGLE_PROMPT = """다음은 금융 법령의 한 조문이다.
 
@@ -139,9 +146,14 @@ def _find_multihop_pairs(arts: list[dict]) -> list[tuple[dict, dict, str]]:
         law_idx = by_law[a["law"]]
         for m in _REF_RE.finditer(a["text"]):
             ref = f"제{m.group(1)}조" + (f"의{m.group(2)}" if m.group(2) else "")
-            if ref != a["article_no"] and ref in law_idx:
-                pairs.append((a, law_idx[ref], ref))
-                break  # one cross-ref per source article
+            if ref == a["article_no"] or ref not in law_idx:
+                continue
+            # Reject citations qualified by another instrument — those
+            # resolve to a *different* law, not this article's own.
+            if _QUALIFIED_CITATION_RE.search(a["text"][max(0, m.start() - 24):m.start()]):
+                continue
+            pairs.append((a, law_idx[ref], ref))
+            break  # one cross-ref per source article
     return pairs
 
 
@@ -251,7 +263,11 @@ async def main() -> None:
     substantive = [a for a in arts if len(a["text"]) >= 180]
     print(f"{len(arts)} articles ({len(substantive)} substantive)")
 
-    single = await _gen_single(client, args.model, substantive, args.single)
+    single = (
+        await _gen_single(client, args.model, substantive, args.single)
+        if args.single
+        else []
+    )
 
     pairs = _find_multihop_pairs(arts)
     random.shuffle(pairs)
@@ -267,6 +283,9 @@ async def main() -> None:
             "financial statutes — multi-hop cross-reference (FTS-verified RAG-hard)",
         ),
     ]:
+        if not qs:
+            print(f"skip {fname} — 0 queries generated (existing file preserved)")
+            continue
         out = QDIR / fname
         with out.open("w", encoding="utf-8") as f:
             json.dump(
