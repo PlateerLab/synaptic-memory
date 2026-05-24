@@ -1949,6 +1949,12 @@ def _parse_args():
     )
     p.add_argument("--quick", action="store_true", help="Skip large datasets (KLUE, Ko-StrategyQA)")
     p.add_argument("--custom-only", action="store_true", help="Only run KRRA + assort")
+    p.add_argument(
+        "--only",
+        default=None,
+        help="Comma-separated dataset names to run (case-insensitive substring match). "
+        "E.g. --only autorag,publichealth",
+    )
     p.add_argument("--compare", type=Path, default=None, help="Compare against a baseline JSON")
     p.add_argument(
         "--save",
@@ -2054,6 +2060,10 @@ async def main():
             if args.quick and not d.quick:
                 continue
             datasets.append(d)
+
+    if args.only:
+        wanted = [s.strip().lower() for s in args.only.split(",") if s.strip()]
+        datasets = [d for d in datasets if any(w in d.name.lower() for w in wanted)]
 
     if args.agent_only:
         datasets = []

@@ -96,3 +96,54 @@ async def test_calibrate_empty_corpus_returns_default_config():
     cfg = await calibrate_corpus(backend, sample_size=20)
     assert cfg.sample_size == 0
     assert cfg.rerank_blend == 0.1  # default band
+
+
+@pytest.mark.asyncio
+async def test_graph_calibrate_persists_blend():
+    """SynapticGraph.calibrate() runs the sweep and writes config the
+    backend can read back — closes the loop that was open in v0.17.x
+    (calibration code existed but was never invoked at ingest)."""
+    from synaptic.graph import SynapticGraph
+
+    backend = MemoryBackend()
+    await backend.connect()
+    graph = SynapticGraph(backend)
+    # Distinctive titles → FTS-already-strong corpus
+    for i in range(25):
+        await graph.add(
+            title=f"Distinct subject alpha {i} bravo {i * 11}",
+            content=f"Body number {i} with mild filler text",
+        )
+    result = await graph.calibrate(sample_size=20)
+    assert result is not None
+    assert result.sample_size > 0
+    persisted = await read_calibration(backend)
+    assert persisted is not None
+    assert persisted.rerank_blend == result.rerank_blend
+
+
+def test_config_for_signals_hit_at_10_does_not_override_mid_mrr():
+    """Hit@10 is recorded for diagnostics but does NOT trigger blend=0
+    on its own. v0.26 measurement: PublicHealthQA pseudo hit@10 = 1.0
+    while its real-query FTS MRR is 0.55 (reranker gains +0.20). Using
+    hit@10 as a trigger would catastrophically disable reranker on
+    paraphrase-heavy corpora — pseudo self-retrieval is structurally
+    blind to paraphrase difficulty."""
+    from synaptic.extensions.calibration import _config_for_signals
+
+    cfg = _config_for_signals(0.70, hit_at_10=0.98, sample_size=20)
+    # Stays in mid band — hit@10 alone cannot disable reranker
+    assert cfg.rerank_blend == 0.1
+    # hit@10 is still recorded for diagnostics
+    assert cfg.sample_hit_at_10 == 0.98
+
+
+def test_calibration_result_json_backcompat_without_hit_at_10():
+    """Older calibration blobs (pre-hit@10) deserialise without crashing."""
+    legacy = (
+        '{"sample_size": 20, "sample_mrr": 0.9, "rerank_blend": 0.0, '
+        '"vector_prf_enabled": false, "rationale": "legacy"}'
+    )
+    cfg = CalibrationResult.from_json(legacy)
+    assert cfg.sample_hit_at_10 == 0.0
+    assert cfg.rerank_blend == 0.0

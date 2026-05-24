@@ -175,7 +175,19 @@ uv run python eval/run_all.py --compare eval/results/qa_latest.json
 - **이게 Synaptic 의 진짜 narrative**: "single-shot 보통, agent 모드 평균 81%"
 - KRRA Conv 만 회귀 (Qwen 한국어 conversational reasoning 약점 의심) — v0.18 트랙
 
-#### 알려진 한계 — MuSiQue (영어 multi-hop)
+#### 알려진 한계 — AutoRAG cross-encoder 회귀
+
+`AutoRAG −0.100`은 v0.26에서도 닫지 못한 구조적 회귀. v0.26 측정으로 명확해진 이유:
+
+- v0.17의 `calibrate_corpus` (pseudo self-retrieval로 corpus 분류) 가 dead code 였음 → wiring 시도 → 측정 결과 4/5 quick 벤치에서 net 회귀
+- Pseudo-MRR 1.0 인 corpus 중 AutoRAG (reranker 해롭다) 와 Allganize/HotPotQA/PHQA (reranker 이득 +0.04~+0.20) 가 같은 cluster
+- → pseudo-signal로는 둘을 구분 불가, 자동 override 위험
+
+v0.26 결정: `graph.calibrate()` 는 opt-in diagnostic 만 (`_finalize` 자동 호출 안 함). AutoRAG 는 paraphrase-aware signal 이 나올 때까지 알려진 한계로 유지.
+
+세부: `[[project_v026_calibration_findings]]` (auto-memory)
+
+## 알려진 한계 — MuSiQue (영어 multi-hop)
 
 MuSiQue-Ans dev 500q full pipeline 측정 (`run_tier1_benchmarks.py --only musique --subset 500 --local-bge`):
 

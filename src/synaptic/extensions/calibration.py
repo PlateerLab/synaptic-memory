@@ -72,6 +72,7 @@ class CalibrationResult:
     rerank_blend: float
     vector_prf_enabled: bool
     rationale: str
+    sample_hit_at_10: float = 0.0
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))
@@ -79,36 +80,60 @@ class CalibrationResult:
     @classmethod
     def from_json(cls, raw: str) -> CalibrationResult:
         data = json.loads(raw)
+        # Backwards-compat: older JSON blobs predate ``sample_hit_at_10``.
         return cls(**data)
 
 
-def _config_for_mrr(mean_mrr: float, sample_size: int) -> CalibrationResult:
-    """Map a sampled FTS-only MRR to pipeline config.
+def _config_for_signals(
+    mean_mrr: float,
+    hit_at_10: float,
+    sample_size: int,
+) -> CalibrationResult:
+    """Map sampled FTS-only signals to pipeline config.
 
-    Threshold band (0.55-0.85) is conservative — based on v0.17.1
-    measurements where:
-      - AutoRAG sample_mrr ~0.92 → reranker hurts at any blend
-      - PublicHealthQA sample_mrr ~0.55 → reranker helps +0.20
-      - Allganize sample_mrr ~0.95 → reranker neutral (already strong)
-    The 0.85 upper edge is where reranker's marginal contribution
-    inverts from helpful to noise.
+    Currently only ``mean_mrr`` drives the decision. ``hit_at_10`` is
+    captured for diagnostics (returned in the result) but *not* used
+    as a secondary trigger.
+
+    Why hit@10 is NOT used: in v0.26 measurement we found pseudo-query
+    self-retrieval gives high hit@10 (~1.0) on paraphrase-heavy corpora
+    too — PublicHealthQA pseudo hit@10 = 1.0 while real-query FTS MRR
+    is only 0.55 (cross-encoder gains +0.20). Using hit@10 ≥ 0.95 as
+    a "disable reranker" trigger would catch AutoRAG (desired) but
+    false-positive on PublicHealthQA (catastrophic — loses +0.20).
+    Pseudo-self-retrieval is structurally blind to paraphrase
+    difficulty.
+
+    Decision rules:
+      mean_mrr ≥ 0.85                            → blend = 0.0
+      mean_mrr ≤ 0.55                            → blend = 0.2
+      otherwise                                  → blend = 0.1
+
+    Known limitation: AutoRAG-class corpora (real FTS MRR 0.90 but
+    pseudo-MRR 0.72 due to shared boilerplate across PDF chunks)
+    end up in the middle band and keep blend=0.1, so the cross-encoder
+    still contributes a small regression. The adaptive std-based blend
+    in EvidenceSearch (v0.17.1) mitigates but doesn't fully close it.
+    A robust fix needs paraphrase-aware sampling or a manual
+    ``reranker=None`` override; tracked for v0.27+.
     """
     if mean_mrr >= 0.85:
         return CalibrationResult(
             sample_size=sample_size,
             sample_mrr=mean_mrr,
+            sample_hit_at_10=hit_at_10,
             rerank_blend=0.0,
             vector_prf_enabled=False,
             rationale=(
                 f"FTS-only sample MRR {mean_mrr:.2f} ≥ 0.85 — corpus is "
-                "FTS-near-optimal; cross-encoder rerank disabled "
-                "(measured to regress on AutoRAG, X2BEE Easy, KRRA Easy)."
+                "FTS-near-optimal; cross-encoder rerank disabled."
             ),
         )
     if mean_mrr <= 0.55:
         return CalibrationResult(
             sample_size=sample_size,
             sample_mrr=mean_mrr,
+            sample_hit_at_10=hit_at_10,
             rerank_blend=0.2,
             vector_prf_enabled=True,
             rationale=(
@@ -121,13 +146,20 @@ def _config_for_mrr(mean_mrr: float, sample_size: int) -> CalibrationResult:
     return CalibrationResult(
         sample_size=sample_size,
         sample_mrr=mean_mrr,
+        sample_hit_at_10=hit_at_10,
         rerank_blend=0.1,
         vector_prf_enabled=True,
         rationale=(
-            f"FTS-only sample MRR {mean_mrr:.2f} in [0.55, 0.85] — "
-            "default v0.17.1 adaptive blend (rerank_blend=0.1) applied."
+            f"FTS-only sample MRR {mean_mrr:.2f} in (0.55, 0.85), "
+            f"hit@10 {hit_at_10:.2f} — default v0.17.1 adaptive blend "
+            "(rerank_blend=0.1) applied."
         ),
     )
+
+
+def _config_for_mrr(mean_mrr: float, sample_size: int) -> CalibrationResult:
+    """Backwards-compat wrapper. Prefer :func:`_config_for_signals`."""
+    return _config_for_signals(mean_mrr, hit_at_10=0.0, sample_size=sample_size)
 
 
 async def calibrate_corpus(
@@ -151,7 +183,7 @@ async def calibrate_corpus(
     if not candidates:
         # No content-bearing nodes — degenerate corpus, fall back to
         # default config.
-        return _config_for_mrr(0.7, 0)
+        return _config_for_signals(0.7, hit_at_10=0.0, sample_size=0)
 
     rng = random.Random(seed)
     sample = rng.sample(candidates, k=min(sample_size, len(candidates)))
@@ -164,6 +196,7 @@ async def calibrate_corpus(
     # ask about this doc": it carries more lexical specificity than
     # the title and matches what an embedder/reranker would chunk.
     rr_total = 0.0
+    hits = 0
     counted = 0
     for node in sample:
         query = _extract_pseudo_query(node)
@@ -178,12 +211,16 @@ async def calibrate_corpus(
         for i, r in enumerate(results):
             if r.id == node.id:
                 rr = 1.0 / (i + 1)
+                hits += 1
                 break
         rr_total += rr
         counted += 1
 
-    mean_mrr = rr_total / max(counted, 1)
-    return _config_for_mrr(mean_mrr, counted)
+    if counted == 0:
+        return _config_for_signals(0.7, hit_at_10=0.0, sample_size=0)
+    mean_mrr = rr_total / counted
+    hit_at_10 = hits / counted
+    return _config_for_signals(mean_mrr, hit_at_10=hit_at_10, sample_size=counted)
 
 
 def _extract_pseudo_query(node) -> str:

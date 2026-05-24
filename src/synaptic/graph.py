@@ -393,12 +393,23 @@ class SynapticGraph:
         rerank_url: str | None = None,
         rerank_backend: str = "vllm",
         rerank_model: str = "BAAI/bge-reranker-v2-m3",
+        calibrate: bool = False,
     ) -> SynapticGraph:
         """Run the optional embedding pass and assemble the graph.
 
         Builds the embedder / reranker from URLs and — crucially —
         wires both into the returned graph so query-time vector search
         and reranking work without the caller re-supplying them.
+
+        ``calibrate`` is opt-in (default False). Auto-calibration was
+        prototyped in v0.17 to disable the cross-encoder on FTS-near-
+        optimal corpora, but v0.26 measurement showed pseudo-self-
+        retrieval signal cannot distinguish "FTS strong + reranker
+        unhelpful" (AutoRAG) from "FTS strong + reranker still helps
+        via paraphrase boost" (Allganize, HotPotQA, PublicHealthQA).
+        Auto-applying it regressed 4/5 quick benches. Call
+        ``await graph.calibrate()`` manually if you have measured your
+        corpus and want to override the default blend.
         """
         embedder: object | None = None
         if embed_url:
@@ -418,7 +429,38 @@ class SynapticGraph:
         graph = cls(backend, embedder=embedder, reranker=reranker)
         # The one-line path connected the backend in _open_backend.
         graph._connected = True
+        if calibrate:
+            try:
+                await graph.calibrate()
+            except Exception as exc:  # pragma: no cover - non-fatal
+                logger.warning("auto-calibration failed: %s", exc)
         return graph
+
+    async def calibrate(self, *, sample_size: int = 20) -> object | None:
+        """Sample FTS-only MRR on the current corpus and persist a
+        per-corpus rerank_blend to backend metadata.
+
+        Runs once at the end of bulk ingest (the ``from_*`` helpers call
+        this automatically). Callers using the lower-level constructor +
+        ``graph.add()`` ingest path should invoke it explicitly after
+        their last write. Cheap (N FTS calls, no LLM, no embedder).
+
+        Returns the :class:`CalibrationResult` for inspection / logging,
+        or None when the corpus has no content-bearing nodes.
+        """
+        from synaptic.extensions.calibration import (
+            calibrate_corpus,
+            write_calibration,
+        )
+
+        result = await calibrate_corpus(self._backend, sample_size=sample_size)
+        await write_calibration(self._backend, result)
+        logger.info(
+            "calibration written: sample_mrr=%.3f → rerank_blend=%s",
+            result.sample_mrr,
+            result.rerank_blend,
+        )
+        return result
 
     @classmethod
     async def from_data(
