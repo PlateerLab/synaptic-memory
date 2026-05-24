@@ -230,6 +230,14 @@ class KoreanPhraseExtractor:
                 kind=NodeKind.ENTITY,
                 tags=["_phrase"],
             )
+            # Embed phrase title when an embedder is wired (v0.27 —
+            # enables query→phrase dense matching in EvidenceSearch).
+            embedder = getattr(graph, "_embedder", None)
+            if embedder is not None:
+                try:
+                    phrase_node.embedding = await embedder.embed(phrase)
+                except Exception:
+                    pass  # best-effort
             await graph.backend.save_node(phrase_node)
 
             self._phrase_cache[key] = phrase_node.id

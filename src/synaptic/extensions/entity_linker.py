@@ -37,12 +37,15 @@ Example::
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 from synaptic.models import ConsolidationLevel, Edge, EdgeKind, Node, NodeKind
+
+logger = logging.getLogger("entity-linker")
 
 if TYPE_CHECKING:
     from synaptic.extensions.domain_profile import DomainProfile
@@ -69,6 +72,7 @@ class EntityLinkStats:
     raw_phrase_candidates: int = 0
     kept_phrases: int = 0
     phrase_nodes_created: int = 0
+    phrase_nodes_embedded: int = 0
     mentions_edges_created: int = 0
     elapsed_seconds: float = 0.0
     top_phrases_by_df: list[tuple[str, int]] = field(default_factory=list)
@@ -107,6 +111,8 @@ class EntityLinker:
         *,
         source_kind: str | NodeKind = NodeKind.CHUNK,
         source_limit: int = 1_000_000,
+        embedder: object | None = None,
+        embed_batch_size: int = 64,
     ) -> EntityLinkStats:
         """Walk source nodes, compute DF, filter, materialize hubs.
 
@@ -196,8 +202,38 @@ class EntityLinker:
                 )
             )
 
+        # Optional phrase-node embedding (v0.27+).
+        # When an embedder is supplied, batch-embed the phrase titles
+        # so query→phrase dense matching in EvidenceSearch has vectors
+        # to score against. Without this, phrase hubs have empty
+        # embeddings and are only reachable via lexical paths (FTS,
+        # CONTAINS-edge walks), which misses paraphrased entity
+        # mentions in queries — the same gap HippoRAG2 closes with
+        # query→triple linking (measured +0.125 R@5 on MuSiQue in
+        # their ablation).
+        if embedder is not None and new_nodes:
+            embed_fn = getattr(embedder, "embed_batch", None)
+            if embed_fn is not None:
+                texts = [n.title for n in new_nodes]
+                for i in range(0, len(texts), embed_batch_size):
+                    chunk = texts[i : i + embed_batch_size]
+                    try:
+                        vecs = await embed_fn(chunk)
+                    except Exception as exc:
+                        # Best-effort: embedding failure shouldn't
+                        # abort the whole linker run.
+                        logger.warning("phrase embed batch failed: %s", exc)
+                        continue
+                    for j, v in enumerate(vecs):
+                        if v:
+                            new_nodes[i + j].embedding = list(v)
+
         await backend.save_nodes_batch(new_nodes)
         stats.phrase_nodes_created = len(new_nodes)
+        if embedder is not None:
+            stats.phrase_nodes_embedded = sum(
+                1 for n in new_nodes if n.embedding
+            )
 
         # Pass 3b — emit MENTIONS edges, capped per source.
         # Invert the map to source → phrases so we can cap per source

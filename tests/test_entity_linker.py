@@ -238,3 +238,71 @@ class TestMaxLinksPerSource:
             edges = await backend.get_edges(src.id, direction="outgoing")
             mention_edges = [e for e in edges if e.kind == EdgeKind.MENTIONS]
             assert len(mention_edges) <= 3
+
+
+# --- Phrase embedding (v0.27 — query→phrase dense matching enabler) ---
+
+
+class TestPhraseEmbedding:
+    @pytest.mark.asyncio
+    async def test_phrases_embedded_when_embedder_supplied(self):
+        from synaptic.extensions.embedder import MockEmbeddingProvider
+
+        backend = MemoryBackend()
+        profile = DomainProfile(name="test", locale="ko", min_df=2, max_df_ratio=0.9)
+        extractor = KoreanPhraseExtractor(profile=profile, max_phrases_per_node=20)
+        linker = EntityLinker(extractor=extractor, profile=profile)
+        texts = [
+            "이사회 산하 위원회에서 윤리경영을 논의",
+            "이사회 의사록을 위원회에 공유",
+            "이사회 운영 결의",
+        ]
+        await _seed_korean_chunks(backend, texts)
+
+        stats = await linker.link(
+            backend,
+            source_kind=NodeKind.CHUNK,
+            embedder=MockEmbeddingProvider(dim=8),
+        )
+
+        assert stats.phrase_nodes_created > 0
+        # All created phrase hubs should be embedded
+        assert stats.phrase_nodes_embedded == stats.phrase_nodes_created
+
+        phrase_nodes = [
+            n
+            for n in await backend.list_nodes(kind=NodeKind.ENTITY, limit=100)
+            if "_phrase" in (n.tags or [])
+        ]
+        for p in phrase_nodes:
+            assert p.embedding, f"phrase node {p.title!r} has empty embedding"
+            assert len(p.embedding) == 8
+
+    @pytest.mark.asyncio
+    async def test_phrases_unembedded_without_embedder(self):
+        """Without an embedder, phrase nodes keep empty embeddings —
+        preserving the pre-v0.27 default behaviour."""
+        backend = MemoryBackend()
+        profile = DomainProfile(name="test", locale="ko", min_df=2, max_df_ratio=0.9)
+        extractor = KoreanPhraseExtractor(profile=profile, max_phrases_per_node=20)
+        linker = EntityLinker(extractor=extractor, profile=profile)
+        await _seed_korean_chunks(
+            backend,
+            [
+                "이사회 산하 위원회에서 윤리경영을 논의",
+                "이사회 의사록을 위원회에 공유",
+                "이사회 운영 결의",
+            ],
+        )
+
+        stats = await linker.link(backend, source_kind=NodeKind.CHUNK)
+
+        assert stats.phrase_nodes_created > 0
+        assert stats.phrase_nodes_embedded == 0
+        phrase_nodes = [
+            n
+            for n in await backend.list_nodes(kind=NodeKind.ENTITY, limit=100)
+            if "_phrase" in (n.tags or [])
+        ]
+        for p in phrase_nodes:
+            assert not p.embedding

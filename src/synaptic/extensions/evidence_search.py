@@ -269,7 +269,33 @@ class EvidenceSearch:
                 except Exception:
                     pass
 
-        all_seeds = list(fts_nodes) + vec_seeds + prf_seeds
+        # Step 2c++ — query→phrase dense seed (v0.27).
+        # Bridge the lexical/dense gap on multi-hop and paraphrased entity
+        # mentions: embed the query, match against the embedded phrase hub
+        # nodes built by EntityLinker / PhraseExtractor (kind=ENTITY,
+        # tag=_phrase), and use the chunks linked to the top-matched
+        # phrases as seeds. Phrase nodes themselves are NOT seeds — they
+        # are bridges from "what the query is about" to "which chunks
+        # mention that thing", which is the mechanism HippoRAG2's
+        # query→triple linking exploits (+12.5pp R@5 on MuSiQue in their
+        # Table 5 ablation).
+        phrase_bridge_seeds: list = []
+        if query_embedding:
+            try:
+                phrase_chunks = await self._seed_via_phrase_bridges(
+                    query_embedding,
+                    top_k_phrases=5,
+                    seen_ids=fts_ids | {n.id for n in vec_seeds} | {n.id for n in prf_seeds},
+                )
+                for node in phrase_chunks:
+                    phrase_bridge_seeds.append(node)
+                    # Score below FTS top but above noise floor so the
+                    # reranker still sees them as candidate evidence.
+                    fts_scores[node.id] = max(fts_scores.get(node.id, 0.0), 0.07)
+            except Exception as exc:
+                logger.debug("phrase-bridge seeding failed: %s", exc)
+
+        all_seeds = list(fts_nodes) + vec_seeds + prf_seeds + phrase_bridge_seeds
 
         # Step 2c+ — table hint seed augmentation (v0.17.1).
         # If ``DomainProfile.table_query_hints`` was wired and any hint
@@ -542,3 +568,91 @@ class EvidenceSearch:
             elapsed_ms=elapsed_ms,
             sub_queries=sub_queries,
         )
+
+    async def _seed_via_phrase_bridges(
+        self,
+        query_embedding: list[float],
+        *,
+        top_k_phrases: int,
+        seen_ids: set[str],
+        max_chunks_per_phrase: int = 4,
+    ) -> list:
+        """Dense-match the query against phrase hub nodes and return
+        chunks linked to the top matches.
+
+        The phrase hub (NodeKind.ENTITY, tagged ``_phrase``) layer is
+        built at ingest by EntityLinker / PhraseExtractor and is shared
+        across documents — the same phrase mentioned in two unrelated
+        chunks creates a bridge between them via CONTAINS / MENTIONS
+        edges. Lexical FTS misses paraphrased entity mentions in the
+        query; dense matching at the phrase level recovers them.
+
+        Args:
+            query_embedding: Pre-computed query vector.
+            top_k_phrases: How many phrase hubs to walk from.
+            seen_ids: Node IDs already in the seed set — skip when
+                discovering chunks to avoid double-counting.
+            max_chunks_per_phrase: Cap on the chunks pulled from each
+                matched phrase. A very high-DF phrase ("therefore") that
+                slipped past min/max-DF filtering could otherwise flood
+                the seed pool.
+
+        Returns:
+            A list of chunk-level :class:`Node` objects suitable for
+            inclusion in the seed pool. Phrase hub nodes themselves are
+            *not* returned — they are bridges, not evidence.
+        """
+        # 1) Pull phrase hubs with non-empty embeddings.
+        from synaptic.models import NodeKind as _NK
+
+        phrase_nodes = [
+            n
+            for n in await self._backend.list_nodes(kind=_NK.ENTITY, limit=100_000)
+            if n.embedding
+            and len(n.embedding) == len(query_embedding)
+            and "_phrase" in (n.tags or [])
+        ]
+        if not phrase_nodes:
+            return []
+
+        # 2) Cosine similarity (manual — phrase count is bounded by
+        # DF filtering, so this is cheap even on 10k+ phrases).
+        q_norm = sum(x * x for x in query_embedding) ** 0.5
+        if q_norm == 0:
+            return []
+        scored_phrases: list[tuple[float, object]] = []
+        for p in phrase_nodes:
+            p_norm = sum(x * x for x in p.embedding) ** 0.5
+            if p_norm == 0:
+                continue
+            dot = sum(a * b for a, b in zip(query_embedding, p.embedding, strict=False))
+            cos = dot / (q_norm * p_norm)
+            scored_phrases.append((cos, p))
+        scored_phrases.sort(key=lambda t: t[0], reverse=True)
+        top_phrases = [p for _, p in scored_phrases[:top_k_phrases]]
+        if not top_phrases:
+            return []
+
+        # 3) For each matched phrase, follow incoming MENTIONS /
+        # CONTAINS edges back to the chunks that reference it.
+        from synaptic.models import EdgeKind as _EK
+
+        bridge_chunks: list = []
+        bridge_seen: set[str] = set(seen_ids)
+        for phrase in top_phrases:
+            incoming = await self._backend.get_edges(phrase.id, direction="incoming")
+            count_for_phrase = 0
+            for edge in incoming:
+                if edge.kind not in (_EK.CONTAINS, _EK.MENTIONS):
+                    continue
+                if edge.source_id in bridge_seen:
+                    continue
+                chunk = await self._backend.get_node(edge.source_id)
+                if chunk is None:
+                    continue
+                bridge_chunks.append(chunk)
+                bridge_seen.add(chunk.id)
+                count_for_phrase += 1
+                if count_for_phrase >= max_chunks_per_phrase:
+                    break
+        return bridge_chunks

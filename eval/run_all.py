@@ -445,7 +445,7 @@ async def run_public_dataset(
             profile=profile,
             max_links_per_source=15,
         )
-        await linker.link(backend, source_kind=_NK.CONCEPT)
+        await linker.link(backend, source_kind=_NK.CONCEPT, embedder=embedder)
 
     # Post-hoc connective-pattern typed-edge extraction (Korean only).
     if reference_linker:
