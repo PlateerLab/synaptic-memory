@@ -1180,13 +1180,7 @@ class SynapticGraph:
 
         # Auto-embed if embedder is available and no embedding provided
         if embedding is None and self._embedder is not None:
-            # Include LLM classifier-generated metadata in the embedding text
-            embed_text = f"{title} {content}".strip()
-            if properties:
-                search_kw = properties.get("_search_keywords", "")
-                summary = properties.get("_summary", "")
-                if search_kw or summary:
-                    embed_text = f"{title} {summary} {search_kw} {content}".strip()
+            embed_text = self._compose_embed_text(title, content, properties)
             if embed_text:
                 embedding = await self._embedder.embed(embed_text)
 
@@ -1424,6 +1418,188 @@ class SynapticGraph:
                     msg = f"Ontology validation failed: {'; '.join(errors)}"
                     raise ValueError(msg)
         return await self._store.add_edge(source_id, target_id, kind=kind, weight=weight)
+
+    async def unlink(
+        self,
+        source_id: str,
+        target_id: str,
+        *,
+        kind: EdgeKind | str | None = None,
+    ) -> int:
+        """Delete edges from ``source_id`` to ``target_id``.
+
+        If ``kind`` is given, only edges of that kind are removed; otherwise
+        every outgoing edge from source to target is removed. Returns the
+        number of edges deleted.
+        """
+        kind_str = str(kind) if kind is not None else None
+        edges = await self._backend.get_edges(source_id, direction="outgoing")
+        removed = 0
+        for edge in edges:
+            if edge.target_id != target_id:
+                continue
+            if kind_str is not None and str(edge.kind) != kind_str:
+                continue
+            await self._backend.delete_edge(edge.id)
+            removed += 1
+        return removed
+
+    async def update_edge(
+        self,
+        source_id: str,
+        target_id: str,
+        *,
+        kind: EdgeKind | str | None = None,
+        new_weight: float | None = None,
+        new_kind: EdgeKind | str | None = None,
+    ) -> int:
+        """Update edges matching (source_id, target_id[, kind]).
+
+        ``kind`` filters which edges to update (None = all between the pair).
+        ``new_weight`` / ``new_kind`` are the values to apply. When ``new_kind``
+        is set and an ontology is bound, the new kind is re-validated against
+        the source/target node kinds.
+
+        Returns the number of edges updated.
+        """
+        if new_weight is None and new_kind is None:
+            return 0
+        filter_kind = str(kind) if kind is not None else None
+        resolved_new_kind: EdgeKind | None = None
+        if new_kind is not None:
+            resolved_new_kind = (
+                new_kind if isinstance(new_kind, EdgeKind) else EdgeKind(str(new_kind))
+            )
+            if self._ontology:
+                src_node = await self._backend.get_node(source_id)
+                tgt_node = await self._backend.get_node(target_id)
+                if src_node is not None and tgt_node is not None:
+                    errors = self._ontology.validate_edge(
+                        str(resolved_new_kind),
+                        str(src_node.kind),
+                        str(tgt_node.kind),
+                    )
+                    if errors:
+                        msg = f"Ontology validation failed: {'; '.join(errors)}"
+                        raise ValueError(msg)
+        edges = await self._backend.get_edges(source_id, direction="outgoing")
+        updated = 0
+        for edge in edges:
+            if edge.target_id != target_id:
+                continue
+            if filter_kind is not None and str(edge.kind) != filter_kind:
+                continue
+            if resolved_new_kind is not None:
+                edge.kind = resolved_new_kind
+            if new_weight is not None:
+                edge.weight = new_weight
+            await self._backend.update_edge(edge)
+            updated += 1
+        return updated
+
+    async def merge_nodes(
+        self,
+        keep_id: str,
+        drop_id: str,
+        *,
+        merge_tags: bool = True,
+        merge_properties: bool = True,
+        append_content: bool = False,
+    ) -> Node | None:
+        """Merge ``drop_id`` into ``keep_id``.
+
+        All edges incident to ``drop_id`` are re-pointed to ``keep_id``.
+        Duplicate edges (same other-endpoint + kind) are deduplicated by
+        keeping the higher weight. Self-loops created by the re-point are
+        dropped. Then ``drop_id`` is deleted.
+
+        - ``merge_tags``: union the two tag lists onto ``keep``.
+        - ``merge_properties``: keys from ``drop`` fill in keys that
+          ``keep`` doesn't already have (keep wins on conflict).
+        - ``append_content``: append drop.content to keep.content with a
+          separator. Default off to avoid silent content bloat.
+
+        Returns the updated keep node, or None if either ID is missing.
+        """
+        if keep_id == drop_id:
+            msg = "merge_nodes: keep_id and drop_id must differ"
+            raise ValueError(msg)
+
+        keep = await self._backend.get_node(keep_id)
+        drop = await self._backend.get_node(drop_id)
+        if keep is None or drop is None:
+            return None
+
+        # Index keep's existing edges so we can dedupe.
+        keep_out = await self._backend.get_edges(keep_id, direction="outgoing")
+        keep_in = await self._backend.get_edges(keep_id, direction="incoming")
+        out_by_pair: dict[tuple[str, str], Edge] = {
+            (e.target_id, str(e.kind)): e for e in keep_out
+        }
+        in_by_pair: dict[tuple[str, str], Edge] = {
+            (e.source_id, str(e.kind)): e for e in keep_in
+        }
+
+        # Re-point drop's outgoing edges.
+        for edge in await self._backend.get_edges(drop_id, direction="outgoing"):
+            new_target = edge.target_id
+            if new_target == keep_id:
+                # would become a self-loop on keep — discard
+                await self._backend.delete_edge(edge.id)
+                continue
+            key = (new_target, str(edge.kind))
+            existing = out_by_pair.get(key)
+            if existing is not None:
+                # dedupe: keep the higher-weight edge, drop the rest
+                if edge.weight > existing.weight:
+                    existing.weight = edge.weight
+                    await self._backend.update_edge(existing)
+                await self._backend.delete_edge(edge.id)
+            else:
+                edge.source_id = keep_id
+                await self._backend.update_edge(edge)
+                out_by_pair[key] = edge
+
+        # Re-point drop's incoming edges.
+        for edge in await self._backend.get_edges(drop_id, direction="incoming"):
+            new_source = edge.source_id
+            if new_source == keep_id:
+                await self._backend.delete_edge(edge.id)
+                continue
+            key = (new_source, str(edge.kind))
+            existing = in_by_pair.get(key)
+            if existing is not None:
+                if edge.weight > existing.weight:
+                    existing.weight = edge.weight
+                    await self._backend.update_edge(existing)
+                await self._backend.delete_edge(edge.id)
+            else:
+                edge.target_id = keep_id
+                await self._backend.update_edge(edge)
+                in_by_pair[key] = edge
+
+        # Combine metadata onto keep.
+        if merge_tags and drop.tags:
+            seen = set(keep.tags)
+            for t in drop.tags:
+                if t not in seen:
+                    keep.tags.append(t)
+                    seen.add(t)
+        if merge_properties and drop.properties:
+            for k, v in drop.properties.items():
+                keep.properties.setdefault(k, v)
+        if append_content and drop.content:
+            sep = "\n\n" if keep.content else ""
+            keep.content = f"{keep.content}{sep}{drop.content}"
+        keep.updated_at = time()
+        await self._backend.update_node(keep)
+
+        # Delete drop. Use the higher-level remove() so caches/relation
+        # indexes are cleaned up alongside the cascade.
+        await self.remove(drop_id)
+        self._cache.invalidate(keep_id)
+        self._cache.put(keep)
+        return keep
 
     async def chat(
         self,
@@ -1826,6 +2002,27 @@ class SynapticGraph:
             self._cache.put(node)
         return node
 
+    @staticmethod
+    def _compose_embed_text(
+        title: str,
+        content: str,
+        properties: dict[str, str] | None,
+    ) -> str:
+        """Build the text passed to the embedder for a node.
+
+        Mirrors the composition used at ingest time so an update produces
+        the same vector that ``add`` would have produced for equivalent
+        fields. LLM-classifier metadata (``_summary``, ``_search_keywords``)
+        is folded in when present.
+        """
+        embed_text = f"{title} {content}".strip()
+        if properties:
+            search_kw = properties.get("_search_keywords", "")
+            summary = properties.get("_summary", "")
+            if search_kw or summary:
+                embed_text = f"{title} {summary} {search_kw} {content}".strip()
+        return embed_text
+
     async def update(
         self,
         node_id: str,
@@ -1836,11 +2033,19 @@ class SynapticGraph:
         tags: list[str] | None = None,
         properties: dict[str, str] | None = None,
         embedding: list[float] | None = None,
+        reembed: bool = True,
     ) -> Node | None:
-        """Update a node's fields by ID. Returns updated node, or None if not found."""
+        """Update a node's fields by ID. Returns updated node, or None if not found.
+
+        When ``title``, ``content``, or ``properties`` change and an embedder
+        is wired into the graph, the node's vector is automatically recomputed
+        so search stays consistent. Pass ``embedding`` to supply a vector
+        directly (skips re-embed), or ``reembed=False`` to suppress it.
+        """
         node = await self._backend.get_node(node_id)
         if node is None:
             return None
+        text_changed = title is not None or content is not None or properties is not None
         if title is not None:
             node.title = title
         if content is not None:
@@ -1853,6 +2058,12 @@ class SynapticGraph:
             node.properties = properties
         if embedding is not None:
             node.embedding = embedding
+        elif reembed and text_changed and self._embedder is not None:
+            embed_text = self._compose_embed_text(
+                node.title, node.content, node.properties
+            )
+            if embed_text:
+                node.embedding = await self._embedder.embed(embed_text)
         node.updated_at = time()
         await self._backend.update_node(node)
         self._cache.invalidate(node_id)

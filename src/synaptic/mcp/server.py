@@ -330,6 +330,91 @@ async def knowledge_link(
 
 
 @server.tool()
+async def knowledge_update(
+    node_id: str,
+    title: str | None = None,
+    content: str | None = None,
+    kind: str | None = None,
+    tags: list[str] | None = None,
+    tags_add: list[str] | None = None,
+    tags_remove: list[str] | None = None,
+    properties_patch: dict[str, str] | None = None,
+    properties_replace: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Update fields of an existing knowledge node.
+
+    Pass only the fields you want to change; others are left intact.
+
+    Tags have three modes (mutually exclusive):
+      - ``tags``: replace the entire tag list.
+      - ``tags_add``: union these tags onto the existing list.
+      - ``tags_remove``: drop these tags from the existing list.
+
+    Properties have two modes (mutually exclusive):
+      - ``properties_patch``: merge keys into the existing dict.
+      - ``properties_replace``: replace the entire dict.
+    """
+    tag_modes = sum(
+        1 for v in (tags, tags_add, tags_remove) if v is not None
+    )
+    if tag_modes > 1:
+        return {
+            "success": False,
+            "message": "pass only one of tags / tags_add / tags_remove",
+        }
+    if properties_patch is not None and properties_replace is not None:
+        return {
+            "success": False,
+            "message": "pass only one of properties_patch or properties_replace",
+        }
+
+    graph = await _ensure_graph()
+
+    # Resolve tag/properties patches against the live node when needed.
+    merged_tags: list[str] | None = tags
+    merged_properties: dict[str, str] | None = None
+    if tags_add is not None or tags_remove is not None or properties_patch is not None:
+        existing = await graph.backend.get_node(node_id)
+        if existing is None:
+            return {"success": False, "message": f"node not found: {node_id}"}
+        if tags_add is not None:
+            seen = set(existing.tags)
+            merged_tags = list(existing.tags)
+            for t in tags_add:
+                if t not in seen:
+                    merged_tags.append(t)
+                    seen.add(t)
+        elif tags_remove is not None:
+            drop = set(tags_remove)
+            merged_tags = [t for t in existing.tags if t not in drop]
+        if properties_patch is not None:
+            merged_properties = dict(existing.properties)
+            merged_properties.update(properties_patch)
+    if properties_replace is not None:
+        merged_properties = properties_replace
+
+    node = await graph.update(
+        node_id,
+        title=title,
+        content=content,
+        kind=kind,
+        tags=merged_tags,
+        properties=merged_properties,
+    )
+    if node is None:
+        return {"success": False, "message": f"node not found: {node_id}"}
+
+    return {
+        "success": True,
+        "node_id": node.id,
+        "title": node.title,
+        "kind": str(node.kind),
+        "tags": node.tags,
+        "properties": node.properties,
+    }
+
+
+@server.tool()
 async def knowledge_reinforce(
     node_ids: str,
     success: bool = True,
@@ -802,6 +887,113 @@ async def knowledge_remove(node_id: str) -> dict[str, Any]:
     graph = await _ensure_graph()
     removed = await graph.remove(node_id)
     return {"success": removed, "node_id": node_id}
+
+
+@server.tool()
+async def knowledge_unlink(
+    source_id: str,
+    target_id: str,
+    kind: str | None = None,
+) -> dict[str, Any]:
+    """Delete edges from ``source_id`` to ``target_id``.
+
+    If ``kind`` is omitted, every edge between the pair (in that direction)
+    is removed; otherwise only edges of that kind. Returns the number of
+    edges deleted.
+    """
+    graph = await _ensure_graph()
+    removed = await graph.unlink(source_id, target_id, kind=kind)
+    return {
+        "success": True,
+        "source_id": source_id,
+        "target_id": target_id,
+        "removed": removed,
+    }
+
+
+@server.tool()
+async def knowledge_update_edge(
+    source_id: str,
+    target_id: str,
+    kind: str | None = None,
+    new_weight: float | None = None,
+    new_kind: str | None = None,
+) -> dict[str, Any]:
+    """Change weight and/or kind of existing edge(s) between two nodes.
+
+    ``kind`` filters which edges to touch (None = all between the pair).
+    Pass ``new_weight`` and/or ``new_kind`` for the values to apply.
+    Returns the number of edges updated.
+    """
+    if new_weight is None and new_kind is None:
+        return {"success": False, "message": "pass at least one of new_weight or new_kind"}
+
+    graph = await _ensure_graph()
+    try:
+        updated = await graph.update_edge(
+            source_id,
+            target_id,
+            kind=kind,
+            new_weight=new_weight,
+            new_kind=new_kind,
+        )
+    except ValueError as exc:
+        return {"success": False, "message": str(exc)}
+    return {
+        "success": True,
+        "source_id": source_id,
+        "target_id": target_id,
+        "updated": updated,
+    }
+
+
+@server.tool()
+async def knowledge_merge_nodes(
+    keep_id: str,
+    drop_id: str,
+    merge_tags: bool = True,
+    merge_properties: bool = True,
+    append_content: bool = False,
+) -> dict[str, Any]:
+    """Merge ``drop_id`` into ``keep_id`` and delete ``drop_id``.
+
+    All edges incident to ``drop_id`` are re-pointed to ``keep_id``,
+    deduplicated by (other-endpoint, kind) — the higher-weight edge
+    survives on conflict. Self-loops created by the re-point are
+    discarded.
+
+    Use when entity extraction created two nodes for the same real-world
+    entity, or two ingests of the same document produced duplicates.
+
+    - ``merge_tags``: union tag lists onto keep (default True).
+    - ``merge_properties``: fill missing keys on keep from drop (keep
+      wins on conflict, default True).
+    - ``append_content``: append drop.content to keep.content
+      (default False — avoid silent content bloat).
+    """
+    graph = await _ensure_graph()
+    try:
+        result = await graph.merge_nodes(
+            keep_id,
+            drop_id,
+            merge_tags=merge_tags,
+            merge_properties=merge_properties,
+            append_content=append_content,
+        )
+    except ValueError as exc:
+        return {"success": False, "message": str(exc)}
+    if result is None:
+        return {
+            "success": False,
+            "message": f"node not found (keep={keep_id} or drop={drop_id})",
+        }
+    return {
+        "success": True,
+        "node_id": result.id,
+        "title": result.title,
+        "tags": result.tags,
+        "properties": result.properties,
+    }
 
 
 @server.tool()

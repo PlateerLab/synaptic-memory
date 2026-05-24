@@ -202,7 +202,7 @@ eval/data/queries/
 eval/data/gt_datasets.xlsx
 ```
 
-## MCP 서버 (36개 도구)
+## MCP 서버 (40개 도구)
 
 ```bash
 synaptic-mcp --db knowledge.db
@@ -215,6 +215,7 @@ synaptic-mcp --db knowledge.db --source-dsn postgresql://user:pw@host/db
 | 분류 | 도구 수 | 예시 |
 |------|--------|------|
 | Knowledge CRUD | 8 | search, add, link, reinforce, stats, export, consolidate, **backfill** |
+| **Edit** | 4 | update, unlink, update_edge, **merge_nodes** — 에이전트가 대화 중 노드/엣지 수정 |
 | **Ingest / CDC** | 6 | add_document, add_table, add_chunks, ingest_path, remove, sync_from_database |
 | Agent workflow | 4 | start_session, log_action, record_decision, record_outcome |
 | Semantic search | 3 | find_similar, get_reasoning_chain, explore_context |
@@ -234,6 +235,21 @@ synaptic-mcp --db knowledge.db --source-dsn postgresql://user:pw@host/db
 - **`knowledge_remove`** — 단건 노드 삭제 (엣지 cascade)
 - **`knowledge_sync_from_database`** — CDC 증분 동기화. 첫 호출은 풀 로드, 이후는
   변경분만. `--source-dsn`로 기본 DSN을 바인딩하면 dsn 인자 생략 가능.
+
+### Edit 도구 (v0.26+)
+에이전트가 대화 중에 그래프를 직접 수정. 잘못 인제스트된 노드나 자동 추출된
+엣지를 교정할 수 있게 함.
+
+- **`knowledge_update`** — 노드의 title/content/kind/tags/properties 부분 수정.
+  - tags: `tags` (전체 교체) / `tags_add` (union) / `tags_remove` (drop) 택1
+  - properties: `properties_patch` (merge) / `properties_replace` (전체 교체) 택1
+- **`knowledge_unlink`** — (source, target) 쌍의 엣지 삭제. `kind` 지정 시 그
+  종류만, 미지정이면 두 노드 사이 모든 엣지.
+- **`knowledge_update_edge`** — 엣지의 weight/kind 변경. ontology 바인딩 시
+  kind 변경은 source/target NodeKind와의 호환성을 재검증.
+- **`knowledge_merge_nodes`** — 중복 노드 병합. drop 노드의 모든 엣지를 keep으로
+  re-point, (other, kind) 기준 dedupe (높은 weight 보존), self-loop drop.
+  자동 엔티티 추출이 같은 개체를 둘로 만든 케이스 교정용.
 
 ## 배포
 
