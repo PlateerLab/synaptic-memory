@@ -196,29 +196,26 @@ MuSiQue-Ans dev 500q full pipeline 측정 (`run_tier1_benchmarks.py --only musiq
 - 결론: **OpenIE triple extraction + query-to-triple dense linking** 같은 architecture 교체가 필요. v0.18.0+ 연구 트랙.
 - 세부: `docs/PLAN-v0.17-ontology.md` §4.5, `docs/PLAN-v0.18-architecture.md` §Q2
 
-### v0.27 시도 — Query→Phrase dense seed (측정 대기)
+### v0.27 시도 — Query→Phrase dense seed (측정 negative)
 
-HippoRAG2 ablation에 따르면 query→triple/phrase linking이 +0.125 R@5 기여 (decomposition 아님 — `[[v017_hipporag_mechanism]]`). v0.27 구현:
+HippoRAG2 ablation 의 +0.125 R@5 가 phrase-level dense linking 으로 재현되는지 검증. 100q 3-way ablation 결과 (Qwen3-Embedding-4B vLLM @ :8013, SqliteGraphBackend, no reranker):
 
-1. **Phrase hub 노드 임베딩** — `EntityLinker.link(embedder=...)` 또는 inline `PhraseExtractor`가 embedder 바인딩 시 phrase title을 임베딩
-2. **EvidenceSearch `_seed_via_phrase_bridges`** — query embedding을 phrase 노드 embeddings와 cosine 매칭, top-K phrase의 CONTAINS/MENTIONS incoming chunks를 seed로 추가 (phrase 노드 자체는 evidence에 안 노출, bridge 역할만)
+| Config | MRR@10 | R@5 | R@10 | Hit/100 | Search |
+|---|---:|---:|---:|---:|---:|
+| **A** (control, no entity-linker) | 0.838 | **0.515** | 0.550 | 91 | 309s |
+| **B** (entity-linker, bridge OFF) | 0.838 | **0.495** | 0.535 | 90 | 332s |
+| **C** (full: entity-linker + bridge) | 0.838 | **0.495** | 0.535 | 90 | 1172s |
 
-측정 명령 (home GPU 박스):
-```bash
-# 1. Ollama qwen3-embedding:4b를 embedder로 사용
-uv run python examples/ablation/run_tier1_benchmarks.py \
-  --only musique --subset 500 \
-  --embed-url http://localhost:11434/v1 \
-  --embed-model qwen3-embedding:4b
+- **Bridge 자체 기여 = 0** (B↔C identical) — bridge가 추가한 chunks 가 reranker top-K에 영향을 안 줌
+- **Entity-linker(47k MENTIONS edges) = −0.020 R@5** — graph expander noise
+- Bridge 비용은 search 시간 **3.5x** (310→1172s) — 가치 없는 비용
+- 원인 가설: top-DF phrases ("World War", "American" 등 generic) 가 query cosine top-K 지배 → 무관 chunk 끌어옴 → reranker 가 무시. HippoRAG2 의 +0.125 는 **triple-level** (subject-predicate-object) 정보 밀도가 핵심, phrase-level 은 너무 coarse-grained
 
-# 2. 또는 local bge-m3
-uv run python examples/ablation/run_tier1_benchmarks.py \
-  --only musique --subset 500 --local-bge
-```
+**v0.27 결정**: `query_phrase_seed_k` default **0 (bridge off)** 로 강등. Phrase embedding 인프라(`EntityLinker.link(embedder=...)`, `PhraseExtractor` 인라인 임베딩)는 향후 작업 기반으로 유지. Bridge 는 opt-in (`EvidenceSearch(query_phrase_seed_k=K)` 또는 env `SYNAPTIC_PHRASE_SEED_K=K`).
 
-예상 (HippoRAG2 ablation 기준): R@5 0.453 → ~0.55-0.57 (격차 0.294 중 42%, +0.10-0.12 R@5 회복)
+세부: `[[v027_phrase_bridge_negative]]` (auto-memory)
 
-Phrase-level dense linking이 의미 있는 신호로 확인되면 v0.28에서 OpenIE triple-level로 확장 (LLM 인덱싱 필요 — 코어 의존성 정책 재검토). 의미 없으면 다른 접근 (e.g., query rewrite via LLM, multi-vector chunk repr).
+**다음 트랙 (v0.28+)**: paraphrase-aware phrase selection (DF range filter, semantic specificity score) 또는 triple-level (LLM ingest cost 정책 재검토 필요).
 
 ### 평가 쿼리 위치
 ```

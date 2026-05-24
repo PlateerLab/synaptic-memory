@@ -123,6 +123,9 @@ class EvidenceSearch:
         "_embedder",
         "_expander",
         "_expansion_budget",
+        "_phrase_cache",
+        "_phrase_cache_loaded",
+        "_query_phrase_seed_k",
         "_rerank_blend",
         "_reranker",
     )
@@ -141,6 +144,7 @@ class EvidenceSearch:
         similarity_threshold: float = 0.85,
         rerank_blend: float = 0.1,
         table_query_hints: dict[str, list[str]] | None = None,
+        query_phrase_seed_k: int = 0,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -155,6 +159,30 @@ class EvidenceSearch:
         self._rerank_blend = rerank_blend
         self._calibration_loaded = False
         self._calibrated_blend: float | None = None
+        # Phrase hub embedding cache for query→phrase dense seeding.
+        # Lazily populated on first search() call: each phrase node's
+        # title-embedding plus its L2 norm, so per-query cosine reduces
+        # to dot-product math against an in-memory list. Without this,
+        # every query re-scanned ``list_nodes(kind=ENTITY)`` on 10k+
+        # phrases and rebuilt norms — measured >10s per query on
+        # MuSiQue and dominated runtime.
+        self._phrase_cache: list[tuple[object, list[float], float]] | None = None
+        self._phrase_cache_loaded = False
+        # v0.27 — query→phrase dense seed top-K. Set to 0 to disable
+        # the bridge entirely (useful for ablation against a graph that
+        # still has phrase hub nodes from entity-linker / phrase
+        # extractor). Env override ``SYNAPTIC_PHRASE_SEED_K`` lets
+        # ablation scripts flip behavior without threading the kwarg
+        # through every facade.
+        import os as _os
+
+        env_k = _os.environ.get("SYNAPTIC_PHRASE_SEED_K")
+        if env_k is not None:
+            try:
+                query_phrase_seed_k = int(env_k)
+            except ValueError:
+                pass
+        self._query_phrase_seed_k = query_phrase_seed_k
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -280,11 +308,11 @@ class EvidenceSearch:
         # query→triple linking exploits (+12.5pp R@5 on MuSiQue in their
         # Table 5 ablation).
         phrase_bridge_seeds: list = []
-        if query_embedding:
+        if query_embedding and self._query_phrase_seed_k > 0:
             try:
                 phrase_chunks = await self._seed_via_phrase_bridges(
                     query_embedding,
-                    top_k_phrases=5,
+                    top_k_phrases=self._query_phrase_seed_k,
                     seen_ids=fts_ids | {n.id for n in vec_seeds} | {n.id for n in prf_seeds},
                 )
                 for node in phrase_chunks:
@@ -602,34 +630,93 @@ class EvidenceSearch:
             inclusion in the seed pool. Phrase hub nodes themselves are
             *not* returned — they are bridges, not evidence.
         """
-        # 1) Pull phrase hubs with non-empty embeddings.
-        from synaptic.models import NodeKind as _NK
+        # 1) Pull phrase hubs with non-empty embeddings — cached.
+        # The cache stores (nodes, matrix, l2_norms) so per-query work
+        # is a single numpy matmul + argpartition. Pure-Python cosine
+        # over 10k phrases × 2560-dim was ~10 s/query on MuSiQue,
+        # making the bridge dominate runtime — measured before this
+        # optimisation. With numpy it drops to ~1 ms.
+        try:
+            import numpy as _np
+        except ImportError:
+            _np = None  # falls back to pure-Python loop below
 
-        phrase_nodes = [
-            n
-            for n in await self._backend.list_nodes(kind=_NK.ENTITY, limit=100_000)
-            if n.embedding
-            and len(n.embedding) == len(query_embedding)
-            and "_phrase" in (n.tags or [])
-        ]
-        if not phrase_nodes:
+        if not self._phrase_cache_loaded:
+            from synaptic.models import NodeKind as _NK
+
+            phrase_nodes_raw = await self._backend.list_nodes(
+                kind=_NK.ENTITY, limit=100_000
+            )
+            nodes: list = []
+            matrix_rows: list[list[float]] = []
+            for n in phrase_nodes_raw:
+                if not n.embedding:
+                    continue
+                if "_phrase" not in (n.tags or []):
+                    continue
+                nodes.append(n)
+                matrix_rows.append(n.embedding)
+            if not nodes:
+                self._phrase_cache = []
+                self._phrase_cache_loaded = True
+            else:
+                if _np is not None:
+                    mat = _np.asarray(matrix_rows, dtype=_np.float32)
+                    norms = _np.linalg.norm(mat, axis=1)
+                    safe = norms > 0
+                    mat = mat[safe]
+                    norms = norms[safe]
+                    nodes = [n for n, ok in zip(nodes, safe.tolist(), strict=False) if ok]
+                    # Store the numpy-ready form for fast per-query reuse.
+                    self._phrase_cache = (nodes, mat, norms)
+                else:
+                    pure: list[tuple[object, list[float], float]] = []
+                    for n, vec in zip(nodes, matrix_rows, strict=False):
+                        norm = sum(x * x for x in vec) ** 0.5
+                        if norm == 0:
+                            continue
+                        pure.append((n, list(vec), norm))
+                    self._phrase_cache = pure
+                self._phrase_cache_loaded = True
+
+        cache = self._phrase_cache
+        if not cache:
             return []
 
-        # 2) Cosine similarity (manual — phrase count is bounded by
-        # DF filtering, so this is cheap even on 10k+ phrases).
-        q_norm = sum(x * x for x in query_embedding) ** 0.5
-        if q_norm == 0:
-            return []
-        scored_phrases: list[tuple[float, object]] = []
-        for p in phrase_nodes:
-            p_norm = sum(x * x for x in p.embedding) ** 0.5
-            if p_norm == 0:
-                continue
-            dot = sum(a * b for a, b in zip(query_embedding, p.embedding, strict=False))
-            cos = dot / (q_norm * p_norm)
-            scored_phrases.append((cos, p))
-        scored_phrases.sort(key=lambda t: t[0], reverse=True)
-        top_phrases = [p for _, p in scored_phrases[:top_k_phrases]]
+        if _np is not None and isinstance(cache, tuple):
+            nodes_cached, mat, norms = cache
+            if mat.shape[1] != len(query_embedding):
+                return []
+            q = _np.asarray(query_embedding, dtype=_np.float32)
+            q_norm = float(_np.linalg.norm(q))
+            if q_norm == 0:
+                return []
+            # cosine = (M · q) / (||M_i|| * ||q||)
+            scores = (mat @ q) / (norms * q_norm)
+            k = min(top_k_phrases, scores.shape[0])
+            idx = _np.argpartition(-scores, k - 1)[:k]
+            idx = idx[_np.argsort(-scores[idx])]
+            top_phrases = [nodes_cached[int(i)] for i in idx]
+        else:
+            # Pure-python fallback for environments without numpy.
+            if not cache:
+                return []
+            cached_dim = len(cache[0][1])
+            if cached_dim != len(query_embedding):
+                return []
+            q_norm = sum(x * x for x in query_embedding) ** 0.5
+            if q_norm == 0:
+                return []
+            scored_phrases: list[tuple[float, object]] = []
+            for node, p_emb, p_norm in cache:
+                dot = sum(
+                    a * b
+                    for a, b in zip(query_embedding, p_emb, strict=False)
+                )
+                cos = dot / (q_norm * p_norm)
+                scored_phrases.append((cos, node))
+            scored_phrases.sort(key=lambda t: t[0], reverse=True)
+            top_phrases = [p for _, p in scored_phrases[:top_k_phrases]]
         if not top_phrases:
             return []
 

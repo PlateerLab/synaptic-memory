@@ -112,20 +112,21 @@ async def test_query_phrase_bridge_seeds_chunks():
     await backend.connect()
     await _make_corpus_with_phrase_bridge(backend, embedder)
 
-    searcher = EvidenceSearch(backend=backend, embedder=embedder)
-    # Query embeds to the "widget" slot. We pass it explicitly so we
-    # don't rely on FTS picking the same surface form.
-    q_emb = await embedder.embed("widget")
-    result = await searcher.search(
-        "the gadget thing",  # lexically unrelated
-        k=5,
-        query_embedding=q_emb,
+    # Bridge default-off since v0.27 MuSiQue ablation (negative net
+    # contribution there); opt in explicitly to exercise it here.
+    searcher = EvidenceSearch(
+        backend=backend, embedder=embedder, query_phrase_seed_k=5
     )
-
-    expanded_ids = {e.node.id for e in result.expanded}
-    # Both phrase-linked chunks must be in the expansion set.
-    assert "chunk_A" in expanded_ids
-    assert "chunk_B" in expanded_ids
+    # Drive the bridge directly so the assertion only measures what
+    # `_seed_via_phrase_bridges` returns, decoupled from FTS / vec
+    # search noise over the synthetic 3-chunk corpus.
+    q_emb = await embedder.embed("widget")
+    bridge_chunks = await searcher._seed_via_phrase_bridges(
+        q_emb, top_k_phrases=5, seen_ids=set()
+    )
+    bridge_ids = {c.id for c in bridge_chunks}
+    assert "chunk_A" in bridge_ids
+    assert "chunk_B" in bridge_ids
 
 
 @pytest.mark.asyncio

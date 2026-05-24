@@ -223,7 +223,9 @@ async def run_one(
         )
         from synaptic.models import NodeKind as _NK
 
-        stats = await linker.link(backend, source_kind=_NK.CONCEPT)
+        stats = await linker.link(
+            backend, source_kind=_NK.CONCEPT, embedder=embedder
+        )
         print(
             f"  entity-linker: {stats.phrase_nodes_created} hubs / "
             f"{stats.mentions_edges_created} MENTIONS "
@@ -339,6 +341,13 @@ async def amain(argv: list[str]) -> int:
         help="Ollama embedding model name (default: qwen3-embedding:4b).",
     )
     p.add_argument(
+        "--embedder-backend",
+        choices=("ollama", "openai"),
+        default="ollama",
+        help="Embedder API style. 'openai' for any /v1/embeddings server "
+        "(vLLM, TEI-OpenAI, OpenAI), 'ollama' (default) for /api/embed.",
+    )
+    p.add_argument(
         "--reranker-url",
         default=None,
         help="TEI reranker base URL (e.g. http://localhost:8180). "
@@ -408,6 +417,16 @@ async def amain(argv: list[str]) -> int:
         "(default 2 — keeps 2-hop bridge candidates, drops hapax).",
     )
     p.add_argument(
+        "--phrase-seed-k",
+        type=int,
+        default=0,
+        help="v0.27 query→phrase dense seed top-K (default: 0 — "
+        "disabled). MuSiQue 100q ablation showed 0 net contribution "
+        "with this set to 5 (top-DF generic phrases dominate cosine "
+        "match; reranker rejects). Keep available as an opt-in for "
+        "future paraphrase-aware phrase selection.",
+    )
+    p.add_argument(
         "--entity-max-df-ratio",
         type=float,
         default=0.02,
@@ -470,11 +489,24 @@ async def amain(argv: list[str]) -> int:
         reranker_label = f"local BAAI/bge-reranker-v2-m3 ({args.local_bge_device})"
     else:
         if args.embedder_url:
-            embedder = OllamaEmbeddingProvider(
-                base_url=args.embedder_url,
-                model=args.embedder_model,
-            )
-            embedder_label = f"Ollama {args.embedder_model} @ {args.embedder_url}"
+            if args.embedder_backend == "openai":
+                from synaptic.extensions.embedder import OpenAIEmbeddingProvider
+
+                embedder = OpenAIEmbeddingProvider(
+                    api_base=args.embedder_url,
+                    model=args.embedder_model,
+                )
+                embedder_label = (
+                    f"OpenAI-compat {args.embedder_model} @ {args.embedder_url}"
+                )
+            else:
+                embedder = OllamaEmbeddingProvider(
+                    base_url=args.embedder_url,
+                    model=args.embedder_model,
+                )
+                embedder_label = (
+                    f"Ollama {args.embedder_model} @ {args.embedder_url}"
+                )
         if args.reranker_url:
             reranker = TEIReranker(base_url=args.reranker_url)
             reranker_label = f"TEI cross-encoder @ {args.reranker_url}"
