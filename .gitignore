@@ -12,6 +12,8 @@ eval/data/*.sqlite-shm
 eval/data/*.sqlite-wal
 eval/data/*.kuzu
 eval/data/*.kuzu.*
+# Derived from eval/data/finreg/raw.jsonl by eval/datasets/build_finreg.py
+eval/data/finreg/finreg_docs.jsonl
 eval/results/
 examples/benchmark_vs_competitors/results/
 examples/benchmark_vs_competitors/hipporag_bench/

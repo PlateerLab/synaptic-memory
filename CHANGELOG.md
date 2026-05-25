@@ -6,6 +6,100 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-05-25
+
+### v0.27 — Phrase embedding infrastructure (measured 0-net on MuSiQue, kept opt-in)
+
+HippoRAG2's published +0.125 R@5 on MuSiQue comes from query→triple/phrase
+dense linking. Synaptic already builds phrase hub nodes (NodeKind.ENTITY
+tagged `_phrase`) via PhraseExtractor / EntityLinker, so the missing piece
+was embedding those hubs and adding a query→phrase cosine seed in
+EvidenceSearch. 3-way ablation on MuSiQue-Ans 100q showed the bridge gave
+**0 net R@5** while increasing search latency 3.5x — top-DF generic phrases
+("World War", "American") dominated the cosine match. Bridge kept as
+opt-in infrastructure; the embedding side is wired by default so future
+paraphrase-aware / triple-level work has a foundation.
+
+**Added**
+- `EntityLinker.link(embedder=...)` — batch-embeds phrase titles before
+  `save_nodes_batch` when an embedder is supplied. Reports
+  `phrase_nodes_embedded` on `EntityLinkStats`.
+- Inline `PhraseExtractor` (en + ko) embeds phrase nodes via
+  `graph._embedder` during ingest.
+- `EvidenceSearch._seed_via_phrase_bridges` — embeds query, matches
+  cached phrase-hub matrix via numpy, follows incoming
+  CONTAINS/MENTIONS edges back to chunks. Cached after first call;
+  numpy-vectorised cosine with pure-Python fallback.
+- `EvidenceSearch(query_phrase_seed_k=K)` parameter
+  (**default 0 — bridge disabled**). Env override
+  `SYNAPTIC_PHRASE_SEED_K=K` for ablation scripts.
+- `examples/ablation/run_tier1_benchmarks.py`: `--embedder-backend
+  {ollama|openai}` flag for vLLM / OpenAI-style endpoints,
+  `--phrase-seed-k` flag (default 0). The linker call now passes
+  `embedder=embedder` automatically.
+- `eval/run_all.py`: `--only NAME[,NAME...]` substring dataset filter.
+
+## [0.26.0] — 2026-05-25 (PyPI: never published; folded into 0.27.0)
+
+### v0.26 — Editable graph + AutoRAG calibration measurement
+
+Treats the knowledge graph as a live object: LLM agents can fix
+auto-extraction mistakes in conversation without rebuilding the
+corpus. Auto-calibration was prototyped and measured then demoted to
+opt-in after the pseudo-self-retrieval signal proved paraphrase-blind
+(would have regressed 4/5 quick benches).
+
+**Added — editable graph**
+- Facade methods: `unlink(source, target, kind=None)`,
+  `update_edge(source, target, kind=None, new_weight, new_kind)`,
+  `merge_nodes(keep_id, drop_id, ...)`. Coordinate-based (source,
+  target, kind) — the storage protocol lacks `get_edge(id)`, and
+  coordinates match how LLMs naturally describe edges.
+- `graph.update()` now auto-reembeds when title/content/properties
+  change and an embedder is wired. `reembed=False` opts out; an
+  explicit `embedding=` argument still wins.
+- `_compose_embed_text` static helper so `add` and `update` produce
+  identical vectors for equivalent fields.
+- MCP tools (36 → 40): `knowledge_update` (tag modes: full replace /
+  `tags_add` / `tags_remove`; properties modes: `properties_patch`
+  merge / `properties_replace`), `knowledge_unlink`,
+  `knowledge_update_edge`, `knowledge_merge_nodes`.
+
+**Added — AutoRAG investigation**
+- `graph.calibrate(sample_size=20)` — runs `calibrate_corpus` +
+  `write_calibration` (dead code before v0.26). Available as a
+  user-facing diagnostic; **not** auto-fired by `_finalize`.
+  `CalibrationResult.sample_hit_at_10` recorded for diagnostics.
+- CLAUDE.md "Known limitation: AutoRAG cross-encoder regression"
+  documenting the −0.100 R@5 gap and why auto-calibration cannot
+  close it without a paraphrase-aware signal.
+
+## [0.25.0] — 2026-05-19 (PyPI: never published; folded into 0.27.0)
+
+### v0.25 — Cross-referential GraphRAG: HippoRAG2 head-to-head + one-line API
+
+**Added**
+- HippoRAG2 head-to-head harness (`examples/benchmark_vs_competitors/`)
+  — finreg 120 multi-hop strict measured RAG 0%, RAG-dense 32%,
+  HippoRAG2 (27B OpenIE) 31%, **synaptic-memory (9B) 73%**. LLM-extracted
+  entity graphs cannot capture exact structural citations; REFERENCES
+  edges + smaller agent dominate.
+- `finreg_dense_rag.py` — standard bge-m3 dense RAG baseline (not just
+  BM25) for fair comparison. Earlier "RAG 0%" finding was BM25-only.
+- One-line API extensions on `SynapticGraph.from_data` / `.from_chunks`
+  / `.from_database`: backend choice, lifecycle, sync, reranker-url,
+  rerank-backend, rerank-model passthrough.
+- `get_document` doc_id resolution via indexed `properties` lookup
+  (was a full-scan).
+
+**Fixed**
+- finreg multi-hop GT generator was resolving every "제N조" reference
+  to an article in the *same* law, ignoring "「○○법」" qualifiers that
+  named a different statute. ~1/6 of pairs carried the wrong B as
+  ground truth. GT regenerated (120 clean queries).
+
+## [0.24.0] — 2026-05-12 (PyPI: never published; folded into 0.27.0)
+
 ### v0.24 — Relation enrichment: multi-hop retrieval (RAG 0% → synaptic 83%)
 
 Built a financial-statute corpus (`finreg` — law.go.kr, 4,417 articles)
