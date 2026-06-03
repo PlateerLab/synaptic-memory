@@ -56,10 +56,9 @@ async def main() -> None:
 
         for query in queries:
             print(f"Query: {query!r}")
-            # engine="evidence" selects the 3rd-gen retrieval pipeline
-            # (BM25 + HNSW + PPR + cross-encoder + MMR). Default flips
-            # to "evidence" in v0.16.0.
-            result = await graph.search(query, limit=3, engine="evidence")
+            # The 3rd-gen retrieval pipeline (BM25 + HNSW + PPR +
+            # cross-encoder + MMR) — the only engine since v0.28.
+            result = await graph.search(query, limit=3)
 
             for i, activated in enumerate(result.nodes[:3], 1):
                 node = activated.node

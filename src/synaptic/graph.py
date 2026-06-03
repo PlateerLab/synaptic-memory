@@ -1744,7 +1744,6 @@ class SynapticGraph:
         *,
         limit: int = 10,
         embedding: list[float] | None = None,
-        engine: str = "evidence",
         rerank: bool | None = None,
         fts_seed_limit: int | None = None,
         per_document_cap: int | None = None,
@@ -1757,28 +1756,10 @@ class SynapticGraph:
             embedding: Pre-computed query embedding. When omitted and
                 an embedder is wired into the graph, the query is
                 embedded automatically.
-            engine: Which retrieval engine to use.
-
-                - ``"evidence"`` (default from v0.16.0) →
-                  :class:`EvidenceSearch`, the hybrid pipeline
-                  (BM25 + HNSW + PPR + cross-encoder + MMR). Anchor-
-                  driven, hybrid-reranker-based, MMR aggregation.
-                  Has no ``cos >= 0.45`` cutoff and uses min-max
-                  normalised cosine, so semantic-only queries that
-                  share no words with the corpus still surface
-                  relevant evidence.
-
-                - ``"legacy"`` → :class:`HybridSearch`, the 3-stage
-                  FTS → synonym → query rewrite cascade that was the
-                  default up to v0.15.x. Kept for transitional
-                  callers that depend on its specific
-                  ``stages_used`` semantics; **deprecated, scheduled
-                  for removal in v0.17.0**.
-
-            rerank: Per-call cross-encoder reranker override (evidence
-                engine only). ``None`` uses the graph's configured
-                reranker; ``False`` skips reranking for this query even
-                when one is wired; ``True`` is the same as ``None``.
+            rerank: Per-call cross-encoder reranker override. ``None``
+                uses the graph's configured reranker; ``False`` skips
+                reranking for this query even when one is wired; ``True``
+                is the same as ``None``.
             fts_seed_limit: Per-call FTS seed-pool size. ``None`` uses
                 the ``max(20, limit * 3)`` default heuristic.
             per_document_cap: Per-call cap on evidence items from any
@@ -1786,133 +1767,21 @@ class SynapticGraph:
                 ``None`` uses the pipeline default (2).
 
         Returns:
-            ``SearchResult`` regardless of which engine was used —
-            the evidence-engine path runs through an internal adapter
-            that mirrors the SearchResult shape so all 67+ existing
-            callers in this repo continue to work unchanged.
+            ``SearchResult`` — the evidence pipeline (BM25 + HNSW + PPR +
+            cross-encoder + MMR) runs through an internal adapter that
+            mirrors the SearchResult shape so all existing callers in this
+            repo continue to work unchanged. ``embedding`` is accepted for
+            backwards compatibility; the evidence pipeline re-embeds the
+            query internally via the configured embedder.
         """
         # NFC-normalize query to match NFC-normalized stored content.
         query = _nfc(query)
-        # Auto-embed query for vector search
-        if embedding is None and self._embedder is not None:
-            embedding = await self._embedder.embed(query)
-
-        # Modern path — default from v0.16.0.
-        if engine == "evidence":
-            return await self._search_via_evidence(
-                query,
-                limit=limit,
-                rerank=rerank,
-                fts_seed_limit=fts_seed_limit,
-                per_document_cap=per_document_cap,
-            )
-
-        if engine != "legacy":
-            msg = f"Unknown search engine {engine!r}; expected 'legacy' or 'evidence'."
-            raise ValueError(msg)
-
-        # Legacy HybridSearch path — deprecated, scheduled for removal in v0.17.0.
-        import warnings
-
-        warnings.warn(
-            "graph.search(engine='legacy') is deprecated and will be removed in "
-            "v0.17.0. Drop the engine argument (now defaults to 'evidence') or "
-            "pass engine='evidence' explicitly.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-        # Corpus size for adaptive vector weighting
-        corpus_size = await self._get_corpus_size()
-
-        # Query decomposition: split complex queries into sub-queries
-        if self._query_decomposer is not None and hasattr(self._query_decomposer, "decompose"):
-            import asyncio
-
-            sub_queries = await self._query_decomposer.decompose(query)
-            if len(sub_queries) > 1:
-                # Search each sub-query in parallel
-                tasks = [
-                    self._search.search(
-                        self._backend,
-                        sq,
-                        limit=limit,
-                        embedding=embedding,
-                        corpus_size=corpus_size,
-                    )
-                    for sq in sub_queries
-                ]
-                sub_results = await asyncio.gather(*tasks)
-
-                # Merge results with RRF fusion
-                from synaptic.search import _rrf_fusion
-
-                rankings: list[dict[str, float]] = []
-                node_map: dict[str, ActivatedNode] = {}
-                for sr in sub_results:
-                    ranking = {}
-                    for activated in sr.nodes:
-                        ranking[activated.node.id] = activated.resonance
-                        # Keep the best ActivatedNode per node_id
-                        existing = node_map.get(activated.node.id)
-                        if existing is None or activated.resonance > existing.resonance:
-                            node_map[activated.node.id] = activated
-                    rankings.append(ranking)
-
-                rrf_scores = _rrf_fusion(*rankings)
-                max_rrf = max(rrf_scores.values()) if rrf_scores else 1.0
-
-                merged: list[ActivatedNode] = []
-                for nid, rrf_s in sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[
-                    :limit
-                ]:
-                    an = node_map[nid]
-                    merged.append(
-                        ActivatedNode(
-                            node=an.node,
-                            activation=an.activation,
-                            resonance=rrf_s / max_rrf if max_rrf > 0 else 0.0,
-                            path=an.path,
-                        )
-                    )
-
-                total = sum(sr.total_candidates for sr in sub_results)
-                elapsed = sum(sr.search_time_ms for sr in sub_results)
-                stages = ["decompose"]
-                for sr in sub_results:
-                    for s in sr.stages_used:
-                        if s not in stages:
-                            stages.append(s)
-
-                result = SearchResult(
-                    query=query,
-                    nodes=merged,
-                    total_candidates=total,
-                    search_time_ms=elapsed,
-                    stages_used=stages,
-                )
-                return await self._apply_reranker(query, result, limit)
-
-        result = await self._search.search(
-            self._backend,
+        return await self._search_via_evidence(
             query,
             limit=limit,
-            embedding=embedding,
-            corpus_size=corpus_size,
-        )
-        return await self._apply_reranker(query, result, limit)
-
-    async def _apply_reranker(self, query: str, result: SearchResult, limit: int) -> SearchResult:
-        """Apply reranker to search results if configured."""
-        if self._reranker is None or not hasattr(self._reranker, "rerank"):
-            return result
-        reranked = await self._reranker.rerank(query, result.nodes, top_k=limit)
-        return SearchResult(
-            query=result.query,
-            nodes=reranked,
-            total_candidates=result.total_candidates,
-            search_time_ms=result.search_time_ms,
-            stages_used=result.stages_used + ["rerank"],
+            rerank=rerank,
+            fts_seed_limit=fts_seed_limit,
+            per_document_cap=per_document_cap,
         )
 
     async def _search_via_evidence(
@@ -1924,14 +1793,12 @@ class SynapticGraph:
         fts_seed_limit: int | None = None,
         per_document_cap: int | None = None,
     ) -> SearchResult:
-        """Run the modern evidence pipeline and adapt its result to the
-        legacy ``SearchResult`` shape.
+        """Run the evidence pipeline and adapt its result to the
+        ``SearchResult`` shape used across the codebase.
 
-        Lazily imported so the evidence pipeline only loads when a
-        caller explicitly opts in via ``engine="evidence"``. Any
-        future Phase C step that flips the default will simply
-        change the ``engine`` parameter default — the adapter itself
-        is forward-compatible.
+        ``EvidenceSearch`` is imported lazily so the pipeline only loads
+        on first search. The adapter mirrors the legacy ``SearchResult``
+        fields so all existing callers keep working.
         """
         from synaptic.extensions.evidence_search import EvidenceSearch
 

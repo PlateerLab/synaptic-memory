@@ -10,7 +10,7 @@ Use with::
     from synaptic.integrations.langchain import SynapticRetriever
 
     graph = await SynapticGraph.from_data("./docs/")
-    retriever = SynapticRetriever(graph=graph, k=5, engine="evidence")
+    retriever = SynapticRetriever(graph=graph, k=5)
 
     # Works anywhere LangChain expects a retriever
     docs = await retriever.ainvoke("my question")
@@ -51,11 +51,6 @@ class SynapticRetriever(BaseRetriever):
             or ``await SynapticGraph.from_database(...)`` before
             constructing the retriever.
         k: Top-k hits to return (default 5).
-        engine: Which retrieval engine to use — ``"evidence"`` for the
-            hybrid pipeline (BM25 + HNSW + PPR + cross-encoder + MMR)
-            or ``"legacy"`` for the 3-stage FTS cascade. ``"evidence"``
-            is recommended for production; legacy is the v0.15.x
-            default and will be removed in v0.17.0.
     """
 
     graph: Any
@@ -63,7 +58,6 @@ class SynapticRetriever(BaseRetriever):
     on the internal dataclass."""
 
     k: int = 5
-    engine: str = "evidence"
 
     model_config: ClassVar[dict] = {"arbitrary_types_allowed": True}
 
@@ -74,7 +68,7 @@ class SynapticRetriever(BaseRetriever):
         run_manager: AsyncCallbackManagerForRetrieverRun,
     ) -> list[Document]:
         graph: SynapticGraph = self.graph
-        result = await graph.search(query, limit=self.k, engine=self.engine)
+        result = await graph.search(query, limit=self.k)
 
         docs: list[Document] = []
         for hit in result.nodes[: self.k]:

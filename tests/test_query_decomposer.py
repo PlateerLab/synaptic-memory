@@ -2,7 +2,6 @@
 
 import pytest
 
-from synaptic import SynapticGraph
 from synaptic.extensions.query_decomposer import QueryDecomposer
 
 
@@ -69,50 +68,3 @@ class TestRuleDecompose:
         """Comparison queries should split items."""
         result = await decomposer.decompose("PostgreSQL과 MongoDB 비교")
         assert len(result) == 2
-
-
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-class TestDecomposerIntegration:
-    """Query decomposition is a legacy-engine hook. EvidenceSearch has
-    its own compound-query path (``compare_search``). These tests pin
-    the legacy contract — pass ``engine="legacy"`` explicitly."""
-
-    async def test_search_with_decomposer(self):
-        from synaptic.backends.memory import MemoryBackend
-
-        decomposer = QueryDecomposer()
-        graph = SynapticGraph(
-            MemoryBackend(),
-            query_decomposer=decomposer,
-        )
-
-        await graph.add("PostgreSQL Guide", "PostgreSQL is a relational database")
-        await graph.add("MongoDB Guide", "MongoDB is a document database")
-        await graph.add("Redis Guide", "Redis is an in-memory cache")
-
-        result = await graph.search("PostgreSQL과 MongoDB", engine="legacy")
-        assert result is not None
-        assert "decompose" in result.stages_used
-
-    async def test_search_without_decomposer(self):
-        """Without decomposer, search should work normally."""
-        graph = SynapticGraph.memory()
-
-        await graph.add("Test", "content about databases")
-        result = await graph.search("databases", engine="legacy")
-        assert "decompose" not in result.stages_used
-
-    async def test_simple_query_not_decomposed(self):
-        """Single-topic query should not trigger decomposition."""
-        from synaptic.backends.memory import MemoryBackend
-
-        decomposer = QueryDecomposer()
-        graph = SynapticGraph(
-            MemoryBackend(),
-            query_decomposer=decomposer,
-        )
-
-        await graph.add("PostgreSQL", "database content")
-        result = await graph.search("PostgreSQL 성능", engine="legacy")
-        # Single topic → no decomposition → no "decompose" stage
-        assert "decompose" not in result.stages_used

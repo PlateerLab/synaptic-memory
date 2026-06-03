@@ -35,7 +35,7 @@ async def main() -> None:
     graph = await SynapticGraph.from_data(str(DATA_PATH), db=DB_PATH)
 
     try:
-        retriever = SynapticRetriever(graph=graph, k=3, engine="evidence")
+        retriever = SynapticRetriever(graph=graph, k=3)
 
         for query in [
             "laptop with good battery life",
