@@ -1,0 +1,65 @@
+name: Bench Regression Guard
+
+# Seals the "stale baseline" trap: runs the FTS-only retrieval benchmark on
+# a schedule and fails if any dataset's MRR drops below the committed
+# baseline (eval/baselines/qa_latest.json) by more than the absolute 0.01
+# threshold enforced in eval/run_all.py.
+#
+# Scope on GitHub-hosted runners:
+#   - The custom corpora (KRRA / assort / X2BEE / finreg) ship as pre-built
+#     SQLite graphs that are NOT in git (proprietary source data), so they
+#     are skipped here. We therefore restrict the run to the five PUBLIC
+#     quick datasets whose corpora ARE tracked in tests/benchmark/data/
+#     (HotPotQA-24, Allganize RAG-ko, Allganize RAG-Eval, PublicHealthQA,
+#     AutoRAG) via `--only`. These load from local JSON — no network, no GPU.
+#   - FTS-only (no embedder / no reranker): deterministic and CPU-only, so it
+#     runs on ubuntu-latest. kiwi (the `korean` extra) is required because
+#     three of the five corpora are Korean.
+#   - On a self-hosted runner that has eval/data/*.sqlite, drop the `--only`
+#     filter to cover the custom corpora too.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --extra sqlite --extra korean --extra vector
+
+      - name: Run FTS-only retrieval bench vs baseline
+        # Non-zero exit (regression > 0.01 MRR on any dataset present in the
+        # baseline) fails the job. `--save` is pointed away from the tracked
+        # baseline so the run never clobbers eval/baselines/qa_latest.json.
+        run: |
+          uv run python eval/run_all.py \
+            --quick \
+            --only hotpotqa,allganize,publichealthqa,autorag \
+            --compare eval/baselines/qa_latest.json \
+            --save /tmp/bench_results.json
+
+      - name: Upload bench results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: /tmp/bench_results.json
+          if-no-files-found: ignore
