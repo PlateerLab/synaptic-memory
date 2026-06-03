@@ -83,7 +83,7 @@ asyncio.run(main())
   ├─ 문서: Category → Document → Chunk
   └─ 정형: 테이블 row → ENTITY 노드 + RELATED 엣지 (FK)
   ↓
-36개 MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
+42개 MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
 ```
 
 **라이브러리가 하는 건 딱 두 가지:**
@@ -161,7 +161,7 @@ synaptic-mcp --db my_graph.db
 synaptic-mcp --db my_graph.db --embed-url http://localhost:11434/v1
 ```
 
-Claude가 36개 도구로 그래프를 직접 탐색합니다. 검색, 인제스트, CDC 동기화까지 CLI로 내려가지 않고 대화 안에서.
+Claude가 42개 도구로 그래프를 직접 탐색합니다. 검색, 인제스트, CDC 동기화까지 CLI로 내려가지 않고 대화 안에서.
 
 복붙 가능한 `claude_desktop_config.json` 샘플:
 [`examples/mcp_claude_desktop.json`](examples/mcp_claude_desktop.json).
@@ -232,7 +232,7 @@ Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합�
 
 ---
 
-## 에이전트 도구 (36개)
+## 에이전트 도구 (42개)
 
 ### 텍스트 검색 도구
 | 도구 | 용도 |
@@ -391,7 +391,7 @@ StorageBackend (Protocol)
   ↓
 검색 파이프라인 (BM25 + 벡터 + PRF + PPR + reranker + MMR)
   ↓
-에이전트 도구 (36개) → MCP 서버 → LLM 에이전트
+에이전트 도구 (42개) → MCP 서버 → LLM 에이전트
 ```
 
 ---

@@ -86,7 +86,7 @@ Knowledge Graph
   ├─ Documents: Category → Document → Chunk
   └─ Structured: table rows as ENTITY nodes + RELATED edges (FKs)
   ↓
-36 MCP tools → LLM agent explores via graph-aware multi-turn tool use
+42 MCP tools → LLM agent explores via graph-aware multi-turn tool use
 ```
 
 **Two jobs, nothing else:**
@@ -163,7 +163,7 @@ synaptic-mcp --db my_graph.db
 synaptic-mcp --db my_graph.db --embed-url http://localhost:11434/v1
 ```
 
-Claude can now call 36 tools to explore your graph — search, ingest
+Claude can now call 42 tools to explore your graph — search, ingest
 new files into the graph mid-conversation, and sync from a live
 database without dropping to a CLI.
 
@@ -276,7 +276,7 @@ agent; Synaptic gives you the primitives.
 
 ---
 
-## Agent Tools (36 total)
+## Agent Tools (42 total)
 
 ### Text search tools
 | Tool | Purpose |
@@ -560,7 +560,7 @@ StorageBackend (Protocol)
   ↓
 Retrieval pipeline (BM25 + vector + PRF + PPR + reranker + MMR)
   ↓
-Agent tools (36) → MCP server → LLM agent
+Agent tools (42) → MCP server → LLM agent
 ```
 
 ---

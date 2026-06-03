@@ -2,9 +2,9 @@
 
 ## 프로젝트 개요
 LLM 에이전트용 지식 그래프 + MCP 도구 서버.
-아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 36개 도구로 LLM이 탐색.
+아무 데이터(CSV, JSONL, PDF/DOCX/PPTX/XLSX/HWP, SQL DB)를 넣으면 그래프를 자동 구축하고, 42개 도구로 LLM이 탐색.
 
-- PyPI: `synaptic-memory` (v0.17.2)
+- PyPI: `synaptic-memory` (v0.27.0)
 - 라이선스: Apache-2.0
 - Python: >=3.12
 - 코어 의존성: **0** (백엔드/임베더/한국어 분석 전부 optional)
@@ -42,7 +42,7 @@ StorageBackend
 검색 파이프라인
   Kiwi 형태소 → BM25 → Vector(HNSW) → PRF → PPR → Reranker → MaxP → MMR
   ↓
-Agent tools (36개) → MCP server → LLM agent
+Agent tools (42개) → MCP server → LLM agent
 ```
 
 ### 핵심 모듈
@@ -92,7 +92,7 @@ Agent tools (36개) → MCP server → LLM agent
 ## 테스트
 
 ```bash
-# 단위 테스트 (687+ 건)
+# 단위 테스트 (1088+ 건)
 uv run pytest tests/ -q \
   --ignore=tests/test_backend_postgresql.py \
   --ignore=tests/test_backend_qdrant.py \
@@ -235,7 +235,7 @@ eval/data/queries/
 eval/data/gt_datasets.xlsx
 ```
 
-## MCP 서버 (40개 도구)
+## MCP 서버 (42개 도구)
 
 ```bash
 synaptic-mcp --db knowledge.db
@@ -247,7 +247,7 @@ synaptic-mcp --db knowledge.db --source-dsn postgresql://user:pw@host/db
 ### 도구 분류
 | 분류 | 도구 수 | 예시 |
 |------|--------|------|
-| Knowledge CRUD | 8 | search, add, link, reinforce, stats, export, consolidate, **backfill** |
+| Knowledge CRUD | 9 | search, add, link, reinforce, stats, **snapshot**, export, consolidate, **backfill** |
 | **Edit** | 4 | update, unlink, update_edge, **merge_nodes** — 에이전트가 대화 중 노드/엣지 수정 |
 | **Ingest / CDC** | 6 | add_document, add_table, add_chunks, ingest_path, remove, sync_from_database |
 | Agent workflow | 4 | start_session, log_action, record_decision, record_outcome |
@@ -255,7 +255,7 @@ synaptic-mcp --db knowledge.db --source-dsn postgresql://user:pw@host/db
 | Ontology | 2 | define_type, query_schema |
 | **Agent v1** | 8 | search, expand, get_document, list_categories, count, search_exact, follow, session_info |
 | **Agent v2** | 2 | deep_search, compare_search |
-| **Structured** | 3 | filter_nodes, aggregate_nodes, join_related |
+| **Structured** | 4 | filter_nodes, aggregate_nodes, join_related, **top_nodes** |
 
 ### Ingest / CDC 도구 (v0.14.0+)
 에이전트가 대화 중에 직접 지식 베이스를 업데이트할 수 있게 하는 6개 도구.
