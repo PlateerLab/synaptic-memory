@@ -22,9 +22,16 @@ benchmark regression check into CI.
   behaviour identical to the shipped ramp.** Env override
   `SYNAPTIC_RERANK_STD_DEADZONE` mirrors the `SYNAPTIC_PHRASE_SEED_K`
   precedence. The std→multiplier logic is factored into a pure
-  `_rerank_discriminator` helper and unit-tested. Tuning the AutoRAG
-  recovery needs a full-pipeline sweep
-  (`examples/ablation/run_tier1_benchmarks.py --local-bge`).
+  `_rerank_discriminator` helper and unit-tested.
+- **Validated** (`examples/ablation/sweep_rerank_deadzone.py`,
+  Qwen3-Embedding-4B + bge-reranker-v2-m3): the deadzone monotonically
+  recovers AutoRAG (0.798 → 0.842 as the floor rises 0→3) while `dz=2.0`
+  leaves every reranker-helps corpus (HotPotQA, Allganize, PublicHealthQA
+  +0.20) unchanged — a strict Pareto win there. Full AutoRAG recovery needs
+  a higher floor where PublicHealthQA starts to lose (AutoRAG's per-query
+  std overlaps PHQA's with this embedder; the std SCALE shifts with the
+  embedder, so no single fixed threshold is universal). Confirms the opt-in
+  design: a useful per-deployment knob, not a fixed default.
 - `.github/workflows/bench.yml` — scheduled (weekly) + dispatchable FTS-only
   benchmark regression guard. Runs the five public quick datasets whose
   corpora are tracked in `tests/benchmark/data/` and fails on any >0.01 MRR

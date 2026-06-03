@@ -192,11 +192,13 @@ class EvidenceSearch:
         # outright for that query rather than merely attenuated. The ramp
         # alone leaves a residual blend (AutoRAG worst-case std≈0.53 →
         # blend≈0.018) that still displaces the FTS top-1 and costs ~−0.10
-        # MRR on retrieval-style corpora. Tune per deployment with env
-        # ``SYNAPTIC_RERANK_STD_DEADZONE``; measure the corpus trade-off
-        # with examples/ablation/run_tier1_benchmarks.py --local-bge before
-        # raising it above 0 (PublicHealthQA / HotPotQA rely on the
-        # reranker at higher std and must not regress).
+        # MRR on retrieval-style corpora. The std SCALE is embedder-
+        # dependent (measured: bge-m3 puts AutoRAG std≈0.5, while
+        # Qwen3-Embedding-4B puts it ≈3 and overlaps PublicHealthQA), so
+        # no single fixed floor is universal — tune per deployment via env
+        # ``SYNAPTIC_RERANK_STD_DEADZONE`` and measure with
+        # examples/ablation/sweep_rerank_deadzone.py. PublicHealthQA /
+        # HotPotQA rely on the reranker at higher std and must not regress.
         env_dz = _os.environ.get("SYNAPTIC_RERANK_STD_DEADZONE")
         if env_dz is not None:
             try:
