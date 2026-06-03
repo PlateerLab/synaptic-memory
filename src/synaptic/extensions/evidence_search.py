@@ -127,6 +127,7 @@ class EvidenceSearch:
         "_phrase_cache_loaded",
         "_query_phrase_seed_k",
         "_rerank_blend",
+        "_rerank_std_deadzone",
         "_reranker",
     )
 
@@ -145,6 +146,7 @@ class EvidenceSearch:
         rerank_blend: float = 0.1,
         table_query_hints: dict[str, list[str]] | None = None,
         query_phrase_seed_k: int = 0,
+        rerank_std_deadzone: float = 0.0,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -183,6 +185,25 @@ class EvidenceSearch:
             except ValueError:
                 pass
         self._query_phrase_seed_k = query_phrase_seed_k
+        # v0.28 — per-query reranker-score deadzone (opt-in, default 0.0
+        # → never triggers, behaviour identical to the v0.17.1 std/3 ramp).
+        # When the cross-encoder's top-K logits have std below this floor
+        # they carry no discriminative signal, so the blend is zeroed
+        # outright for that query rather than merely attenuated. The ramp
+        # alone leaves a residual blend (AutoRAG worst-case std≈0.53 →
+        # blend≈0.018) that still displaces the FTS top-1 and costs ~−0.10
+        # MRR on retrieval-style corpora. Tune per deployment with env
+        # ``SYNAPTIC_RERANK_STD_DEADZONE``; measure the corpus trade-off
+        # with examples/ablation/run_tier1_benchmarks.py --local-bge before
+        # raising it above 0 (PublicHealthQA / HotPotQA rely on the
+        # reranker at higher std and must not regress).
+        env_dz = _os.environ.get("SYNAPTIC_RERANK_STD_DEADZONE")
+        if env_dz is not None:
+            try:
+                rerank_std_deadzone = float(env_dz)
+            except ValueError:
+                pass
+        self._rerank_std_deadzone = rerank_std_deadzone
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -195,6 +216,32 @@ class EvidenceSearch:
             similarity_threshold=similarity_threshold,
         )
         self._expansion_budget = expansion_budget or ExpansionBudget()
+
+    @staticmethod
+    def _rerank_discriminator(rerank_scores: list[float], deadzone: float) -> float:
+        """Map the cross-encoder's top-K logit spread to a blend
+        multiplier in ``[0, 1]``.
+
+        A wide spread (std ≥ 3) means the reranker is confidently
+        separating paraphrase-relevant passages → full blend. A flat
+        cluster means it has no discriminative signal → ~0, so blending
+        it would only inject noise that displaces the FTS top-1.
+
+        ``deadzone`` is an opt-in hard floor (default ``0.0`` → never
+        triggers, identical to the v0.17.1 ``std/3`` ramp). When the
+        observed std is below it, the multiplier is zeroed outright
+        instead of merely attenuated — the ramp alone leaves a residual
+        (AutoRAG's worst-case std ≈ 0.53 → ≈ 0.018) that still costs
+        ~−0.10 MRR on retrieval-style corpora.
+        """
+        if len(rerank_scores) < 2:
+            return 1.0
+        mean = sum(rerank_scores) / len(rerank_scores)
+        var = sum((s - mean) ** 2 for s in rerank_scores) / len(rerank_scores)
+        std = var**0.5
+        if std < deadzone:
+            return 0.0
+        return min(1.0, std / 3.0)
 
     async def search(
         self,
@@ -545,13 +592,9 @@ class EvidenceSearch:
                     # discards the score-magnitude information that the
                     # weighted blend uses to do small reorders. Adaptive
                     # weighted blend is the v0.17.1 default.
-                    if len(rerank_scores) >= 2:
-                        mean = sum(rerank_scores) / len(rerank_scores)
-                        var = sum((s - mean) ** 2 for s in rerank_scores) / len(rerank_scores)
-                        std = var**0.5
-                        discriminator = min(1.0, std / 3.0)
-                    else:
-                        discriminator = 1.0
+                    discriminator = self._rerank_discriminator(
+                        rerank_scores, self._rerank_std_deadzone
+                    )
                     effective_blend = active_blend * discriminator
                     if effective_blend > 0:
                         for j, i in enumerate(rerank_indices):
