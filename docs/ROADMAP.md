@@ -156,17 +156,19 @@ v0.14.0 Phase 6 follow-up. Dialect 별 placeholder 차이 (`:1` vs `?`) 만
 | C4-4 | `sync_from_oracle()` / `sync_from_mssql()` 오케스트레이터 |
 | C4-5 | Env-var opt-in integration 테스트 |
 
-### C5. Legacy HybridSearch 제거
+### C5. Legacy HybridSearch 제거 (부분 완료 — v0.28-dev)
 
-v0.17.0 원래 목표였으나 carry-over. `engine="legacy"` 는 여전히 escape
-hatch 로 유지 중 (`src/synaptic/search.py` + `agent_search.py` 에 잔존).
+v0.17.0 원래 목표였으나 carry-over. **안전 부분집합만 ship**: `engine="legacy"`
+escape hatch 제거. 나머지는 공개 API break 라 보류 — `graph.agent_search()`
+(→ `AgentSearch` 의 5개 intent-tuned weight/PPR 프로파일)가 MCP
+`agent_find_similar` 도구를 떠받쳐서 `AgentSearch`/`HybridSearch` 를 못 지움.
 
-| # | 작업 |
-|---|------|
-| C5-1 | `HybridSearch` 클래스 + `search.py` 제거 |
-| C5-2 | `graph.search(engine=)` 파라미터 제거 |
-| C5-3 | `agent_search.py` 의 HybridSearch 기반 intent routing 정리 |
-| C5-4 | Migration 가이드 `docs/MIGRATION-0.19.md` |
+| # | 작업 | 상태 |
+|---|------|---|
+| C5-1 | `HybridSearch` 클래스 + `search.py` 제거 | 보류 — `AgentSearch` 내부 의존 |
+| C5-2 | `graph.search(engine=)` 파라미터 제거 | ✅ ship (v0.28-dev) — legacy 분기 + `_apply_reranker` + double-embed 제거 |
+| C5-3 | `agent_search.py` 의 HybridSearch 기반 intent routing 정리 | 보류 — `agent_find_similar` 도구 동작 변경 위험 |
+| C5-4 | Migration 가이드 `docs/MIGRATION-0.19.md` | 보류 — full 제거 시점에 작성 |
 
 ---
 

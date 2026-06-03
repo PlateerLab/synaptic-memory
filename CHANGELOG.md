@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### v0.28-dev — legacy-engine cleanup, rerank deadzone knob, CI bench guard
+
+Maintenance pass: removes the dead legacy retrieval engine path, adds an
+opt-in mechanism for the AutoRAG cross-encoder regression, and wires the
+benchmark regression check into CI.
+
+**Added**
+- `EvidenceSearch(rerank_std_deadzone=...)` — opt-in per-query hard floor
+  on the cross-encoder blend (PLAN-v0.18 §Q3). When the reranker's top-K
+  logit std is below the floor it carries no discriminative signal, so the
+  blend is zeroed outright instead of merely attenuated by the v0.17.1
+  `std/3` ramp (which leaves a residual ≈0.018 at AutoRAG's worst-case
+  std 0.53 that displaces the FTS top-1). **Default `0.0` → never triggers,
+  behaviour identical to the shipped ramp.** Env override
+  `SYNAPTIC_RERANK_STD_DEADZONE` mirrors the `SYNAPTIC_PHRASE_SEED_K`
+  precedence. The std→multiplier logic is factored into a pure
+  `_rerank_discriminator` helper and unit-tested. Tuning the AutoRAG
+  recovery needs a full-pipeline sweep
+  (`examples/ablation/run_tier1_benchmarks.py --local-bge`).
+- `.github/workflows/bench.yml` — scheduled (weekly) + dispatchable FTS-only
+  benchmark regression guard. Runs the five public quick datasets whose
+  corpora are tracked in `tests/benchmark/data/` and fails on any >0.01 MRR
+  drop vs `eval/baselines/qa_latest.json`. CPU-only, no network. Seals the
+  stale-baseline trap (ROADMAP v0.19+).
+
+**Changed / Removed**
+- **BREAKING:** `graph.search()` no longer accepts the `engine` parameter.
+  The `engine="legacy"` path (dead-reachable since the v0.16 default flip to
+  `"evidence"`; deprecation text still claimed "removed in v0.17.0") and the
+  unused `_apply_reranker` method are removed. Callers passing
+  `engine="evidence"`/`engine="legacy"` must drop the kwarg. `HybridSearch`,
+  `AgentSearch`, `SearchIntent`, `suggest_intent`, and `graph.agent_search()`
+  are **kept** (no public-symbol removal) — `HybridSearch` is now reachable
+  only as `AgentSearch`'s internal dependency. (Safe subset of ROADMAP C5;
+  full class removal deferred — it would break the `agent_find_similar` MCP
+  tool's intent-tuned ranking.)
+- Removed a redundant query double-embed in `graph.search()`: the auto-embed
+  block fed only the legacy path, while the evidence pipeline re-embeds
+  internally — every default search was embedding the query twice.
+- `SynapticRetriever` (LangChain adapter) drops its `engine` attribute.
+
+**Fixed**
+- Stale docs: MCP tool count corrected to **42** across `CLAUDE.md` (was 40)
+  and `README` (was 36) — the category table was missing `knowledge_snapshot`
+  and `agent_top_nodes`; `CLAUDE.md` PyPI version `v0.17.2` → `v0.27.0` and
+  test count `687+` → `1088+`.
+- `uv.lock` self-version re-synced `0.26.0` → `0.27.0` (the 0.27.0 bump
+  commit left the lockfile's editable entry stale).
+
 ## [0.27.0] — 2026-05-25
 
 ### v0.27 — Phrase embedding infrastructure (measured 0-net on MuSiQue, kept opt-in)
