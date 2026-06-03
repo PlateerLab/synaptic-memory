@@ -37,6 +37,14 @@ benchmark regression check into CI.
   corpora are tracked in `tests/benchmark/data/` and fails on any >0.01 MRR
   drop vs `eval/baselines/qa_latest.json`. CPU-only, no network. Seals the
   stale-baseline trap (ROADMAP v0.19+).
+- `synaptic-agent-batch` CLI (`synaptic.cli.agent_batch`) — runs
+  `graph.chat()` over a batch of queries against a BYO OpenAI-compatible LLM
+  endpoint (vLLM / Ollama / OpenAI) with bounded concurrency, streaming one
+  JSONL line per query (`answer`, `found_ids`, `turns`, `tool_calls`,
+  `elapsed_ms`, `error`) as each finishes so long batches survive
+  interruption. Accepts string-list / object-list / `{"queries": […]}` /
+  `.jsonl` inputs. Closes the PLAN-v0.18 §Q1 batch-runner gap (production
+  bulk agent eval without a custom harness).
 
 **Changed / Removed**
 - **BREAKING:** `graph.search()` no longer accepts the `engine` parameter.
