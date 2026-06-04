@@ -65,6 +65,20 @@ benchmark regression check into CI.
     (+0.037)**, HotPotQA-24 +0.021, PublicHealthQA +0.022, Allganize-Eval
     +0.011, **AutoRAG canary safe (-0.005, within noise)**; one small
     regression (Allganize-ko -0.012) so kept opt-in.
+  - **L29 — query-time sufficiency gate in the agent loop**
+    (`graph.chat(sufficiency_gate=True)` / env `SYNAPTIC_SUFFICIENCY_GATE`).
+    The loop accepted the first non-tool message as final, so a model
+    answering from partial evidence stopped early. The gate makes ONE extra
+    LLM call — is the answer supported by the gathered evidence? — and on a
+    clear gap injects it and keeps retrieving. Advisory only: fail-open,
+    bias-to-sufficient, never gate a no-evidence answer, bounded by 2
+    retries. Agent A/B (Qwen3.6-27B, LLM-judge), gate off→on:
+    **KRRA Hard 32→34/39 (+5.1pp)**, assort Conv 18→19/24 (+4.2pp),
+    KRRA Conv 19→19 (flat — the documented GT-bias bench); aggregate
+    **69→72/93 (+3.2pp), zero regressions, latency <1.1x**. Touches neither
+    embedder nor reranker, so it escapes the embedder-dependence /
+    paraphrase-blindness / domain-mismatch failure modes that demoted the
+    rerank/calibration levers.
 
 **Changed / Removed**
 - **BREAKING:** `graph.search()` no longer accepts the `engine` parameter.
