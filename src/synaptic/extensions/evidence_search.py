@@ -79,6 +79,14 @@ _RRF_K = 60
 # seeds from the flat 0.08 cascade floor.
 _RRF_VEC_K = 90
 
+# Anchor-coverage thresholds for the adaptive controller (SYNAPTIC_ADAPTIVE):
+# a query whose anchor terms overlap the retrieved docs >= HI is lexically
+# reliable (apply real-BM25 sharpening); <= LO is a paraphrase (apply vector
+# fusion + semantic tilt). The middle band gets the safe default. See
+# ``EvidenceSearch._anchor_coverage``.
+_COVERAGE_HI = 0.8
+_COVERAGE_LO = 0.3
+
 logger = logging.getLogger("evidence-search")
 
 
@@ -118,9 +126,11 @@ class EvidenceSearch:
     """
 
     __slots__ = (
+        "_adaptive",
         "_aggregator",
         "_anchor_extractor",
         "_backend",
+        "_backend_scored",
         "_calibrated_blend",
         "_calibration_loaded",
         "_cross_reranker",
@@ -156,6 +166,7 @@ class EvidenceSearch:
         query_phrase_seed_k: int = 0,
         rerank_std_deadzone: float = 0.0,
         fusion_mode: str = "cascade",
+        adaptive: bool = False,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -220,15 +231,20 @@ class EvidenceSearch:
         # rank ramp. Only engages when the backend's ``search_fts`` accepts
         # ``with_scores`` (SQLite today); other backends transparently fall
         # back to rank-derived scoring, so this never breaks a backend.
-        real_scores = _os.environ.get("SYNAPTIC_REAL_SCORES") == "1"
-        if real_scores:
+        # Capability: does the backend's search_fts accept ``with_scores``?
+        # (SQLite does; others fall back to rank-derived scoring.) Shared by
+        # L01 and the adaptive controller.
+        try:
             import inspect as _inspect
 
-            try:
-                real_scores = "with_scores" in _inspect.signature(backend.search_fts).parameters
-            except (ValueError, TypeError):
-                real_scores = False
-        self._real_scores_enabled = real_scores
+            self._backend_scored = (
+                "with_scores" in _inspect.signature(backend.search_fts).parameters
+            )
+        except (ValueError, TypeError):
+            self._backend_scored = False
+        self._real_scores_enabled = (
+            _os.environ.get("SYNAPTIC_REAL_SCORES") == "1" and self._backend_scored
+        )
         # L02 (opt-in via ``fusion_mode="rrf"`` or env ``SYNAPTIC_FUSION_MODE``)
         # — true RRF fusion of the FTS and vector seed rank lists instead of
         # the cascade that pins vector-only seeds at a flat 0.08 below the FTS
@@ -239,6 +255,15 @@ class EvidenceSearch:
         # Default off; only shifts weights on low-surface-overlap (paraphrase)
         # queries, leaving lexical-confident queries on the default weights.
         self._query_tilt_enabled = _os.environ.get("SYNAPTIC_QUERY_TILT") == "1"
+        # v0.28 — coverage-ADAPTIVE mode (``adaptive=True`` or env
+        # ``SYNAPTIC_ADAPTIVE=1``). One signal (anchor coverage) gates the
+        # three per-corpus levers per query so they STACK safely: real-BM25
+        # sharpening only on high-coverage queries, vector RRF fusion only on
+        # low-coverage (paraphrase) queries, and the L05 semantic tilt (which
+        # self-gates). Measured rationale: stacking the raw flags regressed
+        # FTS-optimal AutoRAG -0.021 (L02 promoted vectors on lexical-confident
+        # queries); coverage gating lets AutoRAG and PublicHealthQA both win.
+        self._adaptive = adaptive or _os.environ.get("SYNAPTIC_ADAPTIVE") == "1"
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -279,30 +304,31 @@ class EvidenceSearch:
         return min(1.0, std / 3.0)
 
     @staticmethod
-    def _tilt_weights(anchors: QueryAnchors, fts_nodes: list) -> RerankerWeights | None:
-        """Per-query lexical↔semantic tilt from anchor coverage (L05).
-
-        Coverage = the fraction of the query's anchor terms (keywords ∪
-        entities) that surface in the top FTS docs. High coverage → the
-        query is lexically well-matched, keep the lexical-lead default
-        (return ``None``). Low coverage → the query is paraphrased relative
-        to the corpus, so tilt toward the semantic axis. This is the
-        paraphrase-AWARE signal the v0.26 pseudo-self-retrieval calibration
-        lacked: surface overlap is low *by definition* for a paraphrase, and
-        the per-query scope bounds the blast radius. Returns ``None`` (use
-        the default weights) when there is no signal.
+    def _anchor_coverage(anchors: QueryAnchors, fts_nodes: list) -> float | None:
+        """Fraction of the query's anchor terms (keywords ∪ entities) that
+        surface in the top FTS docs. High = lexically well-matched; low = the
+        query is paraphrased relative to the corpus (surface overlap is low
+        *by definition* for a paraphrase — the paraphrase-AWARE signal the
+        v0.26 pseudo-self-retrieval calibration lacked). ``None`` = no signal.
         """
         terms = {t.lower() for t in [*anchors.keywords, *anchors.entities] if t}
         if not terms or not fts_nodes:
             return None
-        corpus = " ".join(
-            f"{n.title or ''} {n.content or ''}" for n in fts_nodes[:5]
-        ).lower()
-        coverage = sum(1 for t in terms if t in corpus) / len(terms)
-        # coverage >= 0.8 → no tilt (lexical-confident); <= 0.3 → full tilt to
-        # the semantic-lead preset; linear in between.
-        hi, lo = 0.8, 0.3
-        t = max(0.0, min(1.0, (hi - coverage) / (hi - lo)))
+        corpus = " ".join(f"{n.title or ''} {n.content or ''}" for n in fts_nodes[:5]).lower()
+        return sum(1 for t in terms if t in corpus) / len(terms)
+
+    @staticmethod
+    def _tilt_weights(anchors: QueryAnchors, fts_nodes: list) -> RerankerWeights | None:
+        """Per-query lexical↔semantic reranker-weight tilt from anchor
+        coverage (L05). Low coverage → tilt toward the semantic axis;
+        lexical-confident queries keep the default. ``None`` = no tilt.
+        """
+        coverage = EvidenceSearch._anchor_coverage(anchors, fts_nodes)
+        if coverage is None:
+            return None
+        # coverage >= HI → no tilt; <= LO → full tilt to the semantic-lead
+        # preset; linear in between.
+        t = max(0.0, min(1.0, (_COVERAGE_HI - coverage) / (_COVERAGE_HI - _COVERAGE_LO)))
         if t <= 0.0:
             return None
         # graph (0.20) / structural (0.10) fixed; only lexical↔semantic shift,
@@ -358,18 +384,32 @@ class EvidenceSearch:
 
         # Step 2a — FTS seeds (lexical).
         fts_scores: dict[str, float] = {}
-        if self._real_scores_enabled:
-            # L01 — real normalized BM25 into the lexical axis. The backend
-            # returns (node, rel∈[0,1], higher=better); map into the existing
-            # [0.10, 0.95] seed band so downstream floors/bands are preserved.
+        # Fetch real scores when L01 is on OR adaptive mode may need them.
+        want_scores = self._backend_scored and (self._real_scores_enabled or self._adaptive)
+        if want_scores:
             scored_fts = await self._backend.search_fts(
                 query, limit=fts_seed_limit, with_scores=True
             )
             fts_nodes = [n for n, _ in scored_fts]
+        else:
+            scored_fts = None
+            fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
+
+        # Adaptive coverage signal — computed once, gates L01/L02/L05 below.
+        coverage = self._anchor_coverage(anchors, fts_nodes) if self._adaptive else None
+
+        # L01 — real normalized BM25 into the lexical axis ([0.10,0.95] band).
+        # Use it when explicitly enabled, or (adaptive) only on high-coverage
+        # queries where lexical is reliable; else fall back to the rank ramp
+        # (sharpening an unreliable lexical signal hurts paraphrase corpora).
+        use_real = scored_fts is not None and (
+            self._real_scores_enabled
+            or (self._adaptive and coverage is not None and coverage >= _COVERAGE_HI)
+        )
+        if use_real:
             for node, rel in scored_fts:
                 fts_scores[node.id] = 0.10 + rel * 0.85
         else:
-            fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
             for rank, node in enumerate(fts_nodes):
                 fts_scores[node.id] = max(0.10, 0.95 - rank * 0.03)
 
@@ -402,7 +442,10 @@ class EvidenceSearch:
         # hit. RRF-fuse the two rank lists (asymmetric k keeps lexical-lead)
         # and MAX-combine into fts_scores, so FTS hits keep their real-BM25 /
         # rank lexical score and only vector-only seeds are lifted by rank.
-        if self._fusion_mode == "rrf" and vec_nodes:
+        use_fusion = self._fusion_mode == "rrf" or (
+            self._adaptive and coverage is not None and coverage <= _COVERAGE_LO
+        )
+        if use_fusion and vec_nodes:
             rrf: dict[str, float] = {}
             for rank, node in enumerate(fts_nodes):
                 rrf[node.id] = rrf.get(node.id, 0.0) + 1.0 / (_RRF_K + rank)
@@ -610,7 +653,11 @@ class EvidenceSearch:
 
         # Step 4 — hybrid reranking
         anchor_category_set = set(anchors.categories)
-        tilt = self._tilt_weights(anchors, fts_nodes) if self._query_tilt_enabled else None
+        tilt = (
+            self._tilt_weights(anchors, fts_nodes)
+            if (self._query_tilt_enabled or self._adaptive)
+            else None
+        )
         scored = self._reranker.rerank(
             expanded=expanded,
             fts_scores=fts_scores,
