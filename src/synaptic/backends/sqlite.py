@@ -538,7 +538,9 @@ class SQLiteBackend:
 
     # --- Search ---
 
-    async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
+    async def search_fts(
+        self, query: str, *, limit: int = 20, with_scores: bool = False
+    ) -> list[Node] | list[tuple[Node, float]]:
         db = self._db()
         # Query-time normalisation is **more aggressive** than index-time:
         # it drops Korean question-form noise ("설명해주세요", "무엇인가요",
@@ -616,8 +618,10 @@ class SQLiteBackend:
                     scored_nodes[node.id] = (node, 10000.0 - sub)
 
         # Sort: FTS5 negatives first (ascending), then substring positives
-        ranked = sorted(scored_nodes.values(), key=lambda x: x[1])
-        return [n for n, _ in ranked[:limit]]
+        ranked = sorted(scored_nodes.values(), key=lambda x: x[1])[:limit]
+        if with_scores:
+            return _lexical_relevance(ranked)
+        return [n for n, _ in ranked]
 
     async def search_fuzzy(
         self, query: str, *, limit: int = 20, threshold: float = 0.3
@@ -1018,6 +1022,34 @@ def _safe_node_kind(value: str) -> str | NodeKind:
         return NodeKind(value)
     except ValueError:
         return value
+
+
+def _lexical_relevance(ranked: list[tuple[Node, float]]) -> list[tuple[Node, float]]:
+    """Normalise raw FTS scores to a backend-agnostic relevance in ``[0, 1]``
+    (higher = better), preserving the existing rank order.
+
+    ``search_fts`` stores two score kinds: FTS5 ``bm25`` (negative, lower =
+    better) and a LIKE-fallback offset (``10000 - sub``, positive). The two
+    bands are normalised SEPARATELY — FTS5 hits into the upper band so the
+    real bm25 spread is preserved, LIKE hits into a lower band so they always
+    rank below FTS5 matches. A flat/single-hit band maps to its ceiling.
+    """
+    if not ranked:
+        return []
+
+    def _band(items: list[tuple[Node, float]], floor: float, ceil: float):
+        if not items:
+            return []
+        good = [-raw for _, raw in items]  # higher = better
+        hi, lo = max(good), min(good)
+        span = hi - lo
+        if span <= 0:
+            return [(n, ceil) for n, _ in items]
+        return [(n, floor + (g - lo) / span * (ceil - floor)) for (n, _), g in zip(items, good)]
+
+    fts = [(n, r) for n, r in ranked if r < 1000.0]  # bm25 (negative)
+    like = [(n, r) for n, r in ranked if r >= 1000.0]  # LIKE fallback offset
+    return _band(fts, 0.35, 1.0) + _band(like, 0.0, 0.30)
 
 
 def _cosine_sim(a: list[float], b: list[float]) -> float:

@@ -55,12 +55,21 @@ class StorageBackend(Protocol):
         year: int | None = None,
     ) -> int: ...
 
-    # Search
-    async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]: ...
+    # Search.
+    # ``with_scores=True`` returns ``list[tuple[Node, float]]`` with a
+    # backend-agnostic relevance score in [0, 1] (higher = better) instead of
+    # ``list[Node]``. Optional capability — callers must degrade gracefully for
+    # backends that don't accept the kwarg (EvidenceSearch detects it via the
+    # method signature and falls back to rank-derived scoring).
+    async def search_fts(
+        self, query: str, *, limit: int = 20, with_scores: bool = False
+    ) -> list[Node] | list[tuple[Node, float]]: ...
     async def search_fuzzy(
         self, query: str, *, limit: int = 20, threshold: float = 0.3
     ) -> list[Node]: ...
-    async def search_vector(self, embedding: list[float], *, limit: int = 20) -> list[Node]: ...
+    async def search_vector(
+        self, embedding: list[float], *, limit: int = 20, with_scores: bool = False
+    ) -> list[Node] | list[tuple[Node, float]]: ...
 
     # Graph traversal
     async def get_neighbors(self, node_id: str, *, depth: int = 1) -> list[tuple[Node, Edge]]: ...

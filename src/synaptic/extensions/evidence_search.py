@@ -126,6 +126,7 @@ class EvidenceSearch:
         "_phrase_cache",
         "_phrase_cache_loaded",
         "_query_phrase_seed_k",
+        "_real_scores_enabled",
         "_rerank_blend",
         "_rerank_std_deadzone",
         "_reranker",
@@ -206,6 +207,20 @@ class EvidenceSearch:
             except ValueError:
                 pass
         self._rerank_std_deadzone = rerank_std_deadzone
+        # L01 (opt-in via env ``SYNAPTIC_REAL_SCORES=1``) — feed the backend's
+        # real normalized BM25 into the lexical axis instead of a synthetic
+        # rank ramp. Only engages when the backend's ``search_fts`` accepts
+        # ``with_scores`` (SQLite today); other backends transparently fall
+        # back to rank-derived scoring, so this never breaks a backend.
+        real_scores = _os.environ.get("SYNAPTIC_REAL_SCORES") == "1"
+        if real_scores:
+            import inspect as _inspect
+
+            try:
+                real_scores = "with_scores" in _inspect.signature(backend.search_fts).parameters
+            except (ValueError, TypeError):
+                real_scores = False
+        self._real_scores_enabled = real_scores
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -288,10 +303,21 @@ class EvidenceSearch:
         anchors = await self._anchor_extractor.extract(query)
 
         # Step 2a — FTS seeds (lexical).
-        fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
         fts_scores: dict[str, float] = {}
-        for rank, node in enumerate(fts_nodes):
-            fts_scores[node.id] = max(0.10, 0.95 - rank * 0.03)
+        if self._real_scores_enabled:
+            # L01 — real normalized BM25 into the lexical axis. The backend
+            # returns (node, rel∈[0,1], higher=better); map into the existing
+            # [0.10, 0.95] seed band so downstream floors/bands are preserved.
+            scored_fts = await self._backend.search_fts(
+                query, limit=fts_seed_limit, with_scores=True
+            )
+            fts_nodes = [n for n, _ in scored_fts]
+            for node, rel in scored_fts:
+                fts_scores[node.id] = 0.10 + rel * 0.85
+        else:
+            fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
+            for rank, node in enumerate(fts_nodes):
+                fts_scores[node.id] = max(0.10, 0.95 - rank * 0.03)
 
         # Step 2b — Vector seeds (semantic). Supplements FTS with
         # results that share meaning but not surface words. This is
