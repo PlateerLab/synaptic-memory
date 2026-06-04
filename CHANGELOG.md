@@ -65,6 +65,18 @@ benchmark regression check into CI.
     (+0.037)**, HotPotQA-24 +0.021, PublicHealthQA +0.022, Allganize-Eval
     +0.011, **AutoRAG canary safe (-0.005, within noise)**; one small
     regression (Allganize-ko -0.012) so kept opt-in.
+  - **L05 — per-query lexical/semantic weight tilt** (env
+    `SYNAPTIC_QUERY_TILT=1`). The reranker weights were globally fixed
+    (lexical 0.45/semantic 0.25). The tilt measures anchor coverage (fraction
+    of the query's anchor terms surfacing in the top FTS docs) and shifts
+    toward the semantic axis on low-coverage (paraphrase) queries only;
+    lexical-confident queries keep the default. `HybridReranker.rerank()`
+    gains an optional per-call `weights` override. The SAFE variant of the
+    v0.26 calibration that was paraphrase-blind — surface overlap is low *by
+    definition* for a paraphrase. Embedder A/B (no reranker), tilt off→on:
+    **PublicHealthQA +0.021 (paraphrase target), AutoRAG -0.0003 (high-overlap,
+    untouched)**, HotPotQA-24 +0.021, Allganize-Eval +0.011, **zero
+    regressions** (near-Pareto; the cleanest of the single-shot levers).
   - **L29 — query-time sufficiency gate in the agent loop**
     (`graph.chat(sufficiency_gate=True)` / env `SYNAPTIC_SUFFICIENCY_GATE`).
     The loop accepted the first non-tool message as final, so a model
