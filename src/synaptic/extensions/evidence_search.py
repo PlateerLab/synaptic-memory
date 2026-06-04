@@ -73,6 +73,11 @@ if TYPE_CHECKING:
 # RRF (Reciprocal Rank Fusion) constant — 60 is the canonical k from the
 # original Cormack et al. 2009 paper and what every baseline re-implements.
 _RRF_K = 60
+# Asymmetric RRF constant for the vector rank list in fusion_mode="rrf".
+# Larger than _RRF_K so dense hits are weighted slightly below lexical,
+# keeping synaptic's lexical-dominant identity while un-capping vector-only
+# seeds from the flat 0.08 cascade floor.
+_RRF_VEC_K = 90
 
 logger = logging.getLogger("evidence-search")
 
@@ -123,6 +128,7 @@ class EvidenceSearch:
         "_embedder",
         "_expander",
         "_expansion_budget",
+        "_fusion_mode",
         "_phrase_cache",
         "_phrase_cache_loaded",
         "_query_phrase_seed_k",
@@ -148,6 +154,7 @@ class EvidenceSearch:
         table_query_hints: dict[str, list[str]] | None = None,
         query_phrase_seed_k: int = 0,
         rerank_std_deadzone: float = 0.0,
+        fusion_mode: str = "cascade",
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -221,6 +228,11 @@ class EvidenceSearch:
             except (ValueError, TypeError):
                 real_scores = False
         self._real_scores_enabled = real_scores
+        # L02 (opt-in via ``fusion_mode="rrf"`` or env ``SYNAPTIC_FUSION_MODE``)
+        # — true RRF fusion of the FTS and vector seed rank lists instead of
+        # the cascade that pins vector-only seeds at a flat 0.08 below the FTS
+        # floor. Default "cascade" preserves shipped behaviour exactly.
+        self._fusion_mode = _os.environ.get("SYNAPTIC_FUSION_MODE", fusion_mode)
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -326,6 +338,7 @@ class EvidenceSearch:
         # ranking is never disrupted (cascade, not fusion).
         fts_ids = {n.id for n in fts_nodes}
         vec_seeds: list = []
+        vec_nodes: list = []
         if query_embedding:
             try:
                 vec_nodes = await self._backend.search_vector(query_embedding, limit=fts_seed_limit)
@@ -335,9 +348,29 @@ class EvidenceSearch:
                         # Vector-only seeds get a flat score below FTS floor
                         # so they never outrank a strong lexical hit, but they
                         # ARE present for the reranker's semantic signal.
+                        # (Overwritten below in fusion_mode="rrf".)
                         fts_scores[node.id] = 0.08
             except Exception:
-                pass
+                vec_nodes = []
+
+        # L02 — true RRF fusion of the FTS and vector rank lists (opt-in).
+        # The cascade above pins every vector-only seed at a flat 0.08, below
+        # the FTS floor by construction, so a gold doc that shares no surface
+        # tokens (the MuSiQue failure mode) can never outrank a weak lexical
+        # hit. RRF-fuse the two rank lists (asymmetric k keeps lexical-lead)
+        # and MAX-combine into fts_scores, so FTS hits keep their real-BM25 /
+        # rank lexical score and only vector-only seeds are lifted by rank.
+        if self._fusion_mode == "rrf" and vec_nodes:
+            rrf: dict[str, float] = {}
+            for rank, node in enumerate(fts_nodes):
+                rrf[node.id] = rrf.get(node.id, 0.0) + 1.0 / (_RRF_K + rank)
+            for rank, node in enumerate(vec_nodes):
+                rrf[node.id] = rrf.get(node.id, 0.0) + 1.0 / (_RRF_VEC_K + rank)
+            if rrf:
+                rrf_max = max(rrf.values())
+                for node_id, score in rrf.items():
+                    normalised = 0.10 + 0.85 * (score / rrf_max)
+                    fts_scores[node_id] = max(fts_scores.get(node_id, 0.0), normalised)
 
         # Step 2c — Vector PRF (Pseudo Relevance Feedback).
         # Refine the query vector using top FTS results' embeddings:
