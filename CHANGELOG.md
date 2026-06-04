@@ -92,6 +92,16 @@ benchmark regression check into CI.
     paraphrase-blindness / domain-mismatch failure modes that demoted the
     rerank/calibration levers.
 
+  These retrieval levers stay **opt-in by design, not by caution**: a stacked
+  embedder A/B (L01+L02+L05 together) regressed the FTS-optimal AutoRAG canary
+  **-0.021 — worse than any lever alone** (negative interaction; "each safe in
+  isolation" ≠ "stack safe"). With an embedder active each is a corpus-
+  dependent lexical↔semantic trade-off (e.g. L01 alone: AutoRAG +0.039 but
+  PublicHealthQA -0.040), so no fixed default serves both lexical-optimal and
+  paraphrase corpora. The exception, and the path to a future default, is
+  L05's per-query coverage gating (paraphrase-aware) — the only near-Pareto
+  result.
+
 **Changed / Removed**
 - **BREAKING:** `graph.search()` no longer accepts the `engine` parameter.
   The `engine="legacy"` path (dead-reachable since the v0.16 default flip to
