@@ -194,6 +194,7 @@ class HybridReranker:
         query_embedding: list[float] | None = None,
         anchor_categories: set[str] | None = None,
         anchor_kinds: set[NodeKind] | None = None,
+        weights: RerankerWeights | None = None,
     ) -> list[ScoredCandidate]:
         """Score and sort ``expanded``.
 
@@ -266,7 +267,9 @@ class HybridReranker:
             return min(score, 1.0)
 
         # --- Combine ---
-        w = self._weights
+        # Per-call ``weights`` override (L05 per-query tilt) wins over the
+        # instance default; falls back to the instance weights otherwise.
+        w = weights or self._weights
         scored: list[ScoredCandidate] = []
         for ex in expanded:
             nid = ex.node.id

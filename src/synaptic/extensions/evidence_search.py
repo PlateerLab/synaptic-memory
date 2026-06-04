@@ -132,6 +132,7 @@ class EvidenceSearch:
         "_phrase_cache",
         "_phrase_cache_loaded",
         "_query_phrase_seed_k",
+        "_query_tilt_enabled",
         "_real_scores_enabled",
         "_rerank_blend",
         "_rerank_std_deadzone",
@@ -233,6 +234,11 @@ class EvidenceSearch:
         # the cascade that pins vector-only seeds at a flat 0.08 below the FTS
         # floor. Default "cascade" preserves shipped behaviour exactly.
         self._fusion_mode = _os.environ.get("SYNAPTIC_FUSION_MODE", fusion_mode)
+        # L05 (opt-in via env ``SYNAPTIC_QUERY_TILT=1``) — per-query
+        # lexical↔semantic reranker-weight tilt driven by anchor coverage.
+        # Default off; only shifts weights on low-surface-overlap (paraphrase)
+        # queries, leaving lexical-confident queries on the default weights.
+        self._query_tilt_enabled = _os.environ.get("SYNAPTIC_QUERY_TILT") == "1"
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -271,6 +277,42 @@ class EvidenceSearch:
         if std < deadzone:
             return 0.0
         return min(1.0, std / 3.0)
+
+    @staticmethod
+    def _tilt_weights(anchors: QueryAnchors, fts_nodes: list) -> RerankerWeights | None:
+        """Per-query lexical↔semantic tilt from anchor coverage (L05).
+
+        Coverage = the fraction of the query's anchor terms (keywords ∪
+        entities) that surface in the top FTS docs. High coverage → the
+        query is lexically well-matched, keep the lexical-lead default
+        (return ``None``). Low coverage → the query is paraphrased relative
+        to the corpus, so tilt toward the semantic axis. This is the
+        paraphrase-AWARE signal the v0.26 pseudo-self-retrieval calibration
+        lacked: surface overlap is low *by definition* for a paraphrase, and
+        the per-query scope bounds the blast radius. Returns ``None`` (use
+        the default weights) when there is no signal.
+        """
+        terms = {t.lower() for t in [*anchors.keywords, *anchors.entities] if t}
+        if not terms or not fts_nodes:
+            return None
+        corpus = " ".join(
+            f"{n.title or ''} {n.content or ''}" for n in fts_nodes[:5]
+        ).lower()
+        coverage = sum(1 for t in terms if t in corpus) / len(terms)
+        # coverage >= 0.8 → no tilt (lexical-confident); <= 0.3 → full tilt to
+        # the semantic-lead preset; linear in between.
+        hi, lo = 0.8, 0.3
+        t = max(0.0, min(1.0, (hi - coverage) / (hi - lo)))
+        if t <= 0.0:
+            return None
+        # graph (0.20) / structural (0.10) fixed; only lexical↔semantic shift,
+        # so the weights still sum to 1.0 at every t.
+        return RerankerWeights(
+            lexical=0.45 - t * (0.45 - 0.30),
+            semantic=0.25 + t * (0.40 - 0.25),
+            graph=0.20,
+            structural=0.10,
+        )
 
     async def search(
         self,
@@ -568,11 +610,13 @@ class EvidenceSearch:
 
         # Step 4 — hybrid reranking
         anchor_category_set = set(anchors.categories)
+        tilt = self._tilt_weights(anchors, fts_nodes) if self._query_tilt_enabled else None
         scored = self._reranker.rerank(
             expanded=expanded,
             fts_scores=fts_scores,
             query_embedding=query_embedding,
             anchor_categories=anchor_category_set,
+            weights=tilt,
         )
 
         # Lazy-load per-corpus calibration once (auto-disable reranker
