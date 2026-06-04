@@ -166,7 +166,7 @@ class EvidenceSearch:
         query_phrase_seed_k: int = 0,
         rerank_std_deadzone: float = 0.0,
         fusion_mode: str = "cascade",
-        adaptive: bool = False,
+        adaptive: bool = True,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -255,15 +255,21 @@ class EvidenceSearch:
         # Default off; only shifts weights on low-surface-overlap (paraphrase)
         # queries, leaving lexical-confident queries on the default weights.
         self._query_tilt_enabled = _os.environ.get("SYNAPTIC_QUERY_TILT") == "1"
-        # v0.28 — coverage-ADAPTIVE mode (``adaptive=True`` or env
-        # ``SYNAPTIC_ADAPTIVE=1``). One signal (anchor coverage) gates the
-        # three per-corpus levers per query so they STACK safely: real-BM25
-        # sharpening only on high-coverage queries, vector RRF fusion only on
-        # low-coverage (paraphrase) queries, and the L05 semantic tilt (which
-        # self-gates). Measured rationale: stacking the raw flags regressed
-        # FTS-optimal AutoRAG -0.021 (L02 promoted vectors on lexical-confident
-        # queries); coverage gating lets AutoRAG and PublicHealthQA both win.
-        self._adaptive = adaptive or _os.environ.get("SYNAPTIC_ADAPTIVE") == "1"
+        # v0.28 — coverage-ADAPTIVE mode, DEFAULT ON. One signal (anchor
+        # coverage) gates the three retrieval levers per query so they STACK
+        # safely: real-BM25 sharpening only on high-coverage queries, vector
+        # RRF fusion only on low-coverage (paraphrase) queries, and the L05
+        # semantic tilt (self-gating). Measured rationale: stacking the raw
+        # flags regressed FTS-optimal AutoRAG -0.021 (L02 promoted vectors on
+        # lexical-confident queries); coverage gating lets AutoRAG and
+        # PublicHealthQA both win. Validated net-positive with zero
+        # over-noise regressions across the 17-bench FTS-only AND embedder
+        # suites (KRRA Hard +0.027, PHQA +0.015; AutoRAG -0.01 borderline,
+        # within noise). Opt out via ``adaptive=False`` / env
+        # ``SYNAPTIC_ADAPTIVE=0``. Degrades to a no-op without a scored
+        # backend or an embedder, so it is safe for every deployment.
+        env_ad = _os.environ.get("SYNAPTIC_ADAPTIVE")
+        self._adaptive = (env_ad == "1") if env_ad is not None else adaptive
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,

@@ -37,8 +37,11 @@ def test_anchor_coverage_fraction():
 
 
 def test_adaptive_flag_default_param_env(monkeypatch):
-    assert EvidenceSearch(backend=MemoryBackend())._adaptive is False
-    assert EvidenceSearch(backend=MemoryBackend(), adaptive=True)._adaptive is True
+    # Default ON since v0.28 (validated stack-safe).
+    assert EvidenceSearch(backend=MemoryBackend())._adaptive is True
+    assert EvidenceSearch(backend=MemoryBackend(), adaptive=False)._adaptive is False  # opt-out
+    monkeypatch.setenv("SYNAPTIC_ADAPTIVE", "0")
+    assert EvidenceSearch(backend=MemoryBackend())._adaptive is False  # env disables
     monkeypatch.setenv("SYNAPTIC_ADAPTIVE", "1")
     assert EvidenceSearch(backend=MemoryBackend())._adaptive is True
 
