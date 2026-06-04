@@ -101,6 +101,17 @@ benchmark regression check into CI.
   paraphrase corpora. The exception, and the path to a future default, is
   L05's per-query coverage gating (paraphrase-aware) — the only near-Pareto
   result.
+  - **Coverage-ADAPTIVE mode** (`EvidenceSearch(adaptive=True)` / env
+    `SYNAPTIC_ADAPTIVE=1`) acts on that insight: one anchor-coverage signal,
+    computed once per query, gates all three levers so they STACK safely —
+    real-BM25 sharpening only when coverage ≥ 0.8 (lexical reliable), vector
+    RRF fusion only when coverage ≤ 0.3 (paraphrase), the semantic tilt
+    self-gating. Embedder A/B vs default (the naive stack regressed AutoRAG
+    -0.021): adaptive holds the **AutoRAG canary safe (-0.005)** AND keeps the
+    paraphrase/multi-hop gains — **PublicHealthQA +0.015, HotPotQA-24 +0.021,
+    Allganize-Eval +0.014; mean +0.0077, ZERO regressions across 6 datasets**.
+    The stack-safe unification — the strongest default-on candidate (pending
+    custom-bench + multi-embedder validation), still opt-in for now.
 
 **Changed / Removed**
 - **BREAKING:** `graph.search()` no longer accepts the `engine` parameter.
