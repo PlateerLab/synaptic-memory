@@ -1653,6 +1653,7 @@ class SynapticGraph:
         system_prompt: str | None = None,
         extra_context: str | None = None,
         prime_with_snapshot: bool = True,
+        sufficiency_gate: bool = False,
     ):
         """Multi-turn agent loop — Synaptic's measured-strongest mode.
 
@@ -1736,6 +1737,7 @@ class SynapticGraph:
             embedder=self._embedder,
             system_prompt=system_prompt,
             extra_context=priming_context or None,
+            sufficiency_gate=sufficiency_gate,
         )
 
     async def search(

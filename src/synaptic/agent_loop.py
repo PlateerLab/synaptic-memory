@@ -887,6 +887,71 @@ def project_tool_result(result: dict | Any, *, max_chars: int = _TOOL_RESULT_BUD
 # --- Public API ----------------------------------------------------
 
 
+# Max times the sufficiency gate may force a corrective retrieval on one
+# query. Bounds the worst case (a stubborn judge burning every turn) so the
+# loop's max_turns still dominates.
+_MAX_GATE_RETRIES = 2
+
+_SUFFICIENCY_SYSTEM = (
+    "You are a strict but fair evidence auditor. Given a QUESTION, the EVIDENCE a "
+    "retrieval agent gathered, and the agent's PROPOSED ANSWER, decide whether the "
+    "answer is fully supported by the evidence. Bias toward 'sufficient' — only say "
+    "false when a clearly-needed fact for the question is absent from the evidence. "
+    'Reply with ONLY a JSON object: {"sufficient": true|false, "gap": "<one short '
+    'phrase naming the missing fact, or empty if sufficient>"}.'
+)
+
+
+def _parse_sufficiency(content: str) -> dict | None:
+    """Extract ``{"sufficient": bool, "gap": str}`` from a judge reply.
+
+    Returns ``None`` when no parseable object is present so the caller fails
+    OPEN (a broken judge must never block the agent's answer).
+    """
+    if not content:
+        return None
+    start = content.find("{")
+    end = content.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        obj = json.loads(content[start : end + 1])
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(obj, dict) or "sufficient" not in obj:
+        return None
+    return {"sufficient": bool(obj.get("sufficient")), "gap": str(obj.get("gap") or "")}
+
+
+async def _judge_sufficiency(
+    client: Any, model: str, query: str, messages: list, candidate: str
+) -> dict | None:
+    """One advisory LLM call — is ``candidate`` fully supported by the tool
+    evidence gathered so far? Fail-open (returns ``None``) on any error, and
+    returns ``None`` when nothing was retrieved (don't gate a no-evidence
+    answer — that would only invite over-abstention)."""
+    evidence = "\n---\n".join(
+        str(m.get("content", ""))[:600] for m in messages if m.get("role") == "tool"
+    )[:4000]
+    if not evidence:
+        return None
+    judge_messages = [
+        {"role": "system", "content": _SUFFICIENCY_SYSTEM},
+        {
+            "role": "user",
+            "content": f"QUESTION:\n{query}\n\nEVIDENCE:\n{evidence}\n\nPROPOSED ANSWER:\n{candidate}",
+        },
+    ]
+    try:
+        resp = await client.chat.completions.create(
+            model=model, messages=judge_messages, max_tokens=200
+        )
+        return _parse_sufficiency(resp.choices[0].message.content or "")
+    except Exception as exc:
+        logger.debug("sufficiency judge failed: %s", exc)
+        return None
+
+
 async def run_agent_loop(
     *,
     client: Any,
@@ -897,6 +962,7 @@ async def run_agent_loop(
     embedder: EmbeddingProvider | None = None,
     system_prompt: str | None = None,
     extra_context: str | None = None,
+    sufficiency_gate: bool = False,
 ) -> AgentSearchResult:
     """Run one multi-turn agent search.
 
@@ -924,6 +990,10 @@ async def run_agent_loop(
     from synaptic.search_session import SearchSession, build_graph_context
 
     t0 = time.time()
+    import os as _os
+
+    if not sufficiency_gate and _os.environ.get("SYNAPTIC_SUFFICIENCY_GATE") == "1":
+        sufficiency_gate = True
     graph_ctx = await build_graph_context(backend)
     base_prompt = system_prompt or AGENT_SYSTEM
     parts = [base_prompt, graph_ctx]
@@ -958,6 +1028,7 @@ async def run_agent_loop(
     final_answer = ""
     turns_used = 0
     tool_calls = 0
+    gate_retries = 0
 
     for turn in range(max_turns):
         turns_used = turn + 1
@@ -996,7 +1067,36 @@ async def run_agent_loop(
                     }
                 )
         else:
-            final_answer = msg.content or ""
+            candidate = msg.content or ""
+            # L29 — query-time sufficiency gate (opt-in). Instead of accepting
+            # the first non-tool message, ask the LLM once whether the answer
+            # is actually supported by the evidence gathered; on a clear gap
+            # (and with turns + retry budget left) inject the gap and keep
+            # retrieving. Advisory only — fail-open, bias-to-sufficient, and
+            # bounded by _MAX_GATE_RETRIES so it can never out-loop max_turns.
+            if (
+                sufficiency_gate
+                and candidate.strip()
+                and turn < max_turns - 1
+                and gate_retries < _MAX_GATE_RETRIES
+            ):
+                verdict = await _judge_sufficiency(client, model, query, messages, candidate)
+                if verdict is not None and not verdict["sufficient"]:
+                    gate_retries += 1
+                    gap = verdict["gap"] or "the question is not fully answered by the evidence"
+                    messages.append({"role": "assistant", "content": candidate})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "That answer is not yet fully supported by the retrieved "
+                                f"evidence. Missing: {gap}. Use the search tools to find the "
+                                "missing evidence, then give the final answer."
+                            ),
+                        }
+                    )
+                    continue
+            final_answer = candidate
             break
 
     # Best-effort fetch of node objects for the final result
