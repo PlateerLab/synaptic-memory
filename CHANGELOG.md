@@ -45,6 +45,26 @@ benchmark regression check into CI.
   interruption. Accepts string-list / object-list / `{"queries": […]}` /
   `.jsonl` inputs. Closes the PLAN-v0.18 §Q1 batch-runner gap (production
   bulk agent eval without a custom harness).
+- Retrieval-scoring levers for the embedder-only (no-reranker) deployment,
+  both **opt-in, default off** so shipped behaviour is unchanged:
+  - **L01 — real BM25 in the lexical axis** (env `SYNAPTIC_REAL_SCORES=1`).
+    The backend computes a real bm25 score but EvidenceSearch re-fabricated
+    the lexical axis from rank (`0.95-rank*0.03`). `search_fts(with_scores=True)`
+    now returns `[(node, rel∈[0,1])]` (FTS5 and LIKE-fallback normalized into
+    separate bands); EvidenceSearch maps it into the `[0.10,0.95]` seed band
+    with signature-based capability detection + rank fallback. FTS-only
+    17-bench A/B: mean MRR **+0.0023, zero regressions**, biggest wins KRRA
+    Conv +0.016 / finreg-multihop +0.009. The keystone: real distributions
+    unblock the fusion/gating levers that ran on synthetic ramps.
+  - **L02 — RRF fusion of the FTS + vector seed pool** (`fusion_mode="rrf"`
+    / env `SYNAPTIC_FUSION_MODE`). The cascade pinned vector-only seeds at a
+    flat 0.08 below the FTS floor, so a gold doc sharing no surface tokens
+    could never compete. RRF-fuses the two rank lists (asymmetric k=60/90,
+    lexical-lead) and max-combines, lifting only vector-only seeds. Embedder
+    A/B (Qwen3-Embedding-4B, no reranker): **MuSiQue-Ans R@10 0.563→0.600
+    (+0.037)**, HotPotQA-24 +0.021, PublicHealthQA +0.022, Allganize-Eval
+    +0.011, **AutoRAG canary safe (-0.005, within noise)**; one small
+    regression (Allganize-ko -0.012) so kept opt-in.
 
 **Changed / Removed**
 - **BREAKING:** `graph.search()` no longer accepts the `engine` parameter.
