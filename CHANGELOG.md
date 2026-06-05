@@ -45,12 +45,11 @@ benchmark regression check into CI.
   interruption. Accepts string-list / object-list / `{"queries": […]}` /
   `.jsonl` inputs. Closes the PLAN-v0.18 §Q1 batch-runner gap (production
   bulk agent eval without a custom harness).
-- **Coverage-adaptive retrieval is now the DEFAULT** (`graph.search()`),
-  unifying four embedder-only (no-reranker) retrieval levers under one
-  per-query signal so they raise the floor without regressing the FTS-optimal
-  case. Each lever below is also exposed as an individual env flag for
-  ablation; the adaptive controller (last bullet) is what ships on by default.
-  Opt out of all of it with `adaptive=False` / `SYNAPTIC_ADAPTIVE=0`.
+- **Coverage-adaptive retrieval** (`adaptive=True` / `SYNAPTIC_ADAPTIVE=1`) —
+  an **opt-in** controller that unifies four embedder-only (no-reranker)
+  retrieval levers under one per-query signal so they stack safely. Each lever
+  below is also a standalone env flag for ablation. (A default-on flip was
+  attempted and reverted — see the adaptive bullet: it's embedder-dependent.)
   - **L01 — real BM25 in the lexical axis** (env `SYNAPTIC_REAL_SCORES=1`).
     The backend computes a real bm25 score but EvidenceSearch re-fabricated
     the lexical axis from rank (`0.95-rank*0.03`). `search_fts(with_scores=True)`
@@ -114,11 +113,15 @@ benchmark regression check into CI.
     -0.021): adaptive holds the **AutoRAG canary safe (-0.005)** AND keeps the
     paraphrase/multi-hop gains — **PublicHealthQA +0.015, HotPotQA-24 +0.021,
     Allganize-Eval +0.014; mean +0.0077, ZERO regressions across 6 datasets**.
-    **Validated across the full FTS-only AND embedder 17-bench suites (KRRA
-    Hard +0.027 on real Korean data; FTS-only path neutral; AutoRAG -0.01
-    borderline within noise; CI bench guard passes) and shipped as the DEFAULT
-    (`adaptive=True`)** — the stack-safe floor-raise. The individual `SYNAPTIC_*`
-    flags remain for ablation/override.
+    On the Qwen3-Embedding-4B embedder, validated across the full FTS-only AND
+    embedder 17-bench suites (KRRA Hard +0.027 on real Korean data; FTS-only
+    neutral; AutoRAG -0.01 borderline). **A default-on flip was attempted but
+    REVERTED: cross-embedder validation found it EMBEDDER-DEPENDENT — on bge-m3
+    it regresses the FTS-optimal AutoRAG canary -0.030** (the same wall as the
+    rerank std-deadzone; the gating signal is embedder-independent but the
+    levers' effect is not). Stays opt-in — a validated, recommended setting for
+    Qwen-style embedders, not a universal default. The individual `SYNAPTIC_*`
+    flags remain for ablation.
 
 **Changed / Removed**
 - **BREAKING:** `graph.search()` no longer accepts the `engine` parameter.
