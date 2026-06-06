@@ -64,6 +64,11 @@ class SnapshotStats:
     tables: dict[str, int] | None = None
     top_phrase_hubs: list[tuple[str, int]] | None = None  # (title, mention_count)
     categories: list[tuple[str, int]] | None = None  # (title, doc_count)
+    # Urban-legibility "city map" (opt-in): each district (category) with the
+    # landmark hubs that actually sit inside it, so the agent can form a mental
+    # map — "for X-type info, go to district D" — instead of blind re-searching.
+    # list of (district, [(landmark_title, mentions), ...]). None when not built.
+    district_landmarks: list[tuple[str, list[tuple[str, int]]]] | None = None
 
 
 async def collect_stats(
@@ -171,6 +176,44 @@ async def collect_stats(
     phrase_hubs.sort(key=lambda x: -x[1])
     phrase_hubs = phrase_hubs[:top_n_phrase_hubs]
 
+    # Urban-legibility "city map" (opt-in via SYNAPTIC_LEGIBLE_MAP=1) — assign
+    # each landmark hub to the DISTRICT (category) it actually sits in, by
+    # sampling the categories of the chunks that mention it, then group
+    # landmarks under districts. Bounded: top_n hubs x a few sampled chunks.
+    district_landmarks: list[tuple[str, list[tuple[str, int]]]] | None = None
+    import os as _os
+
+    if _os.environ.get("SYNAPTIC_LEGIBLE_MAP") == "1" and phrase_hubs:
+        title_to_hub = {h.title: h for h in phrase_candidates}
+        grouped: dict[str, list[tuple[str, int]]] = {}
+        for hub_title, mentions in phrase_hubs:
+            hub = title_to_hub.get(hub_title)
+            district = "(unzoned)"
+            if hub is not None:
+                try:
+                    edges = await backend.get_edges(hub.id, direction="incoming")
+                    chunk_ids = [
+                        ed.source_id
+                        for ed in edges
+                        if str(ed.kind) == str(EdgeKind.MENTIONS)
+                    ][:5]
+                    cats: Counter[str] = Counter()
+                    for cid in chunk_ids:
+                        cn = await backend.get_node(cid)
+                        cat = (cn.properties or {}).get("category") if cn else None
+                        if cat:
+                            cats[cat] += 1
+                    if cats:
+                        district = cats.most_common(1)[0][0]
+                except Exception:
+                    pass
+            grouped.setdefault(district, []).append((hub_title, mentions))
+        # order districts by total landmark mentions (busiest first)
+        district_landmarks = sorted(
+            grouped.items(),
+            key=lambda kv: -sum(m for _, m in kv[1]),
+        )
+
     # Edge kind sample — ``edge_sample_size`` nodes (default 50). We
     # report counts as "(sampled)" so callers know not to treat as
     # exact graph-wide totals.
@@ -199,6 +242,7 @@ async def collect_stats(
         tables=dict(table_counts),
         top_phrase_hubs=phrase_hubs,
         categories=cat_counts,
+        district_landmarks=district_landmarks,
     )
 
 
@@ -257,8 +301,25 @@ def render_markdown(
             lines.append(f"- ``{tbl}`` ({count:,} rows)")
         lines.append("")
 
-    # --- Top phrase hubs ---
-    if stats.top_phrase_hubs:
+    # --- City map: districts → landmarks (legibility) ---
+    # When the district map was built, render landmarks grouped under the
+    # district they sit in, so the agent can navigate "go to district D for
+    # X-type info" instead of treating hubs as a flat anchor list. Falls back
+    # to the flat hub list otherwise.
+    if stats.district_landmarks:
+        lines.append("## City map (districts → landmark terms)")
+        lines.append("")
+        lines.append(
+            "Each district is a category; the landmarks are its most-mentioned "
+            "terms. To find X-type info, search within the district it belongs to "
+            "(pass the district name as ``category`` to ``deep_search``)."
+        )
+        lines.append("")
+        for district, landmarks in stats.district_landmarks:
+            marks = ", ".join(f"{t} ({m})" for t, m in landmarks)
+            lines.append(f"- **{district}** → {marks}")
+        lines.append("")
+    elif stats.top_phrase_hubs:
         lines.append("## Top phrase hubs (by mention count)")
         lines.append("")
         lines.append("Frequently-mentioned terms — likely good search anchors.")
