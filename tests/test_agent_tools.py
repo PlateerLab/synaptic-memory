@@ -287,6 +287,71 @@ class TestExpandTool:
         assert result.ok is False
         assert result.error == "budget_exceeded"
 
+    async def test_expand_query_ranks_relevant_neighbour_first(self):
+        # Navigation upgrade: with a query, the neighbour whose content matches
+        # it (chunk_r1a holds "E217") must rank above an unrelated sibling.
+        backend = await _fresh_backend()
+        session = SearchSession()
+        result = await expand_tool(backend, session, "doc_r1", query="E217 코드")
+        ids = [n["id"] for n in result.data["neighbours"]]
+        assert "chunk_r1a" in ids
+        assert ids.index("chunk_r1a") < ids.index("chunk_r1b")  # relevant first
+        assert result.data["via"] == "graph"
+
+    async def test_expand_island_node_uses_semantic_fallback(self):
+        # Navigation upgrade: an isolated node (no edges) would dead-end graph
+        # traversal; with an embedder, expand falls back to nearest nodes.
+        backend = MemoryBackend()
+        await backend.connect()
+        island = Node(
+            id="island",
+            kind=NodeKind.CHUNK,
+            title="lonely topic",
+            content="a fact with no graph links",
+            embedding=[1.0, 0.0, 0.0],
+            level=ConsolidationLevel.L0_RAW,
+        )
+        near = Node(
+            id="near",
+            kind=NodeKind.CHUNK,
+            title="adjacent topic",
+            content="a semantically close fact",
+            embedding=[0.9, 0.1, 0.0],
+            level=ConsolidationLevel.L0_RAW,
+        )
+        await backend.save_node(island)
+        await backend.save_node(near)
+
+        class _Emb:
+            async def embed(self, text: str):
+                return [1.0, 0.0, 0.0]
+
+        session = SearchSession()
+        result = await expand_tool(backend, session, "island", embedder=_Emb())
+        assert result.ok is True
+        ids = {n["id"] for n in result.data["neighbours"]}
+        assert "near" in ids  # rescued off the island
+        assert result.data["via"] == "semantic"
+
+    async def test_expand_island_no_embedder_returns_empty_with_hint(self):
+        # Without an embedder the island still degrades gracefully (no crash).
+        backend = MemoryBackend()
+        await backend.connect()
+        await backend.save_node(
+            Node(
+                id="island2",
+                kind=NodeKind.CHUNK,
+                title="lonely",
+                content="no links",
+                level=ConsolidationLevel.L0_RAW,
+            )
+        )
+        session = SearchSession()
+        result = await expand_tool(backend, session, "island2")
+        assert result.ok is True
+        assert result.data["neighbours"] == []
+        assert len(result.hints) > 0
+
 
 # --- get_document_tool ---
 

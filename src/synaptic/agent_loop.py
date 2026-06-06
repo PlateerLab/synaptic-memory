@@ -205,10 +205,21 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "expand",
-            "description": "Get neighbours of a node (1-hop graph expand).",
+            "description": (
+                "Get the neighbours of a node most relevant to your question. "
+                "Pass your current question as `query` so neighbours are ranked "
+                "toward it (not the node's own topic); falls back to "
+                "semantically-nearest nodes if the node has no graph links."
+            ),
             "parameters": {
                 "type": "object",
-                "properties": {"node_id": {"type": "string"}},
+                "properties": {
+                    "node_id": {"type": "string"},
+                    "query": {
+                        "type": "string",
+                        "description": "Your current question — ranks neighbours by relevance to it.",
+                    },
+                },
                 "required": ["node_id"],
             },
         },
@@ -388,6 +399,10 @@ class AgentSearchResult:
     turns_used: int = 0
     tool_calls_made: int = 0
     elapsed_ms: float = 0.0
+    # Per-turn navigation trace (populated only when ``record_trace=True``).
+    # Each entry: {"turn", "tool_calls" (cumulative), "found_ids" (snapshot)}.
+    # Feeds nav_metrics.navigation_efficiency — hops/calls-to-evidence.
+    trace: list[dict] = field(default_factory=list)
 
 
 # --- Internals -----------------------------------------------------
@@ -428,7 +443,13 @@ async def _dispatch_tool(
         elif name == "search":
             r = await search_tool(backend, session, args.get("query", ""), embedder=embedder)
         elif name == "expand":
-            r = await expand_tool(backend, session, args.get("node_id", ""))
+            r = await expand_tool(
+                backend,
+                session,
+                args.get("node_id", ""),
+                query=args.get("query", ""),
+                embedder=embedder,
+            )
         elif name == "follow":
             r = await follow_tool(
                 backend,
@@ -963,6 +984,7 @@ async def run_agent_loop(
     system_prompt: str | None = None,
     extra_context: str | None = None,
     sufficiency_gate: bool = False,
+    record_trace: bool = False,
 ) -> AgentSearchResult:
     """Run one multi-turn agent search.
 
@@ -1029,6 +1051,7 @@ async def run_agent_loop(
     turns_used = 0
     tool_calls = 0
     gate_retries = 0
+    trace_log: list[dict] | None = [] if record_trace else None
 
     for turn in range(max_turns):
         turns_used = turn + 1
@@ -1064,6 +1087,16 @@ async def run_agent_loop(
                         "role": "tool",
                         "tool_call_id": tc.id,
                         "content": project_tool_result(result),
+                    }
+                )
+            if trace_log is not None:
+                # snapshot AFTER this turn's tool calls — cumulative evidence
+                # reached so far, for hops/calls-to-evidence measurement.
+                trace_log.append(
+                    {
+                        "turn": turn + 1,
+                        "tool_calls": tool_calls,
+                        "found_ids": set(found_ids),
                     }
                 )
         else:
@@ -1117,4 +1150,5 @@ async def run_agent_loop(
         turns_used=turns_used,
         tool_calls_made=tool_calls,
         elapsed_ms=(time.time() - t0) * 1000.0,
+        trace=trace_log or [],
     )

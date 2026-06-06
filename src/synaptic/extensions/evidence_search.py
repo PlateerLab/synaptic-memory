@@ -127,6 +127,7 @@ class EvidenceSearch:
 
     __slots__ = (
         "_adaptive",
+        "_graph_expansion",
         "_aggregator",
         "_anchor_extractor",
         "_backend",
@@ -167,6 +168,7 @@ class EvidenceSearch:
         rerank_std_deadzone: float = 0.0,
         fusion_mode: str = "cascade",
         adaptive: bool = False,
+        graph_expansion: bool = True,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -271,6 +273,13 @@ class EvidenceSearch:
         # Degrades to a no-op without a scored backend or an embedder.
         env_ad = _os.environ.get("SYNAPTIC_ADAPTIVE")
         self._adaptive = (env_ad == "1") if env_ad is not None else adaptive
+        # Ablation knob — skip 1-hop graph expansion + PPR discovery, feeding
+        # only FTS/vector seeds to the reranker. Measures how much the graph
+        # structure (vs the lexical/vector seeds) actually contributes to
+        # retrieval, so we know whether graph-connectivity work is worth it
+        # before building it. Default True = shipped behaviour unchanged.
+        env_ge = _os.environ.get("SYNAPTIC_GRAPH_EXPANSION")
+        self._graph_expansion = (env_ge != "0") if env_ge is not None else graph_expansion
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -620,18 +629,29 @@ class EvidenceSearch:
                     fts_scores[node_id] = max(fts_scores.get(node_id, 0.0), normalised)
 
         # Step 3 — shallow graph expansion
-        expanded = await self._expander.expand(
-            anchors=anchors,
-            seed_nodes=all_seeds,
-            budget=self._expansion_budget,
-        )
+        if self._graph_expansion:
+            expanded = await self._expander.expand(
+                anchors=anchors,
+                seed_nodes=all_seeds,
+                budget=self._expansion_budget,
+            )
+        else:
+            # Ablation: skip graph expansion — feed only the seeds (as 0-hop
+            # ExpandedNodes) so the reranker sees the same lexical/vector
+            # candidates minus everything reachable through graph structure.
+            from synaptic.extensions.graph_expander import ExpandedNode
+
+            expanded = [
+                ExpandedNode(node=n, reason="seed", hops=0, anchor_hit=None)
+                for n in all_seeds
+            ]
 
         # Step 3b — PPR graph discovery. Uses FTS seeds as teleport
         # nodes and walks the graph via PPR to find nodes reachable
         # through structural paths (PART_OF, CONTAINS, MENTIONS) that
         # neither FTS nor vector search found. Discovered nodes are
         # added to the expanded set with a graph-based score.
-        if fts_scores:
+        if fts_scores and self._graph_expansion:
             try:
                 ppr_results = await personalized_pagerank(
                     self._backend,

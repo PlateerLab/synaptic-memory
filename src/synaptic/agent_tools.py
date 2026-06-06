@@ -354,21 +354,44 @@ async def search_tool(
 # --- Tool 2: expand ---
 
 
+def _query_relevance(node: Node, q_terms: set[str]) -> int:
+    """LLM-free relevance of a node to the query: count of distinct query
+    terms appearing in its title (weighted) or content. Used to rank graph
+    neighbours toward the agent's actual question instead of the seed's own
+    anchors — the seed-anchored expander surfaces noisy 1-hop neighbours, so
+    re-ranking by the live query is what makes traversal signal-bearing."""
+    if not q_terms:
+        return 0
+    title = (node.title or "").lower()
+    content = (node.content or "").lower()
+    return sum((2 if t in title else 0) + (1 if t in content else 0) for t in q_terms)
+
+
 async def expand_tool(
     backend: StorageBackend,
     session: SearchSession,
     node_id: str,
     *,
+    query: str = "",
     limit: int = 10,
     exclude_seen: bool = True,
+    embedder: object | None = None,
 ) -> ToolResult:
-    """Return 1-hop graph neighbours of ``node_id``.
+    """Return the most useful neighbours of ``node_id`` for the agent's question.
 
-    Reuses :class:`GraphExpander` so the semantics match the rest
-    of the pipeline — category siblings, document-scoped chunks,
-    NEXT_CHUNK walks, and entity mentions. The agent typically calls
-    this after seeing a promising result from ``search`` to look at
-    surrounding context.
+    Reuses :class:`GraphExpander` for graph semantics (category siblings,
+    document-scoped chunks, NEXT_CHUNK walks, entity mentions), then adds two
+    navigation upgrades so the agent finds faster:
+
+    * **Query-aware ranking** — when ``query`` is given, neighbours are scored
+      by relevance to *that question* and the best survive the ``limit`` cap,
+      instead of an arbitrary slice of the seed-anchored expansion. Snippets are
+      query-extracted too.
+    * **Semantic-neighbour fallback** — when the node is an *island* (no graph
+      neighbours, ~29 % of a real corpus) and an ``embedder`` is available, fall
+      back to embedding-kNN nearest nodes so the agent is never stranded. This
+      is the navigable-small-world idea applied at query time — no index-time
+      backbone, no index cost.
     """
     budget = _budget_check(session, "expand")
     if budget is not None:
@@ -389,13 +412,41 @@ async def expand_tool(
     expanded = await expander.expand(
         anchors=_anchors_from_seed(seed),
         seed_nodes=[seed],
-        budget=ExpansionBudget(max_total_expanded=limit * 2),
+        budget=ExpansionBudget(max_total_expanded=max(limit * 3, 20)),
     )
 
     out_nodes = [e for e in expanded if e.node.id != node_id]
     if exclude_seen:
         out_nodes = [e for e in out_nodes if not session.has_seen(e.node.id)]
+
+    # Query-aware ranking — rank the over-fetched pool by relevance to the live
+    # question BEFORE the cap, so a relevant neighbour can't be cut off by the
+    # expander's seed-anchored order. Stable: ties keep expander order.
+    q_terms = {t for t in (query or "").lower().split() if len(t) > 1}
+    if q_terms and out_nodes:
+        out_nodes.sort(key=lambda e: _query_relevance(e.node, q_terms), reverse=True)
     out_nodes = out_nodes[:limit]
+
+    # Semantic-neighbour fallback for island nodes — graph traversal dead-ends
+    # on isolated nodes, so give the agent an embedding-kNN escape hatch.
+    fallback_used = False
+    if not out_nodes and embedder is not None:
+        try:
+            seed_text = ((seed.title or "") + " " + (seed.content or "")).strip()
+            if seed_text:
+                emb = await embedder.embed(seed_text)
+                hits = await backend.search_vector(emb, limit=limit + 5)
+                from synaptic.extensions.graph_expander import ExpandedNode
+
+                out_nodes = [
+                    ExpandedNode(node=n, reason="semantic_neighbor", hops=1, anchor_hit=None)
+                    for n in hits
+                    if n.id != node_id and not (exclude_seen and session.has_seen(n.id))
+                ][:limit]
+                fallback_used = bool(out_nodes)
+        except Exception as exc:  # embedder/vector failure must never break expand
+            logger.debug("expand semantic fallback failed: %s", exc)
+
     session.mark_seen(e.node.id for e in out_nodes)
     session.expanded_nodes.add(node_id)
 
@@ -413,15 +464,16 @@ async def expand_tool(
         tool="expand",
         ok=True,
         data={
-            "seed": _node_to_summary(seed),
+            "seed": _node_to_summary(seed, query=query),
             "neighbours": [
                 {
-                    **_node_to_summary(e.node),
+                    **_node_to_summary(e.node, query=query),
                     "reason": e.reason,
                     "anchor_hit": e.anchor_hit,
                 }
                 for e in out_nodes
             ],
+            "via": "semantic" if fallback_used else "graph",
         },
         hints=hints,
         session=session.summary(),

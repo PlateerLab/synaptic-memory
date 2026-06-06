@@ -915,11 +915,15 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "expand",
-            "description": "Explore graph neighbours of a node — follow edges to discover related nodes (FK-linked rows, document chunks, category siblings).",
+            "description": "Explore neighbours of a node most relevant to your question — pass `query` to rank them toward it; falls back to semantically-nearest nodes if the node has no graph links.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "node_id": {"type": "string", "description": "Node ID to expand from"},
+                    "query": {
+                        "type": "string",
+                        "description": "Your current question — ranks neighbours by relevance to it.",
+                    },
                 },
                 "required": ["node_id"],
             },
@@ -1102,7 +1106,13 @@ async def _agent_dispatch(name, args, backend, session, *, embedder=None):
     elif name == "search":
         r = await search_tool(backend, session, args.get("query", ""), embedder=embedder)
     elif name == "expand":
-        r = await expand_tool(backend, session, args.get("node_id", ""))
+        r = await expand_tool(
+            backend,
+            session,
+            args.get("node_id", ""),
+            query=args.get("query", ""),
+            embedder=embedder,
+        )
     elif name == "follow":
         r = await follow_tool(
             backend, session, args.get("node_id", ""), args.get("edge_kind", "related")
