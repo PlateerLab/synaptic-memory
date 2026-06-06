@@ -415,6 +415,19 @@ async def expand_tool(
         budget=ExpansionBudget(max_total_expanded=max(limit * 3, 20)),
     )
 
+    # OPT-IN (default OFF) — measured neutral on the explicit `expand` path.
+    # A/B on finreg-multihop (Δ 0) and KRRA Hard (Δ −1, noise) showed no gain:
+    # the agent reaches evidence via the `search` tool (whose INTERNAL
+    # GraphExpander is what gives graph its +8.3pp agent lift), and rarely calls
+    # the explicit `expand` tool on island nodes, so the semantic fallback fired
+    # 0 times even on KRRA (29% islands). Kept opt-in (the ideas are being moved
+    # into EvidenceSearch's internal expansion, where they actually fire). Set
+    # SYNAPTIC_NAV_UPGRADE=1 to re-enable query-aware ranking + island fallback.
+    # See examples/ablation/diagnostics/v028_agent_navigation_20260607.md.
+    import os as _os
+
+    _upgrade = _os.environ.get("SYNAPTIC_NAV_UPGRADE", "0") != "0"
+
     out_nodes = [e for e in expanded if e.node.id != node_id]
     if exclude_seen:
         out_nodes = [e for e in out_nodes if not session.has_seen(e.node.id)]
@@ -423,14 +436,14 @@ async def expand_tool(
     # question BEFORE the cap, so a relevant neighbour can't be cut off by the
     # expander's seed-anchored order. Stable: ties keep expander order.
     q_terms = {t for t in (query or "").lower().split() if len(t) > 1}
-    if q_terms and out_nodes:
+    if _upgrade and q_terms and out_nodes:
         out_nodes.sort(key=lambda e: _query_relevance(e.node, q_terms), reverse=True)
     out_nodes = out_nodes[:limit]
 
     # Semantic-neighbour fallback for island nodes — graph traversal dead-ends
     # on isolated nodes, so give the agent an embedding-kNN escape hatch.
     fallback_used = False
-    if not out_nodes and embedder is not None:
+    if _upgrade and not out_nodes and embedder is not None:
         try:
             seed_text = ((seed.title or "") + " " + (seed.content or "")).strip()
             if seed_text:

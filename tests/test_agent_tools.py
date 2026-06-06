@@ -287,9 +287,10 @@ class TestExpandTool:
         assert result.ok is False
         assert result.error == "budget_exceeded"
 
-    async def test_expand_query_ranks_relevant_neighbour_first(self):
-        # Navigation upgrade: with a query, the neighbour whose content matches
-        # it (chunk_r1a holds "E217") must rank above an unrelated sibling.
+    async def test_expand_query_ranks_relevant_neighbour_first(self, monkeypatch):
+        # Navigation upgrade (opt-in): with a query, the neighbour whose content
+        # matches it (chunk_r1a holds "E217") must rank above an unrelated sibling.
+        monkeypatch.setenv("SYNAPTIC_NAV_UPGRADE", "1")
         backend = await _fresh_backend()
         session = SearchSession()
         result = await expand_tool(backend, session, "doc_r1", query="E217 코드")
@@ -298,9 +299,10 @@ class TestExpandTool:
         assert ids.index("chunk_r1a") < ids.index("chunk_r1b")  # relevant first
         assert result.data["via"] == "graph"
 
-    async def test_expand_island_node_uses_semantic_fallback(self):
-        # Navigation upgrade: an isolated node (no edges) would dead-end graph
-        # traversal; with an embedder, expand falls back to nearest nodes.
+    async def test_expand_island_node_uses_semantic_fallback(self, monkeypatch):
+        # Navigation upgrade (opt-in): an isolated node (no edges) would dead-end
+        # graph traversal; with an embedder, expand falls back to nearest nodes.
+        monkeypatch.setenv("SYNAPTIC_NAV_UPGRADE", "1")
         backend = MemoryBackend()
         await backend.connect()
         island = Node(
