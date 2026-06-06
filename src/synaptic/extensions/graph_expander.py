@@ -149,6 +149,7 @@ class GraphExpander:
         anchors: QueryAnchors,
         seed_nodes: list[Node],
         budget: ExpansionBudget | None = None,
+        query_terms: frozenset[str] | None = None,
     ) -> list[ExpandedNode]:
         """Produce an expanded candidate list from anchors and seeds.
 
@@ -156,9 +157,15 @@ class GraphExpander:
         Order is deterministic within each group (seeds first, then
         category siblings, then document-scoped expansion, then
         chunk-next walk) so tests can assert on it without sorting.
+
+        ``query_terms`` (opt-in) makes the budget relevance-aware: when the
+        1-hop neighbourhood exceeds the budget, the most query-relevant
+        neighbours win the slots instead of the first-visited ones. Helps the
+        agent find evidence in large neighbourhoods where relevant neighbours
+        would otherwise be dropped before the reranker. None = prior behaviour.
         """
         budget = budget or ExpansionBudget()
-        state = _ExpansionState(budget)
+        state = _ExpansionState(budget, q_terms=query_terms or frozenset())
 
         # Step 1 — seeds are always included first.
         for node in seed_nodes:
@@ -464,6 +471,17 @@ class GraphExpander:
                 added += 1
 
 
+def _relevance(node: Node, q_terms: frozenset[str]) -> int:
+    """LLM-free relevance of a node to the query: query-term hits in the title
+    (weighted 2x) plus content. Used to decide which neighbour keeps a budget
+    slot when the 1-hop neighbourhood is larger than the budget."""
+    if not q_terms:
+        return 0
+    title = (node.title or "").lower()
+    content = (node.content or "").lower()
+    return sum((2 if t in title else 0) + (1 if t in content else 0) for t in q_terms)
+
+
 @dataclass(slots=True)
 class _ExpansionState:
     """Per-call bookkeeping for an expansion run.
@@ -472,25 +490,63 @@ class _ExpansionState:
     detected in O(1) and the *first* reason a node was added wins —
     seeds beat category siblings, category siblings beat document
     siblings, etc., matching the order the expander visits paths.
+
+    When ``q_terms`` is non-empty the budget becomes RELEVANCE-AWARE: once
+    full, a new neighbour evicts the least-query-relevant *non-seed* already
+    held if the newcomer is more relevant. This stops a large structural
+    neighbourhood (e.g. a 90k-node graph) from spending the whole budget on
+    the first-visited paths and dropping relevant neighbours before the
+    reranker ever sees them. Seeds (hops==0) are never evicted. Empty
+    ``q_terms`` (default) preserves the prior first-come behaviour exactly.
     """
 
     budget: ExpansionBudget
+    q_terms: frozenset[str] = frozenset()
     _by_id: dict[str, ExpandedNode] = field(default_factory=dict)
     _order: list[str] = field(default_factory=list)
+    _rel: dict[str, int] = field(default_factory=dict)
 
     def add(self, expanded: ExpandedNode) -> None:
         nid = expanded.node.id
         if nid in self._by_id:
             return
-        if len(self._by_id) >= self.budget.max_total_expanded:
+        if len(self._by_id) < self.budget.max_total_expanded:
+            self._by_id[nid] = expanded
+            self._order.append(nid)
+            if self.q_terms:
+                self._rel[nid] = _relevance(expanded.node, self.q_terms)
             return
+        # Full. First-come mode (no query terms) → drop the newcomer.
+        if not self.q_terms:
+            return
+        # Relevance-aware mode → evict the least-relevant non-seed if the
+        # newcomer beats it (strictly, so ties keep the earlier-visited node).
+        new_rel = _relevance(expanded.node, self.q_terms)
+        victim, victim_rel = None, new_rel
+        for oid in self._order:
+            if self._by_id[oid].hops == 0:  # never evict a seed
+                continue
+            if self._rel.get(oid, 0) < victim_rel:
+                victim, victim_rel = oid, self._rel.get(oid, 0)
+        if victim is None:
+            return
+        del self._by_id[victim]
+        self._order.remove(victim)
+        self._rel.pop(victim, None)
         self._by_id[nid] = expanded
         self._order.append(nid)
+        self._rel[nid] = new_rel
 
     def contains(self, node_id: str) -> bool:
         return node_id in self._by_id
 
     def is_full(self) -> bool:
+        # In relevance mode never short-circuit the per-path walks — let every
+        # path OFFER its neighbours so add() can evict-by-relevance. Per-path
+        # `added` caps still bound how many each path iterates. First-come mode
+        # keeps the original early-stop behaviour.
+        if self.q_terms:
+            return False
         return len(self._by_id) >= self.budget.max_total_expanded
 
     def results(self) -> list[ExpandedNode]:

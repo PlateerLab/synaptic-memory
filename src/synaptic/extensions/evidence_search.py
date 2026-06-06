@@ -127,6 +127,7 @@ class EvidenceSearch:
 
     __slots__ = (
         "_adaptive",
+        "_expand_relevance",
         "_graph_expansion",
         "_aggregator",
         "_anchor_extractor",
@@ -280,6 +281,12 @@ class EvidenceSearch:
         # before building it. Default True = shipped behaviour unchanged.
         env_ge = _os.environ.get("SYNAPTIC_GRAPH_EXPANSION")
         self._graph_expansion = (env_ge != "0") if env_ge is not None else graph_expansion
+        # Relevance-aware expansion budget (opt-in via SYNAPTIC_EXPAND_RELEVANCE=1).
+        # When the 1-hop neighbourhood exceeds the expander budget, keep the most
+        # query-relevant neighbours instead of the first-visited ones — so the
+        # agent finds evidence buried in large neighbourhoods. Default off until
+        # measured on the agent benches.
+        self._expand_relevance = _os.environ.get("SYNAPTIC_EXPAND_RELEVANCE") == "1"
         self._anchor_extractor = QueryAnchorExtractor(
             backend=backend,
             phrase_extractor=phrase_extractor,
@@ -630,10 +637,16 @@ class EvidenceSearch:
 
         # Step 3 — shallow graph expansion
         if self._graph_expansion:
+            q_terms = (
+                frozenset(t for t in query.lower().split() if len(t) > 1)
+                if self._expand_relevance
+                else None
+            )
             expanded = await self._expander.expand(
                 anchors=anchors,
                 seed_nodes=all_seeds,
                 budget=self._expansion_budget,
+                query_terms=q_terms,
             )
         else:
             # Ablation: skip graph expansion — feed only the seeds (as 0-hop

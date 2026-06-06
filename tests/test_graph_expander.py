@@ -326,3 +326,56 @@ async def test_references_expansion_noop_without_edges():
     expander = GraphExpander(backend=backend)
     results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[a])
     assert [r.reason for r in results] == ["seed"]
+
+
+# --- relevance-aware budget (opt-in) -----------------------------------
+
+
+def _mk_expanded(nid: str, *, title: str = "", content: str = "", hops: int = 1):
+    from synaptic.extensions.graph_expander import ExpandedNode
+
+    return ExpandedNode(
+        node=Node(id=nid, kind=NodeKind.CHUNK, title=title, content=content),
+        reason="seed" if hops == 0 else "doc_sibling",
+        hops=hops,
+    )
+
+
+def test_relevance_budget_keeps_most_relevant_over_budget():
+    """When the neighbourhood exceeds the budget, the most query-relevant
+    non-seed neighbours win the slots — not the first-visited ones."""
+    from synaptic.extensions.graph_expander import ExpansionBudget, _ExpansionState
+
+    st = _ExpansionState(ExpansionBudget(max_total_expanded=3), q_terms=frozenset({"e217"}))
+    st.add(_mk_expanded("seed", hops=0))  # protected
+    st.add(_mk_expanded("noise1", content="unrelated"))  # rel 0
+    st.add(_mk_expanded("noise2", content="also unrelated"))  # rel 0, budget now full
+    # newcomer mentions the query term → must evict a rel-0 noise node
+    st.add(_mk_expanded("hit", title="E217 spec"))  # rel 2
+    ids = {r.node.id for r in st.results()}
+    assert "seed" in ids  # never evicted
+    assert "hit" in ids  # relevant newcomer admitted
+    assert len(ids) == 3
+    assert ("noise1" in ids) != ("noise2" in ids)  # exactly one noise evicted
+
+
+def test_relevance_budget_never_evicts_seeds():
+    from synaptic.extensions.graph_expander import ExpansionBudget, _ExpansionState
+
+    st = _ExpansionState(ExpansionBudget(max_total_expanded=2), q_terms=frozenset({"x"}))
+    st.add(_mk_expanded("s1", hops=0))
+    st.add(_mk_expanded("s2", hops=0))  # budget full with two seeds
+    st.add(_mk_expanded("relevant", title="x x x"))  # rel high but only seeds held
+    ids = {r.node.id for r in st.results()}
+    assert ids == {"s1", "s2"}  # seeds protected, newcomer rejected
+
+
+def test_empty_q_terms_preserves_first_come():
+    """No query terms → original behaviour: drop the newcomer when full."""
+    from synaptic.extensions.graph_expander import ExpansionBudget, _ExpansionState
+
+    st = _ExpansionState(ExpansionBudget(max_total_expanded=2))
+    st.add(_mk_expanded("a", title="anything"))
+    st.add(_mk_expanded("b", title="anything"))
+    st.add(_mk_expanded("c", title="very relevant whatever"))  # dropped, not evicting
+    assert [r.node.id for r in st.results()] == ["a", "b"]
