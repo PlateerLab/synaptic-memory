@@ -95,6 +95,36 @@ search and is what produced the §3 gain. (Next development target.)
 
 ---
 
+## 5. Relevance-aware expansion budget (`SYNAPTIC_EXPAND_RELEVANCE`, commit c2360a5)
+
+When the expander budget is full, keep the most query-relevant non-seed
+neighbours instead of the first-visited ones (seeds protected). Hypothesis: on
+KRRA's 90k neighbourhoods, relevant neighbours were being dropped before the
+reranker saw them.
+
+| corpus | relevance ON | baseline (default) | Δ |
+|---|---:|---:|---:|
+| KRRA Hard | 29/39 (0.744), 551s | 30/39 (0.769), 586s | **−1 (noise, not a win)** |
+
+**Verdict: neutral.** Together with §4 this is now TWICE that tweaking the
+expansion's neighbour *selection* did nothing. Mechanism: the reranker
+re-scores every candidate, so given any reasonable candidate pool, *which*
+neighbours won the budget doesn't change the final ranking.
+
+### The load-bearing learning
+- Graph **ON vs OFF** = **+8.3pp** (§3): the agent gain is from REACH —
+  whether the graph reaches evidence the seeds missed at all.
+- Graph neighbour **selection** (§4 explicit-expand, §5 relevance-budget) =
+  **0**: once reached, the reranker handles relevance.
+- ⇒ **The live lever is REACH/connectivity, not selection.** The 29% isolated
+  nodes in KRRA (§1) are pure reach-absence — the +8.3pp can't touch them. The
+  next development is adding reach to islands (the opposite of selection-tuning),
+  measured ON THE AGENT (where reach paid off), not single-shot (where the §2
+  ablation said an index backbone won't help ranking).
+- Both selection tweaks kept opt-in (default off). Legible city-map (commit
+  3e91181) is a DIFFERENT mechanism (priming/wayfinding, not expansion) — still
+  to be measured.
+
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +
   `SYNAPTIC_GRAPH_EXPANSION` toggle (measurement infra — keep) and the `expand`
