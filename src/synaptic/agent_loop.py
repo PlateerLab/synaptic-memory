@@ -983,7 +983,7 @@ async def run_agent_loop(
     embedder: EmbeddingProvider | None = None,
     system_prompt: str | None = None,
     extra_context: str | None = None,
-    sufficiency_gate: bool = False,
+    sufficiency_gate: bool = True,
     record_trace: bool = False,
 ) -> AgentSearchResult:
     """Run one multi-turn agent search.
@@ -1014,8 +1014,11 @@ async def run_agent_loop(
     t0 = time.time()
     import os as _os
 
-    if not sufficiency_gate and _os.environ.get("SYNAPTIC_SUFFICIENCY_GATE") == "1":
-        sufficiency_gate = True
+    # Default ON (measured +3.2pp agent, 0 regressions, fail-open, <1.1x latency).
+    # Env forces either way: SYNAPTIC_SUFFICIENCY_GATE=0 disables, =1 enables.
+    env_sg = _os.environ.get("SYNAPTIC_SUFFICIENCY_GATE")
+    if env_sg is not None:
+        sufficiency_gate = env_sg == "1"
     graph_ctx = await build_graph_context(backend)
     base_prompt = system_prompt or AGENT_SYSTEM
     parts = [base_prompt, graph_ctx]

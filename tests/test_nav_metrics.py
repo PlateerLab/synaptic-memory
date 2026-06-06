@@ -122,7 +122,9 @@ async def _backend():
 async def test_record_trace_off_by_default():
     b = await _backend()
     client = _FakeClient([_Msg(content="answer")])
-    res = await run_agent_loop(client=client, backend=b, query="q")
+    # sufficiency_gate=False isolates the trace behaviour from the (now default-on)
+    # gate, which would otherwise consume an extra judge turn from the fake client.
+    res = await run_agent_loop(client=client, backend=b, query="q", sufficiency_gate=False)
     assert res.trace == []
     await b.close()
 
@@ -133,7 +135,9 @@ async def test_record_trace_captures_per_turn_evidence():
     client = _FakeClient(
         [_Msg(tool_calls=[_ToolCall("search", {"query": "test"})]), _Msg(content="final")]
     )
-    res = await run_agent_loop(client=client, backend=b, query="q", record_trace=True)
+    res = await run_agent_loop(
+        client=client, backend=b, query="q", record_trace=True, sufficiency_gate=False
+    )
     assert len(res.trace) == 1  # one tool-calling turn
     snap = res.trace[0]
     assert snap["turn"] == 1 and snap["tool_calls"] == 1

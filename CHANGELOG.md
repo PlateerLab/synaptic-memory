@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### v0.28-dev — agent navigation track + sufficiency gate default-on
+
+Agent-first push: the measured truth is single-shot 0.30 MRR → agent ~81%, so
+the lever that beats RAG is the agent loop, not better single-shot retrieval.
+This pass ships a proven agent win as the default and adds the measurement +
+opt-in structure to keep advancing it.
+
+**Changed**
+- `graph.chat(...)` / `run_agent_loop(...)` now default `sufficiency_gate=True`
+  (measured +3.2pp agent solve-rate, 0 regressions, fail-open, <1.1x latency).
+  Before accepting the first final answer the agent checks, in one LLM call,
+  whether the answer is supported by the evidence; on a clear gap it keeps
+  retrieving. RAG has no equivalent. Opt out via the arg or
+  `SYNAPTIC_SUFFICIENCY_GATE=0`.
+
+**Added (opt-in, measured — see examples/ablation/diagnostics/v028_agent_navigation_20260607.md)**
+- `examples/ablation/graph_navigability.py` — LLM-free corpus navigability scan
+  (components / isolated % / hubs / hop distance). Surfaced that real corpora
+  are fragmented (KRRA 29% isolated, x2bee shattered into 1099 components).
+- `src/synaptic/nav_metrics.py` + `run_agent_loop(record_trace=True)` +
+  `AgentSearchResult.trace` — agent-navigation-efficiency metric (hops/calls to
+  evidence, success@budget). The measurement RAG benchmarks don't have.
+- `SYNAPTIC_GRAPH_EXPANSION` toggle — ablate graph expansion. Found graph is
+  net-negative single-shot but **+8.3pp in agent mode** (reach, via traverse).
+- `SYNAPTIC_EXPAND_RELEVANCE` (relevance-aware expansion budget) and
+  `SYNAPTIC_NAV_UPGRADE` (query-aware `expand` + island fallback) — both
+  measured NEUTRAL on the agent (selection-tweaking is absorbed by the
+  reranker), kept opt-in. The live lever is reach/connectivity, not selection.
+- `SYNAPTIC_LEGIBLE_MAP` — snapshot "city map" grouping landmark hubs under
+  their district (category) for agent wayfinding (urban-legibility). Opt-in.
+
 ### v0.28-dev — legacy-engine cleanup, rerank deadzone knob, CI bench guard
 
 Maintenance pass: removes the dead legacy retrieval engine path, adds an

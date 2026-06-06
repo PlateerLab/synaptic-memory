@@ -141,6 +141,29 @@ async def test_gate_fails_open_on_unparseable_judge():
 
 
 @pytest.mark.asyncio
+async def test_gate_on_by_default():
+    # Promoted to default-on (measured +3.2pp). No arg, no env → gate fires.
+    b = await _backend_with_evidence()
+    client = _FakeClient(_search_then("answer"), judge_texts=['{"sufficient": true}'])
+    res = await run_agent_loop(client=client, backend=b, query="q")
+    assert res.final_answer == "answer"
+    assert "judge" in client.kinds  # gate ran without being asked
+    await b.close()
+
+
+@pytest.mark.asyncio
+async def test_env_var_can_disable_default_gate(monkeypatch):
+    # Escape hatch: SYNAPTIC_SUFFICIENCY_GATE=0 turns the default-on gate OFF.
+    monkeypatch.setenv("SYNAPTIC_SUFFICIENCY_GATE", "0")
+    b = await _backend_with_evidence()
+    client = _FakeClient(_search_then("answer"), judge_texts=[])
+    res = await run_agent_loop(client=client, backend=b, query="q")
+    assert res.final_answer == "answer"
+    assert "judge" not in client.kinds  # env disabled it
+    await b.close()
+
+
+@pytest.mark.asyncio
 async def test_env_var_enables_gate(monkeypatch):
     monkeypatch.setenv("SYNAPTIC_SUFFICIENCY_GATE", "1")
     b = await _backend_with_evidence()
