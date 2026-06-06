@@ -125,6 +125,23 @@ neighbours won the budget doesn't change the final ranking.
   3e91181) is a DIFFERENT mechanism (priming/wayfinding, not expansion) — still
   to be measured.
 
+## 6. Sufficiency gate — re-verified before default-on (commit 3941e82)
+
+The +3.2pp gate result lived only in memory from a prior code state, and the
+eval harness's inline loop doesn't exercise the gate. So before flipping the
+default, re-measured on CURRENT code via `run_agent_loop` (the real gated path),
+`examples/ablation/gate_ab.py`, KRRA Hard, gate OFF vs ON:
+
+| | id-reach | time |
+|---|---:|---:|
+| gate **OFF** | 29/39 (0.744) | 719s |
+| gate **ON** | **32/39 (0.821)** | 864s |
+| **Δ** | **+3 (+7.7pp)** | +20% latency |
+
+Reproduces the recorded win (was +5.1pp on KRRA Hard) on current code → default-on
+justified. Minor: 2 enumeration queries hit the model's 32k context at turn 10
+(both arms; fail-open) — a separate context-budget limit, not the gate.
+
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +
   `SYNAPTIC_GRAPH_EXPANSION` toggle (measurement infra — keep) and the `expand`
