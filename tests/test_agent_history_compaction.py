@@ -17,6 +17,7 @@ import pytest
 from synaptic.agent_loop import (
     _FOLD_STUB,
     _compact_history,
+    _fold_summary,
     _history_chars,
     _is_context_length_error,
     run_agent_loop,
@@ -77,6 +78,59 @@ def test_compact_history_idempotent():
     # running it again changes nothing (already-folded stubs are skipped)
     _compact_history(msgs, budget=2500)
     assert _history_chars(msgs) == chars
+
+
+# --- unit: fold summary preserves found ids ---------------------------
+
+
+def test_fold_summary_preserves_ids():
+    content = json.dumps(
+        {
+            "tool": "search",
+            "ok": True,
+            "data": {"evidence": [{"id": "d1", "title": "Alpha"}, {"id": "d2", "title": "Beta"}]},
+        }
+    )
+    s = _fold_summary(content)
+    assert '"_folded"' in s
+    assert "d1" in s and "d2" in s
+    assert "Alpha" in s and "Beta" in s
+    assert "search" in s  # tool name kept
+    # and it's smaller than a full result would be at scale
+    assert len(s) < len(json.dumps({"data": {"x": "y" * 5000}}))
+
+
+def test_fold_summary_falls_back_when_unparseable():
+    assert _fold_summary("not json at all") == _FOLD_STUB
+    assert _fold_summary(json.dumps({"tool": "x", "data": {}})) == _FOLD_STUB  # no ids
+
+
+def test_fold_summary_blind_env(monkeypatch):
+    monkeypatch.setenv("SYNAPTIC_FOLD_BLIND", "1")
+    content = json.dumps({"tool": "search", "data": {"evidence": [{"id": "d1"}]}})
+    assert _fold_summary(content) == _FOLD_STUB
+
+
+def test_compact_history_keeps_ids_in_folded_json():
+    # a folded JSON tool result must still expose its ids after compaction.
+    msgs = [{"role": "system", "content": "S" * 200}, {"role": "user", "content": "q"}]
+    for i in range(6):
+        big = json.dumps(
+            {
+                "tool": "search",
+                "ok": True,
+                "data": {"evidence": [{"id": f"doc{i}", "title": f"T{i}", "snippet": "z" * 900}]},
+            }
+        )
+        msgs.append({"role": "assistant", "content": "", "tool_calls": [{"id": f"t{i}"}]})
+        msgs.append({"role": "tool", "tool_call_id": f"t{i}", "content": big})
+
+    _compact_history(msgs, budget=2500)
+    # the oldest tool message was folded but still names its doc id
+    oldest_tool = msgs[3]["content"]
+    assert '"_folded"' in oldest_tool
+    assert "doc0" in oldest_tool  # id survived the fold
+    assert "z" * 900 not in oldest_tool  # raw snippet body dropped
 
 
 # --- integration: reactive retry on overflow --------------------------

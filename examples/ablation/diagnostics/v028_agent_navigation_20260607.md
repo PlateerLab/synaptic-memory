@@ -241,6 +241,15 @@ the estimate-independent backstop. This is the right KIND of agent work given
 silently capped long-session reach (a query dying at turn 12 can't reach
 anything regardless of how good the retrieval levers are).
 
+**Refinement — id-preserving fold.** A blind `[folded]` stub would make the
+agent forget which docs an old turn retrieved → re-search what it already had,
+on the exact context-tight queries where that wastes the remaining turns. So the
+fold keeps `{"_folded","tool","found":[ids/titles]}` (env `SYNAPTIC_FOLD_BLIND=1`
+reverts). The deterministic guarantee is the unit test (ids survive the fold);
+a behavioural re-search delta isn't cleanly measurable here (only ~2/39 queries
+fold → dominated by the §7 noise floor), so no accuracy claim — re-ran to
+confirm NO regression: escaped 0, solve 32/39 unchanged.
+
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +
   `SYNAPTIC_GRAPH_EXPANSION` toggle (measurement infra — keep) and the `expand`

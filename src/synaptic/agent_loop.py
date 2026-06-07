@@ -920,6 +920,71 @@ _AGENT_HISTORY_CHAR_BUDGET = 48_000
 _FOLD_STUB = "[older tool result folded to fit the context window]"
 
 
+def _collect_ids_titles(obj: Any, out: list[str], cap: int = 24) -> None:
+    """Recursively gather id/title/doc identifiers from a projected tool result.
+
+    Shape-agnostic: walks dicts/lists pulling values of the identifier keys the
+    projection emits (``id`` / ``title`` / ``document_id`` / ``doc_id``). Each
+    value is truncated and de-duplicated (order-preserving), capped at ``cap``
+    so the fold summary stays small. Used to keep the agent's *found* handles
+    alive when an old tool result is folded — so it chains by id instead of
+    re-searching for what it already retrieved."""
+    if len(out) >= cap:
+        return
+    if isinstance(obj, dict):
+        for key in ("id", "title", "document_id", "doc_id"):
+            v = obj.get(key)
+            if isinstance(v, str) and v:
+                tv = _truncate(v, 60)
+                if tv not in out:
+                    out.append(tv)
+                    if len(out) >= cap:
+                        return
+        for v in obj.values():
+            if isinstance(v, dict | list):
+                _collect_ids_titles(v, out, cap)
+                if len(out) >= cap:
+                    return
+    elif isinstance(obj, list):
+        for item in obj:
+            _collect_ids_titles(item, out, cap)
+            if len(out) >= cap:
+                return
+
+
+def _fold_summary(content: str) -> str:
+    """Compact a tool-result message to a stub that PRESERVES its found ids.
+
+    Parses the projected JSON and keeps ``{"_folded", "tool", "found":[ids]}``
+    so the agent still sees which documents that turn retrieved (and can chain
+    by id) instead of a blind "result folded" marker. Falls back to the plain
+    stub when the content isn't parseable JSON or carries no identifiers. Env
+    ``SYNAPTIC_FOLD_BLIND=1`` forces the blind stub (for A/B)."""
+    import os as _os
+
+    if _os.environ.get("SYNAPTIC_FOLD_BLIND") == "1":
+        return _FOLD_STUB
+    try:
+        obj = json.loads(content)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return _FOLD_STUB
+    if not isinstance(obj, dict):
+        return _FOLD_STUB
+    tool = obj.get("tool", "") if isinstance(obj.get("tool"), str) else ""
+    ids: list[str] = []
+    _collect_ids_titles(obj.get("data", obj), ids, cap=24)
+    if not ids:
+        return _FOLD_STUB
+    summary: dict[str, Any] = {"_folded": True, "found": ids}
+    if tool:
+        summary["tool"] = tool
+    s = json.dumps(summary, ensure_ascii=False)
+    if len(s) > 1200:  # keep the summary itself bounded
+        summary["found"] = ids[:12]
+        s = json.dumps(summary, ensure_ascii=False)
+    return s
+
+
 def _is_context_length_error(exc: Exception) -> bool:
     """True when ``exc`` is the model rejecting an over-long prompt.
 
@@ -961,10 +1026,13 @@ def _compact_history(messages: list, budget: int) -> int:
         if m.get("role") != "tool":
             continue
         c = str(m.get("content") or "")
-        if len(c) <= len(_FOLD_STUB):
-            continue  # already small / already folded
-        total -= len(c) - len(_FOLD_STUB)
-        m["content"] = _FOLD_STUB
+        if c == _FOLD_STUB or c.startswith('{"_folded"'):
+            continue  # already folded
+        stub = _fold_summary(c)
+        if len(stub) >= len(c):
+            continue  # nothing to gain (content already smaller than its stub)
+        total -= len(c) - len(stub)
+        m["content"] = stub
         folded += 1
     return folded
 
