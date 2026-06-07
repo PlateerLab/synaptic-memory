@@ -32,6 +32,21 @@ opt-in structure to keep advancing it.
   retry never had to fire). A deterministic count, not a noise-floor delta.
   RAG-irrelevant — purely an agentic-session robustness fix.
 
+**Added (agent efficiency)**
+- `AgentSearchResult.tool_log` — per-tool-call telemetry (tool / normalized
+  args key / n_results / duplicate flag), always populated. Feeds
+  `examples/ablation/agent_efficiency.py`, a profiler for the DETERMINISTIC cost
+  signals (turns / tool_calls / duplicate / empty-result) that the accuracy
+  noise floor leaves measurable.
+- Opt-in efficiency directive (`efficiency_hint=True` /
+  `SYNAPTIC_AGENT_EFFICIENCY=1`, default OFF). Appended to the agent system
+  prompt: trust search/deep_search snippets, batch document reads, stop when
+  answered — targeting the measured waste (agents reading documents one-at-a-time
+  across turns). A/B on 30 finreg queries: **tool_calls −26%, get_document −46%,
+  per-query latency −20% (76.8→61.1s), solve held 28/30**. Default OFF pending a
+  multi-hop canary (on single-hop the "read fewer docs" steer is safe; on
+  multi-hop it could cut needed retrieval). `agent_efficiency.py`.
+
 **Changed**
 - `graph.chat(...)` / `run_agent_loop(...)` now default `sufficiency_gate=True`
   (measured +3.2pp agent solve-rate, 0 regressions, fail-open, <1.1x latency).

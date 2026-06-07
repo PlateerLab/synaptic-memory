@@ -250,6 +250,41 @@ a behavioural re-search delta isn't cleanly measurable here (only ~2/39 queries
 fold → dominated by the §7 noise floor), so no accuracy claim — re-ran to
 confirm NO regression: escaped 0, solve 32/39 unchanged.
 
+## 10. Agent efficiency — profile the COST (the lever the noise floor leaves open)
+
+§7 established accuracy deltas are noise-walled, so the productive lever is COST.
+Profiled `run_agent_loop` on finreg (`examples/ablation/agent_efficiency.py`,
+new `AgentSearchResult.tool_log` telemetry: per-call tool / args-key /
+n_results / duplicate). 30q baseline: **mean 4.87 turns, 6.03 tool_calls, 14%
+empty calls, get_document the most-used tool (65 calls).** Per-query dump
+revealed the pattern: agents read documents ONE AT A TIME across turns
+(deep_search → get_document → search → get_document …), burning the full turn
+budget on single-hop questions even though deep_search already returned the
+answer-bearing snippet. 0 exact duplicates — the waste is over-reading, not
+repetition.
+
+Fix: an opt-in efficiency directive (`SYNAPTIC_AGENT_EFFICIENCY=1` /
+`efficiency_hint=True`) appended to the system prompt — trust snippets, batch
+reads, stop when answered. A/B on the SAME 30 finreg queries (eff OFF vs ON):
+
+| metric | OFF | ON | Δ |
+|---|---:|---:|---:|
+| mean turns_used | 4.87 | 4.17 | **−14%** |
+| mean tool_calls | 6.03 | 4.47 | **−26%** |
+| get_document calls | 65 | 35 | **−46%** (the targeted waste) |
+| empty calls | 26 (14%) | 11 (8%) | −58% |
+| mean per-query latency | 76.8s | 61.1s | **−20%** |
+| solve (guard) | 28/30 | 28/30 | **unchanged** |
+
+Unlike the bridge case, the WIN metric here (tool_calls / latency) is
+deterministic-ish and the deltas are LARGE + causal (get_document −46% is the
+direct mechanical consequence of "don't read docs one at a time"), so this is
+real, not noise. solve held at 28/30 — but solve is the noisy axis and this is a
+single run on a SINGLE-HOP bench. The risk: on multi-hop / Conv, "trust snippets,
+read fewer docs" could cut genuinely-needed retrieval. So: **shipped opt-in,
+default OFF, pending a multi-hop canary** (same discipline as the bridge gate §7)
+before any default-on flip.
+
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +
   `SYNAPTIC_GRAPH_EXPANSION` toggle (measurement infra — keep) and the `expand`

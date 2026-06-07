@@ -112,6 +112,27 @@ def _is_enumeration_query(query: str) -> bool:
 # --- System prompt + tool schema -----------------------------------
 
 
+# Efficiency directive (opt-in, env SYNAPTIC_AGENT_EFFICIENCY=1). Targets the
+# measured waste pattern: agents read documents one-at-a-time across turns
+# (get_document → search → get_document …), burning the full turn budget on
+# single-hop questions even though deep_search already returned the answer-
+# bearing snippet. Each tool round-trip is one serial LLM turn = the dominant
+# latency cost, so cutting turns is the efficiency lever (turns_used is a
+# deterministic count, measurable above the accuracy noise floor). Appended to
+# the system prompt rather than edited in so it can be A/B'd cleanly.
+_EFFICIENCY_DIRECTIVE = """\
+Efficiency (each tool round-trip costs a full turn — minimise them)
+===================================================================
+- ``deep_search`` / ``search`` already return the answer-bearing SNIPPET for
+  every hit. Read those snippets FIRST — they usually contain the answer. Call
+  ``get_document`` ONLY when a snippet is cut off mid-fact, never to
+  "double-check" a snippet that already states the answer.
+- NEVER fetch documents one at a time across turns. If you truly need 2-3 full
+  documents, request them together in ONE turn (parallel calls).
+- The moment the snippets answer the question, STOP and give the final answer.
+  Do not keep searching paraphrased variants for confirmation."""
+
+
 AGENT_SYSTEM = """\
 You are a research agent answering a user question by calling tools
 that explore a knowledge graph.
@@ -411,6 +432,11 @@ class AgentSearchResult:
     # Each entry: {"turn", "tool_calls" (cumulative), "found_ids" (snapshot)}.
     # Feeds nav_metrics.navigation_efficiency — hops/calls-to-evidence.
     trace: list[dict] = field(default_factory=list)
+    # Per-tool-call efficiency telemetry (always populated — cheap). Each entry:
+    # {"turn", "tool", "key" (normalized args), "n_results", "duplicate" (this
+    # (tool,key) was already issued earlier this query)}. Feeds the efficiency
+    # profiler — duplicate / empty-result / calls-per-query waste signals.
+    tool_log: list[dict] = field(default_factory=list)
 
 
 # --- Internals -----------------------------------------------------
@@ -654,6 +680,50 @@ def _extract_ids(data: dict, found_ids: set[str], known_tables: set[str] | None 
                 f"pr_{base}:{g}",
             ):
                 found_ids.add(candidate)
+
+
+_RESULT_LIST_KEYS = (
+    "evidence",
+    "results",
+    "merged_evidence",
+    "matches",
+    "groups",
+    "neighbours",
+    "expanded_neighbours",
+    "document_excerpts",
+    "sub_results",
+)
+
+
+def _result_count(payload: dict) -> int:
+    """Count the retrieved items in a tool result's data payload.
+
+    Sums the lengths of the known result-list keys; a get_document hit counts
+    as 1. Used by the efficiency profiler to flag empty-result calls (waste)."""
+    if not isinstance(payload, dict):
+        return 0
+    n = 0
+    for key in _RESULT_LIST_KEYS:
+        v = payload.get(key)
+        if isinstance(v, list):
+            n += len(v)
+    if not n and isinstance(payload.get("document"), dict):
+        n = 1
+    return n
+
+
+def _args_key(tool: str, args: dict) -> str:
+    """Normalized (tool, args) signature for duplicate detection.
+
+    Lowercased, key-sorted JSON of the args so two calls that differ only in
+    whitespace / key order collapse to the same key — a genuine duplicate."""
+    try:
+        norm = {
+            k: (v.lower().strip() if isinstance(v, str) else v) for k, v in sorted(args.items())
+        }
+        return f"{tool}:{json.dumps(norm, ensure_ascii=False, sort_keys=True)}"
+    except (TypeError, ValueError, AttributeError):
+        return f"{tool}:{args}"
 
 
 _TOOL_RESULT_BUDGET = 4000
@@ -1280,6 +1350,7 @@ async def run_agent_loop(
     extra_context: str | None = None,
     sufficiency_gate: bool = True,
     gate_bridge: bool = False,
+    efficiency_hint: bool = False,
     record_trace: bool = False,
 ) -> AgentSearchResult:
     """Run one multi-turn agent search.
@@ -1320,9 +1391,17 @@ async def run_agent_loop(
     env_gb = _os.environ.get("SYNAPTIC_GATE_BRIDGE")
     if env_gb is not None:
         gate_bridge = env_gb == "1"
+    # Efficiency directive (opt-in, default off pending measurement). Steers the
+    # agent to batch reads and trust snippets → fewer turns. Env forces either
+    # way: SYNAPTIC_AGENT_EFFICIENCY=1 enables, =0 disables.
+    env_eff = _os.environ.get("SYNAPTIC_AGENT_EFFICIENCY")
+    if env_eff is not None:
+        efficiency_hint = env_eff == "1"
     graph_ctx = await build_graph_context(backend)
     base_prompt = system_prompt or AGENT_SYSTEM
     parts = [base_prompt, graph_ctx]
+    if efficiency_hint:
+        parts.append(_EFFICIENCY_DIRECTIVE)
     if extra_context:
         parts.append(extra_context)
     system = "\n\n".join(p for p in parts if p)
@@ -1366,6 +1445,8 @@ async def run_agent_loop(
     tool_calls = 0
     gate_retries = 0
     trace_log: list[dict] | None = [] if record_trace else None
+    tool_log: list[dict] = []
+    seen_call_keys: set[str] = set()
 
     for turn in range(max_turns):
         turns_used = turn + 1
@@ -1417,6 +1498,19 @@ async def run_agent_loop(
                 # at top level.
                 payload = result.get("data", {}) if isinstance(result, dict) else {}
                 _extract_ids(payload, found_ids, known_tables=known_tables)
+                # Efficiency telemetry: flag duplicate (same tool+args reissued)
+                # and empty-result calls — the deterministic waste signals.
+                key = _args_key(fn, fn_args)
+                tool_log.append(
+                    {
+                        "turn": turn + 1,
+                        "tool": fn,
+                        "key": key,
+                        "n_results": _result_count(payload),
+                        "duplicate": key in seen_call_keys,
+                    }
+                )
+                seen_call_keys.add(key)
                 messages.append(
                     {
                         "role": "tool",
@@ -1505,4 +1599,5 @@ async def run_agent_loop(
         tool_calls_made=tool_calls,
         elapsed_ms=(time.time() - t0) * 1000.0,
         trace=trace_log or [],
+        tool_log=tool_log,
     )
