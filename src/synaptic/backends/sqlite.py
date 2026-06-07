@@ -449,10 +449,7 @@ class SQLiteBackend:
         object construction a full ``list_nodes`` scan pays.
         """
         db = self._db()
-        sql = (
-            "SELECT * FROM syn_nodes "
-            "WHERE json_extract(properties_json, '$.' || ?) = ? LIMIT ?"
-        )
+        sql = "SELECT * FROM syn_nodes WHERE json_extract(properties_json, '$.' || ?) = ? LIMIT ?"
         async with db.execute(sql, (key, value, limit)) as cur:
             rows = await cur.fetchall()
         return [_row_to_node(r) for r in rows]

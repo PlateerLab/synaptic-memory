@@ -303,9 +303,7 @@ async def test_references_expansion_surfaces_cited_document():
     b = Node(id="art_b", kind=NodeKind.ENTITY, title="Article B", content="body")
     await backend.save_node(a)
     await backend.save_node(b)
-    await backend.save_edge(
-        Edge(source_id="art_a", target_id="art_b", kind=EdgeKind.REFERENCES)
-    )
+    await backend.save_edge(Edge(source_id="art_a", target_id="art_b", kind=EdgeKind.REFERENCES))
 
     expander = GraphExpander(backend=backend)
     results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[a])

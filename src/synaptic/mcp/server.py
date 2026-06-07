@@ -104,12 +104,12 @@ async def _ensure_graph() -> Any:
         if _rerank_url:
             from synaptic.extensions.reranker_cross import reranker_from_url
 
-            _reranker = reranker_from_url(
-                _rerank_url, backend=_rerank_backend, model=_rerank_model
-            )
+            _reranker = reranker_from_url(_rerank_url, backend=_rerank_backend, model=_rerank_model)
             logger.info(
                 "Reranker configured: %s (backend=%s, model=%s)",
-                _rerank_url, _rerank_backend, _rerank_model,
+                _rerank_url,
+                _rerank_backend,
+                _rerank_model,
             )
 
         # Wire the cross-document bridge mechanism.
@@ -201,9 +201,7 @@ async def knowledge_search(
     # legacy `graph.search` codepath stay independent.
     from synaptic.extensions.evidence_search import EvidenceSearch
 
-    searcher = EvidenceSearch(
-        backend=graph.backend, embedder=_embedder, reranker=_reranker
-    )
+    searcher = EvidenceSearch(backend=graph.backend, embedder=_embedder, reranker=_reranker)
     result = await searcher.search(
         query,
         k=limit,
@@ -354,9 +352,7 @@ async def knowledge_update(
       - ``properties_patch``: merge keys into the existing dict.
       - ``properties_replace``: replace the entire dict.
     """
-    tag_modes = sum(
-        1 for v in (tags, tags_add, tags_remove) if v is not None
-    )
+    tag_modes = sum(1 for v in (tags, tags_add, tags_remove) if v is not None)
     if tag_modes > 1:
         return {
             "success": False,
@@ -2014,7 +2010,9 @@ def main() -> None:
     if _rerank_url:
         logger.info(
             "Reranking: %s (backend=%s, model=%s)",
-            _rerank_url, _rerank_backend, _rerank_model,
+            _rerank_url,
+            _rerank_backend,
+            _rerank_model,
         )
     server.run()
 

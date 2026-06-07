@@ -69,15 +69,20 @@ class BGEEmbeddingModel(BaseEmbeddingModel):
         self._st = SentenceTransformer(self.embedding_model_name, device=args.device)
         self.embedding_dim = self._st.get_sentence_embedding_dimension()
         self.embedding_config = EmbeddingConfig.from_dict(
-            {"embedding_model_name": self.embedding_model_name, "norm": True,
-             "encode_params": {"batch_size": 32, "instruction": "", "max_length": 8192}}
+            {
+                "embedding_model_name": self.embedding_model_name,
+                "norm": True,
+                "encode_params": {"batch_size": 32, "instruction": "", "max_length": 8192},
+            }
         )
 
     def batch_encode(self, texts, **kwargs):
         if isinstance(texts, str):
             texts = [texts]
         emb = self._st.encode(
-            texts, normalize_embeddings=True, batch_size=32,
+            texts,
+            normalize_embeddings=True,
+            batch_size=32,
             show_progress_bar=len(texts) > 64,
         )
         return np.asarray(emb, dtype=np.float32)
@@ -146,4 +151,6 @@ for q, sol in zip(gt, sols):
     solved += hit
     print(f"  [{q['qid']}] hit={hit} ({len(got)} mapped)", flush=True)
 
-print(f"\nHippoRAG2 finreg multi-hop: {solved}/{len(gt)} ({solved / len(gt) * 100:.0f}%)", flush=True)
+print(
+    f"\nHippoRAG2 finreg multi-hop: {solved}/{len(gt)} ({solved / len(gt) * 100:.0f}%)", flush=True
+)

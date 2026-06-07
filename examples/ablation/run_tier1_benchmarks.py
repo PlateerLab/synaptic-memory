@@ -223,9 +223,7 @@ async def run_one(
         )
         from synaptic.models import NodeKind as _NK
 
-        stats = await linker.link(
-            backend, source_kind=_NK.CONCEPT, embedder=embedder
-        )
+        stats = await linker.link(backend, source_kind=_NK.CONCEPT, embedder=embedder)
         print(
             f"  entity-linker: {stats.phrase_nodes_created} hubs / "
             f"{stats.mentions_edges_created} MENTIONS "
@@ -496,17 +494,13 @@ async def amain(argv: list[str]) -> int:
                     api_base=args.embedder_url,
                     model=args.embedder_model,
                 )
-                embedder_label = (
-                    f"OpenAI-compat {args.embedder_model} @ {args.embedder_url}"
-                )
+                embedder_label = f"OpenAI-compat {args.embedder_model} @ {args.embedder_url}"
             else:
                 embedder = OllamaEmbeddingProvider(
                     base_url=args.embedder_url,
                     model=args.embedder_model,
                 )
-                embedder_label = (
-                    f"Ollama {args.embedder_model} @ {args.embedder_url}"
-                )
+                embedder_label = f"Ollama {args.embedder_model} @ {args.embedder_url}"
         if args.reranker_url:
             reranker = TEIReranker(base_url=args.reranker_url)
             reranker_label = f"TEI cross-encoder @ {args.reranker_url}"

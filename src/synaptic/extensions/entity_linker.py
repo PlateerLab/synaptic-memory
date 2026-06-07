@@ -231,9 +231,7 @@ class EntityLinker:
         await backend.save_nodes_batch(new_nodes)
         stats.phrase_nodes_created = len(new_nodes)
         if embedder is not None:
-            stats.phrase_nodes_embedded = sum(
-                1 for n in new_nodes if n.embedding
-            )
+            stats.phrase_nodes_embedded = sum(1 for n in new_nodes if n.embedding)
 
         # Pass 3b — emit MENTIONS edges, capped per source.
         # Invert the map to source → phrases so we can cap per source

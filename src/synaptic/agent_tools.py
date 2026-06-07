@@ -520,9 +520,7 @@ def _doc_id_of(node: Node) -> str:
 # --- Tool 3: get_document ---
 
 
-async def _parent_via_contains(
-    backend: StorageBackend, chunk_id: str
-) -> Node | None:
+async def _parent_via_contains(backend: StorageBackend, chunk_id: str) -> Node | None:
     """Return the document node that CONTAINS ``chunk_id``, if any."""
     edges = await backend.get_edges(chunk_id, direction="both")
     for e in edges:
@@ -531,9 +529,7 @@ async def _parent_via_contains(
     return None
 
 
-async def _resolve_by_doc_id_property(
-    backend: StorageBackend, doc_id: str
-) -> Node | None:
+async def _resolve_by_doc_id_property(backend: StorageBackend, doc_id: str) -> Node | None:
     """Resolve a bare ``doc_id`` property value to a document node.
 
     ``search``/``deep_search`` results expose the ``doc_id`` *property*

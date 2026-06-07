@@ -193,9 +193,7 @@ async def collect_stats(
                 try:
                     edges = await backend.get_edges(hub.id, direction="incoming")
                     chunk_ids = [
-                        ed.source_id
-                        for ed in edges
-                        if str(ed.kind) == str(EdgeKind.MENTIONS)
+                        ed.source_id for ed in edges if str(ed.kind) == str(EdgeKind.MENTIONS)
                     ][:5]
                     cats: Counter[str] = Counter()
                     for cid in chunk_ids:

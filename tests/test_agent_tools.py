@@ -413,8 +413,7 @@ class TestGetDocumentTool:
             )
         )
         await backend.save_edge(
-            Edge(id="c0", source_id="doc_node_xyz", target_id="chunk_x0",
-                 kind=EdgeKind.CONTAINS)
+            Edge(id="c0", source_id="doc_node_xyz", target_id="chunk_x0", kind=EdgeKind.CONTAINS)
         )
         session = SearchSession()
         result = await get_document_tool(backend, session, "abc123hash")

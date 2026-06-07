@@ -95,7 +95,7 @@ async def _run(args) -> None:
         scored = [s for s in scored if s is not None]
         solved = sum(1 for s in scored if s)
         total = len(scored)
-        line = f"{label}: {solved}/{total} ({solved/total:.3f}) in {time.time()-t0:.0f}s"
+        line = f"{label}: {solved}/{total} ({solved / total:.3f}) in {time.time() - t0:.0f}s"
         print(line, flush=True)
         lines.append(line)
 

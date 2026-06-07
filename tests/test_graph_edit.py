@@ -52,9 +52,7 @@ class TestUpdateEdge:
         a = await graph.add("A", "x")
         b = await graph.add("B", "y")
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
-        updated = await graph.update_edge(
-            a.id, b.id, new_kind=EdgeKind.CAUSED
-        )
+        updated = await graph.update_edge(a.id, b.id, new_kind=EdgeKind.CAUSED)
         assert updated == 1
         edges = await graph.backend.get_edges(a.id, direction="outgoing")
         assert edges[0].kind == EdgeKind.CAUSED
@@ -64,9 +62,7 @@ class TestUpdateEdge:
         b = await graph.add("B", "y")
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED, weight=1.0)
         await graph.link(a.id, b.id, kind=EdgeKind.CAUSED, weight=1.0)
-        updated = await graph.update_edge(
-            a.id, b.id, kind=EdgeKind.CAUSED, new_weight=5.0
-        )
+        updated = await graph.update_edge(a.id, b.id, kind=EdgeKind.CAUSED, new_weight=5.0)
         assert updated == 1
         edges = await graph.backend.get_edges(a.id, direction="outgoing")
         for e in edges:
@@ -92,9 +88,7 @@ class TestMergeNodes:
         assert merged is not None
         assert await graph.get(drop.id) is None
         edges = await graph.backend.get_edges(keep.id, direction="outgoing")
-        assert any(
-            e.target_id == other.id and str(e.kind) == "related" for e in edges
-        )
+        assert any(e.target_id == other.id and str(e.kind) == "related" for e in edges)
 
     async def test_repoint_incoming_edges(self, graph: SynapticGraph) -> None:
         keep = await graph.add("keep", "x")
@@ -177,9 +171,7 @@ async def graph_with_embedder() -> SynapticGraph:
 
 
 class TestAutoReembedOnUpdate:
-    async def test_content_change_reembeds(
-        self, graph_with_embedder: SynapticGraph
-    ) -> None:
+    async def test_content_change_reembeds(self, graph_with_embedder: SynapticGraph) -> None:
         node = await graph_with_embedder.add("t", "old content")
         before = list(node.embedding)
         assert before  # was embedded at add() time
@@ -189,9 +181,7 @@ class TestAutoReembedOnUpdate:
         assert after is not None
         assert after.embedding != before
 
-    async def test_title_change_reembeds(
-        self, graph_with_embedder: SynapticGraph
-    ) -> None:
+    async def test_title_change_reembeds(self, graph_with_embedder: SynapticGraph) -> None:
         node = await graph_with_embedder.add("orig title", "body")
         before = list(node.embedding)
         await graph_with_embedder.update(node.id, title="new title entirely")
@@ -199,14 +189,10 @@ class TestAutoReembedOnUpdate:
         assert after is not None
         assert after.embedding != before
 
-    async def test_explicit_embedding_wins(
-        self, graph_with_embedder: SynapticGraph
-    ) -> None:
+    async def test_explicit_embedding_wins(self, graph_with_embedder: SynapticGraph) -> None:
         node = await graph_with_embedder.add("t", "body")
         forced = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
-        await graph_with_embedder.update(
-            node.id, content="changed", embedding=forced
-        )
+        await graph_with_embedder.update(node.id, content="changed", embedding=forced)
         after = await graph_with_embedder.get(node.id)
         assert after is not None
         assert after.embedding == forced
@@ -216,16 +202,12 @@ class TestAutoReembedOnUpdate:
     ) -> None:
         node = await graph_with_embedder.add("t", "body")
         before = list(node.embedding)
-        await graph_with_embedder.update(
-            node.id, content="changed", reembed=False
-        )
+        await graph_with_embedder.update(node.id, content="changed", reembed=False)
         after = await graph_with_embedder.get(node.id)
         assert after is not None
         assert after.embedding == before
 
-    async def test_kind_only_change_no_reembed(
-        self, graph_with_embedder: SynapticGraph
-    ) -> None:
+    async def test_kind_only_change_no_reembed(self, graph_with_embedder: SynapticGraph) -> None:
         node = await graph_with_embedder.add("t", "body")
         before = list(node.embedding)
         await graph_with_embedder.update(node.id, kind="concept")
@@ -233,9 +215,7 @@ class TestAutoReembedOnUpdate:
         assert after is not None
         assert after.embedding == before
 
-    async def test_update_without_embedder_does_not_error(
-        self, graph: SynapticGraph
-    ) -> None:
+    async def test_update_without_embedder_does_not_error(self, graph: SynapticGraph) -> None:
         # default `graph` fixture has no embedder; update should still work.
         node = await graph.add("t", "body")
         result = await graph.update(node.id, content="new")

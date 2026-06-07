@@ -69,9 +69,7 @@ def test_every_node_gets_domain_id_tag(tmp_path):
     assert stats[0].nodes_inserted == 2
     conn = sqlite3.connect(out)
     rows = list(
-        conn.execute(
-            "SELECT id, json_extract(properties_json, '$._domain_id') FROM syn_nodes"
-        )
+        conn.execute("SELECT id, json_extract(properties_json, '$._domain_id') FROM syn_nodes")
     )
     assert {r[1] for r in rows} == {"foo"}, rows
 

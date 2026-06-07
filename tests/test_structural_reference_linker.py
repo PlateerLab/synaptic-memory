@@ -86,9 +86,7 @@ async def test_gate_on_noisy_target_inventory():
     backend = MemoryBackend()
     # 10 nodes all sharing article_no '제1조' within one law → 90% collision.
     for i in range(10):
-        await backend.save_node(
-            _article("noisy법", "제1조", f"제2조 참조 본문 {i}")
-        )
+        await backend.save_node(_article("noisy법", "제1조", f"제2조 참조 본문 {i}"))
     await backend.save_node(_article("noisy법", "제2조", "제2조 본문"))
 
     stats = await StructuralReferenceLinker(_profile()).link(backend)
@@ -102,9 +100,7 @@ async def test_gate_on_noisy_target_inventory():
 async def test_disabled_profile_is_gated():
     backend = MemoryBackend()
     await backend.save_node(_article("은행법", "제3조", "제5조 참조"))
-    stats = await StructuralReferenceLinker(
-        DomainProfile(name="t", locale="ko")
-    ).link(backend)
+    stats = await StructuralReferenceLinker(DomainProfile(name="t", locale="ko")).link(backend)
     assert stats.gated
     assert stats.edges_created == 0
 
@@ -173,9 +169,7 @@ async def test_with_references_factory_enables_linker():
     await backend.save_node(a)
     await backend.save_node(b)
 
-    profile = DomainProfile.with_references(
-        key_property="article_no", scope_property="law"
-    )
+    profile = DomainProfile.with_references(key_property="article_no", scope_property="law")
     stats = await StructuralReferenceLinker(profile).link(backend)
 
     assert not stats.gated

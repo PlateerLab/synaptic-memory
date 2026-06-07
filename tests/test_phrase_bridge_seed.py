@@ -91,12 +91,22 @@ async def _make_corpus_with_phrase_bridge(backend: MemoryBackend, embedder):
         await backend.save_node(n)
     # CONTAINS edges from both chunks → phrase
     await backend.save_edge(
-        Edge(id="e1", source_id="chunk_A", target_id="phrase_widget",
-             kind=EdgeKind.CONTAINS, weight=0.8)
+        Edge(
+            id="e1",
+            source_id="chunk_A",
+            target_id="phrase_widget",
+            kind=EdgeKind.CONTAINS,
+            weight=0.8,
+        )
     )
     await backend.save_edge(
-        Edge(id="e2", source_id="chunk_B", target_id="phrase_widget",
-             kind=EdgeKind.CONTAINS, weight=0.8)
+        Edge(
+            id="e2",
+            source_id="chunk_B",
+            target_id="phrase_widget",
+            kind=EdgeKind.CONTAINS,
+            weight=0.8,
+        )
     )
 
 
@@ -114,16 +124,12 @@ async def test_query_phrase_bridge_seeds_chunks():
 
     # Bridge default-off since v0.27 MuSiQue ablation (negative net
     # contribution there); opt in explicitly to exercise it here.
-    searcher = EvidenceSearch(
-        backend=backend, embedder=embedder, query_phrase_seed_k=5
-    )
+    searcher = EvidenceSearch(backend=backend, embedder=embedder, query_phrase_seed_k=5)
     # Drive the bridge directly so the assertion only measures what
     # `_seed_via_phrase_bridges` returns, decoupled from FTS / vec
     # search noise over the synthetic 3-chunk corpus.
     q_emb = await embedder.embed("widget")
-    bridge_chunks = await searcher._seed_via_phrase_bridges(
-        q_emb, top_k_phrases=5, seen_ids=set()
-    )
+    bridge_chunks = await searcher._seed_via_phrase_bridges(q_emb, top_k_phrases=5, seen_ids=set())
     bridge_ids = {c.id for c in bridge_chunks}
     assert "chunk_A" in bridge_ids
     assert "chunk_B" in bridge_ids
@@ -144,9 +150,7 @@ async def test_phrase_bridge_skips_when_no_phrase_match():
     searcher = EvidenceSearch(backend=backend, embedder=embedder)
     # Query embedding is orthogonal to "widget" slot.
     q_emb = [0.0, 0.0, 0.0, 1.0]
-    bridge = await searcher._seed_via_phrase_bridges(
-        q_emb, top_k_phrases=5, seen_ids=set()
-    )
+    bridge = await searcher._seed_via_phrase_bridges(q_emb, top_k_phrases=5, seen_ids=set())
     # Bridge will still return phrase-linked chunks even with low cosine
     # — top_k just picks the best, regardless of absolute score. That's
     # by design (let the reranker score them). The check here is that
@@ -164,15 +168,17 @@ async def test_phrase_bridge_no_op_without_phrase_nodes():
     await backend.connect()
     # Two chunks, no phrase hubs
     for i, text in enumerate(["alpha foo", "beta foo"]):
-        await backend.save_node(Node(
-            id=f"chunk_{i}", kind=NodeKind.CHUNK,
-            title=f"d{i}", content=text,
-            level=ConsolidationLevel.L0_RAW,
-        ))
+        await backend.save_node(
+            Node(
+                id=f"chunk_{i}",
+                kind=NodeKind.CHUNK,
+                title=f"d{i}",
+                content=text,
+                level=ConsolidationLevel.L0_RAW,
+            )
+        )
 
     searcher = EvidenceSearch(backend=backend, embedder=embedder)
     q_emb = await embedder.embed("foo")
-    bridge = await searcher._seed_via_phrase_bridges(
-        q_emb, top_k_phrases=5, seen_ids=set()
-    )
+    bridge = await searcher._seed_via_phrase_bridges(q_emb, top_k_phrases=5, seen_ids=set())
     assert bridge == []

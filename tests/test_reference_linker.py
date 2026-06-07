@@ -173,9 +173,7 @@ class TestResolution:
             targets={"rule_a": "개인정보 보호법"},
             chunks=["존재하지않는규정에 따라 처리한다."],
         )
-        stats = await ReferenceLinker(DomainProfile(name="t", locale="ko")).link(
-            backend
-        )
+        stats = await ReferenceLinker(DomainProfile(name="t", locale="ko")).link(backend)
         assert stats.edges_created == 0
         assert stats.unresolved >= 1
 
@@ -224,9 +222,7 @@ class TestIdempotencyAndCaps:
         targets = {f"rule_{i}": f"규정{i}번" for i in range(8)}
         sentence = " ".join(f"규정{i}번에 따라" for i in range(8)) + " 처리한다."
         await _seed(backend, targets=targets, chunks=[sentence])
-        linker = ReferenceLinker(
-            DomainProfile(name="t", locale="ko"), max_per_kind_per_source=3
-        )
+        linker = ReferenceLinker(DomainProfile(name="t", locale="ko"), max_per_kind_per_source=3)
         await linker.link(backend)
         edges = await backend.get_edges("chunk_000", direction="outgoing")
         assert len(edges) == 3
@@ -248,8 +244,6 @@ class TestEdgeCases:
                 level=ConsolidationLevel.L0_RAW,
             )
         )
-        stats = await ReferenceLinker(DomainProfile(name="t", locale="ko")).link(
-            backend
-        )
+        stats = await ReferenceLinker(DomainProfile(name="t", locale="ko")).link(backend)
         assert stats.edges_created == 0
         assert stats.target_index_size == 0

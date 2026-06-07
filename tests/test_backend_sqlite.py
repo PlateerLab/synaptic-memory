@@ -165,9 +165,7 @@ class TestFindNodesByProperty:
         await sqlite.save_node(
             Node(id="b", kind=NodeKind.CHUNK, properties={"doc_id": "h1", "law": "X"})
         )
-        await sqlite.save_node(
-            Node(id="c", kind=NodeKind.CHUNK, properties={"doc_id": "h2"})
-        )
+        await sqlite.save_node(Node(id="c", kind=NodeKind.CHUNK, properties={"doc_id": "h2"}))
         hits = await sqlite.find_nodes_by_property("doc_id", "h1")
         assert {n.id for n in hits} == {"a", "b"}
 

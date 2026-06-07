@@ -161,10 +161,7 @@ async def main() -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     laws_ok = len({r["law"] for r in records})
-    print(
-        f"\n{len(records)} articles from {laws_ok} documents "
-        f"-> {OUT}  ({time.time() - t0:.1f}s)"
-    )
+    print(f"\n{len(records)} articles from {laws_ok} documents -> {OUT}  ({time.time() - t0:.1f}s)")
 
 
 if __name__ == "__main__":

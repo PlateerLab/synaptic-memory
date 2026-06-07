@@ -74,8 +74,16 @@ logger = logging.getLogger("agent-loop")
 # pattern, and the English "list all" / "every" / "all of the" forms.
 # Order doesn't matter — a single substring match flips the budget.
 _ENUMERATION_TOKENS = (
-    "모두", "전체", "목록", "리스트", "list all", "전수",
-    "every ", "all of the ", "all the ", "show me all",
+    "모두",
+    "전체",
+    "목록",
+    "리스트",
+    "list all",
+    "전수",
+    "every ",
+    "all of the ",
+    "all the ",
+    "show me all",
 )
 
 
@@ -1084,12 +1092,67 @@ _SUFFICIENCY_BRIDGE_SYSTEM = (
 # stopword set: grounding must stay corpus-agnostic.
 _BRIDGE_STOP = frozenset(
     {
-        "the", "of", "a", "an", "in", "on", "at", "for", "to", "and", "or", "is",
-        "was", "are", "were", "be", "by", "with", "as", "that", "this", "what",
-        "which", "who", "whom", "whose", "where", "when", "how", "why", "did",
-        "do", "does", "from", "about", "into", "over", "than", "then",
-        "의", "은", "는", "이", "가", "을", "를", "에", "와", "과", "도", "로",
-        "으로", "에서", "한", "그", "및", "또는", "무엇", "어떤", "누가", "어디",
+        "the",
+        "of",
+        "a",
+        "an",
+        "in",
+        "on",
+        "at",
+        "for",
+        "to",
+        "and",
+        "or",
+        "is",
+        "was",
+        "are",
+        "were",
+        "be",
+        "by",
+        "with",
+        "as",
+        "that",
+        "this",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "where",
+        "when",
+        "how",
+        "why",
+        "did",
+        "do",
+        "does",
+        "from",
+        "about",
+        "into",
+        "over",
+        "than",
+        "then",
+        "의",
+        "은",
+        "는",
+        "이",
+        "가",
+        "을",
+        "를",
+        "에",
+        "와",
+        "과",
+        "도",
+        "로",
+        "으로",
+        "에서",
+        "한",
+        "그",
+        "및",
+        "또는",
+        "무엇",
+        "어떤",
+        "누가",
+        "어디",
     }
 )
 
@@ -1320,9 +1383,7 @@ async def run_agent_loop(
             # under-counted tokens. Compact harder and retry ONCE before giving
             # up, so a long session degrades (folds old evidence) instead of
             # dying mid-retrieval.
-            if _is_context_length_error(exc) and _compact_history(
-                messages, history_budget // 2
-            ):
+            if _is_context_length_error(exc) and _compact_history(messages, history_budget // 2):
                 logger.info("turn %d hit context limit — compacted, retrying", turn)
                 try:
                     resp = await client.chat.completions.create(
@@ -1332,7 +1393,9 @@ async def run_agent_loop(
                         max_tokens=2048,
                     )
                 except Exception as exc2:
-                    logger.warning("agent LLM call failed at turn %d after compaction: %s", turn, exc2)
+                    logger.warning(
+                        "agent LLM call failed at turn %d after compaction: %s", turn, exc2
+                    )
                     break
             else:
                 logger.warning("agent LLM call failed at turn %d: %s", turn, exc)

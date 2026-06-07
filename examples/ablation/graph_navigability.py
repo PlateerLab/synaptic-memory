@@ -97,7 +97,7 @@ def main() -> None:
     print(f"components={len(sizes)}  largest={largest} ({100 * largest / n:.1f}% of graph)")
 
     # small-world hop distances: BFS from a few seeds inside the largest component
-    import random as _r  # noqa: ASYNC — script, deterministic seed
+    import random as _r  # script-local, deterministic seed below
 
     _r.seed(0)
     big = [u for u in adj if adj[u]]  # non-isolated
@@ -118,7 +118,9 @@ def main() -> None:
     print("--- verdict ---")
     print(f"  reachable-as-one-graph: {'YES' if frag > 0.9 else 'NO — fragmented'} ({frag:.0%})")
     hubness = max(degs) / (2 * n_edges / n) if n_edges else 0
-    print(f"  hub structure (max/avg degree ratio): {hubness:.0f}x {'(heavy-tail, good)' if hubness > 20 else ''}")
+    print(
+        f"  hub structure (max/avg degree ratio): {hubness:.0f}x {'(heavy-tail, good)' if hubness > 20 else ''}"
+    )
 
 
 if __name__ == "__main__":

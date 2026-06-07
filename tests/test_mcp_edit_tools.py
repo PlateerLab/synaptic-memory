@@ -51,9 +51,7 @@ class TestKnowledgeUpdate:
         node_id = added["node_id"]
 
         # seed properties via replace
-        await m.knowledge_update(
-            node_id=node_id, properties_replace={"k1": "v1", "k2": "v2"}
-        )
+        await m.knowledge_update(node_id=node_id, properties_replace={"k1": "v1", "k2": "v2"})
         # patch one key
         result = await m.knowledge_update(
             node_id=node_id, properties_patch={"k2": "v2-new", "k3": "v3"}
@@ -96,9 +94,7 @@ class TestKnowledgeUpdateTagModes:
     async def test_tags_mode_conflict_rejected(self, fresh_mcp_graph):
         m = fresh_mcp_graph
         added = await m.knowledge_add(title="t", content="c")
-        result = await m.knowledge_update(
-            node_id=added["node_id"], tags=["x"], tags_add=["y"]
-        )
+        result = await m.knowledge_update(node_id=added["node_id"], tags=["x"], tags_add=["y"])
         assert result["success"] is False
 
 
@@ -110,26 +106,20 @@ class TestKnowledgeMergeNodes:
         other = await m.knowledge_add(title="other", content="z")
         await m.knowledge_link(drop["node_id"], other["node_id"], kind="related")
 
-        result = await m.knowledge_merge_nodes(
-            keep_id=keep["node_id"], drop_id=drop["node_id"]
-        )
+        result = await m.knowledge_merge_nodes(keep_id=keep["node_id"], drop_id=drop["node_id"])
         assert result["success"] is True
         assert set(result["tags"]) == {"a", "b"}
 
     async def test_missing_id_fails(self, fresh_mcp_graph):
         m = fresh_mcp_graph
         keep = await m.knowledge_add(title="k", content="x")
-        result = await m.knowledge_merge_nodes(
-            keep_id=keep["node_id"], drop_id="nonexistent"
-        )
+        result = await m.knowledge_merge_nodes(keep_id=keep["node_id"], drop_id="nonexistent")
         assert result["success"] is False
 
     async def test_same_id_fails(self, fresh_mcp_graph):
         m = fresh_mcp_graph
         n = await m.knowledge_add(title="t", content="c")
-        result = await m.knowledge_merge_nodes(
-            keep_id=n["node_id"], drop_id=n["node_id"]
-        )
+        result = await m.knowledge_merge_nodes(keep_id=n["node_id"], drop_id=n["node_id"])
         assert result["success"] is False
 
 
@@ -152,9 +142,7 @@ class TestKnowledgeUnlink:
         await m.knowledge_link(a["node_id"], b["node_id"], kind="related")
         await m.knowledge_link(a["node_id"], b["node_id"], kind="caused")
 
-        result = await m.knowledge_unlink(
-            a["node_id"], b["node_id"], kind="caused"
-        )
+        result = await m.knowledge_unlink(a["node_id"], b["node_id"], kind="caused")
         assert result["removed"] == 1
 
 
@@ -165,9 +153,7 @@ class TestKnowledgeUpdateEdge:
         b = await m.knowledge_add(title="B", content="y")
         await m.knowledge_link(a["node_id"], b["node_id"], kind="related", weight=1.0)
 
-        result = await m.knowledge_update_edge(
-            a["node_id"], b["node_id"], new_weight=4.5
-        )
+        result = await m.knowledge_update_edge(a["node_id"], b["node_id"], new_weight=4.5)
         assert result["success"] is True
         assert result["updated"] == 1
 
@@ -177,9 +163,7 @@ class TestKnowledgeUpdateEdge:
         b = await m.knowledge_add(title="B", content="y")
         await m.knowledge_link(a["node_id"], b["node_id"], kind="related")
 
-        result = await m.knowledge_update_edge(
-            a["node_id"], b["node_id"], new_kind="caused"
-        )
+        result = await m.knowledge_update_edge(a["node_id"], b["node_id"], new_kind="caused")
         assert result["updated"] == 1
 
     async def test_noop_returns_failure(self, fresh_mcp_graph):

@@ -379,13 +379,22 @@ class TestReferenceCompanionAttach:
         agg = EvidenceAggregator()
         chosen = ScoredCandidate(
             node=_node("anchor", doc_id="anchor"),
-            total=0.9, lexical=0.9, semantic=0.0, graph=0.5, structural=0.0,
+            total=0.9,
+            lexical=0.9,
+            semantic=0.0,
+            graph=0.5,
+            structural=0.0,
             reason="seed",
         )
         companion = ScoredCandidate(
             node=_node("cited", doc_id="cited"),
-            total=0.05, lexical=0.0, semantic=0.0, graph=0.1, structural=0.0,
-            reason="references", anchor_id="anchor",
+            total=0.05,
+            lexical=0.0,
+            semantic=0.0,
+            graph=0.1,
+            structural=0.0,
+            reason="references",
+            anchor_id="anchor",
         )
         filler = _scored("filler", total=0.5, doc_id="filler")
 
@@ -400,13 +409,22 @@ class TestReferenceCompanionAttach:
         agg = EvidenceAggregator()
         chosen = ScoredCandidate(
             node=_node("anchor", doc_id="anchor"),
-            total=0.9, lexical=0.9, semantic=0.0, graph=0.5, structural=0.0,
+            total=0.9,
+            lexical=0.9,
+            semantic=0.0,
+            graph=0.5,
+            structural=0.0,
             reason="seed",
         )
         orphan = ScoredCandidate(
             node=_node("other", doc_id="other"),
-            total=0.05, lexical=0.0, semantic=0.0, graph=0.1, structural=0.0,
-            reason="references", anchor_id="someone_else",
+            total=0.05,
+            lexical=0.0,
+            semantic=0.0,
+            graph=0.1,
+            structural=0.0,
+            reason="references",
+            anchor_id="someone_else",
         )
         result = agg.aggregate(scored=[chosen, orphan], k=1)
         assert {e.node.id for e in result} == {"anchor"}

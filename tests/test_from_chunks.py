@@ -117,9 +117,7 @@ class TestFromChunksWiring:
         assert graph._embedder is not None
 
     async def test_no_embedder_when_url_omitted(self, tmp_db):
-        graph = await SynapticGraph.from_chunks(
-            [{"content": "a test chunk"}], db=tmp_db
-        )
+        graph = await SynapticGraph.from_chunks([{"content": "a test chunk"}], db=tmp_db)
         assert graph._embedder is None
 
     async def test_reranker_wired_into_returned_graph(self, tmp_db):

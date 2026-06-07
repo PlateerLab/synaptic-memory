@@ -202,9 +202,7 @@ def test_default_weights_sum_to_one_after_normalisation():
     items.append((QueryDimensions(language="en"), True, "x"))
     items.append((QueryDimensions(language="mixed"), True, "x"))
     items.append((QueryDimensions(recall_type="multi_hop"), True, "x"))
-    items.append(
-        (QueryDimensions(recall_type="enumeration", enumeration=True), True, "x")
-    )
+    items.append((QueryDimensions(recall_type="enumeration", enumeration=True), True, "x"))
     items.append((QueryDimensions(structured_pct=1.0), True, "x"))
     items.append((QueryDimensions(cross_domain=True), True, "x"))
     items.append((QueryDimensions(cross_language=True), True, "x"))
@@ -247,16 +245,12 @@ def test_cross_domain_query_file_loads_and_all_flagged():
     assert len(dims) >= 10, f"expected ≥10 cross-domain queries, found {len(dims)}"
     n_cd = sum(1 for d in dims.values() if d.cross_domain)
     assert n_cd == len(dims), (
-        f"all cross_domain queries must carry cross_domain=true; "
-        f"found {n_cd}/{len(dims)}"
+        f"all cross_domain queries must carry cross_domain=true; found {n_cd}/{len(dims)}"
     )
     # Some should also be cross_language (English queries against
     # Korean corpora — exercises both axes simultaneously)
     n_cl = sum(1 for d in dims.values() if d.cross_language)
-    assert n_cl >= 2, (
-        f"expected ≥2 cross_domain queries that are ALSO cross_language; "
-        f"found {n_cl}"
-    )
+    assert n_cl >= 2, f"expected ≥2 cross_domain queries that are ALSO cross_language; found {n_cl}"
 
 
 def test_cross_domain_validation_field_present():

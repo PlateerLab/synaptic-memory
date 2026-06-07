@@ -127,8 +127,6 @@ class EvidenceSearch:
 
     __slots__ = (
         "_adaptive",
-        "_expand_relevance",
-        "_graph_expansion",
         "_aggregator",
         "_anchor_extractor",
         "_backend",
@@ -138,9 +136,11 @@ class EvidenceSearch:
         "_cross_reranker",
         "_decomposer",
         "_embedder",
+        "_expand_relevance",
         "_expander",
         "_expansion_budget",
         "_fusion_mode",
+        "_graph_expansion",
         "_phrase_cache",
         "_phrase_cache_loaded",
         "_query_phrase_seed_k",
@@ -655,8 +655,7 @@ class EvidenceSearch:
             from synaptic.extensions.graph_expander import ExpandedNode
 
             expanded = [
-                ExpandedNode(node=n, reason="seed", hops=0, anchor_hit=None)
-                for n in all_seeds
+                ExpandedNode(node=n, reason="seed", hops=0, anchor_hit=None) for n in all_seeds
             ]
 
         # Step 3b — PPR graph discovery. Uses FTS seeds as teleport
@@ -879,9 +878,7 @@ class EvidenceSearch:
         if not self._phrase_cache_loaded:
             from synaptic.models import NodeKind as _NK
 
-            phrase_nodes_raw = await self._backend.list_nodes(
-                kind=_NK.ENTITY, limit=100_000
-            )
+            phrase_nodes_raw = await self._backend.list_nodes(kind=_NK.ENTITY, limit=100_000)
             nodes: list = []
             matrix_rows: list[list[float]] = []
             for n in phrase_nodes_raw:
@@ -944,10 +941,7 @@ class EvidenceSearch:
                 return []
             scored_phrases: list[tuple[float, object]] = []
             for node, p_emb, p_norm in cache:
-                dot = sum(
-                    a * b
-                    for a, b in zip(query_embedding, p_emb, strict=False)
-                )
+                dot = sum(a * b for a, b in zip(query_embedding, p_emb, strict=False))
                 cos = dot / (q_norm * p_norm)
                 scored_phrases.append((cos, node))
             scored_phrases.sort(key=lambda t: t[0], reverse=True)

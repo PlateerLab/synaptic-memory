@@ -150,7 +150,7 @@ def _find_multihop_pairs(arts: list[dict]) -> list[tuple[dict, dict, str]]:
                 continue
             # Reject citations qualified by another instrument — those
             # resolve to a *different* law, not this article's own.
-            if _QUALIFIED_CITATION_RE.search(a["text"][max(0, m.start() - 24):m.start()]):
+            if _QUALIFIED_CITATION_RE.search(a["text"][max(0, m.start() - 24) : m.start()]):
                 continue
             pairs.append((a, law_idx[ref], ref))
             break  # one cross-ref per source article
@@ -165,7 +165,9 @@ async def _gen_single(client, model, substantive, n) -> list[dict]:
             client,
             model,
             _SINGLE_PROMPT.format(
-                law=a["law"], article_no=a["article_no"], title=a["title"],
+                law=a["law"],
+                article_no=a["article_no"],
+                title=a["title"],
                 text=a["text"][:1400],
             ),
         )
@@ -202,8 +204,12 @@ async def _gen_multi(client, model, pairs, n, *, top_k: int) -> list[dict]:
             client,
             model,
             _MULTI_PROMPT.format(
-                a_no=a["article_no"], a_title=a["title"], a_text=a["text"][:1100],
-                b_no=b["article_no"], b_title=b["title"], b_text=b["text"][:1100],
+                a_no=a["article_no"],
+                a_title=a["title"],
+                a_text=a["text"][:1100],
+                b_no=b["article_no"],
+                b_title=b["title"],
+                b_text=b["text"][:1100],
             ),
         )
         if not q:
@@ -263,11 +269,7 @@ async def main() -> None:
     substantive = [a for a in arts if len(a["text"]) >= 180]
     print(f"{len(arts)} articles ({len(substantive)} substantive)")
 
-    single = (
-        await _gen_single(client, args.model, substantive, args.single)
-        if args.single
-        else []
-    )
+    single = await _gen_single(client, args.model, substantive, args.single) if args.single else []
 
     pairs = _find_multihop_pairs(arts)
     random.shuffle(pairs)

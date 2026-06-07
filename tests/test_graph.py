@@ -436,7 +436,5 @@ class TestSearchRuntimeOptions:
 
     async def test_per_call_options_run_without_error(self) -> None:
         g = await self._graph(_SpyReranker())
-        result = await g.search(
-            "retrieval topic", limit=3, fts_seed_limit=40, per_document_cap=1
-        )
+        result = await g.search("retrieval topic", limit=3, fts_seed_limit=40, per_document_cap=1)
         assert result is not None

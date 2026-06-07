@@ -255,13 +255,28 @@ async def test_collect_builds_district_map_when_enabled(monkeypatch):
     b = MemoryBackend()
     await b.connect()
     # district (category) + a chunk in it + a landmark entity mentioned by it
-    await b.save_node(Node(id="cat_rules", kind=NodeKind.CONCEPT, title="Rules",
-                           tags=["category"], level=ConsolidationLevel.L0_RAW))
-    await b.save_node(Node(id="chunk1", kind=NodeKind.CHUNK, title="rule chunk",
-                           content="E217 applies", properties={"category": "Rules"},
-                           level=ConsolidationLevel.L0_RAW))
-    await b.save_node(Node(id="ent_e217", kind=NodeKind.ENTITY, title="E217",
-                           level=ConsolidationLevel.L0_RAW))
+    await b.save_node(
+        Node(
+            id="cat_rules",
+            kind=NodeKind.CONCEPT,
+            title="Rules",
+            tags=["category"],
+            level=ConsolidationLevel.L0_RAW,
+        )
+    )
+    await b.save_node(
+        Node(
+            id="chunk1",
+            kind=NodeKind.CHUNK,
+            title="rule chunk",
+            content="E217 applies",
+            properties={"category": "Rules"},
+            level=ConsolidationLevel.L0_RAW,
+        )
+    )
+    await b.save_node(
+        Node(id="ent_e217", kind=NodeKind.ENTITY, title="E217", level=ConsolidationLevel.L0_RAW)
+    )
     await b.save_edge(Edge(source_id="chunk1", target_id="ent_e217", kind=EdgeKind.MENTIONS))
     await b.save_edge(Edge(source_id="cat_rules", target_id="chunk1", kind=EdgeKind.PART_OF))
 
@@ -277,7 +292,8 @@ async def test_collect_skips_district_map_by_default():
     """Default (flag off) → no district map computed, zero added cost."""
     b = MemoryBackend()
     await b.connect()
-    await b.save_node(Node(id="e", kind=NodeKind.ENTITY, title="x",
-                           level=ConsolidationLevel.L0_RAW))
+    await b.save_node(
+        Node(id="e", kind=NodeKind.ENTITY, title="x", level=ConsolidationLevel.L0_RAW)
+    )
     stats = await collect_stats(b)
     assert stats.district_landmarks is None

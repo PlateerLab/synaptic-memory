@@ -60,6 +60,7 @@ def _project_or_legacy(result: dict) -> str:
         return project_tool_result(result)
     return json.dumps(result, ensure_ascii=False)[:5000]
 
+
 # --- Dataset registry ---
 
 BENCHMARK_DIR = REPO_ROOT / "tests" / "benchmark" / "data"
@@ -453,9 +454,7 @@ async def run_public_dataset(
         from synaptic.extensions.reference_linker import ReferenceLinker
         from synaptic.models import NodeKind as _NK
 
-        ref_linker = ReferenceLinker(
-            DomainProfile(name=f"{cfg.name}-eval", locale="multi")
-        )
+        ref_linker = ReferenceLinker(DomainProfile(name=f"{cfg.name}-eval", locale="multi"))
         ref_stats = await ref_linker.link(backend, source_kind=_NK.CONCEPT)
         print(
             f"  [ReferenceLinker {cfg.name}] {ref_stats.edges_created} edges "
@@ -1416,9 +1415,7 @@ async def _agent_loop_run(
         # pagination cursors. Mirror src/synaptic/agent_loop.py.
         from synaptic.agent_loop import _is_enumeration_query
 
-        eff_max_turns = (
-            15 if (max_turns <= 5 and _is_enumeration_query(query_text)) else max_turns
-        )
+        eff_max_turns = 15 if (max_turns <= 5 and _is_enumeration_query(query_text)) else max_turns
         session = SearchSession(budget_tool_calls=eff_max_turns * 3)
         messages = [
             {"role": "system", "content": system},
@@ -1710,9 +1707,7 @@ async def run_agent_benchmark(
         # Adaptive budget: enumeration queries ("X 모두/전체/목록",
         # "list all X") get 3x the turns so the agent can walk
         # pagination cursors. Mirror src/synaptic/agent_loop.py.
-        eff_max_turns = (
-            15 if (max_turns <= 5 and _is_enumeration_query(query_text)) else max_turns
-        )
+        eff_max_turns = 15 if (max_turns <= 5 and _is_enumeration_query(query_text)) else max_turns
         session = SearchSession(budget_tool_calls=eff_max_turns * 3)
         messages = [
             {"role": "system", "content": system},

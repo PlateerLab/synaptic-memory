@@ -261,17 +261,14 @@ async def filter_nodes_tool(
         if table and property and not prop_present_on_table and table_columns:
             import difflib
 
-            candidates = difflib.get_close_matches(
-                property, sorted(table_columns), n=2, cutoff=0.5
-            )
+            candidates = difflib.get_close_matches(property, sorted(table_columns), n=2, cutoff=0.5)
             for cand in candidates:
                 hints.append(
                     Hint(
                         action="filter_nodes",
                         args={"table": table, "property": cand, "op": op, "value": value},
                         reason=(
-                            f"column {property!r} not found on {table!r}; "
-                            f"did you mean {cand!r}?"
+                            f"column {property!r} not found on {table!r}; did you mean {cand!r}?"
                         ),
                     )
                 )

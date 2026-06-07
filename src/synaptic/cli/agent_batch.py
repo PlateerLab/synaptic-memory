@@ -141,7 +141,9 @@ async def _run(args: argparse.Namespace, sink: TextIO) -> int:
         queries = queries[: args.limit]
     total = len(queries)
 
-    os.environ.setdefault("OPENAI_API_KEY", args.api_key or os.environ.get("OPENAI_API_KEY", "ollama"))
+    os.environ.setdefault(
+        "OPENAI_API_KEY", args.api_key or os.environ.get("OPENAI_API_KEY", "ollama")
+    )
     client = (
         AsyncOpenAI(base_url=args.llm_base_url, api_key=args.api_key)
         if args.api_key

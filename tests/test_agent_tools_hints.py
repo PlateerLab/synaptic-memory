@@ -44,9 +44,7 @@ async def _backend_with_rows(rows: list[dict[str, str]]) -> MemoryBackend:
 
 @pytest.mark.asyncio
 async def test_filter_zero_result_on_equality_emits_contains_hint():
-    backend = await _backend_with_rows(
-        [{"id": "1", "name": "티셔츠", "_table_name": "products"}]
-    )
+    backend = await _backend_with_rows([{"id": "1", "name": "티셔츠", "_table_name": "products"}])
     session = SearchSession(budget_tool_calls=5)
     r = await filter_nodes_tool(
         backend,
@@ -68,9 +66,7 @@ async def test_filter_zero_result_on_equality_emits_contains_hint():
 
 @pytest.mark.asyncio
 async def test_filter_zero_result_on_multiword_contains_emits_first_token_hint():
-    backend = await _backend_with_rows(
-        [{"id": "1", "name": "운동화", "_table_name": "products"}]
-    )
+    backend = await _backend_with_rows([{"id": "1", "name": "운동화", "_table_name": "products"}])
     session = SearchSession(budget_tool_calls=5)
     r = await filter_nodes_tool(
         backend,
@@ -88,9 +84,7 @@ async def test_filter_zero_result_on_multiword_contains_emits_first_token_hint()
 
 @pytest.mark.asyncio
 async def test_filter_hit_emits_no_recovery_hints():
-    backend = await _backend_with_rows(
-        [{"id": "1", "name": "티셔츠", "_table_name": "products"}]
-    )
+    backend = await _backend_with_rows([{"id": "1", "name": "티셔츠", "_table_name": "products"}])
     session = SearchSession(budget_tool_calls=5)
     r = await filter_nodes_tool(
         backend,

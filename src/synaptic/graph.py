@@ -422,9 +422,7 @@ class SynapticGraph:
         if rerank_url:
             from synaptic.extensions.reranker_cross import reranker_from_url
 
-            reranker = reranker_from_url(
-                rerank_url, backend=rerank_backend, model=rerank_model
-            )
+            reranker = reranker_from_url(rerank_url, backend=rerank_backend, model=rerank_model)
 
         graph = cls(backend, embedder=embedder, reranker=reranker)
         # The one-line path connected the backend in _open_backend.
@@ -956,9 +954,7 @@ class SynapticGraph:
                     row_limit=row_limit,
                 )
                 cdc_done = True
-            elif connection_string.startswith("mysql") or connection_string.startswith(
-                "mariadb"
-            ):
+            elif connection_string.startswith("mysql") or connection_string.startswith("mariadb"):
                 await ingester.sync_from_mysql(
                     connection_string,
                     graph,
@@ -1575,12 +1571,8 @@ class SynapticGraph:
         # Index keep's existing edges so we can dedupe.
         keep_out = await self._backend.get_edges(keep_id, direction="outgoing")
         keep_in = await self._backend.get_edges(keep_id, direction="incoming")
-        out_by_pair: dict[tuple[str, str], Edge] = {
-            (e.target_id, str(e.kind)): e for e in keep_out
-        }
-        in_by_pair: dict[tuple[str, str], Edge] = {
-            (e.source_id, str(e.kind)): e for e in keep_in
-        }
+        out_by_pair: dict[tuple[str, str], Edge] = {(e.target_id, str(e.kind)): e for e in keep_out}
+        in_by_pair: dict[tuple[str, str], Edge] = {(e.source_id, str(e.kind)): e for e in keep_in}
 
         # Re-point drop's outgoing edges.
         for edge in await self._backend.get_edges(drop_id, direction="outgoing"):
@@ -1833,9 +1825,7 @@ class SynapticGraph:
             "k": limit,
             # Match the over-fetch heuristic agent_search_tool uses so
             # the reranker sees a richer pool than ``limit`` itself.
-            "fts_seed_limit": fts_seed_limit
-            if fts_seed_limit is not None
-            else max(20, limit * 3),
+            "fts_seed_limit": fts_seed_limit if fts_seed_limit is not None else max(20, limit * 3),
         }
         if per_document_cap is not None:
             search_kwargs["per_document_cap"] = per_document_cap
@@ -1986,9 +1976,7 @@ class SynapticGraph:
         if embedding is not None:
             node.embedding = embedding
         elif reembed and text_changed and self._embedder is not None:
-            embed_text = self._compose_embed_text(
-                node.title, node.content, node.properties
-            )
+            embed_text = self._compose_embed_text(node.title, node.content, node.properties)
             if embed_text:
                 node.embedding = await self._embedder.embed(embed_text)
         node.updated_at = time()

@@ -52,8 +52,13 @@ async def test_filter_first_page_signals_has_more():
     backend = await _backend_with_n_rows(50)
     session = SearchSession(budget_tool_calls=10)
     r = await filter_nodes_tool(
-        backend, session, table="products", property="category",
-        op="==", value="shoes", limit=20,
+        backend,
+        session,
+        table="products",
+        property="category",
+        op="==",
+        value="shoes",
+        limit=20,
     )
     assert r.ok is True
     assert r.data["total"] == 50
@@ -68,8 +73,14 @@ async def test_filter_second_page_continues_from_cursor():
     backend = await _backend_with_n_rows(50)
     session = SearchSession(budget_tool_calls=10)
     r = await filter_nodes_tool(
-        backend, session, table="products", property="category",
-        op="==", value="shoes", limit=20, cursor="20",
+        backend,
+        session,
+        table="products",
+        property="category",
+        op="==",
+        value="shoes",
+        limit=20,
+        cursor="20",
     )
     assert r.data["offset"] == 20
     assert r.data["showing"] == 20
@@ -87,8 +98,14 @@ async def test_filter_last_page_signals_no_more():
     backend = await _backend_with_n_rows(50)
     session = SearchSession(budget_tool_calls=10)
     r = await filter_nodes_tool(
-        backend, session, table="products", property="category",
-        op="==", value="shoes", limit=20, cursor="40",
+        backend,
+        session,
+        table="products",
+        property="category",
+        op="==",
+        value="shoes",
+        limit=20,
+        cursor="40",
     )
     assert r.data["offset"] == 40
     assert r.data["showing"] == 10  # only 10 left
@@ -101,8 +118,14 @@ async def test_filter_cursor_beyond_total_returns_empty_no_more():
     backend = await _backend_with_n_rows(50)
     session = SearchSession(budget_tool_calls=10)
     r = await filter_nodes_tool(
-        backend, session, table="products", property="category",
-        op="==", value="shoes", limit=20, cursor="100",
+        backend,
+        session,
+        table="products",
+        property="category",
+        op="==",
+        value="shoes",
+        limit=20,
+        cursor="100",
     )
     assert r.data["showing"] == 0
     assert r.data["has_more"] is False
@@ -120,8 +143,14 @@ async def test_filter_invalid_cursor_falls_back_to_first_page():
     session = SearchSession(budget_tool_calls=10)
     for bad in ("abc", "-5", "", "  "):
         r = await filter_nodes_tool(
-            backend, session, table="products", property="category",
-            op="==", value="shoes", limit=20, cursor=bad,
+            backend,
+            session,
+            table="products",
+            property="category",
+            op="==",
+            value="shoes",
+            limit=20,
+            cursor=bad,
         )
         assert r.ok is True
         assert r.data["offset"] == 0, f"cursor={bad!r} should fall back to 0"
@@ -134,8 +163,13 @@ async def test_filter_no_cursor_matches_legacy_behavior():
     backend = await _backend_with_n_rows(15)
     session = SearchSession(budget_tool_calls=5)
     r = await filter_nodes_tool(
-        backend, session, table="products", property="category",
-        op="==", value="shoes", limit=20,
+        backend,
+        session,
+        table="products",
+        property="category",
+        op="==",
+        value="shoes",
+        limit=20,
     )
     assert r.data["total"] == 15
     assert r.data["showing"] == 15
@@ -155,8 +189,14 @@ async def test_filter_total_remains_accurate_across_pages():
     cursor = None
     for _ in range(3):
         r = await filter_nodes_tool(
-            backend, session, table="products", property="category",
-            op="==", value="shoes", limit=20, cursor=cursor,
+            backend,
+            session,
+            table="products",
+            property="category",
+            op="==",
+            value="shoes",
+            limit=20,
+            cursor=cursor,
         )
         pages.append(r.data["total"])
         cursor = r.data["next_cursor"]
@@ -173,14 +213,27 @@ async def test_filter_pagination_with_from_ids_constrains_pool():
     session = SearchSession(budget_tool_calls=10)
     subset = [f"products:G{i:05d}" for i in range(30)]  # 30 of 50
     r = await filter_nodes_tool(
-        backend, session, table="products", property="category",
-        op="==", value="shoes", limit=20, from_ids=subset,
+        backend,
+        session,
+        table="products",
+        property="category",
+        op="==",
+        value="shoes",
+        limit=20,
+        from_ids=subset,
     )
     assert r.data["total"] == 30  # not 50
     assert r.data["next_cursor"] == "20"
     r2 = await filter_nodes_tool(
-        backend, session, table="products", property="category",
-        op="==", value="shoes", limit=20, from_ids=subset, cursor="20",
+        backend,
+        session,
+        table="products",
+        property="category",
+        op="==",
+        value="shoes",
+        limit=20,
+        from_ids=subset,
+        cursor="20",
     )
     assert r2.data["showing"] == 10
     assert r2.data["has_more"] is False
@@ -214,8 +267,12 @@ async def test_top_nodes_first_page_signals_has_more():
     backend = await _backend_with_priced_rows(30)
     session = SearchSession(budget_tool_calls=10)
     r = await top_nodes_tool(
-        backend, session, table="products", sort_by="price",
-        order="desc", limit=10,
+        backend,
+        session,
+        table="products",
+        sort_by="price",
+        order="desc",
+        limit=10,
     )
     assert r.data["total"] == 30
     assert r.data["showing"] == 10
@@ -231,8 +288,13 @@ async def test_top_nodes_second_page_continues_ranking():
     backend = await _backend_with_priced_rows(30)
     session = SearchSession(budget_tool_calls=10)
     r = await top_nodes_tool(
-        backend, session, table="products", sort_by="price",
-        order="desc", limit=10, cursor="10",
+        backend,
+        session,
+        table="products",
+        sort_by="price",
+        order="desc",
+        limit=10,
+        cursor="10",
     )
     assert r.data["offset"] == 10
     assert r.data["showing"] == 10
@@ -269,8 +331,12 @@ async def test_aggregate_first_page_signals_has_more():
     backend = await _backend_with_grouped_rows()
     session = SearchSession(budget_tool_calls=10)
     r = await aggregate_nodes_tool(
-        backend, session, table="products", group_by="category",
-        metric="count", limit=10,
+        backend,
+        session,
+        table="products",
+        group_by="category",
+        metric="count",
+        limit=10,
     )
     assert r.data["total_groups"] == 25
     assert r.data["showing"] == 10
@@ -283,8 +349,13 @@ async def test_aggregate_last_page_signals_no_more():
     backend = await _backend_with_grouped_rows()
     session = SearchSession(budget_tool_calls=10)
     r = await aggregate_nodes_tool(
-        backend, session, table="products", group_by="category",
-        metric="count", limit=10, cursor="20",
+        backend,
+        session,
+        table="products",
+        group_by="category",
+        metric="count",
+        limit=10,
+        cursor="20",
     )
     assert r.data["showing"] == 5  # 25 - 20
     assert r.data["has_more"] is False
@@ -300,7 +371,9 @@ async def _backend_for_join(n_reviews: int) -> MemoryBackend:
     await b.connect()
     await b.save_node(
         Node(
-            id="p_1", kind=NodeKind.ENTITY, title="products:G00001",
+            id="p_1",
+            kind=NodeKind.ENTITY,
+            title="products:G00001",
             properties={"_table_name": "products", "_primary_key": "G00001"},
             level=ConsolidationLevel.L0_RAW,
         )
@@ -323,8 +396,12 @@ async def test_join_related_first_page_signals_has_more():
     backend = await _backend_for_join(50)
     session = SearchSession(budget_tool_calls=10)
     r = await join_related_tool(
-        backend, session, from_value="G00001",
-        fk_property="goods_no", target_table="reviews", limit=20,
+        backend,
+        session,
+        from_value="G00001",
+        fk_property="goods_no",
+        target_table="reviews",
+        limit=20,
     )
     assert r.data["total"] == 50
     assert r.data["showing"] == 20
@@ -343,9 +420,13 @@ async def test_join_related_walks_all_pages_and_terminates():
     pages = 0
     while True:
         r = await join_related_tool(
-            backend, session, from_value="G00001",
-            fk_property="goods_no", target_table="reviews",
-            limit=20, cursor=cursor,
+            backend,
+            session,
+            from_value="G00001",
+            fk_property="goods_no",
+            target_table="reviews",
+            limit=20,
+            cursor=cursor,
         )
         pages += 1
         for item in r.data["results"]:

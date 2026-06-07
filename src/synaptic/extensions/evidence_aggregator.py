@@ -310,9 +310,7 @@ class EvidenceAggregator:
             # companion of the document that cites it. Bypasses MMR /
             # per-doc cap; capped per anchor to bound fan-out.
             companions = [
-                c
-                for c in remaining
-                if c.reason == "references" and c.anchor_id == chosen.node.id
+                c for c in remaining if c.reason == "references" and c.anchor_id == chosen.node.id
             ]
             for comp in companions[:_MAX_COMPANIONS_PER_ANCHOR]:
                 remaining.remove(comp)
@@ -320,9 +318,7 @@ class EvidenceAggregator:
                 selected.append(comp_ev)
                 selected_tokens.append(_tokens(comp_ev.node.content))
                 if comp_ev.document_id:
-                    doc_counts[comp_ev.document_id] = (
-                        doc_counts.get(comp_ev.document_id, 0) + 1
-                    )
+                    doc_counts[comp_ev.document_id] = doc_counts.get(comp_ev.document_id, 0) + 1
 
         return selected
 

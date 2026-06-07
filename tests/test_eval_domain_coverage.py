@@ -79,9 +79,7 @@ async def test_count_domains_skips_nodes_without_domain_id():
     they're not counted under any domain."""
     b = MemoryBackend()
     await b.connect()
-    await b.save_node(
-        Node(id="tagged", kind=NodeKind.ENTITY, properties={"_domain_id": "krra"})
-    )
+    await b.save_node(Node(id="tagged", kind=NodeKind.ENTITY, properties={"_domain_id": "krra"}))
     await b.save_node(Node(id="untagged", kind=NodeKind.ENTITY, properties={}))
     counts = await _count_domains_for_ids(b, {"tagged", "untagged"})
     assert counts == {"krra": 1}

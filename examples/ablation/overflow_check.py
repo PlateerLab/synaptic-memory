@@ -40,9 +40,7 @@ class _CountingHandler(logging.Handler):
         msg = record.getMessage().lower()
         if "compacted, retrying" in msg:
             self.retried += 1
-        elif "agent llm call failed" in msg and (
-            "context length" in msg or "input_tokens" in msg
-        ):
+        elif "agent llm call failed" in msg and ("context length" in msg or "input_tokens" in msg):
             self.escaped += 1
 
 
@@ -105,7 +103,7 @@ async def _run(args) -> None:
     print("\n=== overflow guard check ===", flush=True)
     print(f"escaped (hard 400s that broke a turn): {counter.escaped}", flush=True)
     print(f"retried (reactive compaction recovered): {counter.retried}", flush=True)
-    print(f"solved: {solved}/{len(scored)} in {time.time()-t0:.0f}s", flush=True)
+    print(f"solved: {solved}/{len(scored)} in {time.time() - t0:.0f}s", flush=True)
     await backend.close()
 
 
