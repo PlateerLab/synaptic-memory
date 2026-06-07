@@ -905,6 +905,70 @@ def project_tool_result(result: dict | Any, *, max_chars: int = _TOOL_RESULT_BUD
     return _shrink_lists(data, max_chars, envelope)
 
 
+# --- History compaction (context-overflow guard) -------------------
+
+# Total char budget for the running message history before each LLM call. The
+# agent loop appends an assistant message + N tool results every turn; over
+# 10-15 turns (enumeration / deep multi-hop queries) the unbounded history
+# overflows the model's context window (observed: hard 400 at ~30.7k tokens on
+# turn 12-13, which used to BREAK the loop and lose all remaining retrieval).
+# 48k chars keeps the input comfortably under a 32k-token window for the
+# JSON+Korean content here (~1.6-2.5 chars/token); the reactive retry below is
+# the estimate-independent safety net. Override: SYNAPTIC_AGENT_HISTORY_BUDGET.
+_AGENT_HISTORY_CHAR_BUDGET = 48_000
+
+_FOLD_STUB = "[older tool result folded to fit the context window]"
+
+
+def _is_context_length_error(exc: Exception) -> bool:
+    """True when ``exc`` is the model rejecting an over-long prompt.
+
+    Matches the OpenAI/vLLM 400 shape ("maximum context length", "context_length",
+    "input_tokens") so the loop can compact + retry instead of dying."""
+    s = str(exc).lower()
+    return (
+        "maximum context length" in s
+        or "context_length" in s
+        or "context length" in s
+        or "input_tokens" in s
+    )
+
+
+def _history_chars(messages: list) -> int:
+    return sum(len(str(m.get("content") or "")) for m in messages)
+
+
+def _compact_history(messages: list, budget: int) -> int:
+    """Fold the OLDEST tool-result contents to a short stub until the total
+    message-content size fits ``budget``.
+
+    Only the ``content`` string of ``role == "tool"`` messages is shrunk — the
+    message order and every ``tool_call_id`` are preserved, so the OpenAI
+    tool-call pairing stays valid. Folding oldest-first keeps the most recent
+    (actionable) evidence intact; older turns the agent has already reasoned
+    over collapse to a stub. ``found_ids`` is unaffected (it's accumulated
+    separately), so retrieval scoring never loses a hit to compaction.
+
+    Returns the number of tool messages folded.
+    """
+    if _history_chars(messages) <= budget:
+        return 0
+    total = _history_chars(messages)
+    folded = 0
+    for m in messages:  # oldest-first
+        if total <= budget:
+            break
+        if m.get("role") != "tool":
+            continue
+        c = str(m.get("content") or "")
+        if len(c) <= len(_FOLD_STUB):
+            continue  # already small / already folded
+        total -= len(c) - len(_FOLD_STUB)
+        m["content"] = _FOLD_STUB
+        folded += 1
+    return folded
+
+
 # --- Public API ----------------------------------------------------
 
 
@@ -1150,6 +1214,16 @@ async def run_agent_loop(
     if max_turns <= 5 and _is_enumeration_query(query):
         max_turns = 15
 
+    # Char budget for the running history before each LLM call — guards the
+    # context-overflow that used to hard-stop long (enumeration / multi-hop)
+    # sessions at turn 12-13.
+    try:
+        history_budget = int(
+            _os.environ.get("SYNAPTIC_AGENT_HISTORY_BUDGET", _AGENT_HISTORY_CHAR_BUDGET)
+        )
+    except ValueError:
+        history_budget = _AGENT_HISTORY_CHAR_BUDGET
+
     session = SearchSession(budget_tool_calls=max_turns * 3)
     messages = [
         {"role": "system", "content": system},
@@ -1164,6 +1238,8 @@ async def run_agent_loop(
 
     for turn in range(max_turns):
         turns_used = turn + 1
+        # Proactive: fold old tool results before they overflow the window.
+        _compact_history(messages, history_budget)
         try:
             resp = await client.chat.completions.create(
                 model=model,
@@ -1172,8 +1248,27 @@ async def run_agent_loop(
                 max_tokens=2048,
             )
         except Exception as exc:
-            logger.warning("agent LLM call failed at turn %d: %s", turn, exc)
-            break
+            # Reactive safety net: a context-length 400 means our char estimate
+            # under-counted tokens. Compact harder and retry ONCE before giving
+            # up, so a long session degrades (folds old evidence) instead of
+            # dying mid-retrieval.
+            if _is_context_length_error(exc) and _compact_history(
+                messages, history_budget // 2
+            ):
+                logger.info("turn %d hit context limit — compacted, retrying", turn)
+                try:
+                    resp = await client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        tools=AGENT_TOOLS,
+                        max_tokens=2048,
+                    )
+                except Exception as exc2:
+                    logger.warning("agent LLM call failed at turn %d after compaction: %s", turn, exc2)
+                    break
+            else:
+                logger.warning("agent LLM call failed at turn %d: %s", turn, exc)
+                break
 
         msg = resp.choices[0].message
         if msg.tool_calls:

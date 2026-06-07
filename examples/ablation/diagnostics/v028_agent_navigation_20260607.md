@@ -211,6 +211,36 @@ because it makes the opt-in knob strictly safer at zero measured cost, NOT
 because it was shown to help. Both the raw and grounded bridge are the same
 opt-in flag (`SYNAPTIC_GATE_BRIDGE=1`); grounded is the only shipped behaviour.
 
+## 9. Agent context-overflow guard (deterministic fix, commit pending)
+
+Every long agent run logged `agent LLM call failed at turn 12/13: ... maximum
+context length is 32768 tokens` — the unbounded message history overflowed the
+window and the loop BROKE, discarding all remaining retrieval. 2 such hard
+failures in the §7 KRRA canary (enumeration queries, max_turns=15). This is the
+opposite of a noise-floor delta: a hard, reproducible 400 you can COUNT.
+
+Fix (`agent_loop.py`): fold the oldest tool-result contents to a stub before
+each LLM call (proactive, `SYNAPTIC_AGENT_HISTORY_BUDGET` chars, default 48k);
+on a context-length 400 slipping through, compact to half-budget and retry once
+(reactive) instead of breaking. Order + tool_call_id pairing preserved (only the
+content string shrinks), recent evidence kept (oldest-first), `found_ids`
+untouched.
+
+Validated (`examples/ablation/overflow_check.py`, KRRA Hard, gate default-on):
+
+| | count |
+|---|---:|
+| escaped (hard 400s that broke a turn) | **0** (was 2) |
+| reactive retries that fired | 0 (proactive caught all) |
+| solved | 32/39 (unchanged vs gate-ON baseline) |
+
+A deterministic before/after (2→0 hard failures), immune to the §7 noise floor.
+The reactive net never fired — proactive 48k budget sufficed — but it stays as
+the estimate-independent backstop. This is the right KIND of agent work given
+§7: not chasing sub-noise accuracy deltas, but removing a hard failure that
+silently capped long-session reach (a query dying at turn 12 can't reach
+anything regardless of how good the retrieval levers are).
+
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +
   `SYNAPTIC_GRAPH_EXPANSION` toggle (measurement infra — keep) and the `expand`

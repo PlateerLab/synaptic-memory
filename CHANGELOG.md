@@ -13,6 +13,21 @@ the lever that beats RAG is the agent loop, not better single-shot retrieval.
 This pass ships a proven agent win as the default and adds the measurement +
 opt-in structure to keep advancing it.
 
+**Fixed**
+- Agent context-overflow on long sessions. The agent loop accumulated an
+  unbounded message history; enumeration / deep multi-hop queries (max_turns
+  bumped to 15) hit the model's 32k window at turn 12-13, where the LLM call
+  raised a 400 and the loop BROKE — discarding all remaining retrieval. Now the
+  loop folds the oldest tool results to a stub before each call (proactive,
+  `SYNAPTIC_AGENT_HISTORY_BUDGET` chars, default 48k) and, if a context-length
+  400 still slips through, compacts harder and retries once instead of dying
+  (reactive). `found_ids` is unaffected (accumulated separately), message order
+  + tool_call_id pairing preserved, recent evidence kept (oldest-first folding).
+  Validated on KRRA Hard (`examples/ablation/overflow_check.py`): **0 hard 400s
+  (was 2), solve 32/39 unchanged** — proactive compaction alone caught every
+  overflow (reactive retry never had to fire). A deterministic count, not a
+  noise-floor delta. RAG-irrelevant — purely an agentic-session robustness fix.
+
 **Changed**
 - `graph.chat(...)` / `run_agent_loop(...)` now default `sufficiency_gate=True`
   (measured +3.2pp agent solve-rate, 0 regressions, fail-open, <1.1x latency).
