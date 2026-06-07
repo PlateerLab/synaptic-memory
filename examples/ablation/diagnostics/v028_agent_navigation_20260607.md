@@ -142,6 +142,38 @@ Reproduces the recorded win (was +5.1pp on KRRA Hard) on current code → defaul
 justified. Minor: 2 enumeration queries hit the model's 32k context at turn 10
 (both arms; fail-open) — a separate context-budget limit, not the gate.
 
+## 7. Bridge-aware gate (L29b) — multi-hop chaining (commit pending)
+
+The §5 learning was: the live lever is REACH, not selection. The query-time
+answer to reach on *multi-hop* questions: when the sufficiency gate fires, don't
+just say "find the missing evidence" — have the judge name the concrete
+follow-up search query with the **bridge entity from the evidence spelled out**,
+and relay it as an explicit chained search. No index-time OpenIE triples; the
+agent loop does the hop. Opt-in `gate_bridge` / `SYNAPTIC_GATE_BRIDGE=1`.
+
+A/B via `gate_ab.py --compare bridge` on **finreg_multihop** (120q, all
+`multi_hop`, strict `relevant.issubset(found)` scoring — both hops required),
+gate ON plain vs gate ON + bridge:
+
+| | id-reach | time |
+|---|---:|---:|
+| gate ON (plain)   | 93/120 (0.775) | 1248s |
+| gate ON + bridge  | **99/120 (0.825)** | 1291s |
+| **Δ** | **+6 (+5.0pp)** | **+3% latency (free)** |
+
+The bridge arm reaches both hops on 6 more questions — exactly the reach gain
+§5 predicted the multi-hop problem needed. Latency is flat (the extra chained
+search replaces a wasted retry the plain gate would have spent anyway). The
+plain baseline 93/120 matches §3's graph-ON 94/120 — the gate alone adds little
+on this multihop set; the bridge *injection* is what moves it.
+
+**Decision: opt-in ship justified (tested + measured). Default-on pending a
+canary** — bridge uses a different judge prompt that proposes a next_query even
+on non-multihop queries, which could send the agent chasing a wrong entity. So
+before any default flip, measure bridge on KRRA Hard (the gate's verified
+single-hop-ish bench) to confirm no regression on the gate's home turf. (Same
+discipline the gate itself needed — §6.)
+
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +
   `SYNAPTIC_GRAPH_EXPANSION` toggle (measurement infra — keep) and the `expand`

@@ -1654,6 +1654,7 @@ class SynapticGraph:
         extra_context: str | None = None,
         prime_with_snapshot: bool = True,
         sufficiency_gate: bool = True,
+        gate_bridge: bool = False,
         record_trace: bool = False,
     ):
         """Multi-turn agent loop — Synaptic's measured-strongest mode.
@@ -1687,6 +1688,12 @@ class SynapticGraph:
                 on a clear gap it injects the gap and keeps retrieving
                 (fail-open, bias-to-sufficient, bounded retries, <1.1x latency).
                 Set False (or env ``SYNAPTIC_SUFFICIENCY_GATE=0``) to disable.
+            gate_bridge: Opt-in (default False, env
+                ``SYNAPTIC_GATE_BRIDGE=1``). When the sufficiency gate fires on
+                a multi-hop gap, ask the judge to name the concrete follow-up
+                search query (with the bridge entity from the evidence spelled
+                out) and inject it as an explicit chained search instead of the
+                generic "use the search tools" nudge. Pending agent A/B.
             prime_with_snapshot: If True (default), inject a markdown
                 snapshot of the graph (categories, top phrase hubs,
                 tables) into the system prompt to skip the agent's
@@ -1745,6 +1752,7 @@ class SynapticGraph:
             system_prompt=system_prompt,
             extra_context=priming_context or None,
             sufficiency_gate=sufficiency_gate,
+            gate_bridge=gate_bridge,
             record_trace=record_trace,
         )
 

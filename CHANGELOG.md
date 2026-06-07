@@ -36,6 +36,13 @@ opt-in structure to keep advancing it.
   reranker), kept opt-in. The live lever is reach/connectivity, not selection.
 - `SYNAPTIC_LEGIBLE_MAP` — snapshot "city map" grouping landmark hubs under
   their district (category) for agent wayfinding (urban-legibility). Opt-in.
+- `gate_bridge` arg / `SYNAPTIC_GATE_BRIDGE=1` (L29b) — bridge-aware sufficiency
+  gap injection for multi-hop. When the gate fires, the judge also names the
+  concrete follow-up search query (the bridge entity from the evidence spelled
+  out) and the loop relays it as an explicit chained search instead of the
+  generic "use the search tools" nudge. The query-time answer to the multi-hop
+  reach problem — no index-time OpenIE triples. Opt-in pending agent A/B on
+  finreg multihop (`examples/ablation/gate_ab.py --compare bridge`).
 
 ### v0.28-dev — legacy-engine cleanup, rerank deadzone knob, CI bench guard
 

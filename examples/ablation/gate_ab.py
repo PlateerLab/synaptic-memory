@@ -2,18 +2,26 @@
 
 The standard eval harness (eval/run_all.py) uses its own inline agent loop that
 does NOT exercise the sufficiency gate, so it cannot measure it. This script
-drives run_agent_loop directly (which has the gate) with sufficiency_gate True
-vs False on a labelled dataset, scoring id-reach the same way run_all.py does
-(found_ids resolved to doc_ids via a title/id index; multi_hop scored strict).
+drives run_agent_loop directly (which has the gate) on a labelled dataset,
+scoring id-reach the same way run_all.py does (found_ids resolved to doc_ids
+via a title/id index; multi_hop scored strict).
+
+Two comparison modes (--compare):
+  gate   (default) — gate OFF vs gate ON (the L29 default-on validation).
+  bridge           — gate ON plain vs gate ON + bridge-aware gap injection
+                     (L29b multi-hop chaining). Use a multi-hop dataset.
 
 Usage:
-  SYNAPTIC_SUFFICIENCY_GATE= uv run python examples/ablation/gate_ab.py \
+  SYNAPTIC_SUFFICIENCY_GATE= SYNAPTIC_GATE_BRIDGE= \
+  uv run python examples/ablation/gate_ab.py \
     --dataset krra_hard --graph eval/data/krra_graph.sqlite \
+    --compare bridge \
     --llm-base-url http://localhost:8012/v1 --model Qwen3.6-27B \
     --embed-url http://localhost:8013/v1 --embed-model Qwen3-Embedding-4B \
     --concurrency 6
 
-Leave env SYNAPTIC_SUFFICIENCY_GATE UNSET so the per-arm arg controls the gate.
+Leave env SYNAPTIC_SUFFICIENCY_GATE / SYNAPTIC_GATE_BRIDGE UNSET so the per-arm
+args control the gate.
 """
 
 from __future__ import annotations
@@ -49,7 +57,7 @@ async def _run(args) -> None:
     with open(args.queries, encoding="utf-8") as f:
         queries = [q for q in json.load(f).get("queries", []) if q.get("query")]
 
-    async def score_one(q: dict, gate: bool, sem) -> bool | None:
+    async def score_one(q: dict, *, gate: bool, bridge: bool, sem) -> bool | None:
         relevant = set(q.get("relevant_docs", []))
         if not relevant:
             return None
@@ -62,6 +70,7 @@ async def _run(args) -> None:
                 max_turns=args.max_turns,
                 embedder=embedder,
                 sufficiency_gate=gate,
+                gate_bridge=bridge,
             )
         fids = set(res.found_ids)
         for fid in list(fids):
@@ -70,23 +79,29 @@ async def _run(args) -> None:
             return relevant.issubset(fids)
         return bool(fids & relevant)
 
-    results: dict[bool, str] = {}
-    for gate in (False, True):  # baseline first
+    # Arms: (label, sufficiency_gate, gate_bridge). Baseline first.
+    if args.compare == "bridge":
+        arms = [("gate ON         ", True, False), ("gate ON +bridge ", True, True)]
+    else:
+        arms = [("gate OFF        ", False, False), ("gate ON         ", True, False)]
+
+    lines: list[str] = []
+    for label, gate, bridge in arms:
         sem = asyncio.Semaphore(args.concurrency)
         t0 = time.time()
-        scored = await asyncio.gather(*[score_one(q, gate, sem) for q in queries])
+        scored = await asyncio.gather(
+            *[score_one(q, gate=gate, bridge=bridge, sem=sem) for q in queries]
+        )
         scored = [s for s in scored if s is not None]
         solved = sum(1 for s in scored if s)
         total = len(scored)
-        line = f"gate={'ON ' if gate else 'OFF'}: {solved}/{total} ({solved/total:.3f}) in {time.time()-t0:.0f}s"
+        line = f"{label}: {solved}/{total} ({solved/total:.3f}) in {time.time()-t0:.0f}s"
         print(line, flush=True)
-        results[gate] = line
+        lines.append(line)
 
-    off = results[False]
-    on = results[True]
-    print("\n=== sufficiency-gate A/B ===")
-    print(off)
-    print(on)
+    print(f"\n=== gate A/B (compare={args.compare}) ===")
+    for line in lines:
+        print(line)
     await backend.close()
 
 
@@ -101,6 +116,12 @@ def main() -> None:
     p.add_argument("--embed-model", default="Qwen3-Embedding-4B")
     p.add_argument("--max-turns", type=int, default=5)
     p.add_argument("--concurrency", type=int, default=6)
+    p.add_argument(
+        "--compare",
+        choices=["gate", "bridge"],
+        default="gate",
+        help="gate=OFF vs ON (default); bridge=ON-plain vs ON+bridge (multi-hop).",
+    )
     args = p.parse_args()
     if not args.queries:
         args.queries = f"eval/data/queries/{args.dataset}.json"

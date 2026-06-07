@@ -922,12 +922,37 @@ _SUFFICIENCY_SYSTEM = (
     'phrase naming the missing fact, or empty if sufficient>"}.'
 )
 
+# Bridge-aware variant (L29b): when the gap is real, multi-hop questions almost
+# always leave a *bridge entity* in the evidence (the country someone was born
+# in, the org a code belongs to) that must be searched for next to close the
+# gap. Asking the judge to name a concrete follow-up query — with that bridge
+# entity spelled out from the evidence — turns the generic "find the missing
+# evidence" re-prompt into an explicit chained search. General (no per-corpus
+# logic): the judge extracts the entity; we only relay the query it proposes.
+_SUFFICIENCY_BRIDGE_SYSTEM = (
+    "You are a strict but fair evidence auditor. Given a QUESTION, the EVIDENCE a "
+    "retrieval agent gathered, and the agent's PROPOSED ANSWER, decide whether the "
+    "answer is fully supported by the evidence. Bias toward 'sufficient' — only say "
+    "false when a clearly-needed fact for the question is absent from the evidence. "
+    "When NOT sufficient, the question is usually MULTI-HOP: the EVIDENCE already "
+    "names a bridge entity (a person, place, organisation, code, product, or date) "
+    "that must be searched for next to close the gap. Identify that bridge entity "
+    "from the evidence and write the single concrete follow-up search query that "
+    "would retrieve the missing fact, with the bridge entity's specific name spelled "
+    'out. Reply with ONLY a JSON object: {"sufficient": true|false, "gap": "<one '
+    'short phrase naming the missing fact, or empty if sufficient>", "next_query": '
+    '"<a single concrete search query containing the specific bridge entity name(s) '
+    'taken from the EVIDENCE; empty if sufficient or no bridge entity is present>"}.'
+)
+
 
 def _parse_sufficiency(content: str) -> dict | None:
-    """Extract ``{"sufficient": bool, "gap": str}`` from a judge reply.
+    """Extract ``{"sufficient": bool, "gap": str, "next_query": str}`` from a
+    judge reply.
 
-    Returns ``None`` when no parseable object is present so the caller fails
-    OPEN (a broken judge must never block the agent's answer).
+    ``next_query`` is optional (empty for the plain gate prompt, which never
+    asks for it). Returns ``None`` when no parseable object is present so the
+    caller fails OPEN (a broken judge must never block the agent's answer).
     """
     if not content:
         return None
@@ -941,23 +966,39 @@ def _parse_sufficiency(content: str) -> dict | None:
         return None
     if not isinstance(obj, dict) or "sufficient" not in obj:
         return None
-    return {"sufficient": bool(obj.get("sufficient")), "gap": str(obj.get("gap") or "")}
+    return {
+        "sufficient": bool(obj.get("sufficient")),
+        "gap": str(obj.get("gap") or ""),
+        "next_query": str(obj.get("next_query") or ""),
+    }
 
 
 async def _judge_sufficiency(
-    client: Any, model: str, query: str, messages: list, candidate: str
+    client: Any,
+    model: str,
+    query: str,
+    messages: list,
+    candidate: str,
+    *,
+    bridge: bool = False,
 ) -> dict | None:
     """One advisory LLM call — is ``candidate`` fully supported by the tool
     evidence gathered so far? Fail-open (returns ``None``) on any error, and
     returns ``None`` when nothing was retrieved (don't gate a no-evidence
-    answer — that would only invite over-abstention)."""
+    answer — that would only invite over-abstention).
+
+    With ``bridge=True`` the judge is also asked to name a concrete follow-up
+    search query grounded in the evidence's bridge entity (L29b multi-hop
+    chaining); the plain prompt never requests it.
+    """
     evidence = "\n---\n".join(
         str(m.get("content", ""))[:600] for m in messages if m.get("role") == "tool"
     )[:4000]
     if not evidence:
         return None
+    system = _SUFFICIENCY_BRIDGE_SYSTEM if bridge else _SUFFICIENCY_SYSTEM
     judge_messages = [
-        {"role": "system", "content": _SUFFICIENCY_SYSTEM},
+        {"role": "system", "content": system},
         {
             "role": "user",
             "content": f"QUESTION:\n{query}\n\nEVIDENCE:\n{evidence}\n\nPROPOSED ANSWER:\n{candidate}",
@@ -984,6 +1025,7 @@ async def run_agent_loop(
     system_prompt: str | None = None,
     extra_context: str | None = None,
     sufficiency_gate: bool = True,
+    gate_bridge: bool = False,
     record_trace: bool = False,
 ) -> AgentSearchResult:
     """Run one multi-turn agent search.
@@ -1019,6 +1061,11 @@ async def run_agent_loop(
     env_sg = _os.environ.get("SYNAPTIC_SUFFICIENCY_GATE")
     if env_sg is not None:
         sufficiency_gate = env_sg == "1"
+    # L29b — bridge-aware gap injection (opt-in, default off pending measurement).
+    # Env forces either way: SYNAPTIC_GATE_BRIDGE=1 enables, =0 disables.
+    env_gb = _os.environ.get("SYNAPTIC_GATE_BRIDGE")
+    if env_gb is not None:
+        gate_bridge = env_gb == "1"
     graph_ctx = await build_graph_context(backend)
     base_prompt = system_prompt or AGENT_SYSTEM
     parts = [base_prompt, graph_ctx]
@@ -1116,21 +1163,32 @@ async def run_agent_loop(
                 and turn < max_turns - 1
                 and gate_retries < _MAX_GATE_RETRIES
             ):
-                verdict = await _judge_sufficiency(client, model, query, messages, candidate)
+                verdict = await _judge_sufficiency(
+                    client, model, query, messages, candidate, bridge=gate_bridge
+                )
                 if verdict is not None and not verdict["sufficient"]:
                     gate_retries += 1
                     gap = verdict["gap"] or "the question is not fully answered by the evidence"
+                    # L29b — when the bridge judge proposes a concrete grounded
+                    # follow-up query, relay it as an explicit chained search
+                    # instead of the generic "use the search tools" nudge. This
+                    # is the multi-hop reach lever: name the bridge entity the
+                    # next hop must search for, taken from the evidence.
+                    next_query = verdict.get("next_query") if gate_bridge else ""
+                    if next_query:
+                        nudge = (
+                            "That answer is not yet fully supported by the retrieved "
+                            f"evidence. Missing: {gap}. Run search with this exact query to "
+                            f'retrieve it: "{next_query}" — then give the final answer.'
+                        )
+                    else:
+                        nudge = (
+                            "That answer is not yet fully supported by the retrieved "
+                            f"evidence. Missing: {gap}. Use the search tools to find the "
+                            "missing evidence, then give the final answer."
+                        )
                     messages.append({"role": "assistant", "content": candidate})
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "That answer is not yet fully supported by the retrieved "
-                                f"evidence. Missing: {gap}. Use the search tools to find the "
-                                "missing evidence, then give the final answer."
-                            ),
-                        }
-                    )
+                    messages.append({"role": "user", "content": nudge})
                     continue
             final_answer = candidate
             break

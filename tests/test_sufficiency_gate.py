@@ -54,12 +54,16 @@ class _FakeClient:
         self._agent = list(agent_msgs)
         self._judge = list(judge_texts)
         self.kinds: list[str] = []
+        # Messages seen on each agent turn — lets tests assert what the gate
+        # injected as the corrective user nudge.
+        self.agent_message_log: list[list] = []
         self.chat = self
         self.completions = self
 
     async def create(self, *, model, messages, tools=None, max_tokens=None):
         if tools is not None:
             self.kinds.append("agent")
+            self.agent_message_log.append([dict(m) for m in messages])
             return _Resp(self._agent.pop(0))
         self.kinds.append("judge")
         return _Resp(_Msg(content=self._judge.pop(0)))
@@ -94,12 +98,25 @@ def test_parse_sufficiency():
     assert _parse_sufficiency('{"sufficient": false, "gap": "the year"}') == {
         "sufficient": False,
         "gap": "the year",
+        "next_query": "",
     }
     # tolerant of surrounding prose
     assert _parse_sufficiency('ok: {"sufficient": true, "gap": ""} done')["sufficient"] is True
     assert _parse_sufficiency("not json at all") is None
     assert _parse_sufficiency('{"foo": 1}') is None  # missing key → None (fail open)
     assert _parse_sufficiency("") is None
+
+
+def test_parse_sufficiency_next_query():
+    # bridge prompt adds next_query — parsed when present, optional otherwise.
+    parsed = _parse_sufficiency(
+        '{"sufficient": false, "gap": "capital of Y", "next_query": "capital of Korea"}'
+    )
+    assert parsed == {
+        "sufficient": False,
+        "gap": "capital of Y",
+        "next_query": "capital of Korea",
+    }
 
 
 # --- gate behaviour ----------------------------------------------------
@@ -170,4 +187,69 @@ async def test_env_var_enables_gate(monkeypatch):
     client = _FakeClient(_search_then("answer"), judge_texts=['{"sufficient": true}'])
     await run_agent_loop(client=client, backend=b, query="q")  # gate not passed as arg
     assert "judge" in client.kinds  # env turned it on
+    await b.close()
+
+
+# --- L29b: bridge-aware gap injection ---------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bridge_relays_next_query_into_nudge():
+    # When gate_bridge is on and the judge proposes a concrete follow-up query,
+    # the corrective nudge must relay that exact query (the chained search).
+    b = await _backend_with_evidence()
+    client = _FakeClient(
+        _search_then("v1", "v2"),
+        judge_texts=[
+            '{"sufficient": false, "gap": "capital of Y", "next_query": "capital of Korea"}',
+            '{"sufficient": true}',
+        ],
+    )
+    res = await run_agent_loop(
+        client=client, backend=b, query="q", sufficiency_gate=True, gate_bridge=True
+    )
+    assert res.final_answer == "v2"
+    # The nudge is injected AFTER turn 1's v1 answer, so it's the last message
+    # the agent sees on turn 2 (index 2: turn0 search, turn1 v1, turn2 v2).
+    nudge = client.agent_message_log[2][-1]
+    assert nudge["role"] == "user"
+    assert '"capital of Korea"' in nudge["content"]
+    await b.close()
+
+
+@pytest.mark.asyncio
+async def test_plain_gate_does_not_relay_next_query():
+    # Without gate_bridge, even a next_query in the verdict is ignored — the
+    # generic nudge is used (plain judge prompt never asks for next_query).
+    b = await _backend_with_evidence()
+    client = _FakeClient(
+        _search_then("v1", "v2"),
+        judge_texts=[
+            '{"sufficient": false, "gap": "capital of Y", "next_query": "capital of Korea"}',
+            '{"sufficient": true}',
+        ],
+    )
+    await run_agent_loop(
+        client=client, backend=b, query="q", sufficiency_gate=True, gate_bridge=False
+    )
+    nudge = client.agent_message_log[2][-1]
+    assert "capital of Korea" not in nudge["content"]
+    assert "use the search tools" in nudge["content"].lower()
+    await b.close()
+
+
+@pytest.mark.asyncio
+async def test_env_var_enables_bridge(monkeypatch):
+    monkeypatch.setenv("SYNAPTIC_GATE_BRIDGE", "1")
+    b = await _backend_with_evidence()
+    client = _FakeClient(
+        _search_then("v1", "v2"),
+        judge_texts=[
+            '{"sufficient": false, "gap": "g", "next_query": "bridged query X"}',
+            '{"sufficient": true}',
+        ],
+    )
+    await run_agent_loop(client=client, backend=b, query="q")  # bridge not passed as arg
+    nudge = client.agent_message_log[2][-1]
+    assert "bridged query X" in nudge["content"]
     await b.close()
