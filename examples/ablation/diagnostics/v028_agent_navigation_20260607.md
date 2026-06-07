@@ -155,39 +155,52 @@ A/B via `gate_ab.py --compare bridge` on **finreg_multihop** (120q, all
 `multi_hop`, strict `relevant.issubset(found)` scoring — both hops required),
 gate ON plain vs gate ON + bridge:
 
-| | id-reach | time |
-|---|---:|---:|
-| gate ON (plain)   | 93/120 (0.775) | 1248s |
-| gate ON + bridge  | **99/120 (0.825)** | 1291s |
-| **Δ** | **+6 (+5.0pp)** | **+3% latency (free)** |
+**TWO runs each (raw bridge, then grounded bridge — see §8 for grounding),
+gate ON plain vs gate ON + bridge:**
 
-The bridge arm reaches both hops on 6 more questions — exactly the reach gain
-§5 predicted the multi-hop problem needed. Latency is flat (the extra chained
-search replaces a wasted retry the plain gate would have spent anyway). The
-plain baseline 93/120 matches §3's graph-ON 94/120 — the gate alone adds little
-on this multihop set; the bridge *injection* is what moves it.
+| bench | run | plain | bridge | Δ |
+|---|---|---:|---:|---:|
+| finreg multihop | run1 (raw)      | 93/120  | 99/120  | +6 |
+| finreg multihop | run2 (grounded) | **101/120** | 101/120 | 0 |
+| KRRA Hard       | run1 (raw)      | 32/39   | 31/39   | −1 |
+| KRRA Hard       | run2 (grounded) | 31/39   | 32/39   | +1 |
 
-**Canary (KRRA Hard, the gate's verified non-pure-multihop bench), gate ON
-plain vs gate ON + bridge:**
+**HONEST CONCLUSION — the bridge effect is inside the noise floor.** The SAME
+plain arm (gate_bridge=False, an UNCHANGED code path between the two runs) moved
+**93→101 on finreg = 8/120 (6.7pp) of pure run-to-run nondeterminism** (vLLM
+sampling at temp>0, concurrency-6 races). Every bridge Δ measured (+6, 0, −1,
++1) sits INSIDE that ±8/120 floor. So:
+- the run1 "+5.0pp" was NOT a real win — the plain baseline merely landed low
+  (93) that run; it was single-RUN noise mistaken for signal (commit 601b46a's
+  claim is **retracted**);
+- grounding (§8) neither helped nor hurt above noise either (finreg 101=101,
+  KRRA 32 vs 31 — both within ±1).
 
-| | id-reach | time |
-|---|---:|---:|
-| gate ON (plain)   | 32/39 (0.821) | 913s |
-| gate ON + bridge  | 31/39 (0.795) | 900s |
-| **Δ** | **−1 (−2.6pp, noise but NOT positive)** | flat |
+**Decision: bridge (grounded) stays OPT-IN, default OFF — but with NO measured
+accuracy claim.** The mechanism is sound and, in grounded form, provably
+harmless (it only relays a next_query whose entity is present in the evidence;
+on a hallucinated bridge it falls back to the plain nudge). There is simply no
+*measured* win above this rig's noise floor. To ever claim an agent-bench delta
+of this size you need repeated trials to estimate variance — a single A/B run
+cannot. (Methodology recorded: `[[project_v028_agent_bench_noise_floor]]`.)
 
-(plain 32/39 reproduces §6's verified gate-ON exactly — the rig is consistent.)
+## 8. Bridge grounding (self-gating, commit pending)
 
-**Decision: bridge stays OPT-IN, default OFF.** +5.0pp on finreg multihop but
-−1 on KRRA Hard: the bridge judge proposes a next_query even on non-multihop
-queries, occasionally sending the agent after the wrong entity. A FIXED default
-cannot serve both a multi-hop corpus and the gate's single-hop home turf — the
-exact L01/L02 lesson (`[[project_v028_retrieval_advancement]]`: "each safe in
-isolation does NOT imply universal default"). Bridge is a multi-hop-corpus
-tuning knob: validated + recommended for multi-hop deployments
-(`SYNAPTIC_GATE_BRIDGE=1`), measure-first elsewhere. Discipline held: measured
-the canary BEFORE flipping, found it doesn't generalise, kept opt-in. The
-+5.0pp multihop win is real and shipped (opt-in, commit 601b46a).
+The hypothesis behind grounding: raw bridge's run1 KRRA −1 came from the judge
+*hallucinating* a bridge entity on non-multihop queries and sending the agent
+after it. Fix (corpus-agnostic, query-time, no index LLM): before relaying the
+judge's `next_query`, require its NOVEL tokens (those not already in the
+question) to appear verbatim in the gathered evidence — the bridge premise is
+"the evidence already names the entity". Ungrounded → fall back to the plain
+nudge. `_bridge_is_grounded()` in `agent_loop.py`; tiny universal stoplist, no
+per-corpus words.
+
+Outcome: grounding is the right *safety* refinement (it can only ever turn a
+relay into the plain nudge, never the reverse), but its accuracy effect — like
+the bridge itself — is inside the noise floor (finreg 101=101, KRRA 31→32). Kept
+because it makes the opt-in knob strictly safer at zero measured cost, NOT
+because it was shown to help. Both the raw and grounded bridge are the same
+opt-in flag (`SYNAPTIC_GATE_BRIDGE=1`); grounded is the only shipped behaviour.
 
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +

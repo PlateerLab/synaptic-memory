@@ -13,7 +13,11 @@ import json
 
 import pytest
 
-from synaptic.agent_loop import _parse_sufficiency, run_agent_loop
+from synaptic.agent_loop import (
+    _bridge_is_grounded,
+    _parse_sufficiency,
+    run_agent_loop,
+)
 from synaptic.backends.sqlite_graph import SqliteGraphBackend
 from synaptic.models import ConsolidationLevel, Node, NodeKind
 
@@ -190,18 +194,32 @@ async def test_env_var_enables_gate(monkeypatch):
     await b.close()
 
 
-# --- L29b: bridge-aware gap injection ---------------------------------
+# --- L29b: bridge-aware gap injection + grounding ---------------------
+
+
+def test_bridge_is_grounded():
+    ev = "Acme Corp was founded in Berlin. Revenue grew 12%."
+    # novel entity present in evidence → grounded
+    assert _bridge_is_grounded("where is the HQ", "headquarters of Acme Corp", ev) is True
+    assert _bridge_is_grounded("founding city", "Berlin city population", ev) is True
+    # hallucinated entity absent from evidence → not grounded
+    assert _bridge_is_grounded("where is the HQ", "capital of Korea", ev) is False
+    # next_query only restates the question (no novel tokens) → not grounded
+    assert _bridge_is_grounded("founding city Berlin", "founding city Berlin", ev) is False
+    # empty inputs fail closed
+    assert _bridge_is_grounded("q", "", ev) is False
+    assert _bridge_is_grounded("q", "Acme", "") is False
 
 
 @pytest.mark.asyncio
-async def test_bridge_relays_next_query_into_nudge():
-    # When gate_bridge is on and the judge proposes a concrete follow-up query,
-    # the corrective nudge must relay that exact query (the chained search).
+async def test_bridge_relays_grounded_next_query_into_nudge():
+    # gate_bridge ON + the proposed bridge entity IS in the evidence ("topic"
+    # appears in the test node) → the nudge relays the exact chained query.
     b = await _backend_with_evidence()
     client = _FakeClient(
         _search_then("v1", "v2"),
         judge_texts=[
-            '{"sufficient": false, "gap": "capital of Y", "next_query": "capital of Korea"}',
+            '{"sufficient": false, "gap": "the topic detail", "next_query": "topic ownership record"}',
             '{"sufficient": true}',
         ],
     )
@@ -213,19 +231,40 @@ async def test_bridge_relays_next_query_into_nudge():
     # the agent sees on turn 2 (index 2: turn0 search, turn1 v1, turn2 v2).
     nudge = client.agent_message_log[2][-1]
     assert nudge["role"] == "user"
-    assert '"capital of Korea"' in nudge["content"]
+    assert '"topic ownership record"' in nudge["content"]
+    await b.close()
+
+
+@pytest.mark.asyncio
+async def test_bridge_rejects_ungrounded_next_query():
+    # gate_bridge ON but the proposed bridge entity is NOT in the evidence
+    # (hallucinated) → grounding rejects it → falls back to the generic nudge.
+    b = await _backend_with_evidence()
+    client = _FakeClient(
+        _search_then("v1", "v2"),
+        judge_texts=[
+            '{"sufficient": false, "gap": "g", "next_query": "capital of Korea"}',
+            '{"sufficient": true}',
+        ],
+    )
+    await run_agent_loop(
+        client=client, backend=b, query="q", sufficiency_gate=True, gate_bridge=True
+    )
+    nudge = client.agent_message_log[2][-1]
+    assert "capital of Korea" not in nudge["content"]
+    assert "use the search tools" in nudge["content"].lower()
     await b.close()
 
 
 @pytest.mark.asyncio
 async def test_plain_gate_does_not_relay_next_query():
-    # Without gate_bridge, even a next_query in the verdict is ignored — the
-    # generic nudge is used (plain judge prompt never asks for next_query).
+    # Without gate_bridge, even a (grounded) next_query in the verdict is ignored
+    # — the generic nudge is used (plain judge prompt never asks for next_query).
     b = await _backend_with_evidence()
     client = _FakeClient(
         _search_then("v1", "v2"),
         judge_texts=[
-            '{"sufficient": false, "gap": "capital of Y", "next_query": "capital of Korea"}',
+            '{"sufficient": false, "gap": "g", "next_query": "topic ownership record"}',
             '{"sufficient": true}',
         ],
     )
@@ -233,7 +272,7 @@ async def test_plain_gate_does_not_relay_next_query():
         client=client, backend=b, query="q", sufficiency_gate=True, gate_bridge=False
     )
     nudge = client.agent_message_log[2][-1]
-    assert "capital of Korea" not in nudge["content"]
+    assert "topic ownership record" not in nudge["content"]
     assert "use the search tools" in nudge["content"].lower()
     await b.close()
 
@@ -245,11 +284,11 @@ async def test_env_var_enables_bridge(monkeypatch):
     client = _FakeClient(
         _search_then("v1", "v2"),
         judge_texts=[
-            '{"sufficient": false, "gap": "g", "next_query": "bridged query X"}',
+            '{"sufficient": false, "gap": "g", "next_query": "topic registry lookup"}',
             '{"sufficient": true}',
         ],
     )
     await run_agent_loop(client=client, backend=b, query="q")  # bridge not passed as arg
     nudge = client.agent_message_log[2][-1]
-    assert "bridged query X" in nudge["content"]
+    assert "topic registry lookup" in nudge["content"]
     await b.close()

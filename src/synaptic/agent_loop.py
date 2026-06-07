@@ -946,6 +946,67 @@ _SUFFICIENCY_BRIDGE_SYSTEM = (
 )
 
 
+# Minimal multilingual stoplist for the bridge-grounding check — tokens too
+# common to be a distinguishing bridge entity. Deliberately tiny and universal
+# (articles / preposition / wh-words / Korean particles+josa), NOT a per-corpus
+# stopword set: grounding must stay corpus-agnostic.
+_BRIDGE_STOP = frozenset(
+    {
+        "the", "of", "a", "an", "in", "on", "at", "for", "to", "and", "or", "is",
+        "was", "are", "were", "be", "by", "with", "as", "that", "this", "what",
+        "which", "who", "whom", "whose", "where", "when", "how", "why", "did",
+        "do", "does", "from", "about", "into", "over", "than", "then",
+        "의", "은", "는", "이", "가", "을", "를", "에", "와", "과", "도", "로",
+        "으로", "에서", "한", "그", "및", "또는", "무엇", "어떤", "누가", "어디",
+    }
+)
+
+
+def _bridge_tokens(text: str) -> set[str]:
+    """Significant tokens of ``text`` for the grounding check.
+
+    Splits on non-alphanumeric (keeps Korean/CJK), lowercases, drops the tiny
+    universal stoplist and length-1 tokens. Corpus-agnostic on purpose.
+    """
+    import re
+
+    out: set[str] = set()
+    for tok in re.split(r"[^0-9A-Za-z가-힣一-鿿]+", text.lower()):
+        if len(tok) >= 2 and tok not in _BRIDGE_STOP:
+            out.add(tok)
+    return out
+
+
+def _bridge_is_grounded(query: str, next_query: str, evidence: str) -> bool:
+    """True when ``next_query`` introduces a bridge entity actually present in
+    the gathered ``evidence``.
+
+    The bridge premise is "the evidence already names the entity the next hop
+    must search for". We enforce it: the *novel* tokens of ``next_query`` (those
+    not already in the original ``query``) are the proposed bridge entity; at
+    least one must appear verbatim in the evidence. A judge that hallucinated a
+    bridge entity (the non-multihop failure mode that regressed KRRA Hard)
+    proposes tokens absent from the evidence → rejected → caller falls back to
+    the generic nudge (plain-gate behaviour). General, query-time, no index LLM.
+    """
+    if not next_query or not evidence:
+        return False
+    novel = _bridge_tokens(next_query) - _bridge_tokens(query)
+    if not novel:
+        return False  # next_query only restates the question — not a real chain
+    ev = evidence.lower()
+    return any(tok in ev for tok in novel)
+
+
+def _gather_tool_evidence(messages: list) -> str:
+    """Concatenate the tool-result messages into the evidence string the
+    sufficiency judge sees (also reused by the bridge-grounding check so both
+    score against identical evidence)."""
+    return "\n---\n".join(
+        str(m.get("content", ""))[:600] for m in messages if m.get("role") == "tool"
+    )[:4000]
+
+
 def _parse_sufficiency(content: str) -> dict | None:
     """Extract ``{"sufficient": bool, "gap": str, "next_query": str}`` from a
     judge reply.
@@ -991,9 +1052,7 @@ async def _judge_sufficiency(
     search query grounded in the evidence's bridge entity (L29b multi-hop
     chaining); the plain prompt never requests it.
     """
-    evidence = "\n---\n".join(
-        str(m.get("content", ""))[:600] for m in messages if m.get("role") == "tool"
-    )[:4000]
+    evidence = _gather_tool_evidence(messages)
     if not evidence:
         return None
     system = _SUFFICIENCY_BRIDGE_SYSTEM if bridge else _SUFFICIENCY_SYSTEM
@@ -1174,7 +1233,15 @@ async def run_agent_loop(
                     # instead of the generic "use the search tools" nudge. This
                     # is the multi-hop reach lever: name the bridge entity the
                     # next hop must search for, taken from the evidence.
+                    # Self-gating: only relay if the proposed bridge entity is
+                    # actually GROUNDED in the evidence — rejects the judge's
+                    # hallucinated bridges on non-multihop queries (the KRRA-Hard
+                    # regression), falling back to the generic nudge there.
                     next_query = verdict.get("next_query") if gate_bridge else ""
+                    if next_query and not _bridge_is_grounded(
+                        query, next_query, _gather_tool_evidence(messages)
+                    ):
+                        next_query = ""
                     if next_query:
                         nudge = (
                             "That answer is not yet fully supported by the retrieved "
