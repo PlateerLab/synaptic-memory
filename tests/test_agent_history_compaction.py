@@ -198,6 +198,38 @@ async def _backend_with_evidence():
     return b
 
 
+class _AlwaysToolThenSynthClient:
+    """Emits a tool call on EVERY agent turn (never a final text), so the loop
+    exhausts max_turns empty; the forced-synthesis call (no tools) returns the
+    final answer."""
+
+    def __init__(self, synth: str):
+        self._synth = synth
+        self.synth_called = False
+        self.chat = self
+        self.completions = self
+
+    async def create(self, *, model, messages, tools=None, max_tokens=None):
+        if tools is not None:
+            return _Resp(_Msg(tool_calls=[_ToolCall("search", {"query": "topic"})]))
+        # no-tools call == the forced final synthesis (judge is off in this test)
+        self.synth_called = True
+        return _Resp(_Msg(content=self._synth))
+
+
+@pytest.mark.asyncio
+async def test_forced_synthesis_when_loop_exhausts_without_answer():
+    b = await _backend_with_evidence()
+    client = _AlwaysToolThenSynthClient("final synthesized answer")
+    res = await run_agent_loop(
+        client=client, backend=b, query="q", sufficiency_gate=False, max_turns=3
+    )
+    # the loop never emitted a final text → forced synthesis filled it in
+    assert client.synth_called
+    assert res.final_answer == "final synthesized answer"
+    await b.close()
+
+
 @pytest.mark.asyncio
 async def test_reactive_retry_recovers_from_overflow(monkeypatch):
     # Budget chosen so the proactive pass leaves the ~4k-char tool result full

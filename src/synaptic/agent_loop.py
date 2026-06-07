@@ -1582,6 +1582,35 @@ async def run_agent_loop(
             final_answer = candidate
             break
 
+    # Forced final synthesis — if the loop exhausted max_turns making tool calls
+    # and never emitted a final text answer (measured: 72% of finreg-multihop
+    # agent runs ended empty — the agent REACHES evidence but never concludes),
+    # make ONE more no-tools call asking it to answer from what it gathered.
+    # Without this the caller gets an empty answer despite full retrieval.
+    if not final_answer.strip():
+        evidence = _gather_tool_evidence(messages)
+        if evidence:
+            _compact_history(messages, history_budget)  # exhausted history can be large
+            try:
+                resp = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        *messages,
+                        {
+                            "role": "user",
+                            "content": (
+                                "You are out of search turns. Using ONLY the evidence you have "
+                                "already gathered above, give your best final answer to the "
+                                "original question now. Be concise and factual."
+                            ),
+                        },
+                    ],
+                    max_tokens=2048,
+                )
+                final_answer = resp.choices[0].message.content or ""
+            except Exception as exc:
+                logger.debug("forced final synthesis failed: %s", exc)
+
     # Best-effort fetch of node objects for the final result
     nodes: list = []
     for did in list(found_ids)[:50]:  # cap to avoid runaway expansion
