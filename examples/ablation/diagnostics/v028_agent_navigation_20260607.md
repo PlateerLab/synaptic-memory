@@ -281,9 +281,26 @@ deterministic-ish and the deltas are LARGE + causal (get_document −46% is the
 direct mechanical consequence of "don't read docs one at a time"), so this is
 real, not noise. solve held at 28/30 — but solve is the noisy axis and this is a
 single run on a SINGLE-HOP bench. The risk: on multi-hop / Conv, "trust snippets,
-read fewer docs" could cut genuinely-needed retrieval. So: **shipped opt-in,
-default OFF, pending a multi-hop canary** (same discipline as the bridge gate §7)
-before any default-on flip.
+read fewer docs" could cut genuinely-needed retrieval.
+
+**Multi-hop canary (finreg_multihop 40q, strict, eff OFF vs ON):**
+
+| metric | OFF | ON | Δ |
+|---|---:|---:|---:|
+| mean tool_calls | 6.38 | 5.40 | −15% |
+| get_document | 89 | 67 | −25% |
+| latency | 62.8s | 57.0s | −9% |
+| solve (guard) | 29/40 | 34/40 | **+5 (NOT cratered)** |
+
+The crater risk did NOT materialise — solve went up if anything (the +5 is
+likely partly noise, NOT claimed as a win). **Decision: DEFAULT-ON** (commit
+36a6c5c → default flip). The justification is the robust COST win (calls/latency
+down on BOTH benches) with solve NON-NEGATIVE on both — NOT an accuracy claim
+(solve is the noisy axis; no +Δ asserted). This is materially stronger evidence
+than the bridge case (there the win metric WAS the noisy solve and it
+oscillated; here the win is cost and it's consistent). Opt out:
+`SYNAPTIC_AGENT_EFFICIENCY=0` / `efficiency_hint=False`. Recorded:
+`[[project_v028_agent_efficiency]]`.
 
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +

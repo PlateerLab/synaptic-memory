@@ -38,14 +38,16 @@ opt-in structure to keep advancing it.
   `examples/ablation/agent_efficiency.py`, a profiler for the DETERMINISTIC cost
   signals (turns / tool_calls / duplicate / empty-result) that the accuracy
   noise floor leaves measurable.
-- Opt-in efficiency directive (`efficiency_hint=True` /
-  `SYNAPTIC_AGENT_EFFICIENCY=1`, default OFF). Appended to the agent system
+- Efficiency directive — **DEFAULT ON** (`efficiency_hint`, env
+  `SYNAPTIC_AGENT_EFFICIENCY=0` to disable). Appended to the agent system
   prompt: trust search/deep_search snippets, batch document reads, stop when
-  answered — targeting the measured waste (agents reading documents one-at-a-time
-  across turns). A/B on 30 finreg queries: **tool_calls −26%, get_document −46%,
-  per-query latency −20% (76.8→61.1s), solve held 28/30**. Default OFF pending a
-  multi-hop canary (on single-hop the "read fewer docs" steer is safe; on
-  multi-hop it could cut needed retrieval). `agent_efficiency.py`.
+  answered — targeting the measured waste (agents reading documents
+  one-at-a-time across turns). A/B (eff OFF vs ON), **two benches**:
+  single-hop finreg 30q — tool_calls −26%, get_document −46%, latency −20%
+  (76.8→61.1s), solve held 28/30; multi-hop finreg 40q — tool_calls −15%,
+  latency −9%, solve 29→34/40 (NOT cratered). Default-on rests on the robust
+  COST win (calls/latency down on both) with solve non-negative on both; no
+  accuracy-improvement claim (solve is the noisy axis). `agent_efficiency.py`.
 
 **Changed**
 - `graph.chat(...)` / `run_agent_loop(...)` now default `sufficiency_gate=True`

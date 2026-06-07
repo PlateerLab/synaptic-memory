@@ -143,30 +143,32 @@ async def _backend_one_node():
 
 
 @pytest.mark.asyncio
-async def test_efficiency_directive_off_by_default():
+async def test_efficiency_directive_on_by_default():
+    # Promoted to default-on (measured -15..-26% tool_calls, solve non-negative).
     b = await _backend_one_node()
     client = _FakeClient([_Msg(content="answer")])
     await run_agent_loop(client=client, backend=b, query="q", sufficiency_gate=False)
-    assert _EFFICIENCY_DIRECTIVE not in client.system_seen
-    await b.close()
-
-
-@pytest.mark.asyncio
-async def test_efficiency_directive_injected_when_enabled():
-    b = await _backend_one_node()
-    client = _FakeClient([_Msg(content="answer")])
-    await run_agent_loop(
-        client=client, backend=b, query="q", sufficiency_gate=False, efficiency_hint=True
-    )
     assert _EFFICIENCY_DIRECTIVE in client.system_seen
     await b.close()
 
 
 @pytest.mark.asyncio
-async def test_efficiency_directive_env_toggle(monkeypatch):
-    monkeypatch.setenv("SYNAPTIC_AGENT_EFFICIENCY", "1")
+async def test_efficiency_directive_can_be_disabled():
+    b = await _backend_one_node()
+    client = _FakeClient([_Msg(content="answer")])
+    await run_agent_loop(
+        client=client, backend=b, query="q", sufficiency_gate=False, efficiency_hint=False
+    )
+    assert _EFFICIENCY_DIRECTIVE not in client.system_seen
+    await b.close()
+
+
+@pytest.mark.asyncio
+async def test_efficiency_directive_env_can_disable(monkeypatch):
+    # Escape hatch: SYNAPTIC_AGENT_EFFICIENCY=0 turns the default-on directive off.
+    monkeypatch.setenv("SYNAPTIC_AGENT_EFFICIENCY", "0")
     b = await _backend_one_node()
     client = _FakeClient([_Msg(content="answer")])
     await run_agent_loop(client=client, backend=b, query="q", sufficiency_gate=False)
-    assert _EFFICIENCY_DIRECTIVE in client.system_seen  # env enabled it without the arg
+    assert _EFFICIENCY_DIRECTIVE not in client.system_seen  # env disabled it
     await b.close()

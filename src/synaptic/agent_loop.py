@@ -1350,7 +1350,7 @@ async def run_agent_loop(
     extra_context: str | None = None,
     sufficiency_gate: bool = True,
     gate_bridge: bool = False,
-    efficiency_hint: bool = False,
+    efficiency_hint: bool = True,
     record_trace: bool = False,
 ) -> AgentSearchResult:
     """Run one multi-turn agent search.
@@ -1391,9 +1391,11 @@ async def run_agent_loop(
     env_gb = _os.environ.get("SYNAPTIC_GATE_BRIDGE")
     if env_gb is not None:
         gate_bridge = env_gb == "1"
-    # Efficiency directive (opt-in, default off pending measurement). Steers the
-    # agent to batch reads and trust snippets → fewer turns. Env forces either
-    # way: SYNAPTIC_AGENT_EFFICIENCY=1 enables, =0 disables.
+    # Efficiency directive — DEFAULT ON (2026-06-07). Steers the agent to batch
+    # reads and trust snippets → fewer turns. Measured: tool_calls -15..-26%,
+    # latency -9..-20%, solve non-negative on single-hop (28/30) AND multi-hop
+    # (29→34/40) benches. Env forces either way: SYNAPTIC_AGENT_EFFICIENCY=0
+    # disables, =1 enables.
     env_eff = _os.environ.get("SYNAPTIC_AGENT_EFFICIENCY")
     if env_eff is not None:
         efficiency_hint = env_eff == "1"

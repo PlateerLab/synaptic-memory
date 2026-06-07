@@ -1647,6 +1647,7 @@ class SynapticGraph:
         prime_with_snapshot: bool = True,
         sufficiency_gate: bool = True,
         gate_bridge: bool = False,
+        efficiency_hint: bool = True,
         record_trace: bool = False,
     ):
         """Multi-turn agent loop — Synaptic's measured-strongest mode.
@@ -1686,6 +1687,11 @@ class SynapticGraph:
                 search query (with the bridge entity from the evidence spelled
                 out) and inject it as an explicit chained search instead of the
                 generic "use the search tools" nudge. Pending agent A/B.
+            efficiency_hint: Default True (env ``SYNAPTIC_AGENT_EFFICIENCY=0``
+                to disable). Appends an efficiency directive to the system
+                prompt — trust search snippets, batch document reads, stop when
+                answered. Measured: tool_calls −15..−26%, per-query latency
+                −9..−20%, solve non-negative on single-hop AND multi-hop benches.
             prime_with_snapshot: If True (default), inject a markdown
                 snapshot of the graph (categories, top phrase hubs,
                 tables) into the system prompt to skip the agent's
@@ -1745,6 +1751,7 @@ class SynapticGraph:
             extra_context=priming_context or None,
             sufficiency_gate=sufficiency_gate,
             gate_bridge=gate_bridge,
+            efficiency_hint=efficiency_hint,
             record_trace=record_trace,
         )
 
