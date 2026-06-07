@@ -41,8 +41,11 @@ opt-in structure to keep advancing it.
   concrete follow-up search query (the bridge entity from the evidence spelled
   out) and the loop relays it as an explicit chained search instead of the
   generic "use the search tools" nudge. The query-time answer to the multi-hop
-  reach problem — no index-time OpenIE triples. Opt-in pending agent A/B on
-  finreg multihop (`examples/ablation/gate_ab.py --compare bridge`).
+  reach problem — no index-time OpenIE triples. **Measured: finreg multihop
+  93→99/120 (+5.0pp, latency flat), but KRRA Hard 32→31/39 (−1) — the bridge
+  judge can chase a wrong entity on non-multihop queries.** A fixed default
+  can't serve both, so it stays opt-in (a multi-hop-corpus knob), not default.
+  `examples/ablation/gate_ab.py --compare bridge`.
 
 ### v0.28-dev — legacy-engine cleanup, rerank deadzone knob, CI bench guard
 

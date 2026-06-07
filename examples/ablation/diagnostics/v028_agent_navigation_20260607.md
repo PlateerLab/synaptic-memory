@@ -167,12 +167,27 @@ search replaces a wasted retry the plain gate would have spent anyway). The
 plain baseline 93/120 matches §3's graph-ON 94/120 — the gate alone adds little
 on this multihop set; the bridge *injection* is what moves it.
 
-**Decision: opt-in ship justified (tested + measured). Default-on pending a
-canary** — bridge uses a different judge prompt that proposes a next_query even
-on non-multihop queries, which could send the agent chasing a wrong entity. So
-before any default flip, measure bridge on KRRA Hard (the gate's verified
-single-hop-ish bench) to confirm no regression on the gate's home turf. (Same
-discipline the gate itself needed — §6.)
+**Canary (KRRA Hard, the gate's verified non-pure-multihop bench), gate ON
+plain vs gate ON + bridge:**
+
+| | id-reach | time |
+|---|---:|---:|
+| gate ON (plain)   | 32/39 (0.821) | 913s |
+| gate ON + bridge  | 31/39 (0.795) | 900s |
+| **Δ** | **−1 (−2.6pp, noise but NOT positive)** | flat |
+
+(plain 32/39 reproduces §6's verified gate-ON exactly — the rig is consistent.)
+
+**Decision: bridge stays OPT-IN, default OFF.** +5.0pp on finreg multihop but
+−1 on KRRA Hard: the bridge judge proposes a next_query even on non-multihop
+queries, occasionally sending the agent after the wrong entity. A FIXED default
+cannot serve both a multi-hop corpus and the gate's single-hop home turf — the
+exact L01/L02 lesson (`[[project_v028_retrieval_advancement]]`: "each safe in
+isolation does NOT imply universal default"). Bridge is a multi-hop-corpus
+tuning knob: validated + recommended for multi-hop deployments
+(`SYNAPTIC_GATE_BRIDGE=1`), measure-first elsewhere. Discipline held: measured
+the canary BEFORE flipping, found it doesn't generalise, kept opt-in. The
++5.0pp multihop win is real and shipped (opt-in, commit 601b46a).
 
 ## Status
 - Shipped (commit 80aba7c): nav_metrics + navigability scan +
