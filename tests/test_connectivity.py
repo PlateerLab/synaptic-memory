@@ -140,6 +140,21 @@ async def test_skips_node_with_no_signal_and_idempotent():
 
 
 @pytest.mark.asyncio
+async def test_dry_run_diagnoses_without_mutating():
+    b = await _fragmented_backend()
+    stats = await bridge_components(b, dry_run=True)
+    # reports the fragmentation...
+    assert stats.components_before == 3
+    assert stats.components_after == 3  # unchanged — diagnosis only
+    assert stats.bridges_added == 0
+    # ...and wrote no bridge edges
+    edges = []
+    for nid in ("a1", "a2", "b1", "b2", "c1", "c2"):
+        edges += await b.get_edges(nid, direction="outgoing")
+    assert not any(e.id.startswith("bridge_") for e in edges)
+
+
+@pytest.mark.asyncio
 async def test_empty_graph_is_safe():
     b = MemoryBackend()
     await b.connect()

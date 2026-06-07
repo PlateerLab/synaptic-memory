@@ -160,6 +160,7 @@ async def bridge_components(
     node_limit: int = 1_000_000,
     df_max: int = 2000,
     max_tokens_per_node: int = 100,
+    dry_run: bool = False,
 ) -> BridgeStats:
     """Connect a fragmented graph into a navigable structure (LLM-free).
 
@@ -176,6 +177,11 @@ async def bridge_components(
             (guarantees connectivity where any cross-component neighbour exists).
         max_bridges: Optional cap on edges added (safety valve on huge graphs).
         node_limit: Max nodes to load.
+        dry_run: Diagnose only — compute the current component / isolated
+            counts and return WITHOUT generating candidates or writing edges
+            (``components_after == components_before``). Powers
+            ``graph.navigability()``: surface fragmentation before deciding to
+            bridge.
 
     Returns:
         :class:`BridgeStats` — components / isolated before-and-after + bridges.
@@ -208,6 +214,13 @@ async def bridge_components(
 
     if not ids:
         stats.components_after, stats.isolated_after = 0, 0
+        return stats
+
+    if dry_run:  # diagnose only — no candidates, no writes
+        stats.components_after, stats.isolated_after = (
+            stats.components_before,
+            stats.isolated_before,
+        )
         return stats
 
     # mainland = largest component; islands are everything else.

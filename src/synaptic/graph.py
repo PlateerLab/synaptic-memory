@@ -394,6 +394,7 @@ class SynapticGraph:
         rerank_backend: str = "vllm",
         rerank_model: str = "BAAI/bge-reranker-v2-m3",
         calibrate: bool = False,
+        connect: bool = False,
     ) -> SynapticGraph:
         """Run the optional embedding pass and assemble the graph.
 
@@ -432,6 +433,11 @@ class SynapticGraph:
                 await graph.calibrate()
             except Exception as exc:  # pragma: no cover - non-fatal
                 logger.warning("auto-calibration failed: %s", exc)
+        if connect:
+            try:
+                await graph.connect_components()
+            except Exception as exc:  # pragma: no cover - non-fatal
+                logger.warning("connect_components failed: %s", exc)
         return graph
 
     async def calibrate(self, *, sample_size: int = 20) -> object | None:
@@ -459,6 +465,23 @@ class SynapticGraph:
             result.rerank_blend,
         )
         return result
+
+    async def navigability(self) -> object:
+        """Diagnose how navigable the graph is — components + isolated %.
+
+        A read-only structure-health check: how fragmented is the corpus? A
+        well-structured graph is one (or few) component(s) with ~0 % isolated;
+        real corpora often aren't (e.g. KRRA 28.9 % isolated). When this reports
+        fragmentation, :meth:`connect_components` fixes it. No writes.
+
+        Returns a :class:`BridgeStats` with ``components_before`` /
+        ``isolated_before`` populated (``*_after`` mirror them — nothing changed).
+        """
+        from synaptic.extensions.connectivity import bridge_components
+
+        stats = await bridge_components(self._backend, dry_run=True)
+        logger.info("navigability: %s", stats.summary())
+        return stats
 
     async def connect_components(
         self,
@@ -500,6 +523,7 @@ class SynapticGraph:
         rerank_url: str | None = None,
         rerank_backend: str = "vllm",
         rerank_model: str = "BAAI/bge-reranker-v2-m3",
+        connect: bool = False,
     ) -> SynapticGraph:
         """ONE-LINE graph construction from any data source.
 
@@ -560,6 +584,12 @@ class SynapticGraph:
                 (EvidenceSearch step 4b). ``rerank_backend`` selects
                 the wire format — ``"vllm"`` (default; ``vllm serve
                 <model> --task score``), ``"ollama"``, or ``"tei"``.
+            connect: Opt-in (default False). After ingest, run
+                :meth:`connect_components` to bridge fragmented islands into one
+                navigable graph (real corpora leave 29 %+ of nodes unreachable).
+                Off by default because its effect on retrieval is not yet
+                measured; call :meth:`navigability` to see your fragmentation
+                first. LLM-free, deterministic.
 
         Example with a vLLM-served reranker::
 
@@ -733,6 +763,7 @@ class SynapticGraph:
             rerank_url=rerank_url,
             rerank_backend=rerank_backend,
             rerank_model=rerank_model,
+            connect=connect,
         )
 
     @classmethod

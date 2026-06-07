@@ -34,6 +34,12 @@ opt-in structure to keep advancing it.
   noise edges, so by design they stay isolated (the principled fix for those is
   embeddings, deferred). Opt-in (not auto-run); a structural guarantee — its
   effect on agent answer quality is a separate (noisy) measurement, not claimed.
+- `graph.navigability()` — read-only structure-health check (components +
+  isolated %), so a user can SEE fragmentation before deciding to bridge
+  (`bridge_components(dry_run=True)` under the hood — no writes).
+  `SynapticGraph.from_data(..., connect=True)` runs `connect_components()` as an
+  opt-in finalize step, so a navigable graph is one call. Default off (retrieval
+  effect unmeasured); `navigability()` first, then opt in.
 
 **Fixed**
 - `search` no longer returns a blank when the seen-filter empties an otherwise
