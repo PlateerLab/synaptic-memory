@@ -377,6 +377,47 @@ class TestGetDocumentTool:
         assert result.ok is False
         assert "document_not_found" in (result.error or "")
 
+    async def test_get_document_unresolved_id_falls_back_to_search(self):
+        # An unresolvable id WITH a query must not dead-end the turn — fall back
+        # to a content search so the agent still gets usable evidence.
+        backend = await _fresh_backend()
+        session = SearchSession()
+        result = await get_document_tool(
+            backend, session, "doc_from_other_namespace_xyz", query="규정 준수"
+        )
+        assert result.ok is True
+        assert result.data.get("fallback") == "doc_id_unresolved_search_fallback"
+        assert len(result.data["chunks"]) > 0
+        assert any("규정" in (c.get("content") or "") for c in result.data["chunks"])
+
+    async def test_get_document_unresolved_id_no_query_still_errors(self):
+        # Without a query there's nothing to fall back to → keep the honest error.
+        backend = await _fresh_backend()
+        session = SearchSession()
+        result = await get_document_tool(backend, session, "totally_unknown_id")
+        assert result.ok is False
+        assert "document_not_found" in (result.error or "")
+
+    async def test_get_document_content_node_without_chunks(self):
+        # A content-bearing node with no CONTAINS chunks returns its own text,
+        # not an empty result.
+        backend = await _fresh_backend()
+        await backend.save_node(
+            Node(
+                id="lonely_doc",
+                kind=NodeKind.ENTITY,
+                title="고립 문서",
+                content="이 문서는 청크가 없지만 본문이 있다",
+                tags=["document"],
+                level=ConsolidationLevel.L0_RAW,
+            )
+        )
+        session = SearchSession()
+        result = await get_document_tool(backend, session, "lonely_doc")
+        assert result.ok is True
+        assert result.data["chunk_count"] == 1
+        assert "본문이 있다" in result.data["chunks"][0]["content"]
+
     async def test_get_document_marks_chunks_seen(self):
         backend = await _fresh_backend()
         session = SearchSession()

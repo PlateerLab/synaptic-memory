@@ -610,12 +610,53 @@ async def get_document_tool(
         doc_node = await _resolve_by_doc_id_property(backend, doc_id)
 
     if doc_node is None:
+        # Don't dead-end the agent's turn on an unresolvable id (the id it
+        # carried over from a search result may be from a different namespace).
+        # If a query is present, return the best lexical matches for it so the
+        # turn still yields usable evidence instead of an empty error.
+        if query and query.strip():
+            try:
+                matches = await backend.search_fts(query, limit=max_full_chunks)
+            except Exception:
+                matches = []
+            if matches:
+                session.mark_seen([m.id for m in matches])
+                return ToolResult(
+                    tool="get_document",
+                    ok=True,
+                    data={
+                        "document": {
+                            "id": doc_id,
+                            "title": f"(no exact document for {doc_id} — best matches for query)",
+                        },
+                        "chunk_count": len(matches),
+                        "full_chunks": len(matches),
+                        "chunks": [
+                            {
+                                "id": m.id,
+                                "index": (m.properties or {}).get("chunk_index", ""),
+                                "content": m.content,
+                                "relevant": True,
+                            }
+                            for m in matches
+                        ],
+                        "fallback": "doc_id_unresolved_search_fallback",
+                    },
+                    hints=[
+                        f"No document resolved for '{doc_id}'; showing best lexical matches "
+                        "for the query instead. Use these chunk ids, or refine the query."
+                    ],
+                    session=session.summary(),
+                )
         return ToolResult(
             tool="get_document",
             ok=False,
             data={},
             session=session.summary(),
             error=f"document_not_found: {doc_id}",
+            hints=[
+                "Pass a `query` to get_document to fall back to a content search when the id is unknown."
+            ],
         )
 
     # Walk CONTAINS edges to assemble chunks in index order.
@@ -625,9 +666,11 @@ async def get_document_tool(
 
     chunks = await backend.get_nodes_batch(chunk_ids)
 
-    # Chunk-only corpus with no parent document — return the node itself
-    # so the agent still gets content instead of an empty result.
-    if not chunks and doc_node.kind == NodeKind.CHUNK:
+    # No CONTAINS chunks — return the node's own content so the agent still
+    # gets the text instead of an empty result. Covers chunk-only corpora AND
+    # document/entity nodes that carry their text inline (a common 0-result
+    # dead-end that wasted the agent's turn).
+    if not chunks and (doc_node.content or "").strip():
         chunks = [doc_node]
 
     chunks.sort(key=lambda c: int((c.properties or {}).get("chunk_index", "0") or "0"))

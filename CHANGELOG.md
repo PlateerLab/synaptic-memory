@@ -14,6 +14,15 @@ This pass ships a proven agent win as the default and adds the measurement +
 opt-in structure to keep advancing it.
 
 **Fixed**
+- `get_document` no longer dead-ends the agent's turn. Two empty-result paths
+  that wasted a full turn (~8-14% of profiled calls were empty): (1) an
+  unresolvable `doc_id` — the id the agent carried over from a search result may
+  be from a different namespace — now, when a `query` is given, falls back to a
+  lexical content search so the turn still yields usable chunks (with a
+  `fallback` marker + hint); (2) a content-bearing document/entity node with no
+  CONTAINS chunks now returns its own inline text instead of an empty list
+  (previously only chunk-kind nodes did). Corpus-agnostic; the honest error is
+  still returned when there's no query to fall back to.
 - Agent context-overflow on long sessions. The agent loop accumulated an
   unbounded message history; enumeration / deep multi-hop queries (max_turns
   bumped to 15) hit the model's 32k window at turn 12-13, where the LLM call
