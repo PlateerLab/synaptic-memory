@@ -405,6 +405,9 @@ class TestGetDocumentTool:
         assert result.data.get("fallback") == "doc_id_unresolved_search_fallback"
         assert len(result.data["chunks"]) > 0
         assert any("규정" in (c.get("content") or "") for c in result.data["chunks"])
+        # to_dict() is the agent-dispatch path — hints must be Hint objects, not
+        # strings (a str hint crashes to_dict on h.action).
+        assert result.to_dict()["hints"][0]["action"] == "get_document"
 
     async def test_get_document_unresolved_id_no_query_still_errors(self):
         # Without a query there's nothing to fall back to → keep the honest error.
@@ -413,6 +416,7 @@ class TestGetDocumentTool:
         result = await get_document_tool(backend, session, "totally_unknown_id")
         assert result.ok is False
         assert "document_not_found" in (result.error or "")
+        assert result.to_dict()["hints"][0]["action"] == "get_document"  # Hint, not str
 
     async def test_get_document_content_node_without_chunks(self):
         # A content-bearing node with no CONTAINS chunks returns its own text,

@@ -657,8 +657,15 @@ async def get_document_tool(
                         "fallback": "doc_id_unresolved_search_fallback",
                     },
                     hints=[
-                        f"No document resolved for '{doc_id}'; showing best lexical matches "
-                        "for the query instead. Use these chunk ids, or refine the query."
+                        Hint(
+                            action="get_document",
+                            args={"doc_id": doc_id, "query": query},
+                            reason=(
+                                f"No document resolved for '{doc_id}'; showing best lexical "
+                                "matches for the query instead. Use these chunk ids, or refine "
+                                "the query."
+                            ),
+                        )
                     ],
                     session=session.summary(),
                 )
@@ -669,7 +676,11 @@ async def get_document_tool(
             session=session.summary(),
             error=f"document_not_found: {doc_id}",
             hints=[
-                "Pass a `query` to get_document to fall back to a content search when the id is unknown."
+                Hint(
+                    action="get_document",
+                    args={"doc_id": doc_id, "query": "<your question>"},
+                    reason="Pass a `query` to fall back to a content search when the id is unknown.",
+                )
             ],
         )
 
