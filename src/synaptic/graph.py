@@ -460,6 +460,33 @@ class SynapticGraph:
         )
         return result
 
+    async def connect_components(
+        self,
+        *,
+        k: int = 10,
+        min_similarity: float = 0.0,
+        max_bridges: int | None = None,
+    ) -> object:
+        """Make a fragmented corpus navigable — add a minimal semantic backbone.
+
+        Real corpora leave nodes with no containment / FK / co-occurrence edge
+        as unreachable islands (an agent can't traverse an edge that doesn't
+        exist). This bridges every embedded node into one component using a
+        Max-Spanning-Forest over HNSW-nearest cross-component pairs — fewest,
+        highest-quality edges, no LLM, no per-domain logic. Only islands are
+        queried, so the dense core is left untouched. Opt-in (not auto-run):
+        call after ingest. Idempotent.
+
+        Returns a :class:`BridgeStats` (components / isolated before-and-after).
+        """
+        from synaptic.extensions.connectivity import bridge_components
+
+        stats = await bridge_components(
+            self._backend, k=k, min_similarity=min_similarity, max_bridges=max_bridges
+        )
+        logger.info("connect_components: %s", stats.summary())
+        return stats
+
     @classmethod
     async def from_data(
         cls,

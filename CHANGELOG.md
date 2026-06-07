@@ -13,6 +13,23 @@ the lever that beats RAG is the agent loop, not better single-shot retrieval.
 This pass ships a proven agent win as the default and adds the measurement +
 opt-in structure to keep advancing it.
 
+**Added (knowledge structure — navigability)**
+- `graph.connect_components()` / `extensions.connectivity.bridge_components` — a
+  connectivity backbone that makes ANY corpus navigable, LLM-free and
+  corpus-agnostic. Real corpora fragment (the relation-free graph leaves nodes
+  with no containment/FK/co-occurrence edge as unreachable islands — measured
+  KRRA 28.9 % isolated, x2bee 1 099 components), and an agent can't traverse an
+  edge that doesn't exist. The algorithm: union-find components → candidate
+  bridges (embedded nodes by HNSW vector cosine; non-embedded entity/phrase hubs
+  by an in-memory DF-filtered token-overlap index — the MENTIONS-style link that
+  never formed) → **Max-Spanning-Forest (Kruskal)** accepting the
+  highest-quality bridge that merges two components. Optimal (fewest edges, best
+  quality), not threshold-tuned; only islands are queried so the dense core is
+  untouched. Validated on real KRRA: **isolated 28.9 %→1.4 %, components
+  26 076→1 293, +24 783 bridges, 30 s, deterministic.** Opt-in (not auto-run);
+  this is a structural guarantee — its effect on agent answer quality is a
+  separate (noisy) measurement, not claimed here.
+
 **Fixed**
 - `search` no longer returns a blank when the seen-filter empties an otherwise
   non-empty result set. The agent re-searching a topic it already explored hit
