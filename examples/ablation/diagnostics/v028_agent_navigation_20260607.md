@@ -142,6 +142,15 @@ Reproduces the recorded win (was +5.1pp on KRRA Hard) on current code → defaul
 justified. Minor: 2 enumeration queries hit the model's 32k context at turn 10
 (both arms; fail-open) — a separate context-budget limit, not the gate.
 
+**Caveat added after §7's noise-floor finding:** this single-run KRRA Hard
++7.7pp (29→32/39) carries the SAME single-run weakness — on KRRA the gate-ON
+arm later read 31–32 across runs, and gate-OFF could vary too, so +3/39 here is
+only borderline above noise. The gate's default-on does NOT rest on THIS run:
+it rests on the original multi-bench aggregate (+3.2pp over 93 queries across
+benches, 0 regressions — much harder to dismiss as noise than one 39q run) plus
+the gate being fail-open/harmless. Treat §6 as "consistent with the win, not
+independent proof of it." See `[[project_v028_agent_bench_noise_floor]]`.
+
 ## 7. Bridge-aware gate (L29b) — multi-hop chaining (commit pending)
 
 The §5 learning was: the live lever is REACH, not selection. The query-time
