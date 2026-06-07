@@ -25,10 +25,15 @@ opt-in structure to keep advancing it.
   never formed) → **Max-Spanning-Forest (Kruskal)** accepting the
   highest-quality bridge that merges two components. Optimal (fewest edges, best
   quality), not threshold-tuned; only islands are queried so the dense core is
-  untouched. Validated on real KRRA: **isolated 28.9 %→1.4 %, components
-  26 076→1 293, +24 783 bridges, 30 s, deterministic.** Opt-in (not auto-run);
-  this is a structural guarantee — its effect on agent answer quality is a
-  separate (noisy) measurement, not claimed here.
+  untouched. Validated on TWO real corpora (deterministic): **KRRA isolated
+  28.9 %→1.4 % (26 076→1 293 components, 30 s); x2bee — the worst case, 1 099
+  shattered components, all-entity, zero embeddings — →1 single component,
+  0 isolated, 12 s.** The KRRA 1.4 % residual is genuinely-unique entity titles
+  whose tokens overlap nothing cross-component (DF is not the cause — a unique
+  token has DF 1; no other node holds it); forcing them shut would only add
+  noise edges, so by design they stay isolated (the principled fix for those is
+  embeddings, deferred). Opt-in (not auto-run); a structural guarantee — its
+  effect on agent answer quality is a separate (noisy) measurement, not claimed.
 
 **Fixed**
 - `search` no longer returns a blank when the seen-filter empties an otherwise
