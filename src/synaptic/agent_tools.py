@@ -273,8 +273,18 @@ async def search_tool(
     if kind is not None:
         kind_str = str(kind).lower() if not isinstance(kind, NodeKind) else str(kind)
         evidence = [e for e in evidence if str(e.node.kind).lower() == kind_str]
+
+    # The seen-filter lets the agent paginate, but when it empties an otherwise
+    # non-empty result set the agent is re-searching a topic it already explored
+    # — returning a blank dead-ends that turn. Hand the (already-seen) hits back
+    # instead, flagged, so the agent can still read them to answer.
+    seen_fallback = False
     if exclude_seen:
-        evidence = [e for e in evidence if not session.has_seen(e.node.id)]
+        unseen = [e for e in evidence if not session.has_seen(e.node.id)]
+        if not unseen and evidence:
+            seen_fallback = True
+        else:
+            evidence = unseen
 
     evidence = evidence[:limit]
     session.mark_seen(e.node.id for e in evidence)
@@ -345,6 +355,10 @@ async def search_tool(
                 "entities": list(result.anchors.entities),
                 "keywords": list(result.anchors.keywords),
             },
+            # Signals these hits were already surfaced in earlier turns (the
+            # seen-filter would have hidden them) — returned anyway so the turn
+            # isn't wasted; the agent likely already has what it needs to answer.
+            **({"all_previously_seen": True} if seen_fallback else {}),
         },
         hints=hints,
         session=session.summary(),

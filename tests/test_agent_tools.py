@@ -228,9 +228,25 @@ class TestSearchTool:
         first = await search_tool(backend, session, "규정")
         first_ids = {e["id"] for e in first.data["evidence"]}
         second = await search_tool(backend, session, "규정", exclude_seen=True)
-        second_ids = {e["id"] for e in second.data["evidence"]}
-        # No overlap between first and second pass
-        assert first_ids.isdisjoint(second_ids)
+        if second.data.get("all_previously_seen"):
+            # Tiny corpus exhausted in one page — the seen-fallback returns the
+            # known hits rather than a blank dead-end (better for the agent).
+            assert len(second.data["evidence"]) > 0
+        else:
+            # Pagination: genuinely-new results must not overlap the first page.
+            second_ids = {e["id"] for e in second.data["evidence"]}
+            assert first_ids.isdisjoint(second_ids)
+
+    async def test_search_seen_fallback_returns_hits_not_blank(self):
+        # When every hit was already seen, the seen-filter would empty the
+        # result and dead-end the turn. Instead return the hits anyway, flagged.
+        backend = await _fresh_backend()
+        session = SearchSession()
+        all_nodes = await backend.list_nodes(kind=None, limit=1000)
+        session.mark_seen([n.id for n in all_nodes])  # everything is now "seen"
+        result = await search_tool(backend, session, "규정 준수", exclude_seen=True)
+        assert result.data.get("all_previously_seen") is True
+        assert len(result.data["evidence"]) > 0  # not a blank dead-end
 
     async def test_search_budget_enforcement(self):
         backend = await _fresh_backend()

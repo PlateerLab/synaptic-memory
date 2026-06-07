@@ -14,6 +14,12 @@ This pass ships a proven agent win as the default and adds the measurement +
 opt-in structure to keep advancing it.
 
 **Fixed**
+- `search` no longer returns a blank when the seen-filter empties an otherwise
+  non-empty result set. The agent re-searching a topic it already explored hit
+  `exclude_seen=True` → every hit filtered → empty → wasted turn. Now the
+  already-seen hits are returned anyway, flagged `all_previously_seen: true`, so
+  the agent can read them to answer instead of dead-ending. Genuine pagination
+  (new unseen results exist) is unchanged.
 - `get_document` no longer dead-ends the agent's turn. Two empty-result paths
   that wasted a full turn (~8-14% of profiled calls were empty): (1) an
   unresolvable `doc_id` — the id the agent carried over from a search result may
