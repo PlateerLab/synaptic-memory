@@ -419,6 +419,12 @@ class AgentSearchResult:
         turns_used: How many LLM turns were consumed (≤ ``max_turns``).
         tool_calls_made: Total number of tool invocations across all turns.
         elapsed_ms: Wall-clock time of the whole loop.
+        prompt_tokens: Total prompt tokens across ALL LLM calls this loop
+            made (main turns, compaction retries, sufficiency judge,
+            forced final synthesis). 0 when the client's responses carry
+            no ``usage`` (fail-open). This is the cost axis of
+            cost-at-quality — wall-clock alone hides token spend.
+        completion_tokens: Same accumulation for completion tokens.
     """
 
     query: str
@@ -428,6 +434,8 @@ class AgentSearchResult:
     turns_used: int = 0
     tool_calls_made: int = 0
     elapsed_ms: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
     # Per-turn navigation trace (populated only when ``record_trace=True``).
     # Each entry: {"turn", "tool_calls" (cumulative), "found_ids" (snapshot)}.
     # Feeds nav_metrics.navigation_efficiency — hops/calls-to-evidence.
@@ -1299,6 +1307,19 @@ def _parse_sufficiency(content: str) -> dict | None:
     }
 
 
+def _add_usage(acc: dict, resp: Any) -> None:
+    """Fold an OpenAI-style ``resp.usage`` into the running token counters.
+
+    Fail-open: responses without a usage object (test stubs, gateways that
+    strip it) contribute 0 — token accounting must never break the loop.
+    """
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return
+    acc["prompt"] += int(getattr(u, "prompt_tokens", 0) or 0)
+    acc["completion"] += int(getattr(u, "completion_tokens", 0) or 0)
+
+
 async def _judge_sufficiency(
     client: Any,
     model: str,
@@ -1307,6 +1328,7 @@ async def _judge_sufficiency(
     candidate: str,
     *,
     bridge: bool = False,
+    usage: dict | None = None,
 ) -> dict | None:
     """One advisory LLM call — is ``candidate`` fully supported by the tool
     evidence gathered so far? Fail-open (returns ``None``) on any error, and
@@ -1332,6 +1354,8 @@ async def _judge_sufficiency(
         resp = await client.chat.completions.create(
             model=model, messages=judge_messages, max_tokens=200
         )
+        if usage is not None:
+            _add_usage(usage, resp)
         return _parse_sufficiency(resp.choices[0].message.content or "")
     except Exception as exc:
         logger.debug("sufficiency judge failed: %s", exc)
@@ -1446,6 +1470,7 @@ async def run_agent_loop(
     turns_used = 0
     tool_calls = 0
     gate_retries = 0
+    usage_acc = {"prompt": 0, "completion": 0}
     trace_log: list[dict] | None = [] if record_trace else None
     tool_log: list[dict] = []
     seen_call_keys: set[str] = set()
@@ -1484,6 +1509,7 @@ async def run_agent_loop(
                 logger.warning("agent LLM call failed at turn %d: %s", turn, exc)
                 break
 
+        _add_usage(usage_acc, resp)
         msg = resp.choices[0].message
         if msg.tool_calls:
             messages.append(msg.model_dump())
@@ -1545,7 +1571,7 @@ async def run_agent_loop(
                 and gate_retries < _MAX_GATE_RETRIES
             ):
                 verdict = await _judge_sufficiency(
-                    client, model, query, messages, candidate, bridge=gate_bridge
+                    client, model, query, messages, candidate, bridge=gate_bridge, usage=usage_acc
                 )
                 if verdict is not None and not verdict["sufficient"]:
                     gate_retries += 1
@@ -1607,6 +1633,7 @@ async def run_agent_loop(
                     ],
                     max_tokens=2048,
                 )
+                _add_usage(usage_acc, resp)
                 final_answer = resp.choices[0].message.content or ""
             except Exception as exc:
                 logger.debug("forced final synthesis failed: %s", exc)
@@ -1629,6 +1656,8 @@ async def run_agent_loop(
         turns_used=turns_used,
         tool_calls_made=tool_calls,
         elapsed_ms=(time.time() - t0) * 1000.0,
+        prompt_tokens=usage_acc["prompt"],
+        completion_tokens=usage_acc["completion"],
         trace=trace_log or [],
         tool_log=tool_log,
     )
