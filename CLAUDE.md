@@ -145,7 +145,7 @@ uv run python eval/run_all.py --compare eval/results/qa_latest.json
 | Allganize RAG-ko | KO | 200q | 0.947 | **0.983** | +0.036 | |
 | Allganize RAG-Eval | KO | 300q | 0.911 | **0.955** | +0.044 | |
 | **PublicHealthQA** | KO | 77q | 0.547 | **0.748** | **+0.201** | paraphrase-heavy 의료 |
-| **AutoRAG** | KO | 720q | **0.906** | 0.806 | **−0.100** | ⚠️ retrieval-style regression |
+| **AutoRAG** | KO | 114q (720 docs) | **0.906** | 0.806 | **−0.100** | ⚠️ retrieval-style regression |
 | **평균** | | | 0.615 | **0.647** | **+0.032 (+5.2%)** | |
 
 **중요 관찰** (v0.17.1)

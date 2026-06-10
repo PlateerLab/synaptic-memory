@@ -58,14 +58,14 @@
 태스크 (순서 고정):
 - **T1 — 계측 먼저.** `src/synaptic/agent_loop.py` — `AgentSearchResult`(L407)에 `prompt_tokens: int = 0`, `completion_tokens: int = 0` 추가. `run_agent_loop`(L1341) 내 모든 `client.chat.completions.create` 응답에서 `resp.usage` 누적 (`_judge_sufficiency` L1302의 judge 호출 포함, usage 없으면 0 fail-open). 같은 커밋에서 `examples/ablation/rag_vs_agent_answer.py`에 RAG arm 합성 호출 usage 집계 + `--out-jsonl` per-query 결과(qid, arm, run, hit, judge, tokens) 출력 추가.
 - **3런 재실행 (T1 머지 후, H100 예산 태스크).** `finreg_multihop.json` 120q + `finreg.json` 120q × {naive-RAG, agent} × 3런을 `--out-jsonl`로 재실행해 per-query JSONL 생성. 예산: agent arm 실측 ~1650s/120q-run 기준, 240q×3런 + judge ≈ **반나절 H100 점유 (~4–5h)** — 1주차 일정에 명시 반영. judge는 temp=0 + 응답 캐싱으로 실행. agent_solve confirmed 라벨(3런 중 ≥2)은 이 JSONL에서만 산출.
-- `eval/routing_gt.py` 신설 — `build_routing_gt(out: Path) -> None`. 입력: (a) finreg 240q — **위 재실행 JSONL** (confirmed 축), (b) gt_datasets 200q의 `type` 라벨 — **타입은 데이터에서 enumerate** (하드코딩 금지; 실측 파일 전체 25종, assort_hard 단독 18종), agent 축은 v0.17.1 단일 런 로그(`eval/baselines/agent_20260419_020747.log`) 기반 **provisional 플래그**, (c) `krra_graph.json` 15q (`topk_inadequacy`/`current_answerable` — 라우팅 GT로 이미 설계된 셋), (d) AutoRAG 720q — agent 측정 없음, **hit-only 플래그** (cheap-sufficient 음성 대량 소스). 라벨: `single_shot_hit@5`(결정론) × `agent_solve` 2×2 → {cheap_sufficient, agent_required, unsolved, both} + 계층 플래그 {confirmed(3런), provisional(단일런), hit-only, unmeasured}.
+- `eval/routing_gt.py` 신설 — `build_routing_gt(out: Path) -> None`. 입력: (a) finreg 240q — **위 재실행 JSONL** (confirmed 축), (b) gt_datasets 200q의 `type` 라벨 — **타입은 데이터에서 enumerate** (하드코딩 금지; 실측 파일 전체 25종, assort_hard 단독 18종), agent 축은 v0.17.1 단일 런 로그(`eval/baselines/agent_20260419_020747.log`) 기반 **provisional 플래그**, (c) `krra_graph.json` 15q (`topk_inadequacy`/`current_answerable` — 라우팅 GT로 이미 설계된 셋), (d) AutoRAG 114q — agent 측정 없음, **hit-only 플래그** (cheap-sufficient 음성 소스. 2026-06-10 정정: 720은 corpus 문서 수, 쿼리는 114). 라벨: `single_shot_hit@5`(결정론) × `agent_solve` 2×2 → {cheap_sufficient, agent_required, unsolved, both} + 계층 플래그 {confirmed(3런), provisional(단일런), hit-only, unmeasured}.
 - **assort Hard OOM 7건 처리** — v0.17.1 측정에서 16k context로 실행 자체가 안 된 7q는 history compaction/turn 예산 조정으로 재실행 시도. 실패 시 GT에 `unmeasured` 플래그로 분리하고 agent 축 분모에서 제외 (라벨 조작 금지).
 - `eval/unified.py` — `mcnemar_paired(a, b) -> tuple[int, int, float]` 추가 + 신규 per-query JSONL 로더. **McNemar는 신규 JSONL 위에서만 수행** — −2.2pp parity의 per-query 분해(discordant pair) 리포트.
 - **proxy 타당성 검사**: finreg confirmed 부분에서 hit@5 라벨 vs judge 정답 일치율 리포트. (id-reach ~80% vs 답변 55.8% 괴리 대응.)
 - **held-out 분할**: GT를 qid-hash로 train/held-out 분할 (corpus 층화, 50/50). E2의 신호 어휘·임계값 튜닝은 train에서만, E2 go/no-go와 E3 머지 게이트 수치는 **held-out에서만** 보고. assort Easy 15q는 튜닝에 쓰지 않고 전량 held-out(precision 게이트 전용).
 
 수용 게이트:
-- GT ≥1,100q 라벨 생성, 계층 플래그(confirmed/provisional/hit-only/unmeasured) 전수 부착. 라벨 산출 자체는 입력 JSONL이 주어지면 결정론.
+- GT ≥700q 라벨 생성 (2026-06-10 정정: 원안 ≥1,100q는 AutoRAG를 720q로 오인 — 실제 114q), 계층 플래그(confirmed/provisional/hit-only/unmeasured) 전수 부착. 라벨 산출 자체는 입력 JSONL이 주어지면 결정론.
 - assort Hard 40q: **전부 `single_shot_hit@5=0` AND ≥30q agent_required**(provisional — v0.17.1 실측 solved 30/33과 정합). unmeasured는 분모 제외.
 - proxy 일치율 ≥80% — 미달 시 라벨 재설계(hit@5 대신 judge 기반)하고 E2 착수 보류 (2주차 버퍼에서 흡수).
 - `tests/test_agent_token_usage.py`, `tests/test_routing_gt.py` green + 기존 1088+ 테스트 무회귀.
@@ -102,7 +102,7 @@
 - [결정론, 단일런, held-out] **tier-0 라우팅** (LLM 무관 층):
   - assort Hard: **구조 연산 타입(aggregation*·filter·cross_table·ontology_*·temporal·exhaustive 등 — routing_gt가 enumerate) 전수 승급 + 전체 ≥90% 승급** (40q 기준 ≥36/40 상당). conversational/paraphrase류 11q는 승급 미요구 (승급해도 벌점 없음 — assort Conv는 agent 이득 영역).
   - agent-required recall ≥0.90 (confirmed 라벨 한정), krra_graph 15q 중 agent-required 전부 승급.
-  - **escalation 예산 (양방향)**: AutoRAG 720q ≤15% **AND assort Easy 15q ≤20%** — 문서 corpus와 정형 corpus 양쪽에 cheap-sufficient precision 게이트를 대칭으로 걸어 "_table_name이면 전부 승급"류 퇴화 라우터를 차단.
+  - **escalation 예산 (양방향)**: AutoRAG 114q ≤15% **AND assort Easy 15q ≤20%** — 문서 corpus와 정형 corpus 양쪽에 cheap-sufficient precision 게이트를 대칭으로 걸어 "_table_name이면 전부 승급"류 퇴화 라우터를 차단.
 - **end-to-end escalation** (tier-0 + tier-1 judge 합성 — LLM 개입이므로 결정론 표기 금지): judge temp=0 + 응답 캐싱을 전제로 단일런 판정. 캐싱 불가 환경이면 3런 밴드(±)로 판정. 예산은 tier-0와 동일 한도.
 - [결정론] empty answer 0 유지 (169c863 강제 합성 경로 보존).
 - `tests/test_router.py`(신호별 라우팅 단위), `tests/test_graph_ask.py`(mock client로 escalation/우회/토큰 집계) green.
