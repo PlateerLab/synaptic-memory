@@ -339,3 +339,65 @@ def test_classifier_aligned_with_agent_loop_enumeration_detector(korean_query):
 
     d = classify_query(korean_query)
     assert d.enumeration == _is_enumeration_query(korean_query)
+
+
+# --- per-query JSONL + McNemar (v0.29 T4) -------------------------
+
+
+def test_mcnemar_known_value():
+    from eval.unified import mcnemar_paired
+
+    # 8 vs 2 discordants → exact two-sided p = 2 * sum(C(10,k), k=0..2) / 2^10
+    a = [True] * 8 + [False] * 2 + [True] * 5
+    b = [False] * 8 + [True] * 2 + [True] * 5
+    a_only, b_only, p = mcnemar_paired(a, b)
+    assert (a_only, b_only) == (8, 2)
+    assert p == pytest.approx(2 * (1 + 10 + 45) / 1024)
+
+
+def test_mcnemar_no_discordants_is_p1():
+    from eval.unified import mcnemar_paired
+
+    assert mcnemar_paired([True, False], [True, False]) == (0, 0, 1.0)
+
+
+def test_mcnemar_symmetric_caps_at_1():
+    from eval.unified import mcnemar_paired
+
+    a = [True] * 5 + [False] * 5
+    b = [False] * 5 + [True] * 5
+    _, _, p = mcnemar_paired(a, b)
+    assert p == 1.0
+
+
+def test_mcnemar_length_mismatch_raises():
+    from eval.unified import mcnemar_paired
+
+    with pytest.raises(ValueError):
+        mcnemar_paired([True], [True, False])
+
+
+def test_perquery_loader_and_majority_solve(tmp_path):
+    import json as _json
+
+    from eval.unified import load_perquery_jsonl, majority_solve
+
+    # q1: agent 2/3 correct → confirmed solved; q2: 1/3 → not solved
+    rows = [
+        {"qid": "q1", "arm": "agent", "run": r, "judge_correct": ok}
+        for r, ok in [(1, True), (2, True), (3, False)]
+    ] + [
+        {"qid": "q2", "arm": "agent", "run": r, "judge_correct": ok}
+        for r, ok in [(1, False), (2, True), (3, False)]
+    ] + [
+        {"qid": "q1", "arm": "rag", "run": 1, "judge_correct": False},
+    ]
+    p = tmp_path / "perquery.jsonl"
+    p.write_text("\n".join(_json.dumps(r) for r in rows), encoding="utf-8")
+
+    records = load_perquery_jsonl(p)
+    assert len(records) == 7
+    solved = majority_solve(records, "agent")
+    assert solved == {"q1": True, "q2": False}
+    # the rag arm is independent — a single run never reaches min_wins=2
+    assert majority_solve(records, "rag") == {"q1": False}

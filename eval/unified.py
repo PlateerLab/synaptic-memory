@@ -535,6 +535,55 @@ def load_bench_log(log_path: Path) -> list[tuple[str, str, bool]]:
     return out
 
 
+def load_perquery_jsonl(path: Path) -> list[dict]:
+    """Load the per-(query, arm, run) records that
+    ``rag_vs_agent_answer.py --out-jsonl`` writes (v0.29 T1) — one dict per
+    line with at least qid / arm / run / judge_correct."""
+    records: list[dict] = []
+    with Path(path).open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    return records
+
+
+def majority_solve(records: list[dict], arm: str, *, min_wins: int = 2) -> dict[str, bool]:
+    """Per-qid confirmed outcome for one arm: solved iff ``judge_correct`` in
+    ≥ ``min_wins`` runs. This is the ≥2/3-runs rule the routing GT uses for
+    its *confirmed* label tier — single-run outcomes sit inside the ±8/120
+    noise floor and must not become labels."""
+    wins: dict[str, int] = {}
+    for r in records:
+        if r.get("arm") == arm:
+            wins[r["qid"]] = wins.get(r["qid"], 0) + (1 if r.get("judge_correct") else 0)
+    return {qid: n >= min_wins for qid, n in wins.items()}
+
+
+def mcnemar_paired(a: list[bool], b: list[bool]) -> tuple[int, int, float]:
+    """Exact McNemar test on paired per-query outcomes.
+
+    Returns ``(a_only, b_only, p)`` — the discordant counts (queries arm A
+    solved and B missed, and vice versa) and the two-sided exact binomial
+    p-value on those discordants. Concordant pairs carry no information about
+    the *difference*, which is why an aggregate-score delta inside the noise
+    floor can still decompose into a significant paired asymmetry (or confirm
+    there is none). Pure stdlib — no scipy.
+    """
+    if len(a) != len(b):
+        raise ValueError(f"paired outcome length mismatch: {len(a)} vs {len(b)}")
+    a_only = sum(1 for x, y in zip(a, b) if x and not y)
+    b_only = sum(1 for x, y in zip(a, b) if y and not x)
+    n = a_only + b_only
+    if n == 0:
+        return (0, 0, 1.0)
+    from math import comb
+
+    tail = sum(comb(n, k) for k in range(min(a_only, b_only) + 1))
+    p = min(1.0, 2.0 * tail / 2.0**n)
+    return (a_only, b_only, p)
+
+
 # --- CLI -----------------------------------------------------------
 
 
