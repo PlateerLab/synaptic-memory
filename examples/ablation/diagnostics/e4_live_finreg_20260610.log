@@ -1,0 +1,29 @@
+ask() finreg_multihop run 1: 68/120 solved, 21 escalated
+ask() finreg_multihop run 2: 64/120 solved, 18 escalated
+ask() finreg_multihop run 3: 66/120 solved, 19 escalated
+ask() finreg run 1: 82/120 solved, 12 escalated
+ask() finreg run 2: 83/120 solved, 11 escalated
+ask() finreg run 3: 83/120 solved, 8 escalated
+# cost-at-quality — mixed pool (v0.29 E4 keystone)
+
+common paired pool: 240 queries (finreg=120, finreg_multihop=120)
+oracle labels: routing_gt
+
+| arm | solve | rate | tokens/query | cost vs always-agent | min runs |
+|---|---:|---:|---:|---:|---:|
+| always-RAG | 152/240 | 0.633 | 3,216 | 0.09x | 3 |
+| always-agent | 149/240 | 0.621 | 35,170 | 1.00x | 3 |
+| oracle-router | 184/240 | 0.767 | 7,903 | 0.22x | 3 |
+| ask() | 149/240 | 0.621 | 11,001 | 0.31x | 3 |
+
+## acceptance gates (plan §E4)
+
+- **quality**: FAIL — ask 149/240 vs max(always-RAG 152, always-agent 149) - 2 = 150; McNemar ask vs always-RAG: +6/-9 discordant, p=0.6072; ask vs always-agent: +32/-32 discordant, p=1
+- **cost**: PASS — ask 11,001 tok/q = 0.31x always-agent 35,170 tok/q (budget <= 0.35x)
+- **separation**: FAIL — ask 149 vs always-RAG 152; ask vs always-RAG: +6/-9 discordant, p=0.6072 (alpha=0.05)
+
+oracle gap (disclosed, not a gate): ask 149/240 vs oracle 184/240 solve (-35q); 1.39x oracle cost
+
+claim scope: per plan §E4 — only the agent-required-class delta is claimed (noise floor multiples); domain generalization (finreg+assort, 2 domains) is NOT established by this report.
+
+report -> examples/ablation/diagnostics/cost_at_quality_live_finreg240_20260610.md
