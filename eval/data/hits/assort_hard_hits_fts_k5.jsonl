@@ -1,33 +1,33 @@
-{"qid": "a001", "query": "봄 시즌 신상 니트웨어", "hit": false, "rank": null}
-{"qid": "a002", "query": "여름용 가볍고 시원한 하의", "hit": false, "rank": null}
-{"qid": "a003", "query": "가장 많이 팔린 상품의 리뷰", "hit": false, "rank": null}
-{"qid": "a004", "query": "방송 후 주문이 가장 많았던 상품", "hit": false, "rank": null}
-{"qid": "a005", "query": "9만원 이상 고가 상품 목록", "hit": false, "rank": null}
-{"qid": "a006", "query": "할인율이 적용된 상품", "hit": false, "rank": null}
-{"qid": "a007", "query": "색상별 상품 변형 개수", "hit": false, "rank": null}
-{"qid": "a008", "query": "시즌별 상품 수", "hit": false, "rank": null}
-{"qid": "a009", "query": "핏이 타이트하다는 불만이 있는 상품", "hit": false, "rank": null}
-{"qid": "a010", "query": "착용감이 좋다는 후기가 많은 제품", "hit": false, "rank": null}
-{"qid": "a011", "query": "엄마 생일 선물로 괜찮은 옷 추천해줘. 편하고 품질 좋은 걸로", "hit": false, "rank": null}
-{"qid": "a012", "query": "사이즈 55인데 이 브랜드 옷 넉넉한 편이야 작은 편이야?", "hit": false, "rank": null}
-{"qid": "a013", "query": "LBL코리아 파트너사가 판매하는 상품들", "hit": false, "rank": null}
-{"qid": "a014", "query": "2024년 11월에 방송된 상품", "hit": false, "rank": null}
-{"qid": "a015", "query": "24FW 시즌 전체 상품 목록", "hit": false, "rank": null}
-{"qid": "a016", "query": "핑크 색상으로 출시된 상품 목록", "hit": false, "rank": null}
-{"qid": "a017", "query": "TV홈쇼핑 채널을 통한 주문 건수", "hit": false, "rank": null}
-{"qid": "a018", "query": "코스모패션 파트너사가 판매한 상품 종류 수", "hit": false, "rank": null}
-{"qid": "a019", "query": "가장 많은 색상 옵션을 보유한 상품", "hit": false, "rank": null}
-{"qid": "a020", "query": "여성 구매자가 가장 많이 주문한 상품", "hit": false, "rank": null}
-{"qid": "a021", "query": "FREE 사이즈로 판매되는 상품들", "hit": false, "rank": null}
-{"qid": "a022", "query": "방송 직후 가장 빠르게 판매된 상품", "hit": false, "rank": null}
-{"qid": "a023", "query": "50대 여성이 가장 많이 주문한 상품", "hit": false, "rank": null}
-{"qid": "a024", "query": "할인이 적용되고 있는 상품은 몇 개인가요", "hit": false, "rank": null}
-{"qid": "a025", "query": "24FW 시즌 상품의 총 개수", "hit": false, "rank": null}
-{"qid": "a032", "query": "가장 많은 변형(SKU)이 있는 색상", "hit": false, "rank": null}
-{"qid": "a034", "query": "겨울에 따뜻하게 입을 수 있는 두꺼운 옷", "hit": false, "rank": null}
-{"qid": "a035", "query": "사무실에 입고 갈 단정한 셔츠나 블라우스", "hit": false, "rank": null}
-{"qid": "a036", "query": "운동복처럼 편안하게 입을 수 있는 옷", "hit": false, "rank": null}
-{"qid": "a037", "query": "여름 휴가 갈 때 입을 시원한 옷", "hit": false, "rank": null}
-{"qid": "a038", "query": "결혼식 하객으로 입을 만한 단정한 옷", "hit": false, "rank": null}
-{"qid": "a039", "query": "최근 가장 많이 팔린 상품 중에서 핏 만족도가 높은 것 추천해줘", "hit": false, "rank": null}
-{"qid": "a040", "query": "방송 횟수가 가장 많았던 상품의 색상별 판매 현황은 어떻게 돼", "hit": false, "rank": null}
+{"qid": "a001", "query": "봄 시즌 신상 니트웨어", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a002", "query": "여름용 가볍고 시원한 하의", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "a003", "query": "가장 많이 팔린 상품의 리뷰", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a004", "query": "방송 후 주문이 가장 많았던 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a005", "query": "9만원 이상 고가 상품 목록", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a006", "query": "할인율이 적용된 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a007", "query": "색상별 상품 변형 개수", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a008", "query": "시즌별 상품 수", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a009", "query": "핏이 타이트하다는 불만이 있는 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.655312, 0.64125], "has_table_row": true}
+{"qid": "a010", "query": "착용감이 좋다는 후기가 많은 제품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a011", "query": "엄마 생일 선물로 괜찮은 옷 추천해줘. 편하고 품질 좋은 걸로", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a012", "query": "사이즈 55인데 이 브랜드 옷 넉넉한 편이야 작은 편이야?", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a013", "query": "LBL코리아 파트너사가 판매하는 상품들", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a014", "query": "2024년 11월에 방송된 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a015", "query": "24FW 시즌 전체 상품 목록", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a016", "query": "핑크 색상으로 출시된 상품 목록", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a017", "query": "TV홈쇼핑 채널을 통한 주문 건수", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a018", "query": "코스모패션 파트너사가 판매한 상품 종류 수", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a019", "query": "가장 많은 색상 옵션을 보유한 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a020", "query": "여성 구매자가 가장 많이 주문한 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a021", "query": "FREE 사이즈로 판매되는 상품들", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a022", "query": "방송 직후 가장 빠르게 판매된 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a023", "query": "50대 여성이 가장 많이 주문한 상품", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a024", "query": "할인이 적용되고 있는 상품은 몇 개인가요", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a025", "query": "24FW 시즌 상품의 총 개수", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a032", "query": "가장 많은 변형(SKU)이 있는 색상", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "a034", "query": "겨울에 따뜻하게 입을 수 있는 두꺼운 옷", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "a035", "query": "사무실에 입고 갈 단정한 셔츠나 블라우스", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a036", "query": "운동복처럼 편안하게 입을 수 있는 옷", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a037", "query": "여름 휴가 갈 때 입을 시원한 옷", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a038", "query": "결혼식 하객으로 입을 만한 단정한 옷", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a039", "query": "최근 가장 많이 팔린 상품 중에서 핏 만족도가 높은 것 추천해줘", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "a040", "query": "방송 횟수가 가장 많았던 상품의 색상별 판매 현황은 어떻게 돼", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}

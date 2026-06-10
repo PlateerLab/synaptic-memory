@@ -46,8 +46,8 @@ from eval.routing_signal_auc import (
     recall_at_precision,
     s1_structured_lexicon,
     s2_margin_deficit,
-    s2_no_hit,
     s2_score_flatness,
+    s2_zero_results,
     s3_table_row_in_topk,
     tune_thresholds,
 )
@@ -242,7 +242,7 @@ def test_s1_plain_lookup_scores_zero():
 
 def test_s2_s3_nan_without_retrieval_pass():
     ctx = SignalContext(has_table_nodes=True, retrieval=None)
-    assert math.isnan(s2_no_hit("q", ctx))
+    assert math.isnan(s2_zero_results("q", ctx))
     assert math.isnan(s2_score_flatness("q", ctx))
     assert math.isnan(s2_margin_deficit("q", ctx))
     assert math.isnan(s3_table_row_in_topk("q", ctx))
@@ -250,16 +250,20 @@ def test_s2_s3_nan_without_retrieval_pass():
 
 def test_s2_values_from_scores():
     ctx = SignalContext(retrieval=RetrievalInfo(scores=[0.9, 0.5, 0.1], hit=True))
-    assert s2_no_hit("q", ctx) == 0.0
+    assert s2_zero_results("q", ctx) == 0.0
     assert s2_margin_deficit("q", ctx) == pytest.approx(-0.4)
     # population std of [0.9, 0.5, 0.1] = sqrt(0.32/3)
     assert s2_score_flatness("q", ctx) == pytest.approx(-math.sqrt(0.32 / 3))
 
 
-def test_s2_no_hit_fallbacks():
-    assert s2_no_hit("q", SignalContext(retrieval=RetrievalInfo(scores=[], hit=None))) == 1.0
-    assert s2_no_hit("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=False))) == 1.0
-    assert s2_no_hit("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=None))) == 0.0
+def test_s2_zero_results_ignores_gold_hit():
+    # zero results -> fires
+    assert s2_zero_results("q", SignalContext(retrieval=RetrievalInfo(scores=[], hit=None))) == 1.0
+    # gold-based hit must NOT leak into the signal: hit=False with results
+    # present stays 0.0 (the old s2_no_hit oracle behaviour scored 1.0 here,
+    # a tautological AUC against the GT's own hit axis)
+    assert s2_zero_results("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=False))) == 0.0
+    assert s2_zero_results("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=None))) == 0.0
 
 
 def test_s2_flatness_margin_nan_with_single_score():
@@ -601,3 +605,22 @@ def test_cli_empty_gt_returns_error(tmp_path):
     gt = tmp_path / "empty.jsonl"
     gt.write_text("", encoding="utf-8")
     assert main([str(gt)]) == 2
+
+
+def test_load_retrieval_specs_namespaces_corpus(tmp_path):
+    from eval.routing_signal_auc import load_retrieval_specs
+
+    a = tmp_path / "a.jsonl"
+    a.write_text(
+        '{"qid": "q000", "scores": [0.9, 0.2], "hit": true, "has_table_row": false}\n',
+        encoding="utf-8",
+    )
+    b = tmp_path / "b.jsonl"
+    b.write_text(
+        '{"qid": "x2bee_hard:h001", "scores": [0.5], "hit": false}\n', encoding="utf-8"
+    )
+    out = load_retrieval_specs([f"assort={a}", str(b)])
+    # CORPUS=PATH namespaces bare qids; bare PATH is already GT-keyed
+    assert set(out) == {"assort:q000", "x2bee_hard:h001"}
+    assert out["assort:q000"].scores == [0.9, 0.2]
+    assert out["x2bee_hard:h001"].hit is False

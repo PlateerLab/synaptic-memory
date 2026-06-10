@@ -1,15 +1,15 @@
-{"qid": "q001", "query": "실크블렌드 가디건 상품 정보", "hit": true, "rank": 1}
-{"qid": "q002", "query": "시폰 플리츠 롱 스커트", "hit": true, "rank": 1}
-{"qid": "q003", "query": "울 캐시미어 브이넥 니트", "hit": true, "rank": 3}
-{"qid": "q004", "query": "린넨 와이드 밴딩 슬랙스", "hit": true, "rank": 1}
-{"qid": "q005", "query": "모달 레이스 트리밍 블라우스", "hit": true, "rank": 1}
-{"qid": "q006", "query": "소라 색상 옵션", "hit": true, "rank": 1}
-{"qid": "q007", "query": "네이비 색상", "hit": true, "rank": 1}
-{"qid": "q008", "query": "55 사이즈", "hit": true, "rank": 1}
-{"qid": "q009", "query": "입으면 날씬해 보여요 핏이 딱 맞아요", "hit": false, "rank": null}
-{"qid": "q010", "query": "세탁해도 줄지 않고 마감이 깔끔해요", "hit": true, "rank": 1}
-{"qid": "q011", "query": "엄마 선물로 구매했는데 너무 좋아하세요", "hit": true, "rank": 1}
-{"qid": "q012", "query": "LBL코리아 판매 파트너", "hit": true, "rank": 2}
-{"qid": "q013", "query": "OneTV MC 방송 채널", "hit": true, "rank": 1}
-{"qid": "q014", "query": "pgm_time 23:00-23:50 broadcast 12800000", "hit": true, "rank": 1}
-{"qid": "q015", "query": "데님 A라인 미디 스커트", "hit": true, "rank": 1}
+{"qid": "q001", "query": "실크블렌드 가디건 상품 정보", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "q002", "query": "시폰 플리츠 롱 스커트", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q003", "query": "울 캐시미어 브이넥 니트", "hit": true, "rank": 3, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q004", "query": "린넨 와이드 밴딩 슬랙스", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q005", "query": "모달 레이스 트리밍 블라우스", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q006", "query": "소라 색상 옵션", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "q007", "query": "네이비 색상", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "q008", "query": "55 사이즈", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "q009", "query": "입으면 날씬해 보여요 핏이 딱 맞아요", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q010", "query": "세탁해도 줄지 않고 마감이 깔끔해요", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q011", "query": "엄마 선물로 구매했는데 너무 좋아하세요", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q012", "query": "LBL코리아 판매 파트너", "hit": true, "rank": 2, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "q013", "query": "OneTV MC 방송 채널", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "q014", "query": "pgm_time 23:00-23:50 broadcast 12800000", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "q015", "query": "데님 A라인 미디 스커트", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}

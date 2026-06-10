@@ -1,20 +1,20 @@
-{"qid": "e001", "query": "iPhone 15 Pro 512GB", "hit": true, "rank": 1}
-{"qid": "e002", "query": "Shin Ramyun", "hit": true, "rank": 1}
-{"qid": "e003", "query": "Galaxy Book", "hit": true, "rank": 1}
-{"qid": "e004", "query": "Dried Beef", "hit": true, "rank": 1}
-{"qid": "e005", "query": "CLA Mask", "hit": true, "rank": 1}
-{"qid": "e006", "query": "Volume Lip plumper maxi", "hit": true, "rank": 1}
-{"qid": "e007", "query": "Cheese Boursin Garlic Herbs", "hit": true, "rank": 1}
-{"qid": "e008", "query": "Wine Niagara Reisling", "hit": true, "rank": 1}
-{"qid": "e009", "query": "Chicken Soup Base", "hit": true, "rank": 1}
-{"qid": "e010", "query": "Pastry Banana Muffin", "hit": true, "rank": 1}
-{"qid": "e011", "query": "Jameson Irish Whiskey", "hit": true, "rank": 1}
-{"qid": "e012", "query": "Lamb Shoulder Boneless", "hit": true, "rank": 1}
-{"qid": "e013", "query": "English Muffin", "hit": true, "rank": 1}
-{"qid": "e014", "query": "Beer Alexander Kieths Pale Ale", "hit": true, "rank": 1}
-{"qid": "e015", "query": "Wiberg Super Cure", "hit": true, "rank": 1}
-{"qid": "e016", "query": "Ice Wine", "hit": true, "rank": 1}
-{"qid": "e017", "query": "Cheese Feta", "hit": true, "rank": 1}
-{"qid": "e018", "query": "Cabernet Sauvignon wine", "hit": true, "rank": 1}
-{"qid": "e019", "query": "Bread 10 Grain", "hit": true, "rank": 1}
-{"qid": "e020", "query": "Garlic Powder", "hit": true, "rank": 1}
+{"qid": "e001", "query": "iPhone 15 Pro 512GB", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e002", "query": "Shin Ramyun", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e003", "query": "Galaxy Book", "hit": true, "rank": 1, "scores": [0.66, 0.028182, 0.028182, 0.028182, 0.028182], "has_table_row": true}
+{"qid": "e004", "query": "Dried Beef", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e005", "query": "CLA Mask", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e006", "query": "Volume Lip plumper maxi", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e007", "query": "Cheese Boursin Garlic Herbs", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e008", "query": "Wine Niagara Reisling", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e009", "query": "Chicken Soup Base", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e010", "query": "Pastry Banana Muffin", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e011", "query": "Jameson Irish Whiskey", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e012", "query": "Lamb Shoulder Boneless", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e013", "query": "English Muffin", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e014", "query": "Beer Alexander Kieths Pale Ale", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e015", "query": "Wiberg Super Cure", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e016", "query": "Ice Wine", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e017", "query": "Cheese Feta", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e018", "query": "Cabernet Sauvignon wine", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e019", "query": "Bread 10 Grain", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "e020", "query": "Garlic Powder", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}

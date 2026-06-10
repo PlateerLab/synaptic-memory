@@ -1,19 +1,19 @@
-{"qid": "h001", "query": "프리미엄 스마트폰 최신 모델", "hit": false, "rank": null}
-{"qid": "h002", "query": "한국 즉석 라면 제품", "hit": true, "rank": 1}
-{"qid": "h003", "query": "이탈리아 숙성 치즈 제품", "hit": false, "rank": null}
-{"qid": "h004", "query": "portable computing device", "hit": false, "rank": null}
-{"qid": "h005", "query": "Dried Beef 판매 이력", "hit": true, "rank": 1}
-{"qid": "h006", "query": "Cheese Pont Couvert 리뷰", "hit": true, "rank": 1}
-{"qid": "h007", "query": "iPhone 15 Pro 판매 기록은 몇 건인가?", "hit": true, "rank": 1}
-{"qid": "h008", "query": "50만원 이상 고가 상품", "hit": false, "rank": null}
-{"qid": "h009", "query": "1000원짜리 최저가 상품", "hit": true, "rank": 1}
-{"qid": "h010", "query": "5000원 이하 저가 상품 목록", "hit": true, "rank": 1}
-{"qid": "h011", "query": "가장 많이 팔린 상품 TOP 3", "hit": false, "rank": null}
-{"qid": "h012", "query": "리뷰가 가장 많은 상품 TOP 5", "hit": false, "rank": null}
-{"qid": "h013", "query": "맥주 종류가 총 몇 개인가?", "hit": false, "rank": null}
-{"qid": "h014", "query": "5점 리뷰를 가장 많이 받은 상품의 가격은?", "hit": false, "rank": null}
-{"qid": "h015", "query": "판매량 1위 상품의 리뷰 평점은?", "hit": false, "rank": null}
-{"qid": "h016", "query": "이 쇼핑몰에서 와인이 몇 종류나 있어?", "hit": false, "rank": null}
-{"qid": "h017", "query": "신라면이 잘 팔리나요?", "hit": true, "rank": 1}
-{"qid": "h018", "query": "양고기 제품 중 뼈 없는 것", "hit": false, "rank": null}
-{"qid": "h019", "query": "facial skincare product", "hit": false, "rank": null}
+{"qid": "h001", "query": "프리미엄 스마트폰 최신 모델", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "h002", "query": "한국 즉석 라면 제품", "hit": true, "rank": 1, "scores": [0.66, 0.028182, 0.028182, 0.028182, 0.028182], "has_table_row": true}
+{"qid": "h003", "query": "이탈리아 숙성 치즈 제품", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "h004", "query": "portable computing device", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "h005", "query": "Dried Beef 판매 이력", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h006", "query": "Cheese Pont Couvert 리뷰", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h007", "query": "iPhone 15 Pro 판매 기록은 몇 건인가?", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h008", "query": "50만원 이상 고가 상품", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h009", "query": "1000원짜리 최저가 상품", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h010", "query": "5000원 이하 저가 상품 목록", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h011", "query": "가장 많이 팔린 상품 TOP 3", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h012", "query": "리뷰가 가장 많은 상품 TOP 5", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h013", "query": "맥주 종류가 총 몇 개인가?", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "h014", "query": "5점 리뷰를 가장 많이 받은 상품의 가격은?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h015", "query": "판매량 1위 상품의 리뷰 평점은?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "h016", "query": "이 쇼핑몰에서 와인이 몇 종류나 있어?", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "h017", "query": "신라면이 잘 팔리나요?", "hit": true, "rank": 1, "scores": [0.66, 0.028182, 0.028182, 0.028182, 0.028182], "has_table_row": true}
+{"qid": "h018", "query": "양고기 제품 중 뼈 없는 것", "hit": false, "rank": null, "scores": [], "has_table_row": false}
+{"qid": "h019", "query": "facial skincare product", "hit": false, "rank": null, "scores": [], "has_table_row": false}

@@ -1,30 +1,30 @@
-{"qid": "c001", "query": "경마 시행 운영 계획을 요약해줘", "hit": false, "rank": null}
-{"qid": "c002", "query": "말 산업 장기 발전 방안은?", "hit": false, "rank": null}
-{"qid": "c003", "query": "온라인 도박 단속 대응 방침", "hit": true, "rank": 2}
-{"qid": "c004", "query": "탄소 중립을 위한 친환경 전략", "hit": false, "rank": null}
-{"qid": "c005", "query": "직원 복리후생 개선 계획", "hit": false, "rank": null}
-{"qid": "c006", "query": "내년도 경마 대회 일정은 어떻게 돼?", "hit": false, "rank": null}
-{"qid": "c007", "query": "말 복지를 위해 어떤 프로그램을 운영하나요?", "hit": false, "rank": null}
-{"qid": "c008", "query": "올해 예산은 어떻게 편성됐어요?", "hit": false, "rank": null}
-{"qid": "c009", "query": "인권 경영 관련 자료 있어?", "hit": false, "rank": null}
-{"qid": "c010", "query": "경주마 국제 레이팅 현황을 알려줘", "hit": true, "rank": 2}
-{"qid": "c011", "query": "경마 운영과 복지 프로그램의 연관성", "hit": false, "rank": null}
-{"qid": "c012", "query": "마주 경제기준 변경과 경마시행의 관계", "hit": false, "rank": null}
-{"qid": "c013", "query": "교배 실적과 생산 현황의 관계", "hit": false, "rank": null}
-{"qid": "c014", "query": "R&D 연구 과제와 중장기 발전 계획 연계", "hit": false, "rank": null}
-{"qid": "c015", "query": "승용마 번식 지원과 말산업 활성화", "hit": true, "rank": 4}
-{"qid": "c016", "query": "2023년에 수립된 추진 계획들", "hit": false, "rank": null}
-{"qid": "c017", "query": "2024년 경마 시행 관련 문서", "hit": false, "rank": null}
-{"qid": "c018", "query": "농림부 관련 대회 계획", "hit": false, "rank": null}
-{"qid": "c019", "query": "제주 지역 경마 운영 문서", "hit": false, "rank": null}
-{"qid": "c020", "query": "불법 사설경마 대응 계획이 있나?", "hit": false, "rank": null}
-{"qid": "c021", "query": "말산업 발전 계획 관련 문서 목록", "hit": false, "rank": null}
-{"qid": "c022", "query": "공공혁신 추진 관련 자료 리스트", "hit": false, "rank": null}
-{"qid": "c023", "query": "경마 시행 계획 + 경주마 생산 실적 통합 분석", "hit": false, "rank": null}
-{"qid": "c024", "query": "마주 기준 + 레이팅 + 경주마 생산의 종합 현황", "hit": true, "rank": 2}
-{"qid": "c025", "query": "승마 복지 + 말 등록 + 발전 계획의 공통점", "hit": false, "rank": null}
-{"qid": "c026", "query": "데이터 기반 행정 활성화는 어떻게 해?", "hit": false, "rank": null}
-{"qid": "c027", "query": "청춘 블루밍 페스티벌이 뭔가요?", "hit": true, "rank": 1}
-{"qid": "c028", "query": "말 등록 규정이 어떻게 개정됐지?", "hit": true, "rank": 1}
-{"qid": "c029", "query": "워터 페스티벌 행사 계획 알려줘", "hit": true, "rank": 2}
-{"qid": "c030", "query": "건전화 추진 계획이 있으면 보여줘", "hit": false, "rank": null}
+{"qid": "c001", "query": "경마 시행 운영 계획을 요약해줘", "hit": false, "rank": null, "scores": [0.056, 0.832801, 0.793011, 0.626825, 0.629841], "has_table_row": false}
+{"qid": "c002", "query": "말 산업 장기 발전 방안은?", "hit": false, "rank": null, "scores": [0.771665, 0.83935, 0.730945, 0.798629, 0.593272], "has_table_row": false}
+{"qid": "c003", "query": "온라인 도박 단속 대응 방침", "hit": true, "rank": 2, "scores": [0.784245, 0.755824, 0.741614, 0.645789, 0.713193], "has_table_row": false}
+{"qid": "c004", "query": "탄소 중립을 위한 친환경 전략", "hit": false, "rank": null, "scores": [0.84806, 0.825428, 0.546316, 0.39, 0.375789], "has_table_row": false}
+{"qid": "c005", "query": "직원 복리후생 개선 계획", "hit": false, "rank": null, "scores": [0.064, 0.817258, 0.845679, 0.742406, 0.770827], "has_table_row": false}
+{"qid": "c006", "query": "내년도 경마 대회 일정은 어떻게 돼?", "hit": false, "rank": null, "scores": [0.056, 0.686055, 0.765684, 0.66, 0.737263], "has_table_row": false}
+{"qid": "c007", "query": "말 복지를 위해 어떤 프로그램을 운영하나요?", "hit": false, "rank": null, "scores": [0.775129, 0.755998, 0.759826, 0.699156, 0.704077], "has_table_row": false}
+{"qid": "c008", "query": "올해 예산은 어떻게 편성됐어요?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": false}
+{"qid": "c009", "query": "인권 경영 관련 자료 있어?", "hit": false, "rank": null, "scores": [0.779255, 0.66, 0.645789, 0.713193, 0.675457], "has_table_row": false}
+{"qid": "c010", "query": "경주마 국제 레이팅 현황을 알려줘", "hit": true, "rank": 2, "scores": [0.850333, 0.790215, 0.827912, 0.761794, 0.100909], "has_table_row": false}
+{"qid": "c011", "query": "경마 운영과 복지 프로그램의 연관성", "hit": false, "rank": null, "scores": [0.056, 0.541562, 0.790308, 0.814552, 0.747676], "has_table_row": false}
+{"qid": "c012", "query": "마주 경제기준 변경과 경마시행의 관계", "hit": false, "rank": null, "scores": [0.77324, 0.740472, 0.744819, 0.617368, 0.666211], "has_table_row": false}
+{"qid": "c013", "query": "교배 실적과 생산 현황의 관계", "hit": false, "rank": null, "scores": [0.795403, 0.784143, 0.738823, 0.658089, 0.574737], "has_table_row": false}
+{"qid": "c014", "query": "R&D 연구 과제와 중장기 발전 계획 연계", "hit": false, "rank": null, "scores": [0.233315, 0.827245, 0.835456, 0.784419, 0.727577], "has_table_row": false}
+{"qid": "c015", "query": "승용마 번식 지원과 말산업 활성화", "hit": true, "rank": 4, "scores": [0.714894, 0.70288, 0.66, 0.645789, 0.672299], "has_table_row": false}
+{"qid": "c016", "query": "2023년에 수립된 추진 계획들", "hit": false, "rank": null, "scores": [0.628947, 0.769861, 0.761173, 0.755651, 0.751474], "has_table_row": false}
+{"qid": "c017", "query": "2024년 경마 시행 관련 문서", "hit": false, "rank": null, "scores": [0.649158, 0.68888, 0.361579, 0.257368, 0.266775], "has_table_row": false}
+{"qid": "c018", "query": "농림부 관련 대회 계획", "hit": false, "rank": null, "scores": [0.774129, 0.064, 0.856024, 0.603158, 0.11], "has_table_row": false}
+{"qid": "c019", "query": "제주 지역 경마 운영 문서", "hit": false, "rank": null, "scores": [0.245588, 0.527102, 0.814154, 0.757296, 0.68363], "has_table_row": false}
+{"qid": "c020", "query": "불법 사설경마 대응 계획이 있나?", "hit": false, "rank": null, "scores": [0.780037, 0.66, 0.731405, 0.70669, 0.489474], "has_table_row": false}
+{"qid": "c021", "query": "말산업 발전 계획 관련 문서 목록", "hit": false, "rank": null, "scores": [0.064, 0.833603, 0.841814, 0.11, 0.032148], "has_table_row": false}
+{"qid": "c022", "query": "공공혁신 추진 관련 자료 리스트", "hit": false, "rank": null, "scores": [0.693789, 0.746708, 0.732287, 0.644052, 0.475263], "has_table_row": false}
+{"qid": "c023", "query": "경마 시행 계획 + 경주마 생산 실적 통합 분석", "hit": false, "rank": null, "scores": [0.405667, 0.8568, 0.253588, 0.851432, 0.669419], "has_table_row": false}
+{"qid": "c024", "query": "마주 기준 + 레이팅 + 경주마 생산의 종합 현황", "hit": true, "rank": 2, "scores": [0.809346, 0.762797, 0.645789, 0.797218, 0.601246], "has_table_row": false}
+{"qid": "c025", "query": "승마 복지 + 말 등록 + 발전 계획의 공통점", "hit": false, "rank": null, "scores": [0.064, 0.405841, 0.822905, 0.808694, 0.75038], "has_table_row": false}
+{"qid": "c026", "query": "데이터 기반 행정 활성화는 어떻게 해?", "hit": false, "rank": null, "scores": [0.774919, 0.66, 0.718287, 0.726051, 0.574737], "has_table_row": false}
+{"qid": "c027", "query": "청춘 블루밍 페스티벌이 뭔가요?", "hit": true, "rank": 1, "scores": [0.749321, 0.740472, 0.631579, 0.635637, 0.593062], "has_table_row": false}
+{"qid": "c028", "query": "말 등록 규정이 어떻게 개정됐지?", "hit": true, "rank": 1, "scores": [0.800484, 0.751852, 0.746261, 0.749588, 0.712752], "has_table_row": false}
+{"qid": "c029", "query": "워터 페스티벌 행사 계획 알려줘", "hit": true, "rank": 2, "scores": [0.210931, 0.604374, 0.66, 0.746708, 0.645789], "has_table_row": false}
+{"qid": "c030", "query": "건전화 추진 계획이 있으면 보여줘", "hit": false, "rank": null, "scores": [0.058, 0.787366, 0.762061, 0.66, 0.726956], "has_table_row": false}

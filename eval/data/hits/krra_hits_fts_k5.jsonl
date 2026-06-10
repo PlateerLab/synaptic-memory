@@ -1,20 +1,20 @@
-{"qid": "q001", "query": "온실가스 감축 및 에너지 절약 계획은 어떻게 되어있나", "hit": true, "rank": 1}
-{"qid": "q002", "query": "재활힐링승마 사업 운영계획", "hit": true, "rank": 1}
-{"qid": "q003", "query": "인재개발 기본계획", "hit": true, "rank": 1}
-{"qid": "q004", "query": "인권영향평가 결과", "hit": true, "rank": 1}
-{"qid": "q005", "query": "교배실적과 교배횟수", "hit": true, "rank": 1}
-{"qid": "q006", "query": "한국마사회 인권침해 구제절차 매뉴얼", "hit": true, "rank": 1}
-{"qid": "q007", "query": "이용자보호 추진계획", "hit": true, "rank": 1}
-{"qid": "q008", "query": "한국 경주마 국제 레이팅 현황", "hit": true, "rank": 1}
-{"qid": "q009", "query": "윤리경영 기본계획과 사회적가치", "hit": true, "rank": 1}
-{"qid": "q010", "query": "사업별 조직별 예산 계층구조", "hit": true, "rank": 1}
-{"qid": "q011", "query": "예산 및 기금운용계획 집행지침", "hit": true, "rank": 1}
-{"qid": "q012", "query": "내부경영평가제도 개선 방안", "hit": true, "rank": 1}
-{"qid": "q013", "query": "지사 고객입장 및 방역관리 방안", "hit": true, "rank": 1}
-{"qid": "q014", "query": "스마트 사무환경 구축 및 망분리 개선", "hit": true, "rank": 1}
-{"qid": "q015", "query": "재물조사 결과 내역", "hit": true, "rank": 1}
-{"qid": "q016", "query": "2024년 정보화기기 교체 계획", "hit": true, "rank": 3}
-{"qid": "q017", "query": "도심승마체험 시행계획", "hit": true, "rank": 1}
-{"qid": "q018", "query": "KPC 개최계획", "hit": true, "rank": 1}
-{"qid": "q019", "query": "말산업 연구사업 과제 목록", "hit": true, "rank": 1}
-{"qid": "q020", "query": "마주 경제적기준 연도별 현황", "hit": true, "rank": 1}
+{"qid": "q001", "query": "온실가스 감축 및 에너지 절약 계획은 어떻게 되어있나", "hit": true, "rank": 1, "scores": [0.784419, 0.770208, 0.734931, 0.607483, 0.509895], "has_table_row": false}
+{"qid": "q002", "query": "재활힐링승마 사업 운영계획", "hit": true, "rank": 1, "scores": [0.768486, 0.799749, 0.769861, 0.755651, 0.735551], "has_table_row": false}
+{"qid": "q003", "query": "인재개발 기본계획", "hit": true, "rank": 1, "scores": [0.757263, 0.66, 0.723053, 0.57715, 0.489474], "has_table_row": false}
+{"qid": "q004", "query": "인권영향평가 결과", "hit": true, "rank": 1, "scores": [0.811953, 0.759029, 0.687976, 0.607656, 0.735111], "has_table_row": false}
+{"qid": "q005", "query": "교배실적과 교배횟수", "hit": true, "rank": 1, "scores": [0.839243, 0.66, 0.645789, 0.631579, 0.588947], "has_table_row": false}
+{"qid": "q006", "query": "한국마사회 인권침해 구제절차 매뉴얼", "hit": true, "rank": 1, "scores": [0.734931, 0.727577, 0.655209, 0.603158, 0.560526], "has_table_row": false}
+{"qid": "q007", "query": "이용자보호 추진계획", "hit": true, "rank": 1, "scores": [0.761887, 0.743377, 0.747676, 0.66, 0.721167], "has_table_row": false}
+{"qid": "q008", "query": "한국 경주마 국제 레이팅 현황", "hit": true, "rank": 1, "scores": [0.877835, 0.806783, 0.780143, 0.100909, 0.257684], "has_table_row": false}
+{"qid": "q009", "query": "윤리경영 기본계획과 사회적가치", "hit": true, "rank": 1, "scores": [0.832226, 0.783805, 0.490919, 0.599682, 0.471787], "has_table_row": false}
+{"qid": "q010", "query": "사업별 조직별 예산 계층구조", "hit": true, "rank": 1, "scores": [0.863022, 0.820391, 0.800131, 0.77171, 0.100909], "has_table_row": false}
+{"qid": "q011", "query": "예산 및 기금운용계획 집행지침", "hit": true, "rank": 1, "scores": [0.876765, 0.85006, 0.799923, 0.631579, 0.617368], "has_table_row": false}
+{"qid": "q012", "query": "내부경영평가제도 개선 방안", "hit": true, "rank": 1, "scores": [0.818903, 0.804692, 0.532105, 0.528282, 0.470472], "has_table_row": false}
+{"qid": "q013", "query": "지사 고객입장 및 방역관리 방안", "hit": true, "rank": 1, "scores": [0.84661, 0.798189, 0.33784, 0.290526, 0.276316], "has_table_row": false}
+{"qid": "q014", "query": "스마트 사무환경 구축 및 망분리 개선", "hit": true, "rank": 1, "scores": [0.83006, 0.787428, 0.550578, 0.465141, 0.388262], "has_table_row": false}
+{"qid": "q015", "query": "재물조사 결과 내역", "hit": true, "rank": 1, "scores": [0.828462, 0.761887, 0.770035, 0.66, 0.648203], "has_table_row": false}
+{"qid": "q016", "query": "2024년 정보화기기 교체 계획", "hit": true, "rank": 3, "scores": [0.064, 0.729315, 0.747787, 0.596455, 0.639087], "has_table_row": false}
+{"qid": "q017", "query": "도심승마체험 시행계획", "hit": true, "rank": 1, "scores": [0.834601, 0.80618, 0.66, 0.71472, 0.430683], "has_table_row": false}
+{"qid": "q018", "query": "KPC 개최계획", "hit": true, "rank": 1, "scores": [0.755588, 0.741173, 0.755384, 0.735377, 0.550814], "has_table_row": false}
+{"qid": "q019", "query": "말산업 연구사업 과제 목록", "hit": true, "rank": 1, "scores": [0.822905, 0.737642, 0.666589, 0.581326, 0.370998], "has_table_row": false}
+{"qid": "q020", "query": "마주 경제적기준 연도별 현황", "hit": true, "rank": 1, "scores": [0.775861, 0.645789, 0.617368, 0.74144, 0.603158], "has_table_row": false}

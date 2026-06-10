@@ -5,7 +5,8 @@ Fills the ``single_shot_hit`` axis of the routing GT
 top-k id-hit of the cheap single-shot path — FTS-only (no embedder, no
 reranker, GPU 0). Output is JSONL, one object per scored query::
 
-    {"qid": "a001", "query": "...", "hit": false, "rank": null}
+    {"qid": "a001", "query": "...", "hit": false, "rank": null,
+     "scores": [0.66, 0.61, ...], "has_table_row": false}
 
 ``hit`` is true iff any gold id appears in the deduped top-k retrieved
 list; ``rank`` is the 1-based position of the first gold id within that
@@ -13,6 +14,12 @@ top-k window (null on miss) — exactly ``reciprocal_rank > 0`` over
 ``retrieved[:k]`` as ``tests/benchmark/metrics.py`` scores it, so a
 file's hit-rate equals the ``hits/total`` column of ``eval/run_all.py``
 when run at the same k.
+
+``scores`` (top-k retrieval scores, descending) and ``has_table_row``
+(any ``_table_name`` property in the top-k nodes) are the s2/s3 signal
+inputs of ``eval/routing_signal_auc.py`` — the same file serves both
+the routing-GT hit axis and the AUC harness's retrieval pass (its
+loader reads scores/hit/has_table_row and ignores the rest).
 
 Mirroring contract — the retrieval + matching logic below is a 1:1 copy
 of ``eval/run_all.py`` so the GT axis stays consistent with the
@@ -208,7 +215,19 @@ async def _score_custom(
                         retrieved.append(doc_id)
 
             rank = hit_rank(retrieved, relevant, k)
-            rows.append({"qid": qid, "query": query_text, "hit": rank is not None, "rank": rank})
+            top = result.evidence[:k]
+            rows.append(
+                {
+                    "qid": qid,
+                    "query": query_text,
+                    "hit": rank is not None,
+                    "rank": rank,
+                    "scores": [round(float(ev.score), 6) for ev in top],
+                    "has_table_row": any(
+                        "_table_name" in (ev.node.properties or {}) for ev in top
+                    ),
+                }
+            )
     finally:
         await backend.close()
     return rows, skipped
@@ -335,7 +354,22 @@ async def _score_public(
                 if doc_id and doc_id not in retrieved:
                     retrieved.append(doc_id)
             rank = hit_rank(retrieved, relevant, k)
-            rows.append({"qid": qid, "query": query_text, "hit": rank is not None, "rank": rank})
+            top = result.nodes[:k]
+            rows.append(
+                {
+                    "qid": qid,
+                    "query": query_text,
+                    "hit": rank is not None,
+                    "rank": rank,
+                    # graph.search exposes activation, not the EvidenceSearch
+                    # score — both are descending relevance, which is all the
+                    # s2 shape signals (flatness / margin) consume.
+                    "scores": [round(float(h.activation), 6) for h in top],
+                    "has_table_row": any(
+                        "_table_name" in (h.node.properties or {}) for h in top
+                    ),
+                }
+            )
     finally:
         await backend.close()
     return rows

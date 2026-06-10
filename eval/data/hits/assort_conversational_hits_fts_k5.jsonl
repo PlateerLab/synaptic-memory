@@ -1,24 +1,24 @@
-{"qid": "c001", "query": "이번 시즌(25SS)에 몇 벌이나 나왔어?", "hit": false, "rank": null}
-{"qid": "c002", "query": "10만원 이하 티셔츠 추천해줘", "hit": true, "rank": 3}
-{"qid": "c003", "query": "가장 판매량 많은 상품의 평균 리뷰 평점은?", "hit": false, "rank": null}
-{"qid": "c005", "query": "봄에 입기 좋은 니트 뭐가 있을까?", "hit": true, "rank": 1}
-{"qid": "c006", "query": "결혼식 하객으로 입기 좋은 원피스?", "hit": true, "rank": 2}
-{"qid": "c007", "query": "할인율 20% 이상 상품 중 누적 판매량 3000개 넘는 것", "hit": false, "rank": null}
-{"qid": "c008", "query": "색상별로 몇 개의 상품 variant이 있어?", "hit": true, "rank": 1}
-{"qid": "c009", "query": "실크블렌드 가디건의 모든 사이즈 버전", "hit": false, "rank": null}
-{"qid": "c010", "query": "55사이즈로 예쁜 거 뭐 있어?", "hit": true, "rank": 1}
-{"qid": "c012", "query": "어느 시즌 상품이 가장 많이 팔려?", "hit": true, "rank": 1}
-{"qid": "c013", "query": "5만원 미만 상품 전부 보여줘", "hit": true, "rank": 3}
-{"qid": "c014", "query": "방송 판매된 상품 중 가장 누적 매출이 큰 것은?", "hit": false, "rank": null}
-{"qid": "c015", "query": "엄마 선물로 괜찮은 블라우스 있을까?", "hit": false, "rank": null}
-{"qid": "c017", "query": "핑크 색상 variant이 있는 상품은?", "hit": false, "rank": null}
-{"qid": "c019", "query": "24SS 시즌 상품 중에 가장 비싼 것", "hit": true, "rank": 1}
-{"qid": "c020", "query": "이번주 홈쇼핑 방송 예정 상품 있어?", "hit": false, "rank": null}
-{"qid": "c022", "query": "30% 이상 할인 중인 상품 중 25SS 신상은?", "hit": false, "rank": null}
-{"qid": "c023", "query": "12800000 상품에 대해 알려진 모든 정보", "hit": true, "rank": 1}
-{"qid": "c024", "query": "스커트 종류 뭐가 있어?", "hit": true, "rank": 1}
-{"qid": "c025", "query": "블랙 컬러가 들어간 variant 개수는?", "hit": true, "rank": 1}
-{"qid": "c027", "query": "가성비 좋은 걸로 3개만 추천해줘", "hit": false, "rank": null}
-{"qid": "c028", "query": "FREE 사이즈 상품은 몇 가지 색상이 있어?", "hit": true, "rank": 1}
-{"qid": "c029", "query": "24FW 가을/겨울 신상품 목록", "hit": true, "rank": 1}
-{"qid": "c030", "query": "오늘 뭘 사면 좋을지 추천해줄래?", "hit": false, "rank": null}
+{"qid": "c001", "query": "이번 시즌(25SS)에 몇 벌이나 나왔어?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c002", "query": "10만원 이하 티셔츠 추천해줘", "hit": true, "rank": 3, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c003", "query": "가장 판매량 많은 상품의 평균 리뷰 평점은?", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c005", "query": "봄에 입기 좋은 니트 뭐가 있을까?", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c006", "query": "결혼식 하객으로 입기 좋은 원피스?", "hit": true, "rank": 2, "scores": [0.66, 0.645789, 0.028182, 0.028182, 0.028182], "has_table_row": true}
+{"qid": "c007", "query": "할인율 20% 이상 상품 중 누적 판매량 3000개 넘는 것", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.655312], "has_table_row": true}
+{"qid": "c008", "query": "색상별로 몇 개의 상품 variant이 있어?", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c009", "query": "실크블렌드 가디건의 모든 사이즈 버전", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c010", "query": "55사이즈로 예쁜 거 뭐 있어?", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c012", "query": "어느 시즌 상품이 가장 많이 팔려?", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c013", "query": "5만원 미만 상품 전부 보여줘", "hit": true, "rank": 3, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c014", "query": "방송 판매된 상품 중 가장 누적 매출이 큰 것은?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c015", "query": "엄마 선물로 괜찮은 블라우스 있을까?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c017", "query": "핑크 색상 variant이 있는 상품은?", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c019", "query": "24SS 시즌 상품 중에 가장 비싼 것", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c020", "query": "이번주 홈쇼핑 방송 예정 상품 있어?", "hit": false, "rank": null, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c022", "query": "30% 이상 할인 중인 상품 중 25SS 신상은?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c023", "query": "12800000 상품에 대해 알려진 모든 정보", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c024", "query": "스커트 종류 뭐가 있어?", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c025", "query": "블랙 컬러가 들어간 variant 개수는?", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c027", "query": "가성비 좋은 걸로 3개만 추천해줘", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c028", "query": "FREE 사이즈 상품은 몇 가지 색상이 있어?", "hit": true, "rank": 1, "scores": [0.66, 0.66, 0.66, 0.66, 0.66], "has_table_row": true}
+{"qid": "c029", "query": "24FW 가을/겨울 신상품 목록", "hit": true, "rank": 1, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}
+{"qid": "c030", "query": "오늘 뭘 사면 좋을지 추천해줄래?", "hit": false, "rank": null, "scores": [0.66, 0.645789, 0.631579, 0.617368, 0.603158], "has_table_row": true}

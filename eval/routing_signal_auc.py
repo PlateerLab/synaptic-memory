@@ -194,8 +194,9 @@ class RetrievalInfo:
     """Per-query single-shot retrieval observation (top-k pass).
 
     ``scores``: top-k retrieval/rerank scores, best first not required.
-    ``hit``: whether the pass hit GT (optional — when absent, s2_no_hit
-    falls back to "returned zero results").
+    ``hit``: whether the pass hit GT — loaded for reference only; NO
+    signal may consume it (gold-based, query-time unobservable,
+    tautological against the GT label — see s2_zero_results).
     ``has_table_row``: whether any top-k row is a ``_table_name``
     property row (structured-corpus contact).
     """
@@ -243,6 +244,26 @@ def load_retrieval_results(path: Path) -> dict[str, RetrievalInfo]:
         )
     if n_skipped:
         _warn(f"{n_skipped} retrieval record(s) in {path} skipped (non-numeric scores)")
+    return out
+
+
+def load_retrieval_specs(specs: Sequence[str]) -> dict[str, RetrievalInfo]:
+    """Load one or more ``[CORPUS=]PATH`` retrieval specs into a GT-keyed map.
+
+    ``CORPUS=PATH`` namespaces the file's bare qids as ``CORPUS:qid`` —
+    the dump_perquery_hits files are per-corpus with bare qids, while the
+    GT (and therefore the signal join) keys by namespaced qid. A bare
+    ``PATH`` is taken as already GT-keyed. Later specs win on collision,
+    mirroring routing_gt's --hits-jsonl convention.
+    """
+    out: dict[str, RetrievalInfo] = {}
+    for spec in specs:
+        corpus, sep, path = spec.partition("=")
+        if sep and corpus and "/" not in corpus:
+            loaded = load_retrieval_results(Path(path))
+            out.update({f"{corpus}:{qid}": info for qid, info in loaded.items()})
+        else:
+            out.update(load_retrieval_results(Path(spec)))
     return out
 
 
@@ -350,16 +371,19 @@ def s1_structured_lexicon(query: str, ctx: SignalContext) -> float:
     return families / 4.0
 
 
-def s2_no_hit(query: str, ctx: SignalContext) -> float:
-    """1.0 when the single-shot pass produced no hit. Uses the explicit
-    ``hit`` field when the retrieval JSONL carries one; otherwise falls
-    back to "the pass returned zero results". NaN without a retrieval
-    pass."""
+def s2_zero_results(query: str, ctx: SignalContext) -> float:
+    """1.0 when the single-shot pass returned zero results.
+
+    Deliberately IGNORES the retrieval file's gold-based ``hit`` field:
+    the GT's agent_required label embeds that same hit axis, so a
+    hit-fed signal scores a tautological AUC 1.0 while being
+    unobservable at query time (gold ids don't exist in production).
+    Score-presence is the deployable analog. NaN without a retrieval
+    pass.
+    """
     r = ctx.retrieval
     if r is None:
         return math.nan
-    if r.hit is not None:
-        return 0.0 if r.hit else 1.0
     return 1.0 if not r.scores else 0.0
 
 
@@ -402,7 +426,7 @@ def s3_table_row_in_topk(query: str, ctx: SignalContext) -> float:
 
 SIGNALS: dict[str, Signal] = {
     "s1_structured_lexicon": s1_structured_lexicon,
-    "s2_no_hit": s2_no_hit,
+    "s2_zero_results": s2_zero_results,
     "s2_score_flatness": s2_score_flatness,
     "s2_margin_deficit": s2_margin_deficit,
     "s3_table_row_in_topk": s3_table_row_in_topk,
@@ -810,7 +834,7 @@ def generate_report(
     budgets: Mapping[str, float] | None = None,
     min_recall: float = 0.90,
     gt_path: Path | None = None,
-    retrieval_path: Path | None = None,
+    retrieval_path: Path | str | None = None,
 ) -> str:
     """Full E2 markdown report: per-signal AUC (confirmed, held-out),
     recall@precision, reference tiers, train-tuned OR-combo, held-out
@@ -925,9 +949,13 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument("gt", type=Path, help="routing GT JSONL (eval/routing_gt.py output)")
     p.add_argument(
         "--retrieval",
-        type=Path,
+        action="append",
         default=None,
-        help="optional per-query retrieval JSONL (qid, scores, hit, has_table_row) for s2/s3",
+        metavar="[CORPUS=]PATH",
+        help="optional per-query retrieval JSONL (qid, scores, hit, has_table_row) for "
+        "s2/s3. Repeatable. 'CORPUS=PATH' namespaces the file's bare qids as "
+        "'CORPUS:qid' to match the GT's namespaced qids (the dump_perquery_hits "
+        "files); a bare PATH is taken as already GT-keyed.",
     )
     p.add_argument(
         "--out", type=Path, default=None, help="write the markdown report here (default: stdout)"
@@ -947,7 +975,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not records:
         print(f"!! no usable records in {args.gt}", file=sys.stderr)
         return 2
-    retrieval = load_retrieval_results(args.retrieval) if args.retrieval else {}
+    retrieval = load_retrieval_specs(args.retrieval) if args.retrieval else {}
     contexts = build_contexts(records, retrieval)
     values = compute_signal_values(records, contexts)
     report = generate_report(
@@ -955,7 +983,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         values,
         min_recall=args.min_recall,
         gt_path=args.gt,
-        retrieval_path=args.retrieval,
+        retrieval_path=", ".join(args.retrieval) if args.retrieval else None,
     )
     if args.out:
         args.out.write_text(report, encoding="utf-8")
