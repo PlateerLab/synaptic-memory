@@ -164,6 +164,19 @@ async def _run(args) -> None:
         results = await asyncio.gather(*[one(qi, q) for qi, q in enumerate(queries)])
         return sum(1 for ok in results if ok)
 
+    def _flush_jsonl() -> None:
+        # rewrite after every arm — a multi-hour run that dies mid-way must
+        # not lose the completed runs
+        if not args.out_jsonl:
+            return
+        from pathlib import Path
+
+        out = Path(args.out_jsonl)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("w", encoding="utf-8") as f:
+            for rec in records:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
     n = len(queries)
     print(f"\n=== RAG vs agent — ANSWER quality ({n} queries, {args.dataset}, k={args.k}) ===", flush=True)
 
@@ -173,10 +186,12 @@ async def _run(args) -> None:
         t = time.time()
         rr = await score_arm(naive_rag, "rag", r)
         rag.append(rr)
+        _flush_jsonl()
         print(f"naive-RAG run {r + 1}: {rr}/{n} ({rr / n:.3f})  [{time.time() - t:.0f}s]", flush=True)
         t = time.time()
         ar = await score_arm(agent, "agent", r)
         ag.append(ar)
+        _flush_jsonl()
         empty = sum(1 for x in records if x["arm"] == "agent" and x["run"] == r + 1 and x["empty"])
         print(
             f"agent     run {r + 1}: {ar}/{n} ({ar / n:.3f})  [{time.time() - t:.0f}s, "
@@ -193,10 +208,6 @@ async def _run(args) -> None:
         from pathlib import Path
 
         out = Path(args.out_jsonl)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open("w", encoding="utf-8") as f:
-            for rec in records:
-                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         rtok = sum(r["prompt_tokens"] + r["completion_tokens"] for r in records if r["arm"] == "rag")
         atok = sum(r["prompt_tokens"] + r["completion_tokens"] for r in records if r["arm"] == "agent")
         print(
