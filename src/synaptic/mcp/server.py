@@ -4,6 +4,8 @@ Usage:
     synaptic-mcp                          # stdio (default, for Claude Code)
     synaptic-mcp --db ./knowledge.db      # custom DB path
     synaptic-mcp --dsn postgresql://...   # PostgreSQL backend
+    synaptic-mcp --llm-url http://localhost:8012/v1 --llm-model Qwen3.5-27b
+                                          # bind an LLM → enables knowledge_ask
 """
 
 from __future__ import annotations
@@ -38,6 +40,15 @@ _reranker: Any = None
 _rerank_url: str = ""
 _rerank_backend: str = "vllm"
 _rerank_model: str = "BAAI/bge-reranker-v2-m3"
+# LLM binding for server-side answer synthesis (knowledge_ask only).
+# Every other knowledge_*/agent_* tool is an LLM-free primitive — the
+# MCP *client* is the brain. knowledge_ask is the one tool that makes
+# LLM calls server-side (cheap synthesis + sufficiency judge + agent
+# loop), so it needs its own OpenAI-compatible endpoint.
+_llm_client: Any = None
+_llm_url: str = ""
+_llm_model: str = "gpt-4o-mini"
+_llm_api_key: str = ""
 # Vector cascade tuning — see synaptic.search.HybridSearch docstring
 # for the per-embedder cosine distribution guide. None means "use
 # the package default" (DEFAULT_VECTOR_MIN_COSINE / RELATIVE_DROP),
@@ -170,6 +181,32 @@ async def _ensure_tracker() -> Any:
         return _tracker
 
 
+async def _ensure_llm_client() -> Any:
+    """Lazy-initialize the OpenAI-compatible LLM client (concurrency-safe).
+
+    Returns ``None`` when no LLM endpoint is bound (no ``--llm-url`` and
+    no pre-injected ``_llm_client``) — ``knowledge_ask`` turns that into
+    a clear error instead of degrading silently. Raises ``ImportError``
+    when ``--llm-url`` is set but the ``openai`` package is missing.
+    """
+    global _llm_client
+
+    if _llm_client is not None:
+        return _llm_client
+    if not _llm_url:
+        return None
+
+    async with _get_init_lock():
+        if _llm_client is not None:
+            return _llm_client
+
+        from openai import AsyncOpenAI
+
+        _llm_client = AsyncOpenAI(base_url=_llm_url, api_key=_llm_api_key or "synaptic")
+        logger.info("LLM configured: %s (model=%s)", _llm_url, _llm_model)
+        return _llm_client
+
+
 # --- Tools ---
 
 
@@ -243,6 +280,105 @@ async def knowledge_search(
             "categories": list(result.anchors.categories),
             "entities": list(result.anchors.entities),
         },
+    }
+
+
+@server.tool()
+async def knowledge_ask(
+    question: str,
+    mode: str = "auto",
+    k: int = 10,
+    max_turns: int = 5,
+) -> dict[str, Any]:
+    """Answer a question end-to-end with honest routing — cheap path first, agent only when needed.
+
+    Single answer-level entry point over the graph
+    (``SynapticGraph.ask()``). Decision layers:
+
+    1. **tier-0** — deterministic signals (zero LLM calls): structured-
+       operation lexis (enumeration / aggregation / comparison filter /
+       temporal filter) over a corpus with typed table nodes routes
+       straight to the multi-turn agent loop — the class where
+       single-shot retrieval is measured near 0.
+    2. **cheap path** — one retrieval (top ``k``) + ONE synthesis call.
+    3. **tier-1** — a temperature-0 sufficiency judge reads the cheap
+       answer; on a clear evidence gap the question escalates to the
+       agent loop (fail-open: a broken judge keeps the cheap answer).
+
+    The response always carries the route taken, the reasons for it
+    (``route_reasons``), whether tier-1 escalated, and the total
+    prompt/completion token cost across every server-side LLM call —
+    so the caller can audit cost against answer quality.
+
+    Unlike every other knowledge_*/agent_* tool (LLM-free primitives —
+    the MCP client is the brain), this tool makes LLM calls
+    *server-side* and therefore requires an endpoint bound at startup
+    via ``--llm-url`` (plus optional ``--llm-model`` /
+    ``--llm-api-key``). Without one it returns ``success=False`` with
+    guidance — it does NOT silently degrade to search-only; call
+    knowledge_search / agent_search yourself for retrieval-only use.
+
+    Args:
+        question: Natural-language question (Korean or English).
+        mode: ``"auto"`` (route, default), ``"search"`` (force the cheap
+            single-shot path, never escalate), ``"agent"`` (force the
+            multi-turn agent loop).
+        k: Evidence count for the cheap path's retrieval.
+        max_turns: Turn budget when the agent loop runs.
+    """
+    graph = await _ensure_graph()
+    try:
+        client = await _ensure_llm_client()
+    except ImportError:
+        return {
+            "success": False,
+            "error": (
+                "--llm-url is set but the 'openai' package is not installed — "
+                "pip install openai"
+            ),
+        }
+    if client is None:
+        return {
+            "success": False,
+            "error": (
+                "no LLM bound to the server — knowledge_ask makes server-side "
+                "LLM calls (synthesis + sufficiency judge + agent loop). Start "
+                "synaptic-mcp with --llm-url (and optionally --llm-model / "
+                "--llm-api-key), or use knowledge_search / agent_search for "
+                "retrieval and synthesize the answer yourself."
+            ),
+        }
+
+    try:
+        result = await graph.ask(
+            question,
+            llm_client=client,
+            model=_llm_model,
+            mode=mode,
+            k=k,
+            max_turns=max_turns,
+        )
+    except ValueError as exc:
+        return {"success": False, "message": str(exc)}
+
+    return {
+        "success": True,
+        "answer": result.answer,
+        "route": result.route,
+        "route_reasons": result.route_reasons,
+        "escalated": result.escalated,
+        "prompt_tokens": result.prompt_tokens,
+        "completion_tokens": result.completion_tokens,
+        "model": _llm_model,
+        "evidence": [
+            {
+                "id": n.id,
+                "kind": str(n.kind),
+                "title": n.title,
+                "content": (n.content or "")[:300],
+            }
+            for n in result.evidence[:k]
+        ],
     }
 
 
@@ -1918,6 +2054,7 @@ def main() -> None:
     """Entry point for synaptic-mcp command."""
     global _db_path, _dsn, _source_dsn, _embed_url, _embed_model
     global _rerank_url, _rerank_backend, _rerank_model
+    global _llm_url, _llm_model, _llm_api_key
     global _vector_min_cosine, _vector_relative_drop
 
     if "--version" in sys.argv:
@@ -1944,6 +2081,13 @@ def main() -> None:
             "                                       http://localhost:11434 (Ollama)\n"
             "  --rerank-backend NAME      Reranker wire format: vllm (default), ollama, tei\n"
             "  --rerank-model NAME        Reranker model name (default: BAAI/bge-reranker-v2-m3)\n"
+            "  --llm-url URL              LLM API base URL (OpenAI-compatible) for the\n"
+            "                             knowledge_ask tool's server-side calls (cheap\n"
+            "                             synthesis + sufficiency judge + agent loop).\n"
+            "                             Example: http://localhost:8012/v1 (vLLM)\n"
+            "  --llm-model NAME           LLM model name (default: gpt-4o-mini)\n"
+            "  --llm-api-key KEY          API key for --llm-url (default: 'synaptic' —\n"
+            "                             fine for local vLLM / Ollama)\n"
             "  --vector-min-cosine FLOAT  Absolute noise floor for vector cascade (default 0.10)\n"
             "  --vector-relative-drop FLOAT\n"
             "                             Fraction below the top vector hit that is still\n"
@@ -1976,6 +2120,12 @@ def main() -> None:
             _rerank_backend = args[i + 1]
         elif arg == "--rerank-model" and i + 1 < len(args):
             _rerank_model = args[i + 1]
+        elif arg == "--llm-url" and i + 1 < len(args):
+            _llm_url = args[i + 1]
+        elif arg == "--llm-model" and i + 1 < len(args):
+            _llm_model = args[i + 1]
+        elif arg == "--llm-api-key" and i + 1 < len(args):
+            _llm_api_key = args[i + 1]
         elif arg == "--vector-min-cosine" and i + 1 < len(args):
             try:
                 _vector_min_cosine = float(args[i + 1])
@@ -2014,6 +2164,8 @@ def main() -> None:
             _rerank_backend,
             _rerank_model,
         )
+    if _llm_url:
+        logger.info("LLM (knowledge_ask): %s (model=%s)", _llm_url, _llm_model)
     server.run()
 
 
