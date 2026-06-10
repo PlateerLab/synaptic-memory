@@ -1813,6 +1813,177 @@ class SynapticGraph:
             record_trace=record_trace,
         )
 
+    async def ask(
+        self,
+        question: str,
+        *,
+        llm_client: object,
+        model: str = "gpt-4o-mini",
+        mode: str = "auto",
+        k: int = 10,
+        max_turns: int = 5,
+    ):
+        """Single entry point with honest routing — cheap when cheap is enough.
+
+        Routes between the two answer paths this library ships:
+
+        - **single_shot** — ``search(k)`` + ONE synthesis call (the
+          naive-RAG arm of the rag_vs_agent harness, same prompt).
+        - **agent** — the multi-turn :meth:`chat` loop (measured value:
+          structured / multi-hop questions where single-shot is ~0).
+
+        Decision layers (``mode="auto"``):
+
+        1. **tier-0** — :func:`synaptic.router.decide_route`,
+           deterministic, zero LLM calls. Conservative default — tier-0
+           signal set pending E2 validation (PLAN-v0.29 §E2): only
+           structured-operation lexis over a corpus with typed table
+           nodes goes straight to the agent.
+        2. **tier-1** — the cheap answer is judged by the sufficiency
+           gate (``agent_loop._judge_sufficiency``, temperature 0); on a
+           clear gap the query escalates to the agent loop. An empty
+           cheap synthesis also escalates. Fail-open: a broken judge
+           keeps the cheap answer.
+
+        Args:
+            question: User question.
+            llm_client: OpenAI-compatible async client — same contract
+                as :meth:`chat` (required; there is no graph-level
+                default client).
+            model: Model name forwarded to the LLM client.
+            mode: ``"auto"`` (route), ``"search"`` (force the cheap
+                path, never escalate), ``"agent"`` (force the agent
+                loop).
+            k: Evidence count for the cheap path's retrieval.
+            max_turns: Turn budget when the agent loop runs.
+
+        Returns:
+            :class:`synaptic.router.AskResult` — answer, the route that
+            produced it, the route reasons, whether tier-1 escalated,
+            total prompt/completion tokens across every LLM call made
+            (synthesis + judge + agent loop), and the evidence nodes.
+        """
+        from synaptic.agent_loop import _add_usage, _judge_sufficiency
+        from synaptic.router import (
+            RAG_SYNTHESIS_SYSTEM,
+            AskResult,
+            RouteDecision,
+            corpus_has_table_nodes,
+            decide_route,
+        )
+
+        if mode not in ("auto", "search", "agent"):
+            raise ValueError(f"mode must be 'auto', 'search' or 'agent', got {mode!r}")
+
+        usage = {"prompt": 0, "completion": 0}
+
+        # --- tier-0: deterministic route decision (no LLM) ----------
+        if mode == "agent":
+            decision = RouteDecision(
+                route="agent",
+                reasons=["mode='agent' forced by caller"],
+                signals={"mode_forced": True},
+            )
+        elif mode == "search":
+            decision = RouteDecision(
+                route="single_shot",
+                reasons=["mode='search' forced by caller — no escalation"],
+                signals={"mode_forced": True},
+            )
+        else:
+            decision = decide_route(
+                question,
+                has_table_nodes=await corpus_has_table_nodes(self._backend),
+            )
+
+        async def _run_agent():
+            r = await self.chat(question, llm_client=llm_client, model=model, max_turns=max_turns)
+            usage["prompt"] += r.prompt_tokens
+            usage["completion"] += r.completion_tokens
+            return r
+
+        if decision.route == "agent":
+            agent_res = await _run_agent()
+            return AskResult(
+                answer=agent_res.final_answer,
+                route="agent",
+                route_reasons=list(decision.reasons),
+                escalated=False,
+                prompt_tokens=usage["prompt"],
+                completion_tokens=usage["completion"],
+                evidence=list(agent_res.nodes),
+            )
+
+        # --- cheap path: single-shot retrieval + one synthesis call --
+        sr = await self.search(question, limit=k)
+        snippets = [(an.node.content or an.node.title or "")[:700] for an in sr.nodes[:k]]
+        context = "\n---\n".join(snippets)
+        resp = await llm_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": RAG_SYNTHESIS_SYSTEM},
+                {
+                    "role": "user",
+                    "content": f"Context:\n{context}\n\nQuestion: {question}\nAnswer:",
+                },
+            ],
+            max_tokens=512,
+        )
+        _add_usage(usage, resp)
+        answer = resp.choices[0].message.content or ""
+        evidence: list = [an.node for an in sr.nodes]
+        reasons = list(decision.reasons)
+        route = "single_shot"
+        escalated = False
+
+        # --- tier-1: sufficiency gate over the cheap answer ---------
+        if mode == "auto":
+            escalate_reason = ""
+            if not answer.strip():
+                escalate_reason = "cheap synthesis returned an empty answer"
+            elif snippets:
+                # The judge reads role="tool" messages; present the cheap
+                # path's evidence snippets in that shape so both paths are
+                # judged against identical evidence framing.
+                pseudo_messages = [{"role": "tool", "content": s} for s in snippets]
+                verdict = await _judge_sufficiency(
+                    llm_client,
+                    model,
+                    question,
+                    pseudo_messages,
+                    answer,
+                    usage=usage,
+                    temperature=0.0,
+                )
+                if verdict is not None and not verdict["sufficient"]:
+                    gap = verdict["gap"] or "unspecified gap"
+                    escalate_reason = (
+                        f"tier-1 sufficiency judge: cheap answer insufficient (missing: {gap})"
+                    )
+            if escalate_reason:
+                reasons.append(escalate_reason + " — escalated to the agent loop")
+                agent_res = await _run_agent()
+                escalated = True
+                if agent_res.final_answer.strip():
+                    answer = agent_res.final_answer
+                    evidence = list(agent_res.nodes)
+                    route = "agent"
+                else:
+                    # Non-empty guarantee: an escalation that comes back blank
+                    # must not erase a usable cheap answer. route stays
+                    # "single_shot" — that's the path that produced `answer`.
+                    reasons.append("agent returned an empty answer — kept the single-shot synthesis")
+
+        return AskResult(
+            answer=answer,
+            route=route,
+            route_reasons=reasons,
+            escalated=escalated,
+            prompt_tokens=usage["prompt"],
+            completion_tokens=usage["completion"],
+            evidence=evidence,
+        )
+
     async def search(
         self,
         query: str,

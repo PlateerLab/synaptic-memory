@@ -1329,6 +1329,7 @@ async def _judge_sufficiency(
     *,
     bridge: bool = False,
     usage: dict | None = None,
+    temperature: float | None = None,
 ) -> dict | None:
     """One advisory LLM call — is ``candidate`` fully supported by the tool
     evidence gathered so far? Fail-open (returns ``None``) on any error, and
@@ -1338,6 +1339,11 @@ async def _judge_sufficiency(
     With ``bridge=True`` the judge is also asked to name a concrete follow-up
     search query grounded in the evidence's bridge entity (L29b multi-hop
     chaining); the plain prompt never requests it.
+
+    ``temperature`` is forwarded to the client only when not ``None``.
+    ``graph.ask()``'s tier-1 gate passes 0.0 so the routing verdict is as
+    deterministic as the serving stack allows; the agent loop keeps the
+    server default for comparability with the measured runs.
     """
     evidence = _gather_tool_evidence(messages)
     if not evidence:
@@ -1351,8 +1357,11 @@ async def _judge_sufficiency(
         },
     ]
     try:
+        kwargs: dict[str, Any] = {}
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         resp = await client.chat.completions.create(
-            model=model, messages=judge_messages, max_tokens=200
+            model=model, messages=judge_messages, max_tokens=200, **kwargs
         )
         if usage is not None:
             _add_usage(usage, resp)
