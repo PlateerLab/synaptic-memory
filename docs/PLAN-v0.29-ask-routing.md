@@ -85,6 +85,16 @@
 - 신호 조합으로 **agent-required recall ≥0.90 (confirmed 한정) AND tier-0 escalation: AutoRAG ≤15% + assort Easy ≤20%** 달성 가능 여부 판정.
 - 미달 시: 보수 라우팅(고확신 양성만 승급, 나머지는 tier-1 gate에 위임)으로 E3 스코프 축소 — 이 결정 자체가 E2의 산출물.
 
+**✅ 측정 완료 — VERDICT: NO-GO (2026-06-10, `examples/ablation/diagnostics/routing_signal_auc_v029_20260610.md`)**
+
+- GT 624행 (`eval/data/routing_gt_v029.jsonl`): finreg 240q confirmed(3런) + xlsx provisional + krra_graph + hits 10종.
+- 배포 가능 신호의 reference-tier AUC 전부 약함: s1 0.623 / s2_zero 0.587 / flatness 0.618 / margin 0.664 / s3 0.608. confirmed-tier에선 s1 **AUC 0.500** — finreg confirmed agent_required(=judge discordant 17개)는 노이즈라 예측 불가능, 정의대로의 결과.
+- **corpus별 분해가 결정적**: s3은 assort_hard 양성 93%를 잡지만 assort/x2bee easy **음성에도 100% 발화** — corpus 감지기일 뿐, corpus 안에서 agent_required를 분리 못함. s1은 assort_hard recall 40%.
+- 발견·수정: 초기 s2_no_hit이 gold 기반 hit을 소비해 AUC 1.000 — GT 라벨 정의와의 동어반복이자 쿼리 시점 관측 불가. `s2_zero_results`로 교체, "신호의 gold-hit 소비 금지"를 코드에 명문화.
+- **확정 결정**: E3는 보수 라우팅이 기본 (이미 구현된 default) — tier-0은 고확신 양성만, 라우팅의 본체는 cheap-first → tier-1 sufficiency judge. tier-0 정형 어휘 lexicon 개선(train split 한정)은 선택적 upside로 v0.29.x 백로그.
+
+**E4 오프라인 선행 측정 주의** (`cost_at_quality_offline_finreg240_20260610.md`): finreg 240q 풀에서 oracle 0.767 (always-RAG 0.633, always-agent 0.621, 10.9×). 단 **parity corpus의 oracle headroom +32는 대부분 노이즈 discordant를 라벨로 선별한 허상** — 재런 시 discordant 구성이 바뀌고(McNemar p≈1.0), s1 AUC 0.500이 그 예측 불가능성의 직접 증거. ask()의 현실적 목표는 finreg에서 "RAG 동등 품질 ≤0.35× 비용"이며, 진짜 품질 headroom은 혼합 풀의 assort_hard 질량에서 나온다.
+
 ### E3 — `graph.ask()` + MCP `knowledge_ask` (keystone, M)
 
 목표: 단일 진입점. tier-0 결정론 신호 → cheap 경로(search + 1회 합성) → tier-1 sufficiency gate 불충분 시 agent 승급.
