@@ -1,0 +1,27 @@
+{"qid": "c001", "query": "iPhone 15 Pro의 총 판매량이 얼마나 되나요?", "hit": true, "rank": 1}
+{"qid": "c002", "query": "Shin Ramyun의 평균 리뷰 평점을 알려줘", "hit": true, "rank": 1}
+{"qid": "c003", "query": "2023년 12월 판매된 상품 건수는 몇 건이야?", "hit": false, "rank": null}
+{"qid": "c004", "query": "월별 매출 추이를 보여줘", "hit": false, "rank": null}
+{"qid": "c005", "query": "1만원 이상 와인 상품 중에서 리뷰가 10개 넘는 것은?", "hit": false, "rank": null}
+{"qid": "c006", "query": "손님이 \"매운 한국 라면 있어?\" 라고 물으면 뭐라고 답해?", "hit": true, "rank": 1}
+{"qid": "c007", "query": "전자제품 중에 제일 비싼 거 뭐야?", "hit": false, "rank": null}
+{"qid": "c008", "query": "치즈 종류가 이 쇼핑몰에 몇 개나 있어?", "hit": false, "rank": null}
+{"qid": "c009", "query": "빵 제품이 몇 종류 있는지 확인해줘", "hit": false, "rank": null}
+{"qid": "c010", "query": "평점 5점을 받은 상품 중 가장 저렴한 것은?", "hit": false, "rank": null}
+{"qid": "c011", "query": "1만원에서 5만원 사이 상품이 몇 개?", "hit": false, "rank": null}
+{"qid": "c012", "query": "판매량 TOP 3와 리뷰 수 TOP 3를 비교해줘", "hit": false, "rank": null}
+{"qid": "c013", "query": "친구 생일 선물로 뭐가 좋을까? 5만원 이하로 추천해줘", "hit": false, "rank": null}
+{"qid": "c014", "query": "Cheese 카테고리에서 리뷰가 가장 많은 상품은?", "hit": false, "rank": null}
+{"qid": "c015", "query": "Galaxy Book에 대한 리뷰 내용을 보여줘", "hit": true, "rank": 1}
+{"qid": "c017", "query": "2023년 여름(6-8월)에 팔린 상품 목록", "hit": false, "rank": null}
+{"qid": "c019", "query": "판매량 10개 이상 팔린 상품은 몇 개야?", "hit": false, "rank": null}
+{"qid": "c020", "query": "초록 치즈 파스타에 어울리는 와인 추천해줘", "hit": false, "rank": null}
+{"qid": "c021", "query": "가장 많이 팔린 상품의 리뷰 평균 점수는?", "hit": false, "rank": null}
+{"qid": "c022", "query": "70000원 정확히 인 상품 있어?", "hit": false, "rank": null}
+{"qid": "c023", "query": "아이폰보다 저렴한 전자기기는?", "hit": false, "rank": null}
+{"qid": "c025", "query": "1점 리뷰를 가장 많이 받은 상품이 뭐야?", "hit": false, "rank": null}
+{"qid": "c026", "query": "아침 식사용으로 좋은 제품 3가지만 골라줘", "hit": false, "rank": null}
+{"qid": "c027", "query": "재고가 200개 이하인 상품", "hit": true, "rank": 4}
+{"qid": "c028", "query": "Beer 카테고리 상품 11개의 총 판매량 합계는?", "hit": false, "rank": null}
+{"qid": "c029", "query": "달달한 음료 찾고 있어. 뭐가 있을까?", "hit": false, "rank": null}
+{"qid": "c030", "query": "재고가 가장 적은 상품의 리뷰 개수는?", "hit": false, "rank": null}
