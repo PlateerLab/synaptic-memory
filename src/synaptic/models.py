@@ -114,6 +114,13 @@ class Edge:
     target_id: str = ""
     kind: EdgeKind = EdgeKind.RELATED
     weight: float = 1.0
+    # Signed-edge dimension, orthogonal to ``weight``. ``weight`` is the
+    # (non-negative) strength/relevance of a relation; ``polarity`` carries an
+    # optional sign in ``[-1.0, +1.0]`` for relations that are directional in
+    # sentiment/effect (signed graphs). ``0.0`` = unsigned (legacy default), so
+    # existing graphs and backends are unaffected. Domain code (e.g. a news
+    # sentiment edge) sets it; generic retrieval ignores it unless asked.
+    polarity: float = 0.0
     created_at: float = field(default_factory=time)
 
 

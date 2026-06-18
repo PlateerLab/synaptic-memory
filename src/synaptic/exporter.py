@@ -113,6 +113,7 @@ class JSONExporter:
                     "target_id": e.target_id,
                     "kind": str(e.kind),
                     "weight": e.weight,
+                    "polarity": e.polarity,
                 }
                 for e in edges
             ],

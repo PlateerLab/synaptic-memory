@@ -75,6 +75,46 @@ class TestSQLiteEdges:
         both = await sqlite.get_edges(n1.id, direction="both")
         assert len(both) == 1
 
+    async def test_polarity_default_zero(self, sqlite: SQLiteBackend) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        await sqlite.save_node(n1)
+        await sqlite.save_node(n2)
+        await sqlite.save_edge(Edge(source_id=n1.id, target_id=n2.id))
+
+        [edge] = await sqlite.get_edges(n1.id, direction="outgoing")
+        assert edge.polarity == 0.0  # unsigned by default
+
+    async def test_polarity_round_trip(self, sqlite: SQLiteBackend) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        await sqlite.save_node(n1)
+        await sqlite.save_node(n2)
+        # negative-signed edge (e.g. an adverse-sentiment relation)
+        await sqlite.save_edge(
+            Edge(source_id=n1.id, target_id=n2.id, weight=0.8, polarity=-0.6)
+        )
+
+        [edge] = await sqlite.get_edges(n1.id, direction="outgoing")
+        assert edge.weight == pytest.approx(0.8)
+        assert edge.polarity == pytest.approx(-0.6)
+
+    async def test_polarity_updated_on_conflict(self, sqlite: SQLiteBackend) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        await sqlite.save_node(n1)
+        await sqlite.save_node(n2)
+        # same (source, target, kind) → ON CONFLICT must refresh polarity too
+        await sqlite.save_edge(
+            Edge(source_id=n1.id, target_id=n2.id, kind=EdgeKind.MENTIONS, polarity=0.3)
+        )
+        await sqlite.save_edge(
+            Edge(source_id=n1.id, target_id=n2.id, kind=EdgeKind.MENTIONS, polarity=-0.9)
+        )
+
+        [edge] = await sqlite.get_edges(n1.id, direction="outgoing")
+        assert edge.polarity == pytest.approx(-0.9)
+
 
 class TestSQLiteSearch:
     async def test_fts(self, sqlite: SQLiteBackend) -> None:

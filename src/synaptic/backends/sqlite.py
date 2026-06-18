@@ -201,6 +201,7 @@ CREATE TABLE IF NOT EXISTS syn_edges (
     target_id TEXT NOT NULL REFERENCES syn_nodes(id) ON DELETE CASCADE,
     kind TEXT NOT NULL DEFAULT 'related',
     weight REAL NOT NULL DEFAULT 1.0,
+    polarity REAL NOT NULL DEFAULT 0.0,
     created_at REAL NOT NULL,
     UNIQUE(source_id, target_id, kind)
 );
@@ -297,6 +298,13 @@ class SQLiteBackend:
         if "embedding_json" not in columns:
             await self._conn.execute(
                 "ALTER TABLE syn_nodes ADD COLUMN embedding_json TEXT NOT NULL DEFAULT '[]'"
+            )
+        # Migrate: add signed-edge polarity column if missing (→ v0.28)
+        async with self._conn.execute("PRAGMA table_info(syn_edges)") as cur:
+            edge_columns = {row[1] for row in await cur.fetchall()}
+        if "polarity" not in edge_columns:
+            await self._conn.execute(
+                "ALTER TABLE syn_edges ADD COLUMN polarity REAL NOT NULL DEFAULT 0.0"
             )
         await self._conn.commit()
 
@@ -459,10 +467,15 @@ class SQLiteBackend:
     async def save_edge(self, edge: Edge) -> None:
         db = self._db()
         await db.execute(
-            """INSERT INTO syn_edges (id, source_id, target_id, kind, weight, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET weight=excluded.weight""",
-            (edge.id, edge.source_id, edge.target_id, str(edge.kind), edge.weight, edge.created_at),
+            """INSERT INTO syn_edges
+                (id, source_id, target_id, kind, weight, polarity, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET
+                weight=excluded.weight, polarity=excluded.polarity""",
+            (
+                edge.id, edge.source_id, edge.target_id, str(edge.kind),
+                edge.weight, edge.polarity, edge.created_at,
+            ),
         )
         await db.commit()
 
@@ -482,8 +495,8 @@ class SQLiteBackend:
     async def update_edge(self, edge: Edge) -> None:
         db = self._db()
         await db.execute(
-            "UPDATE syn_edges SET weight=?, kind=? WHERE id=?",
-            (edge.weight, str(edge.kind), edge.id),
+            "UPDATE syn_edges SET weight=?, kind=?, polarity=? WHERE id=?",
+            (edge.weight, str(edge.kind), edge.polarity, edge.id),
         )
         await db.commit()
 
@@ -976,13 +989,19 @@ class SQLiteBackend:
             return
         db = self._db()
         rows = [
-            (e.id, e.source_id, e.target_id, str(e.kind), e.weight, e.created_at) for e in edges
+            (
+                e.id, e.source_id, e.target_id, str(e.kind),
+                e.weight, e.polarity, e.created_at,
+            )
+            for e in edges
         ]
         try:
             await db.executemany(
-                """INSERT INTO syn_edges (id, source_id, target_id, kind, weight, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET weight=excluded.weight""",
+                """INSERT INTO syn_edges
+                    (id, source_id, target_id, kind, weight, polarity, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    weight=excluded.weight, polarity=excluded.polarity""",
                 rows,
             )
             await db.commit()
@@ -1085,11 +1104,13 @@ def _row_to_node(row: aiosqlite.Row) -> Node:
 
 
 def _row_to_edge(row: aiosqlite.Row) -> Edge:
+    keys = row.keys()
     return Edge(
         id=row["id"],
         source_id=row["source_id"],
         target_id=row["target_id"],
         kind=EdgeKind(row["kind"]),
         weight=row["weight"],
+        polarity=row["polarity"] if "polarity" in keys else 0.0,
         created_at=row["created_at"],
     )

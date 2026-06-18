@@ -63,9 +63,13 @@ CREATE TABLE IF NOT EXISTS syn_edges (
     target_id   TEXT NOT NULL REFERENCES syn_nodes(id) ON DELETE CASCADE,
     kind        TEXT NOT NULL DEFAULT 'related',
     weight      REAL NOT NULL DEFAULT 1.0,
+    polarity    REAL NOT NULL DEFAULT 0.0,
     created_at  DOUBLE PRECISION NOT NULL,
     UNIQUE(source_id, target_id, kind)
 );
+
+-- Migrate existing graphs: add signed-edge polarity column if missing (→ v0.28)
+ALTER TABLE syn_edges ADD COLUMN IF NOT EXISTS polarity REAL NOT NULL DEFAULT 0.0;
 
 CREATE INDEX IF NOT EXISTS idx_syn_edges_source ON syn_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_target ON syn_edges(target_id);
@@ -240,14 +244,17 @@ class PostgreSQLBackend:
     async def save_edge(self, edge: Edge) -> None:
         pool = self._get_pool()
         await pool.execute(
-            """INSERT INTO syn_edges (id, source_id, target_id, kind, weight, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET weight=EXCLUDED.weight""",
+            """INSERT INTO syn_edges
+                (id, source_id, target_id, kind, weight, polarity, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET
+                weight=EXCLUDED.weight, polarity=EXCLUDED.polarity""",
             edge.id,
             edge.source_id,
             edge.target_id,
             str(edge.kind),
             edge.weight,
+            edge.polarity,
             edge.created_at,
         )
 
@@ -477,6 +484,7 @@ def _row_to_edge(row: asyncpg.Record) -> Edge:
         target_id=row["target_id"],
         kind=EdgeKind(row["kind"]),
         weight=row["weight"],
+        polarity=row["polarity"] if "polarity" in row.keys() else 0.0,
         created_at=row["created_at"],
     )
 
