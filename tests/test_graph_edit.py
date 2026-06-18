@@ -7,7 +7,7 @@ import pytest
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.embedder import MockEmbeddingProvider
 from synaptic.graph import SynapticGraph
-from synaptic.models import EdgeKind
+from synaptic.models import Edge, EdgeKind
 
 
 class TestUnlink:
@@ -77,6 +77,22 @@ class TestUpdateEdge:
         await graph.link(a.id, b.id)
         assert await graph.update_edge(a.id, b.id) == 0
 
+    async def test_update_polarity(self, graph: SynapticGraph) -> None:
+        a = await graph.add("A", "x")
+        b = await graph.add("B", "y")
+        await graph.link(a.id, b.id, kind=EdgeKind.MENTIONS)
+        updated = await graph.update_edge(a.id, b.id, new_polarity=-0.7)
+        assert updated == 1
+        edges = await graph.backend.get_edges(a.id, direction="outgoing")
+        assert edges[0].polarity == pytest.approx(-0.7)
+
+    async def test_update_polarity_only_is_not_noop(self, graph: SynapticGraph) -> None:
+        a = await graph.add("A", "x")
+        b = await graph.add("B", "y")
+        await graph.link(a.id, b.id)
+        # polarity-only update must still apply (regression: noop guard)
+        assert await graph.update_edge(a.id, b.id, new_polarity=0.5) == 1
+
 
 class TestMergeNodes:
     async def test_repoint_outgoing_edges(self, graph: SynapticGraph) -> None:
@@ -113,6 +129,33 @@ class TestMergeNodes:
         ]
         assert len(edges) == 1
         assert edges[0].weight == 3.0
+
+    async def test_dedupe_carries_polarity_with_winner(
+        self, graph: SynapticGraph
+    ) -> None:
+        # Regression: on dedup the surviving edge must take BOTH weight and
+        # polarity from the higher-weight edge — not weight from one and a
+        # stale polarity from the other (would scramble signed graphs).
+        keep = await graph.add("keep", "x")
+        drop = await graph.add("drop", "y")
+        other = await graph.add("other", "z")
+        await graph.backend.save_edge(
+            Edge(source_id=keep.id, target_id=other.id,
+                 kind=EdgeKind.MENTIONS, weight=1.0, polarity=0.2)
+        )
+        await graph.backend.save_edge(
+            Edge(source_id=drop.id, target_id=other.id,
+                 kind=EdgeKind.MENTIONS, weight=3.0, polarity=-0.9)
+        )
+        await graph.merge_nodes(keep.id, drop.id)
+        edges = [
+            e
+            for e in await graph.backend.get_edges(keep.id, direction="outgoing")
+            if e.target_id == other.id and str(e.kind) == "mentions"
+        ]
+        assert len(edges) == 1
+        assert edges[0].weight == 3.0
+        assert edges[0].polarity == pytest.approx(-0.9)  # winner's sign, not 0.2
 
     async def test_self_loop_dropped(self, graph: SynapticGraph) -> None:
         keep = await graph.add("keep", "x")

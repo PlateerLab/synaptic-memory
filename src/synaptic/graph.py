@@ -1548,17 +1548,18 @@ class SynapticGraph:
         kind: EdgeKind | str | None = None,
         new_weight: float | None = None,
         new_kind: EdgeKind | str | None = None,
+        new_polarity: float | None = None,
     ) -> int:
         """Update edges matching (source_id, target_id[, kind]).
 
         ``kind`` filters which edges to update (None = all between the pair).
-        ``new_weight`` / ``new_kind`` are the values to apply. When ``new_kind``
-        is set and an ontology is bound, the new kind is re-validated against
-        the source/target node kinds.
+        ``new_weight`` / ``new_kind`` / ``new_polarity`` are the values to apply.
+        When ``new_kind`` is set and an ontology is bound, the new kind is
+        re-validated against the source/target node kinds.
 
         Returns the number of edges updated.
         """
-        if new_weight is None and new_kind is None:
+        if new_weight is None and new_kind is None and new_polarity is None:
             return 0
         filter_kind = str(kind) if kind is not None else None
         resolved_new_kind: EdgeKind | None = None
@@ -1589,6 +1590,8 @@ class SynapticGraph:
                 edge.kind = resolved_new_kind
             if new_weight is not None:
                 edge.weight = new_weight
+            if new_polarity is not None:
+                edge.polarity = new_polarity
             await self._backend.update_edge(edge)
             updated += 1
         return updated
@@ -1645,6 +1648,7 @@ class SynapticGraph:
                 # dedupe: keep the higher-weight edge, drop the rest
                 if edge.weight > existing.weight:
                     existing.weight = edge.weight
+                    existing.polarity = edge.polarity  # carry sign with the winner
                     await self._backend.update_edge(existing)
                 await self._backend.delete_edge(edge.id)
             else:
@@ -1663,6 +1667,7 @@ class SynapticGraph:
             if existing is not None:
                 if edge.weight > existing.weight:
                     existing.weight = edge.weight
+                    existing.polarity = edge.polarity  # carry sign with the winner
                     await self._backend.update_edge(existing)
                 await self._backend.delete_edge(edge.id)
             else:
