@@ -336,11 +336,28 @@ Query
   ↓  Vector PRF (pseudo relevance feedback, 2-pass)
   ↓  PPR graph discovery (personalized pagerank)
   ↓  GraphExpander (1-hop: category siblings, chunk-next, entity mentions)
-  ↓  HybridReranker (lexical + semantic + graph + structural + authority + temporal)
+  ↓  HybridReranker (lexical + semantic + graph + structural + memory + authority + temporal)
   ↓  MaxP document aggregation (coverage bonus)
   ↓  Cross-encoder reranker (bge-reranker-v2-m3 via TEI, optional)
   ↓  EvidenceAggregator (MMR diversity + per-doc cap + category coverage)
 Result
+```
+
+**Usage/time memory axis (opt-in, off by default).** The reranker carries a
+fifth weighted signal — `memory` — that scores each node by *how it has been
+used*: importance (reinforced successes vs failures), recency (`updated_at`),
+and vitality. With `memory=0.0` (the default) ranking is unchanged. Turn it on
+and retrieval *evolves* — reinforcing the results that answered a query lifts
+them on later searches, and decayed nodes fade, which a static index cannot do.
+
+```python
+from synaptic.extensions.hybrid_reranker import RerankerWeights
+
+# Enable the memory axis (rebalance the others so weights still sum to ~1).
+graph.reranker_weights = RerankerWeights(
+    lexical=0.35, semantic=0.20, graph=0.10, structural=0.10, memory=0.25,
+)
+await graph.reinforce([node_id], success=True)  # this result helped → lift it next time
 ```
 
 ---

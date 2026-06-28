@@ -287,11 +287,27 @@ Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합�
   ↓  Vector PRF (유사 관련 피드백, 2-pass)
   ↓  PPR 그래프 탐색 (PersonalizedPageRank)
   ↓  GraphExpander (1-hop: 카테고리 형제, 다음 청크, 엔티티 멘션)
-  ↓  HybridReranker (어휘 + 의미 + 그래프 + 구조 + 권위 + 시간)
+  ↓  HybridReranker (어휘 + 의미 + 그래프 + 구조 + 메모리 + 권위 + 시간)
   ↓  MaxP 문서 집계 (커버리지 보너스)
   ↓  Cross-encoder reranker (bge-reranker-v2-m3, 선택)
   ↓  EvidenceAggregator (MMR 다양성 + 문서당 캡 + 카테고리 커버리지)
 결과
+```
+
+**사용·시간 메모리 축 (opt-in, 기본 off).** reranker에 다섯 번째 가중 신호
+`memory` — 각 노드를 *어떻게 사용됐는지*로 점수화한다: 중요도(강화된 성공 vs 실패),
+최신성(`updated_at`), 활력(vitality). `memory=0.0`(기본)이면 랭킹은 그대로다. 켜면
+검색이 *진화*한다 — 쿼리에 답이 된 결과를 reinforce하면 다음 검색에서 올라가고, decay된
+노드는 가라앉는다. 정적 인덱스는 구조적으로 못 하는 일이다.
+
+```python
+from synaptic.extensions.hybrid_reranker import RerankerWeights
+
+# 메모리 축 활성화 (나머지 가중치는 합이 ~1 이 되도록 재조정)
+graph.reranker_weights = RerankerWeights(
+    lexical=0.35, semantic=0.20, graph=0.10, structural=0.10, memory=0.25,
+)
+await graph.reinforce([node_id], success=True)  # 이 결과가 도움 됨 → 다음엔 상위로
 ```
 
 ---
