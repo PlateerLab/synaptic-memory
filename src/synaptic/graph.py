@@ -1972,7 +1972,9 @@ class SynapticGraph:
                     # Non-empty guarantee: an escalation that comes back blank
                     # must not erase a usable cheap answer. route stays
                     # "single_shot" — that's the path that produced `answer`.
-                    reasons.append("agent returned an empty answer — kept the single-shot synthesis")
+                    reasons.append(
+                        "agent returned an empty answer — kept the single-shot synthesis"
+                    )
 
         return AskResult(
             answer=answer,

@@ -113,7 +113,9 @@ async def _run(args) -> None:
 
     async def naive_rag(q: dict) -> dict:
         res = await EvidenceSearch(backend=backend, embedder=embedder).search(q["query"], k=args.k)
-        ctx = "\n---\n".join((ev.node.content or ev.node.title or "")[:700] for ev in res.evidence[: args.k])
+        ctx = "\n---\n".join(
+            (ev.node.content or ev.node.title or "")[:700] for ev in res.evidence[: args.k]
+        )
         ans, (pt, ct) = await _chat(
             [
                 {"role": "system", "content": _RAG_SYSTEM},
@@ -178,7 +180,10 @@ async def _run(args) -> None:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     n = len(queries)
-    print(f"\n=== RAG vs agent — ANSWER quality ({n} queries, {args.dataset}, k={args.k}) ===", flush=True)
+    print(
+        f"\n=== RAG vs agent — ANSWER quality ({n} queries, {args.dataset}, k={args.k}) ===",
+        flush=True,
+    )
 
     rag: list[int] = []
     ag: list[int] = []
@@ -187,7 +192,9 @@ async def _run(args) -> None:
         rr = await score_arm(naive_rag, "rag", r)
         rag.append(rr)
         _flush_jsonl()
-        print(f"naive-RAG run {r + 1}: {rr}/{n} ({rr / n:.3f})  [{time.time() - t:.0f}s]", flush=True)
+        print(
+            f"naive-RAG run {r + 1}: {rr}/{n} ({rr / n:.3f})  [{time.time() - t:.0f}s]", flush=True
+        )
         t = time.time()
         ar = await score_arm(agent, "agent", r)
         ag.append(ar)
@@ -200,7 +207,9 @@ async def _run(args) -> None:
         )
 
     rm, am = sum(rag) / len(rag), sum(ag) / len(ag)
-    print(f"\nnaive-RAG : mean {rm:.1f}/{n} ({rm / n:.3f}), range {min(rag)}-{max(rag)}", flush=True)
+    print(
+        f"\nnaive-RAG : mean {rm:.1f}/{n} ({rm / n:.3f}), range {min(rag)}-{max(rag)}", flush=True
+    )
     print(f"agent     : mean {am:.1f}/{n} ({am / n:.3f}), range {min(ag)}-{max(ag)}", flush=True)
     print(f"→ agent minus naive-RAG: {am - rm:+.1f} ({(am - rm) / n:+.3f})", flush=True)
 
@@ -208,8 +217,12 @@ async def _run(args) -> None:
         from pathlib import Path
 
         out = Path(args.out_jsonl)
-        rtok = sum(r["prompt_tokens"] + r["completion_tokens"] for r in records if r["arm"] == "rag")
-        atok = sum(r["prompt_tokens"] + r["completion_tokens"] for r in records if r["arm"] == "agent")
+        rtok = sum(
+            r["prompt_tokens"] + r["completion_tokens"] for r in records if r["arm"] == "rag"
+        )
+        atok = sum(
+            r["prompt_tokens"] + r["completion_tokens"] for r in records if r["arm"] == "agent"
+        )
         print(
             f"per-query JSONL → {out}  ({len(records)} records; "
             f"tokens/query rag {rtok / max(1, n * args.runs):,.0f} vs agent {atok / max(1, n * args.runs):,.0f})",

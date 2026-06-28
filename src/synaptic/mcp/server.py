@@ -333,8 +333,7 @@ async def knowledge_ask(
         return {
             "success": False,
             "error": (
-                "--llm-url is set but the 'openai' package is not installed — "
-                "pip install openai"
+                "--llm-url is set but the 'openai' package is not installed — pip install openai"
             ),
         }
     if client is None:

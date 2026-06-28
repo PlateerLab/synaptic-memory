@@ -266,9 +266,7 @@ def load_finreg_source(paths: Sequence[Path]) -> list[dict]:
             recs = by_qid[qid]
             n_rag = len(run_ids.get((qid, "rag"), ()))
             n_agent = len(run_ids.get((qid, "agent"), ()))
-            rag = (
-                majority_solve(recs, "rag", min_wins=n_rag // 2 + 1).get(qid) if n_rag else None
-            )
+            rag = majority_solve(recs, "rag", min_wins=n_rag // 2 + 1).get(qid) if n_rag else None
             agent = (
                 majority_solve(recs, "agent", min_wins=n_agent // 2 + 1).get(qid)
                 if n_agent
@@ -392,9 +390,7 @@ def load_gt_datasets_source(xlsx_path: Path, agent_log: Path | None) -> list[dic
     try:
         for ws in wb.worksheets:
             sheet_rows = list(ws.iter_rows(values_only=True))
-            header_idx = next(
-                (i for i, r in enumerate(sheet_rows) if r and r[0] == "qid"), None
-            )
+            header_idx = next((i for i, r in enumerate(sheet_rows) if r and r[0] == "qid"), None)
             if header_idx is None:
                 continue  # Summary / non-query sheet
             col = {name: i for i, name in enumerate(sheet_rows[header_idx]) if name}

@@ -56,9 +56,7 @@ def test_top_n_routes_agent():
 
 
 def test_plain_question_stays_single_shot():
-    d = decide_route(
-        "온실가스 감축 및 에너지 절약 계획은 어떻게 되어있나", has_table_nodes=True
-    )
+    d = decide_route("온실가스 감축 및 에너지 절약 계획은 어떻게 되어있나", has_table_nodes=True)
     assert d.route == "single_shot"
     assert d.signals["structured_lexis"] is False
     assert d.reasons

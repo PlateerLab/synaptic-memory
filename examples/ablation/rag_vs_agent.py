@@ -126,10 +126,16 @@ async def _run(args) -> None:
     # deterministic baselines — one pass each
     t = time.time()
     nv = await sweep(naive_vec)
-    print(f"naive-vec   : {nv}/{n} ({nv / n:.3f})  [{time.time() - t:.0f}s, deterministic]", flush=True)
+    print(
+        f"naive-vec   : {nv}/{n} ({nv / n:.3f})  [{time.time() - t:.0f}s, deterministic]",
+        flush=True,
+    )
     t = time.time()
     ss = await sweep(synaptic_ss)
-    print(f"synaptic-ss : {ss}/{n} ({ss / n:.3f})  [{time.time() - t:.0f}s, deterministic]", flush=True)
+    print(
+        f"synaptic-ss : {ss}/{n} ({ss / n:.3f})  [{time.time() - t:.0f}s, deterministic]",
+        flush=True,
+    )
 
     # noisy agent — N runs
     ag: list[int] = []
@@ -140,7 +146,10 @@ async def _run(args) -> None:
         print(f"agent run {r + 1}  : {s}/{n} ({s / n:.3f})  [{time.time() - t:.0f}s]", flush=True)
     lo, hi = min(ag), max(ag)
     mean = sum(ag) / len(ag)
-    print(f"agent       : mean {mean:.1f}/{n} ({mean / n:.3f}), range {lo}-{hi} over {args.runs} runs", flush=True)
+    print(
+        f"agent       : mean {mean:.1f}/{n} ({mean / n:.3f}), range {lo}-{hi} over {args.runs} runs",
+        flush=True,
+    )
     print(
         f"\n→ agent vs naive-vec: {mean - nv:+.1f}; agent vs synaptic-ss: {mean - ss:+.1f}",
         flush=True,

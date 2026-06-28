@@ -177,9 +177,9 @@ def test_finreg_duplicate_run_keeps_last_occurrence(tmp_path: Path):
 
 def test_finreg_even_run_tie_is_not_a_majority(tmp_path: Path):
     # 4 distinct runs: 2/4 wins is a tie, not a majority (min_wins=3).
-    records = [
-        _perquery_record("q000", "rag", r, r <= 2) for r in (1, 2, 3, 4)
-    ] + [_perquery_record("q000", "agent", r, r <= 3) for r in (1, 2, 3, 4)]
+    records = [_perquery_record("q000", "rag", r, r <= 2) for r in (1, 2, 3, 4)] + [
+        _perquery_record("q000", "agent", r, r <= 3) for r in (1, 2, 3, 4)
+    ]
     path = _write_jsonl(tmp_path / "finreg_4runs.jsonl", records)
     (row,) = load_finreg_source([path])
     assert row["single_shot_hit"] is False  # 2/4 rag wins
@@ -504,7 +504,9 @@ def test_dedupe_same_axis_conflict_keeps_winner_value():
 
 
 def _split_rows(corpus: str, n: int) -> list[dict]:
-    return [{"qid": f"{corpus}:q{i:03d}", "source_qid": f"q{i:03d}", "corpus": corpus} for i in range(n)]
+    return [
+        {"qid": f"{corpus}:q{i:03d}", "source_qid": f"q{i:03d}", "corpus": corpus} for i in range(n)
+    ]
 
 
 def test_split_balance_is_approximately_50_50():
