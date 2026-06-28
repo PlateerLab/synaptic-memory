@@ -113,6 +113,7 @@ class SynapticGraph:
         "_query_decomposer",
         "_relation_detector",
         "_reranker",
+        "_reranker_weights",
         "_search",
         "_store",
     )
@@ -131,6 +132,7 @@ class SynapticGraph:
         chunk_entity_index: ChunkEntityIndex | None = None,
         query_decomposer: QueryDecomposer | None = None,
         reranker: object | None = None,
+        reranker_weights: object | None = None,
         cache_size: int = 256,
         vector_min_cosine: float | None = None,
         vector_relative_drop: float | None = None,
@@ -156,6 +158,10 @@ class SynapticGraph:
         self._chunk_entity_index = chunk_entity_index
         self._query_decomposer = query_decomposer
         self._reranker = reranker
+        # Optional RerankerWeights for the hybrid reranker. None keeps the
+        # built-in defaults; set it (e.g. via the ``reranker_weights`` property
+        # or a factory arg) to enable the usage/time memory axis.
+        self._reranker_weights = reranker_weights
         self._agent_search = AgentSearch(hybrid=self._search)
         self._corpus_size = 0
         # Tracks whether this graph has connected its backend, so
@@ -1192,6 +1198,28 @@ class SynapticGraph:
     def backend(self) -> StorageBackend:
         return self._backend
 
+    @property
+    def reranker_weights(self) -> object | None:
+        """Weights for the hybrid reranker (a :class:`RerankerWeights`).
+
+        ``None`` (default) keeps the built-in weights. Set this to enable
+        the usage/time **memory axis** — retrieval that evolves as nodes are
+        reinforced/decayed, which a static index cannot do::
+
+            from synaptic.extensions.hybrid_reranker import RerankerWeights
+            g.reranker_weights = RerankerWeights(
+                lexical=0.35, semantic=0.20, graph=0.10,
+                structural=0.10, memory=0.25,
+            )
+
+        Read fresh on every :meth:`search`, so it can be changed at runtime.
+        """
+        return self._reranker_weights
+
+    @reranker_weights.setter
+    def reranker_weights(self, weights: object | None) -> None:
+        self._reranker_weights = weights
+
     async def _get_corpus_size(self) -> int:
         """Get corpus size for adaptive search weighting (cached)."""
         if self._corpus_size > 0:
@@ -2057,6 +2085,7 @@ class SynapticGraph:
             embedder=self._embedder,
             phrase_extractor=self._phrase_extractor,
             reranker=active_reranker,
+            reranker_weights=self._reranker_weights,
             decomposer=self._query_decomposer,
         )
         search_kwargs: dict[str, object] = {
