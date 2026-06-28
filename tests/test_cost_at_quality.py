@@ -306,7 +306,15 @@ def test_gates_all_fail_for_always_agent_like_ask_arm():
         correct = label == "agent_required"
         for r in (1, 2, 3):
             records.append(
-                _rec(qid, "ask", r, correct, prompt=AGENT_TOK[0], completion=AGENT_TOK[1], corpus="pool")
+                _rec(
+                    qid,
+                    "ask",
+                    r,
+                    correct,
+                    prompt=AGENT_TOK[0],
+                    completion=AGENT_TOK[1],
+                    corpus="pool",
+                )
             )
     arms, _ = compute_arms(summarize_cells(records), labels)
     gates = {g.name: g for g in evaluate_gates(arms)}

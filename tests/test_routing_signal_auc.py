@@ -124,7 +124,15 @@ def test_load_routing_gt_is_lenient(tmp_path):
                 "extra_key": "ignored",
             }
         ),
-        json.dumps({"qid": "q2", "label": "cheap_sufficient", "tier": "hit-only", "split": "held-out", "corpus": "AutoRAG"}),
+        json.dumps(
+            {
+                "qid": "q2",
+                "label": "cheap_sufficient",
+                "tier": "hit-only",
+                "split": "held-out",
+                "corpus": "AutoRAG",
+            }
+        ),
         json.dumps({"qid": "q3", "label": "both"}),  # missing tier/split/corpus
         json.dumps({"label": "cheap_sufficient"}),  # no qid → skipped
         json.dumps({"qid": "q4"}),  # no label → skipped
@@ -262,8 +270,12 @@ def test_s2_zero_results_ignores_gold_hit():
     # gold-based hit must NOT leak into the signal: hit=False with results
     # present stays 0.0 (the old s2_no_hit oracle behaviour scored 1.0 here,
     # a tautological AUC against the GT's own hit axis)
-    assert s2_zero_results("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=False))) == 0.0
-    assert s2_zero_results("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=None))) == 0.0
+    assert (
+        s2_zero_results("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=False))) == 0.0
+    )
+    assert (
+        s2_zero_results("q", SignalContext(retrieval=RetrievalInfo(scores=[0.5], hit=None))) == 0.0
+    )
 
 
 def test_s2_flatness_margin_nan_with_single_score():
@@ -435,21 +447,15 @@ def _mk_dataset(*, autorag_noisy: bool) -> tuple[list[GTRecord], dict[str, dict[
         sfx = split[0]
         for i in range(5):
             qid = f"pos_{sfx}{i}"
-            records.append(
-                _rec(qid, label="agent_required", split=split, corpus="assort_hard")
-            )
+            records.append(_rec(qid, label="agent_required", split=split, corpus="assort_hard"))
             values[qid] = 1.0
         for i in range(10):
             qid = f"ar_{sfx}{i}"
-            records.append(
-                _rec(qid, tier="hit_only", split=split, corpus="autorag")
-            )
+            records.append(_rec(qid, tier="hit_only", split=split, corpus="autorag"))
             values[qid] = 1.0 if (autorag_noisy and i < 4) else 0.0
         for i in range(5):
             qid = f"ae_{sfx}{i}"
-            records.append(
-                _rec(qid, tier="provisional", split=split, corpus="assort")
-            )
+            records.append(_rec(qid, tier="provisional", split=split, corpus="assort"))
             values[qid] = 0.0
     return records, {"sig": values}
 
@@ -534,10 +540,7 @@ def test_heldout_verdict_no_go_when_one_budget_corpus_absent():
     records = [
         _rec(f"p{i}", label="agent_required", split="heldout", corpus="assort_hard")
         for i in range(5)
-    ] + [
-        _rec(f"ar{i}", tier="hit_only", split="heldout", corpus="autorag")
-        for i in range(10)
-    ]
+    ] + [_rec(f"ar{i}", tier="hit_only", split="heldout", corpus="autorag") for i in range(10)]
     values = {"sig": {r.qid: (1.0 if r.qid.startswith("p") else 0.0) for r in records}}
     verdict = evaluate_heldout(records, values, ComboThresholds(thresholds={"sig": 1.0}))
     assert verdict.recall == pytest.approx(1.0)
@@ -558,7 +561,9 @@ def _write_gt(tmp_path: Path) -> Path:
                 {
                     "qid": r.qid,
                     # structured vocab so s1 fires for positives
-                    "query": "전체 상품의 평균 가격은?" if r.label == "agent_required" else "배송 정책",
+                    "query": "전체 상품의 평균 가격은?"
+                    if r.label == "agent_required"
+                    else "배송 정책",
                     "label": r.label,
                     "tier": r.tier,
                     "split": r.split,
@@ -616,9 +621,7 @@ def test_load_retrieval_specs_namespaces_corpus(tmp_path):
         encoding="utf-8",
     )
     b = tmp_path / "b.jsonl"
-    b.write_text(
-        '{"qid": "x2bee_hard:h001", "scores": [0.5], "hit": false}\n', encoding="utf-8"
-    )
+    b.write_text('{"qid": "x2bee_hard:h001", "scores": [0.5], "hit": false}\n', encoding="utf-8")
     out = load_retrieval_specs([f"assort={a}", str(b)])
     # CORPUS=PATH namespaces bare qids; bare PATH is already GT-keyed
     assert set(out) == {"assort:q000", "x2bee_hard:h001"}

@@ -383,15 +383,19 @@ def test_perquery_loader_and_majority_solve(tmp_path):
     from eval.unified import load_perquery_jsonl, majority_solve
 
     # q1: agent 2/3 correct → confirmed solved; q2: 1/3 → not solved
-    rows = [
-        {"qid": "q1", "arm": "agent", "run": r, "judge_correct": ok}
-        for r, ok in [(1, True), (2, True), (3, False)]
-    ] + [
-        {"qid": "q2", "arm": "agent", "run": r, "judge_correct": ok}
-        for r, ok in [(1, False), (2, True), (3, False)]
-    ] + [
-        {"qid": "q1", "arm": "rag", "run": 1, "judge_correct": False},
-    ]
+    rows = (
+        [
+            {"qid": "q1", "arm": "agent", "run": r, "judge_correct": ok}
+            for r, ok in [(1, True), (2, True), (3, False)]
+        ]
+        + [
+            {"qid": "q2", "arm": "agent", "run": r, "judge_correct": ok}
+            for r, ok in [(1, False), (2, True), (3, False)]
+        ]
+        + [
+            {"qid": "q1", "arm": "rag", "run": 1, "judge_correct": False},
+        ]
+    )
     p = tmp_path / "perquery.jsonl"
     p.write_text("\n".join(_json.dumps(r) for r in rows), encoding="utf-8")
 

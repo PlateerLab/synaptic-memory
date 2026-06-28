@@ -89,9 +89,7 @@ class _ScriptedClient:
         return self._synth
 
 
-_INSUFFICIENT = _Resp(
-    _Msg(content='{"sufficient": false, "gap": "order counts"}'), _Usage(30, 5)
-)
+_INSUFFICIENT = _Resp(_Msg(content='{"sufficient": false, "gap": "order counts"}'), _Usage(30, 5))
 
 
 async def _make_graph(*, with_table=False) -> SynapticGraph:

@@ -223,9 +223,7 @@ async def _score_custom(
                     "hit": rank is not None,
                     "rank": rank,
                     "scores": [round(float(ev.score), 6) for ev in top],
-                    "has_table_row": any(
-                        "_table_name" in (ev.node.properties or {}) for ev in top
-                    ),
+                    "has_table_row": any("_table_name" in (ev.node.properties or {}) for ev in top),
                 }
             )
     finally:
@@ -365,9 +363,7 @@ async def _score_public(
                     # score — both are descending relevance, which is all the
                     # s2 shape signals (flatness / margin) consume.
                     "scores": [round(float(h.activation), 6) for h in top],
-                    "has_table_row": any(
-                        "_table_name" in (h.node.properties or {}) for h in top
-                    ),
+                    "has_table_row": any("_table_name" in (h.node.properties or {}) for h in top),
                 }
             )
     finally:
@@ -435,8 +431,7 @@ def dump_hits(
     hits = sum(1 for r in rows if r["hit"])
     skipped_note = f" ({skipped} queries without gold ids skipped)" if skipped else ""
     _log(
-        f"{queries_path.name}: {hits}/{len(rows)} hit@{k} "
-        f"({hits / len(rows):.3f}){skipped_note}"
+        f"{queries_path.name}: {hits}/{len(rows)} hit@{k} ({hits / len(rows):.3f}){skipped_note}"
         if rows
         else f"{queries_path.name}: no scorable queries{skipped_note}"
     )

@@ -365,9 +365,7 @@ def evaluate_gates(
     if not runs_ok:
         gates.append(GateResult("quality", None, f"{runs_note}; {quality_detail}"))
     else:
-        gates.append(
-            GateResult("quality", ask.solved >= best - quality_tolerance, quality_detail)
-        )
+        gates.append(GateResult("quality", ask.solved >= best - quality_tolerance, quality_detail))
 
     # 2. cost: ask tokens/query <= budget x always-agent (deterministic)
     if agent.tokens_per_query <= 0:
@@ -394,9 +392,7 @@ def evaluate_gates(
     if not runs_ok:
         gates.append(GateResult("separation", None, f"{runs_note}; {sep_detail}"))
     else:
-        gates.append(
-            GateResult("separation", ask.solved > rag.solved and p <= alpha, sep_detail)
-        )
+        gates.append(GateResult("separation", ask.solved > rag.solved and p <= alpha, sep_detail))
     return gates
 
 
@@ -483,9 +479,7 @@ def load_gold_queries(path: Path, answer_field: str = "answer") -> list[dict]:
     ``_qid``.
     """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    queries = [
-        q for q in data.get("queries", []) if q.get("query") and q.get(answer_field)
-    ]
+    queries = [q for q in data.get("queries", []) if q.get("query") and q.get(answer_field)]
     return [{**q, "_qid": q.get("id") or f"q{qi:03d}"} for qi, q in enumerate(queries)]
 
 
@@ -623,8 +617,7 @@ def print_dry_run_plan(specs: Sequence[tuple[str, Path, Path]], runs: int) -> No
             continue
         status = "" if graph_path.exists() else "  [graph sqlite MISSING]"
         print(
-            f"  {corpus}: {n_gold} gold-answer queries x {runs} runs "
-            f"(graph={graph_path}{status})"
+            f"  {corpus}: {n_gold} gold-answer queries x {runs} runs (graph={graph_path}{status})"
         )
         if n_gold == 0:
             print(
@@ -706,9 +699,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         corpus, value = _parse_kv(spec, "--live-spec")
         graph_str, sep, queries_str = value.partition(",")
         if not sep or not graph_str or not queries_str:
-            raise SystemExit(
-                f"--live-spec expects CORPUS=GRAPH.sqlite,QUERIES.json, got {spec!r}"
-            )
+            raise SystemExit(f"--live-spec expects CORPUS=GRAPH.sqlite,QUERIES.json, got {spec!r}")
         live_specs.append((corpus, Path(graph_str), Path(queries_str)))
 
     if args.run_live and args.dry_run:

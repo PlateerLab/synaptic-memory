@@ -168,9 +168,7 @@ def load_routing_gt(path: Path) -> list[GTRecord]:
             tier=_norm_tier(row.get("tier")),
             split=_norm_split(row.get("split")),
             corpus=str(row.get("corpus") or "").strip().lower(),
-            has_table_nodes=(
-                bool(row["has_table_nodes"]) if "has_table_nodes" in row else None
-            ),
+            has_table_nodes=(bool(row["has_table_nodes"]) if "has_table_nodes" in row else None),
         )
         if qid in index_of:
             dups.append(qid)
@@ -179,10 +177,7 @@ def load_routing_gt(path: Path) -> list[GTRecord]:
             index_of[qid] = len(out)
             out.append(rec)
     if dups:
-        _warn(
-            f"{len(dups)} duplicate qid(s) in {path} — kept last occurrence "
-            f"(e.g. {dups[:3]})"
-        )
+        _warn(f"{len(dups)} duplicate qid(s) in {path} — kept last occurrence (e.g. {dups[:3]})")
     return out
 
 
@@ -441,8 +436,7 @@ def compute_signal_values(
     """signal name → (qid → value) over every record."""
     signals = signals or SIGNALS
     return {
-        name: {r.qid: fn(r.query, contexts[r.qid]) for r in records}
-        for name, fn in signals.items()
+        name: {r.qid: fn(r.query, contexts[r.qid]) for r in records} for name, fn in signals.items()
     }
 
 
@@ -564,9 +558,7 @@ def precision_recall_curve(
     return pts
 
 
-def recall_at_precision(
-    pairs: Sequence[tuple[float, bool]], min_precision: float
-) -> float | None:
+def recall_at_precision(pairs: Sequence[tuple[float, bool]], min_precision: float) -> float | None:
     """Best recall among thresholds whose precision >= ``min_precision``;
     None when no threshold reaches it."""
     best: float | None = None
@@ -785,7 +777,9 @@ def evaluate_heldout(
     # so the tuner legitimately never sees that bucket.)
     missing_budgets = [k for k, (_rate, _f, n) in rates.items() if n == 0]
     for k in missing_budgets:
-        notes.append(f"budget corpus '{k}' absent from held-out — budget unverifiable, forces NO-GO")
+        notes.append(
+            f"budget corpus '{k}' absent from held-out — budget unverifiable, forces NO-GO"
+        )
     go = (
         n_pos > 0
         and recall >= min_recall
@@ -821,8 +815,7 @@ def _signal_table(evals: Sequence[SignalEval]) -> list[str]:
     ]
     for ev in evals:
         lines.append(
-            f"| {ev.name} | {_fmt(ev.auc)} | {ev.n_pos} | {ev.n_neg} | "
-            f"{ev.n_nan} | {ev.note} |"
+            f"| {ev.name} | {_fmt(ev.auc)} | {ev.n_pos} | {ev.n_neg} | {ev.n_nan} | {ev.note} |"
         )
     return lines
 
@@ -853,16 +846,20 @@ def generate_report(
     lines: list[str] = []
     lines.append("# Tier-0 routing-signal AUC report (v0.29 E2)")
     lines.append("")
-    lines.append(f"- GT: `{gt_path}` — {len(records)} records "
-                 f"(train {len(train)} / heldout {len(heldout)} / other-split {n_other})")
+    lines.append(
+        f"- GT: `{gt_path}` — {len(records)} records "
+        f"(train {len(train)} / heldout {len(heldout)} / other-split {n_other})"
+    )
     if retrieval_path:
         lines.append(f"- Retrieval results: `{retrieval_path}`")
     else:
         lines.append("- Retrieval results: absent — s2/s3 signals require a retrieval pass")
     lines.append(f"- Tiers: {dict(sorted(tier_counts.items()))}")
-    lines.append(f"- Labels: {dict(sorted(label_counts.items()))} "
-                 f"(positive={POSITIVE_LABEL}; negative={sorted(NEGATIVE_LABELS)}; "
-                 f"unsolved excluded from AUC/recall)")
+    lines.append(
+        f"- Labels: {dict(sorted(label_counts.items()))} "
+        f"(positive={POSITIVE_LABEL}; negative={sorted(NEGATIVE_LABELS)}; "
+        f"unsolved excluded from AUC/recall)"
+    )
     lines.append("")
 
     lines.append("## Signal AUC — confirmed tier, held-out split (verdict basis)")
@@ -912,18 +909,14 @@ def generate_report(
 
     lines.append("## Held-out verdict")
     lines.append("")
-    verdict = evaluate_heldout(
-        heldout, values, combo, budgets=budgets, min_recall=min_recall
-    )
+    verdict = evaluate_heldout(heldout, values, combo, budgets=budgets, min_recall=min_recall)
     lines.append(
         f"- agent-required recall (confirmed): {verdict.recall:.3f} "
         f"({verdict.n_escalated_pos}/{verdict.n_pos}) — gate ≥ {min_recall:.2f}"
     )
     lines.append(f"- precision on confirmed labels: {_fmt(verdict.precision)}")
     for k, (rate, f, n) in verdict.escalation.items():
-        lines.append(
-            f"- escalation {k}: {rate:.1%} ({f}/{n}) — budget ≤ {budgets[k]:.0%}"
-        )
+        lines.append(f"- escalation {k}: {rate:.1%} ({f}/{n}) — budget ≤ {budgets[k]:.0%}")
     for note in verdict.notes:
         lines.append(f"- note: {note}")
     lines.append("")
