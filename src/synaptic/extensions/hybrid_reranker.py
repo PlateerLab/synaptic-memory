@@ -46,10 +46,12 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
+from time import time
 from typing import TYPE_CHECKING
 
 from synaptic.extensions.node_metadata import authority_of, is_current
 from synaptic.models import Node, NodeKind
+from synaptic.resonance import ResonanceScorer, ResonanceWeights
 
 if TYPE_CHECKING:
     from synaptic.extensions.graph_expander import ExpandedNode
@@ -111,6 +113,7 @@ class ScoredCandidate:
     structural: float
     reason: str
     anchor_id: str = ""
+    memory: float = 0.0  # usage+time axis (importance/recency/vitality); see RerankerWeights.memory
 
 
 @dataclass(slots=True)
@@ -128,12 +131,21 @@ class RerankerWeights:
             embedder is wired up this contribution is always zero.
         graph: Expansion-reason prior weight. Default ``0.20``.
         structural: Category / kind alignment weight. Default ``0.10``.
+        memory: Usage+time axis weight (importance from success/failure
+            feedback, recency from ``updated_at``, vitality). Default
+            ``0.0`` — OFF, so behaviour is unchanged unless explicitly
+            enabled. This is the axis a static dense index cannot have:
+            it lets retrieval *evolve* as nodes are reinforced/decayed.
+            When enabling, rebalance the others so weights still sum to 1
+            (e.g. lexical 0.40 / semantic 0.20 / graph 0.15 / structural
+            0.10 / memory 0.15).
     """
 
     lexical: float = 0.45
     semantic: float = 0.25
     graph: float = 0.20
     structural: float = 0.10
+    memory: float = 0.0
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -181,10 +193,21 @@ class HybridReranker:
             ``lexical`` because BM25 loses discriminative power.
     """
 
-    __slots__ = ("_weights",)
+    __slots__ = ("_mem_scorer", "_weights")
 
     def __init__(self, *, weights: RerankerWeights | None = None) -> None:
         self._weights = weights or RerankerWeights()
+        # Memory axis reuses the existing ResonanceScorer, restricted to the
+        # importance / recency / vitality axes — relevance is already supplied
+        # by the lexical + semantic signals, so re-adding it would double-count.
+        # Importance-dominant: the success/failure feedback signal is what we
+        # actually want this axis to track. recency/vitality sit at ~1.0 for a
+        # freshly-built corpus, so giving them large weight would just dilute
+        # the feedback signal with a constant offset. They earn their weight
+        # over time (recency decays by day, vitality drops on decay()).
+        self._mem_scorer = ResonanceScorer(
+            ResonanceWeights(relevance=0.0, importance=0.6, recency=0.25, vitality=0.15)
+        )
 
     def rerank(
         self,
@@ -270,6 +293,9 @@ class HybridReranker:
         # Per-call ``weights`` override (L05 per-query tilt) wins over the
         # instance default; falls back to the instance weights otherwise.
         w = weights or self._weights
+        # Single timestamp per call so every candidate's recency axis is
+        # measured against the same "now" (consistent ranking within a call).
+        now = time()
         scored: list[ScoredCandidate] = []
         for ex in expanded:
             nid = ex.node.id
@@ -277,8 +303,17 @@ class HybridReranker:
             sem = sem_norm.get(nid, 0.0)
             graph = graph_norm.get(nid, 0.0)
             struct = _structural_score(ex.node)
+            # Memory axis is skipped entirely when its weight is 0 (the
+            # default), so the scorer is never even invoked in that case.
+            mem = self._mem_scorer.score(ex.node, now=now) if w.memory else 0.0
 
-            total = w.lexical * lex + w.semantic * sem + w.graph * graph + w.structural * struct
+            total = (
+                w.lexical * lex
+                + w.semantic * sem
+                + w.graph * graph
+                + w.structural * struct
+                + w.memory * mem
+            )
             scored.append(
                 ScoredCandidate(
                     node=ex.node,
@@ -289,6 +324,7 @@ class HybridReranker:
                     structural=struct,
                     reason=ex.reason,
                     anchor_id=ex.anchor_hit or "",
+                    memory=mem,
                 )
             )
 
