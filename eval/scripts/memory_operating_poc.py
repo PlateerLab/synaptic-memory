@@ -598,6 +598,9 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and ranking_health.max_memory_scope_boost > 0.0
                 and ranking_health.max_memory_signal_penalty > 0.0
             ),
+            "health_reports_top_reinforced_edges": (
+                "poc_edge_score_boost_relation" in ranking_health.top_reinforced_edge_ids
+            ),
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id
                 and roundtrip_openie.properties.get("model") == "deterministic"

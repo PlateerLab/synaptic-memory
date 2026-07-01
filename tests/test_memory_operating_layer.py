@@ -1255,6 +1255,8 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
             },
         )
     )
+    await backend.save_memory_score(MemoryScore(scope_key=scope.key, node_id="node_top", score=0.8))
+    await backend.save_memory_score(MemoryScore(scope_key=scope.key, edge_id="edge_top", score=0.9))
 
     health = await graph.memory_health(scope=scope, persist_signals=False)
 
@@ -1265,6 +1267,8 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
     assert health.memory_penalized_node_count == 1
     assert health.max_memory_scope_boost == pytest.approx(0.10)
     assert health.max_memory_signal_penalty == pytest.approx(0.05)
+    assert health.top_reinforced_node_ids == ["node_top"]
+    assert health.top_reinforced_edge_ids == ["edge_top"]
 
 
 @pytest.mark.asyncio
