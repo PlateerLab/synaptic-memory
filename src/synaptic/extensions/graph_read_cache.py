@@ -248,6 +248,81 @@ class GraphReadCache:
 
         return result
 
+    async def get_edges_many_by_kind_selective_light(
+        self,
+        node_ids: list[str],
+        *,
+        direction: Direction = "both",
+        light_kinds: Sequence[EdgeKind | str],
+        full_kinds: Sequence[EdgeKind | str],
+    ) -> dict[str, list[Edge]]:
+        """Return mixed metadata edges in one filtered batch read.
+
+        ``light_kinds`` are materialized without properties, while
+        ``full_kinds`` keep provenance metadata. This is useful for relation
+        expansion where generic RELATED edges only need traversal fields, but
+        typed OpenIE edges need ``is_openie`` and ``confidence``.
+        """
+        unique_ids = list(dict.fromkeys(node_ids))
+        if not unique_ids:
+            return {}
+
+        light_key = _kind_key(light_kinds)
+        full_key = _kind_key(full_kinds)
+        if not light_key and not full_key:
+            return {node_id: [] for node_id in unique_ids}
+
+        result: dict[str, list[Edge]] = {}
+        missing: list[str] = []
+        for node_id in unique_ids:
+            light_edges = (
+                self._cached_edges_by_kind_light(node_id, direction, light_key) if light_key else []
+            )
+            full_edges = (
+                self._cached_edges_by_kind(node_id, direction, full_key) if full_key else []
+            )
+            if light_edges is None or full_edges is None:
+                missing.append(node_id)
+            else:
+                result[node_id] = _merge_edges(list(light_edges), list(full_edges))
+
+        if missing:
+            get_selective = getattr(self._backend, "get_edges_batch_filtered_selective_light", None)
+            if callable(get_selective):
+                fetched = await get_selective(
+                    missing,
+                    direction=direction,
+                    light_kinds=list(light_key),
+                    full_kinds=list(full_key),
+                )
+            else:
+                all_fetched = await self.get_edges_many_by_kind(
+                    missing,
+                    direction=direction,
+                    kinds=[*light_key, *full_key],
+                )
+                fetched = {
+                    node_id: _strip_light_kind_properties(
+                        list(all_fetched.get(node_id, [])),
+                        light_key,
+                    )
+                    for node_id in missing
+                }
+
+            for node_id in missing:
+                edges = list(fetched.get(node_id, []))
+                if light_key:
+                    self._edge_kind_light_cache[(node_id, direction, light_key)] = (
+                        _filter_edges_by_kind(edges, light_key)
+                    )
+                if full_key:
+                    self._edge_kind_cache[(node_id, direction, full_key)] = _filter_edges_by_kind(
+                        edges, full_key
+                    )
+                result[node_id] = edges
+
+        return result
+
     def _cached_edges(self, node_id: str, direction: Direction) -> list[Edge] | None:
         key = (node_id, direction)
         cached = self._edge_cache.get(key)
@@ -364,3 +439,26 @@ def _kind_key(kinds: Sequence[EdgeKind | str]) -> tuple[str, ...]:
 def _filter_edges_by_kind(edges: Sequence[Edge], kind_key: tuple[str, ...]) -> list[Edge]:
     kind_set = set(kind_key)
     return [edge for edge in edges if edge.kind.value in kind_set]
+
+
+def _strip_light_kind_properties(edges: list[Edge], light_key: tuple[str, ...]) -> list[Edge]:
+    if not light_key:
+        return edges
+    light_set = set(light_key)
+    stripped: list[Edge] = []
+    for edge in edges:
+        if edge.kind.value not in light_set:
+            stripped.append(edge)
+            continue
+        stripped.append(
+            Edge(
+                id=edge.id,
+                source_id=edge.source_id,
+                target_id=edge.target_id,
+                kind=edge.kind,
+                weight=edge.weight,
+                properties={},
+                created_at=edge.created_at,
+            )
+        )
+    return stripped
