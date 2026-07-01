@@ -566,9 +566,9 @@ class TestSearchRuntimeOptions:
         assert result is not None
         assert "ppr_added_count" in result.diagnostics
 
-    async def test_default_fts_seed_limit_scales_at_2x(self) -> None:
+    async def test_default_fts_seed_limit_scales_at_1x(self) -> None:
         assert _default_fts_seed_limit(3) == 20
-        assert _default_fts_seed_limit(30) == 60
+        assert _default_fts_seed_limit(30) == 30
 
     async def test_search_uses_tighter_default_fts_seed_limit(self) -> None:
         backend = MemoryBackend()
@@ -583,7 +583,7 @@ class TestSearchRuntimeOptions:
 
         result = await g.search("retrieval topic", limit=15, rerank=False)
 
-        assert result.diagnostics["fts_seed_count"] == 30.0
+        assert result.diagnostics["fts_seed_count"] == 20.0
 
     async def test_explicit_fts_seed_limit_still_wins(self) -> None:
         backend = MemoryBackend()
