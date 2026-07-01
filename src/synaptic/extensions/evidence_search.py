@@ -685,20 +685,30 @@ class EvidenceSearch:
         ppr_stage_t0 = time()
         if fts_scores and self._graph_expansion:
             try:
+                ppr_timings: dict[str, float] = {}
                 ppr_results = await personalized_pagerank(
                     self._backend,
                     {nid: score for nid, score in fts_scores.items()},
                     damping=0.85,
+                    # Candidate discovery only needs stable top neighbours,
+                    # not high-precision stationary probabilities.
+                    max_iter=20,
+                    tol=1e-5,
                     top_k=k * 3,
                     read_cache=graph_reads,
+                    timings_ms=ppr_timings,
                 )
+                for key, value in ppr_timings.items():
+                    timings_ms[f"expand_ppr_{key}"] = value
                 from synaptic.extensions.graph_expander import ExpandedNode
 
                 expanded_ids = {e.node.id for e in expanded}
+                ppr_fetch_t0 = time()
                 missing_node_ids = [
                     node_id for node_id, _ppr_score in ppr_results if node_id not in expanded_ids
                 ]
                 ppr_nodes = await graph_reads.get_nodes(missing_node_ids)
+                timings_ms["expand_ppr_fetch"] = (time() - ppr_fetch_t0) * 1000
                 for node_id, ppr_score in ppr_results:
                     if node_id not in expanded_ids:
                         node = ppr_nodes.get(node_id)
