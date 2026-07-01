@@ -913,8 +913,9 @@ Memory health snapshot:
 | fixed 100% gate | `mz_openie_cache_deepseek_to100_fixed_results.json` | `2131.8s` | - | PASS |
 | PR #14 bulk purge | `mz_openie_cache_deepseek_to100_bulk_results.json` | `1508.6s` | `26:46.58` | PASS |
 | PR #15 batch edge replay | `mz_openie_cache_deepseek_to100_batch_results.json` | `955.4s` | `18:25.66` | PASS |
+| PR #17 entity replay cache | `mz_openie_cache_deepseek_to100_entitycache_results.json` | `614.9s` | `11:41.07` | PASS |
 
-품질/게이트 지표는 세 run에서 동일하게 유지됐다:
+핵심 검색/게이트 지표는 PR #17 이후에도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -926,18 +927,25 @@ Memory health snapshot:
 | OpenIE artifacts | `2,403` |
 | relation edges | `627` |
 | relation expanded lift | `+88` |
-| relation evidence lift | `+35` |
-| memory health signals | `939` |
-| suspect memories | `40` |
+| relation evidence lift | `+33` |
+| memory health signals | `940` |
+| suspect memories | `41` |
+
+주의: PR #17은 OpenIE entity node의 불필요한 `updated_at` 갱신을 줄이므로,
+relation probe와 health signal의 세부 카운트는 이전 run과 소폭 달라졌다. 다만
+R@5 no-regress, cache coverage, relation probe, strong evidence, revertibility gate는
+모두 PASS를 유지했다.
 
 성능 변화:
 
 - PR #14 이후 OpenIE elapsed는 `2131.8s -> 1508.6s`로 `29.2%` 감소했다.
 - PR #15 이후 OpenIE elapsed는 `2131.8s -> 955.4s`로 `55.2%` 감소했다.
+- PR #17 이후 OpenIE elapsed는 `2131.8s -> 614.9s`로 `71.2%` 감소했다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
-- 남은 큰 비용은 OpenIE entity/node ensure/update 및 relation probe/search의
-  다수 DB roundtrip이다.
+- PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
+  `save_node()` `1`, `update_node()` `0`으로 같은 hub 반복 조회/갱신을 제거했다.
+- 남은 큰 비용은 relation probe/search의 다수 DB roundtrip이다.
 
 ---
 
