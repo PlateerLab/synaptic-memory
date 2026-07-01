@@ -26,6 +26,10 @@ def _float_dict() -> dict[str, float]:
     return {}
 
 
+def _diagnostic_dict() -> dict[str, float | str]:
+    return {}
+
+
 class ConsolidationLevel(StrEnum):
     L0_RAW = "L0"
     L1_SPRINT = "L1"
@@ -330,7 +334,7 @@ class SearchResult:
     total_candidates: int = 0
     search_time_ms: float = 0.0
     timings_ms: dict[str, float] = field(default_factory=_float_dict)
-    diagnostics: dict[str, float] = field(default_factory=_float_dict)
+    diagnostics: dict[str, float | str] = field(default_factory=_diagnostic_dict)
     stages_used: list[str] = field(default_factory=_str_list)
     event_id: str = ""
 

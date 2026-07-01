@@ -456,6 +456,30 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - signal observation node뿐 아니라 `MemoryEventKind.SIGNAL` ledger에도 signal provenance가 남는다.
 - signal event만 조회해도 scope, target ids, confidence, score, reason을 추적할 수 있다.
 
+후속 signal penalty retrieval provenance guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_signal_penalty_provenance_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `37/37` |
+| signal_penalty_retrieval_event_records_provenance | `true` |
+| memory_signal_source_ids | `memsig_32d1378cc670e496` |
+| memory_signal_edge_ids | `poc_edge_score_demoted_relation` |
+| memory_signal_penalized_node_ids | `poc_scope_clean_memory` |
+| memory_signal_penalized_nodes | `1.0` |
+
+추가로 검증된 동작:
+
+- search-time penalty diagnostics가 penalized node id, source signal id, related edge id를 compact metadata로 남긴다.
+- `record=True` 또는 retrieval event 기록 시 숫자 diagnostics와 문자열 provenance diagnostics가 함께 저장된다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash

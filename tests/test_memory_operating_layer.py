@@ -1113,13 +1113,20 @@ async def test_search_applies_high_confidence_suspect_signal_penalty(monkeypatch
         lambda self, active_reranker: FakeEvidenceSearch(),
     )
 
-    result = await graph.search("policy", scope=scope)
+    result = await graph.search("policy", scope=scope, record=True)
 
     assert [item.node.id for item in result.nodes] == ["clean", "suspect"]
     suspect_item = next(item for item in result.nodes if item.node.id == "suspect")
     assert suspect_item.resonance == pytest.approx(0.95)
     assert result.diagnostics["memory_signal_penalized_nodes"] == 1.0
     assert result.diagnostics["memory_signal_max_penalty"] == pytest.approx(0.05)
+    assert result.diagnostics["memory_signal_penalized_node_ids"] == "suspect"
+    assert result.diagnostics["memory_signal_source_ids"] == "sig_suspect"
+    assert result.event_id
+    recorded = await backend.get_retrieval_event(result.event_id)
+    assert recorded is not None
+    assert recorded.properties["memory_signal_penalized_node_ids"] == "suspect"
+    assert recorded.properties["memory_signal_source_ids"] == "sig_suspect"
 
 
 @pytest.mark.asyncio
@@ -1170,6 +1177,9 @@ async def test_memory_signal_penalty_resolves_edge_only_signal_targets():
     assert suspect_item.resonance == pytest.approx(0.95)
     assert result.diagnostics["memory_signal_penalized_nodes"] == 1.0
     assert result.diagnostics["memory_signal_max_penalty"] == pytest.approx(0.05)
+    assert result.diagnostics["memory_signal_penalized_node_ids"] == suspect.id
+    assert result.diagnostics["memory_signal_source_ids"] == "sig_edge_only"
+    assert result.diagnostics["memory_signal_edge_ids"] == "suspect_relation"
 
 
 @pytest.mark.asyncio
@@ -1619,6 +1629,9 @@ async def test_memory_monitor_carries_edge_score_signal_endpoints_into_penalty()
     assert [item.node.id for item in result.nodes] == [clean.id, suspect.id]
     penalized = next(item for item in result.nodes if item.node.id == suspect.id)
     assert result.diagnostics["memory_signal_max_penalty"] == pytest.approx(0.0415)
+    assert result.diagnostics["memory_signal_penalized_node_ids"] == suspect.id
+    assert result.diagnostics["memory_signal_source_ids"] == edge_signal.id
+    assert result.diagnostics["memory_signal_edge_ids"] == "edge_score_negative_relation"
     assert penalized.resonance == pytest.approx(0.9585)
 
 

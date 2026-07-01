@@ -204,7 +204,10 @@ def _retrieval_event_properties(result: SearchResult) -> dict[str, str]:
     for key, value in sorted((result.diagnostics or {}).items()):
         if not key.startswith("memory_"):
             continue
-        properties[key] = f"{float(value):.6f}"
+        if isinstance(value, int | float):
+            properties[key] = f"{float(value):.6f}"
+        else:
+            properties[key] = str(value)
     return properties
 
 
@@ -2905,9 +2908,11 @@ class SynapticGraph:
             return
         current_scope_key = memory_scope_key(scope or MemoryScope())
         signal_nodes = await self._backend.list_nodes(kind=NodeKind.OBSERVATION, limit=100_000)
-        relevant_signals: list[tuple[dict[str, str], float]] = []
+        relevant_signals: list[tuple[str, dict[str, str], float]] = []
         signal_edge_ids: set[str] = set()
         penalties: dict[str, float] = {}
+        penalty_signal_ids: set[str] = set()
+        penalty_edge_ids: set[str] = set()
         for signal_node in signal_nodes:
             tags = set(signal_node.tags or [])
             if "_memory_signal" not in tags or "_memory_suspect" not in tags:
@@ -2923,7 +2928,7 @@ class SynapticGraph:
                 _MEMORY_SIGNAL_MAX_RANKING_PENALTY,
                 max(0.0, confidence * _MEMORY_SIGNAL_MAX_RANKING_PENALTY),
             )
-            relevant_signals.append((props, penalty))
+            relevant_signals.append((signal_node.id, props, penalty))
             signal_edge_ids.update(_prop_csv_ids(props, "edge_ids"))
         if not relevant_signals:
             return
@@ -2931,13 +2936,16 @@ class SynapticGraph:
             candidate_node_ids=node_ids,
             edge_ids=signal_edge_ids,
         )
-        for props, penalty in relevant_signals:
+        for signal_id, props, penalty in relevant_signals:
             target_ids = set(_prop_csv_ids(props, "node_ids"))
-            for edge_id in _prop_csv_ids(props, "edge_ids"):
+            edge_ids = _prop_csv_ids(props, "edge_ids")
+            for edge_id in edge_ids:
                 target_ids.update(edge_targets.get(edge_id, set()))
             for node_id in target_ids:
                 if node_id in node_ids:
                     penalties[node_id] = max(penalties.get(node_id, 0.0), penalty)
+                    penalty_signal_ids.add(signal_id)
+                    penalty_edge_ids.update(edge_ids)
         if not penalties:
             return
         for item in result.nodes:
@@ -2950,6 +2958,9 @@ class SynapticGraph:
         result.nodes.sort(key=lambda item: item.resonance, reverse=True)
         result.diagnostics["memory_signal_penalized_nodes"] = float(len(penalties))
         result.diagnostics["memory_signal_max_penalty"] = max(penalties.values())
+        result.diagnostics["memory_signal_penalized_node_ids"] = ",".join(sorted(penalties))
+        result.diagnostics["memory_signal_source_ids"] = ",".join(sorted(penalty_signal_ids))
+        result.diagnostics["memory_signal_edge_ids"] = ",".join(sorted(penalty_edge_ids))
 
     async def _candidate_edge_targets(
         self,
