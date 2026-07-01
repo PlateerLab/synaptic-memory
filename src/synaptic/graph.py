@@ -3509,6 +3509,15 @@ class SynapticGraph:
             memory_score_positive_count=memory_score_positive_count,
             memory_score_negative_count=memory_score_negative_count,
             memory_score_neutral_count=memory_score_neutral_count,
+            memory_score_positive_rate=(
+                memory_score_positive_count / len(all_scores) if all_scores else 0.0
+            ),
+            memory_score_negative_rate=(
+                memory_score_negative_count / len(all_scores) if all_scores else 0.0
+            ),
+            memory_score_neutral_rate=(
+                memory_score_neutral_count / len(all_scores) if all_scores else 0.0
+            ),
             signal_count=len(signals),
             new_entity_count=signal_kinds.count(MemorySignalKind.NEW_ENTITY),
             new_relation_count=signal_kinds.count(MemorySignalKind.NEW_RELATION),
@@ -3535,6 +3544,15 @@ class SynapticGraph:
             feedback_success_count=feedback_success_count,
             feedback_failure_count=feedback_failure_count,
             feedback_neutral_count=feedback_neutral_count,
+            feedback_success_rate=(
+                feedback_success_count / feedback_event_count if feedback_event_count else 0.0
+            ),
+            feedback_failure_rate=(
+                feedback_failure_count / feedback_event_count if feedback_event_count else 0.0
+            ),
+            feedback_neutral_rate=(
+                feedback_neutral_count / feedback_event_count if feedback_event_count else 0.0
+            ),
             feedback_signal_counts=dict(feedback_signal_counts),
             top_feedback_node_ids=[node_id for node_id, _ in feedback_node_counts.most_common(10)],
             top_feedback_success_node_ids=[

@@ -1820,6 +1820,13 @@ per-chunk fallback을 유지한다.
   `top_growth_node_counts`에 `poc_growth_entity=3`, `top_growth_edge_counts`에
   `poc_growth_reinforced_relation=2`가 포함됐고,
   `signal_kind_counts={"new_entity": 3, "relation_reinforced": 1, "new_relation": 5, ...}`였다.
+- Memory health quality rates는 feedback outcome과 reinforcement score polarity를 rate로
+  노출한다. 운영자는 count를 직접 나누지 않고도 성공/실패/중립 비율과 positive/negative/neutral
+  score 분포를 바로 볼 수 있다. POC gate는 `health_reports_quality_rates`를 추가해
+  `52/52` PASS했다. 대표 결과는 `feedback_success_rate=0.714286`,
+  `feedback_failure_rate=0.142857`, `feedback_neutral_rate=0.142857`,
+  `memory_score_positive_rate=0.833333`, `memory_score_negative_rate=0.166667`,
+  `memory_score_neutral_rate=0.0`이었다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

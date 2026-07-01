@@ -266,6 +266,9 @@ class MemoryHealthReport:
     memory_score_positive_count: int = 0
     memory_score_negative_count: int = 0
     memory_score_neutral_count: int = 0
+    memory_score_positive_rate: float = 0.0
+    memory_score_negative_rate: float = 0.0
+    memory_score_neutral_rate: float = 0.0
     signal_count: int = 0
     new_entity_count: int = 0
     new_relation_count: int = 0
@@ -286,6 +289,9 @@ class MemoryHealthReport:
     feedback_success_count: int = 0
     feedback_failure_count: int = 0
     feedback_neutral_count: int = 0
+    feedback_success_rate: float = 0.0
+    feedback_failure_rate: float = 0.0
+    feedback_neutral_rate: float = 0.0
     feedback_signal_counts: dict[str, int] = field(default_factory=_int_dict)
     top_feedback_node_ids: list[str] = field(default_factory=_str_list)
     top_feedback_success_node_ids: list[str] = field(default_factory=_str_list)
