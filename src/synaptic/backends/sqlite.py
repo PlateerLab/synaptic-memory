@@ -1195,7 +1195,7 @@ class SQLiteBackend:
             for t in terms:
                 like = f"%{t}%"
                 params.extend([like, like])
-            params.append(limit * 2)
+            params.append(_like_fallback_limit(limit, len(scored_nodes)))
             like_sql = f"SELECT * FROM syn_nodes WHERE {like_parts} LIMIT ?"
             async with db.execute(like_sql, params) as cur:
                 rows2 = await cur.fetchall()
@@ -1632,6 +1632,21 @@ def _safe_node_kind(value: str) -> str | NodeKind:
         return NodeKind(value)
     except ValueError:
         return value
+
+
+def _like_fallback_limit(limit: int, fts_hit_count: int) -> int:
+    """Bound LIKE fallback reads to the remaining lexical deficit.
+
+    With zero FTS hits we keep the historical ``limit * 2`` safety margin.
+    Once FTS has already filled most of the request, reading another
+    ``limit * 2`` substring rows just materializes candidates that cannot
+    survive the final cap.
+    """
+    safe_limit = max(0, limit)
+    deficit = max(0, safe_limit - max(0, fts_hit_count))
+    if deficit <= 0:
+        return 0
+    return max(safe_limit, deficit * 2)
 
 
 def _lexical_relevance(ranked: list[tuple[Node, float]]) -> list[tuple[Node, float]]:

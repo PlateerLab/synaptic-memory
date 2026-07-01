@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from synaptic.backends.memory import MemoryBackend
-from synaptic.backends.sqlite import _lexical_relevance
+from synaptic.backends.sqlite import _lexical_relevance, _like_fallback_limit
 from synaptic.backends.sqlite_graph import SqliteGraphBackend
 from synaptic.extensions.evidence_search import EvidenceSearch
 from synaptic.models import ConsolidationLevel, Node, NodeKind
@@ -40,6 +40,14 @@ def test_lexical_relevance_single_and_empty():
     assert _lexical_relevance([]) == []
     single = _lexical_relevance([(Node(id="x"), -3.0)])
     assert single[0][1] == 1.0  # single FTS5 hit → ceiling (no spread)
+
+
+def test_like_fallback_limit_scales_with_remaining_deficit():
+    assert _like_fallback_limit(30, 0) == 60
+    assert _like_fallback_limit(30, 10) == 40
+    assert _like_fallback_limit(30, 25) == 30
+    assert _like_fallback_limit(30, 30) == 0
+    assert _like_fallback_limit(30, 40) == 0
 
 
 @pytest.mark.asyncio
