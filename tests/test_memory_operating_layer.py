@@ -1747,8 +1747,11 @@ async def test_memory_monitor_flags_superseded_target_as_stale_without_deleting(
     assert await backend.get_node(old.id) is not None
 
     health = await graph.memory_health()
+    assert health.possible_supersession_count >= 1
     assert health.stale_signal_count >= 1
     assert health.suspect_count >= 1
+    assert health.signal_kind_counts[str(MemorySignalKind.POSSIBLE_SUPERSESSION)] >= 1
+    assert health.signal_kind_counts[str(MemorySignalKind.STALE_MEMORY)] >= 1
 
 
 @pytest.mark.asyncio

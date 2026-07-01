@@ -753,6 +753,16 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 str(MemorySignalKind.LOW_CONFIDENCE_RELATION),
                 str(MemorySignalKind.REPEATED_FAILURE),
             }.issubset(set(signal_kinds)),
+            "health_reports_signal_kind_counts": (
+                health.possible_supersession_count >= 1
+                and health.signal_kind_counts.get(str(MemorySignalKind.POSSIBLE_CONFLICT), 0) >= 1
+                and health.signal_kind_counts.get(str(MemorySignalKind.POSSIBLE_SUPERSESSION), 0)
+                >= 1
+                and health.signal_kind_counts.get(str(MemorySignalKind.STALE_MEMORY), 0) >= 1
+                and health.signal_kind_counts.get(str(MemorySignalKind.LOW_CONFIDENCE_RELATION), 0)
+                >= 1
+                and health.signal_kind_counts.get(str(MemorySignalKind.REPEATED_FAILURE), 0) >= 1
+            ),
             "health_reports_top_suspect_targets": (
                 failed.id in health.top_suspect_node_ids
                 and openie_edge.id in health.top_suspect_edge_ids

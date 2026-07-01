@@ -3316,6 +3316,7 @@ class SynapticGraph:
             _prop_int(event.properties, "chunks_selected", 0) for event in semantic_events
         )
         signal_kinds = [MemorySignalKind(str(signal.kind)) for signal in signals]
+        signal_kind_counts = Counter(str(kind) for kind in signal_kinds)
         suspect_kinds = {
             MemorySignalKind.POSSIBLE_CONFLICT,
             MemorySignalKind.POSSIBLE_SUPERSESSION,
@@ -3420,12 +3421,14 @@ class SynapticGraph:
             relation_reinforced_count=signal_kinds.count(MemorySignalKind.RELATION_REINFORCED),
             suspect_count=sum(1 for kind in signal_kinds if kind in suspect_kinds),
             conflict_signal_count=signal_kinds.count(MemorySignalKind.POSSIBLE_CONFLICT),
+            possible_supersession_count=signal_kinds.count(MemorySignalKind.POSSIBLE_SUPERSESSION),
             stale_signal_count=signal_kinds.count(MemorySignalKind.STALE_MEMORY),
             repeated_failure_count=signal_kinds.count(MemorySignalKind.REPEATED_FAILURE),
             low_confidence_relation_count=signal_kinds.count(
                 MemorySignalKind.LOW_CONFIDENCE_RELATION
             ),
             drift_spike_count=signal_kinds.count(MemorySignalKind.DRIFT_SPIKE),
+            signal_kind_counts=dict(signal_kind_counts),
             openie_artifact_count=openie_nodes + openie_edges,
             openie_failure_rate=(failures / selected) if selected else 0.0,
             memory_boosted_retrieval_count=boosted_retrieval_count,

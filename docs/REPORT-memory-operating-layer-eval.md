@@ -1747,6 +1747,12 @@ per-chunk fallback을 유지한다.
   `health_reports_top_suspect_targets`를 추가해 `40/40` PASS했다. 대표 결과는
   `top_suspect_node_counts={"poc_superseded_policy": 3, "poc_failed_memory": 2, "af0f342c2fb14c5b": 2, "de3dd351983745c1": 2, "poc_entity_policy_new": 1, "poc_entity_policy_old": 1, "poc_superseding_policy": 1, "poc_scope_score_failed_memory": 1}`,
   `top_suspect_edge_counts={"poc_supersedes_policy_edge": 2, "poc_conflict_alpha_beta": 1, "poc_alpha_beta_openie_relation": 1}`였다.
+- Memory health signal kind counts는 `possible_supersession`을 개별 count로 노출하고,
+  모든 signal kind 분포를 `signal_kind_counts` map으로 함께 제공한다. 기존에는
+  supersession signal이 `suspect_count`에만 묻혔지만, 이제 stale/conflict/repeated failure와
+  분리해서 볼 수 있다. POC gate는 `health_reports_signal_kind_counts`를 추가해 `41/41`
+  PASS했다. 대표 결과는
+  `signal_kind_counts={"repeated_failure": 2, "stale_memory": 2, "possible_conflict": 2, "low_confidence_relation": 1, "possible_supersession": 1, "drift_spike": 1}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

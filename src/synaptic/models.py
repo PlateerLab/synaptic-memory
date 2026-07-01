@@ -262,10 +262,12 @@ class MemoryHealthReport:
     relation_reinforced_count: int = 0
     suspect_count: int = 0
     conflict_signal_count: int = 0
+    possible_supersession_count: int = 0
     stale_signal_count: int = 0
     repeated_failure_count: int = 0
     low_confidence_relation_count: int = 0
     drift_spike_count: int = 0
+    signal_kind_counts: dict[str, int] = field(default_factory=_int_dict)
     openie_artifact_count: int = 0
     openie_failure_rate: float = 0.0
     memory_boosted_retrieval_count: int = 0
