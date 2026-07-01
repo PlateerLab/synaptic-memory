@@ -268,6 +268,11 @@ class MemoryHealthReport:
     low_confidence_relation_count: int = 0
     drift_spike_count: int = 0
     signal_kind_counts: dict[str, int] = field(default_factory=_int_dict)
+    feedback_event_count: int = 0
+    feedback_success_count: int = 0
+    feedback_failure_count: int = 0
+    feedback_neutral_count: int = 0
+    feedback_signal_counts: dict[str, int] = field(default_factory=_int_dict)
     openie_artifact_count: int = 0
     openie_failure_rate: float = 0.0
     memory_boosted_retrieval_count: int = 0

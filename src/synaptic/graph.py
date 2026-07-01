@@ -3350,6 +3350,11 @@ class SynapticGraph:
         demoted_node_count = 0
         adjusted_node_count = 0
         penalized_node_count = 0
+        feedback_event_count = 0
+        feedback_success_count = 0
+        feedback_failure_count = 0
+        feedback_neutral_count = 0
+        feedback_signal_counts: Counter[str] = Counter()
         max_scope_boost = 0.0
         max_scope_demotion = 0.0
         max_scope_adjustment = 0.0
@@ -3359,6 +3364,22 @@ class SynapticGraph:
         penalty_edge_counts: Counter[str] = Counter()
         for event in retrieval_events:
             props = event.properties or {}
+            signal = str(event.signal)
+            is_feedback_event = (
+                bool(event.selected_node_ids)
+                or event.success is not None
+                or signal != str(FeedbackSignal.SELECTED)
+                or bool(props.get("parent_event_id"))
+            )
+            if is_feedback_event:
+                feedback_event_count += 1
+                feedback_signal_counts[signal] += 1
+                if event.success is True:
+                    feedback_success_count += 1
+                elif event.success is False:
+                    feedback_failure_count += 1
+                else:
+                    feedback_neutral_count += 1
             boosted_nodes = _prop_int(props, "memory_scope_boosted_nodes", 0)
             demoted_nodes = _prop_int(props, "memory_scope_demoted_nodes", 0)
             adjusted_nodes = _prop_int(
@@ -3429,6 +3450,11 @@ class SynapticGraph:
             ),
             drift_spike_count=signal_kinds.count(MemorySignalKind.DRIFT_SPIKE),
             signal_kind_counts=dict(signal_kind_counts),
+            feedback_event_count=feedback_event_count,
+            feedback_success_count=feedback_success_count,
+            feedback_failure_count=feedback_failure_count,
+            feedback_neutral_count=feedback_neutral_count,
+            feedback_signal_counts=dict(feedback_signal_counts),
             openie_artifact_count=openie_nodes + openie_edges,
             openie_failure_rate=(failures / selected) if selected else 0.0,
             memory_boosted_retrieval_count=boosted_retrieval_count,

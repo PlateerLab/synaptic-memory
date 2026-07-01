@@ -659,6 +659,15 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and after_consolidation.level == ConsolidationLevel.L1_SPRINT
                 and consolidation_candidate.id in consolidation_result.nodes_updated
             ),
+            "health_reports_feedback_outcomes": (
+                health.feedback_event_count >= 7
+                and health.feedback_success_count >= 5
+                and health.feedback_failure_count >= 1
+                and health.feedback_neutral_count >= 1
+                and health.feedback_signal_counts.get(str(FeedbackSignal.SELECTED), 0) >= 1
+                and health.feedback_signal_counts.get(str(FeedbackSignal.TASK_SUCCESS), 0) >= 5
+                and health.feedback_signal_counts.get(str(FeedbackSignal.TASK_FAILURE), 0) >= 1
+            ),
             "scope_score_repeated_failure_signal_created": (scope_score_failure_signal is not None),
             "strong_negative_scope_score_signal_created": (
                 strong_negative_signal is not None
