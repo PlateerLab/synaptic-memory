@@ -70,6 +70,7 @@ _REASON_PRIOR: dict[str, float] = {
     "seed": 1.00,
     "references": 0.85,
     "document_chunk": 0.70,
+    "semantic_relation": 0.65,
     "chunk_next": 0.55,
     "entity_mention": 0.50,
     "related": 0.50,
@@ -84,6 +85,17 @@ _REASON_PRIOR: dict[str, float] = {
 # fraction of its anchor seed's total so a cited provision survives in
 # top-k alongside the document that cites it.
 _REFERENCE_COMPANION_FACTOR = 0.9
+_SEMANTIC_RELATION_COMPANION_FACTORS: dict[str, float] = {
+    "depends_on": 0.85,
+    "is_a": 0.85,
+    "part_of": 0.80,
+    "produced": 0.78,
+    "caused": 0.78,
+    "supersedes": 0.72,
+    "contradicts": 0.65,
+    "related": 0.50,
+}
+_SEMANTIC_RELATION_DEFAULT_FACTOR = 0.65
 
 
 @dataclass(slots=True)
@@ -365,5 +377,41 @@ class HybridReranker:
                 continue
             cand.total = max(cand.total, _REFERENCE_COMPANION_FACTOR * anchor.total)
 
+        # --- Semantic-relation companion lift ---
+        # OpenIE relation targets are often graph-only facts: the query names
+        # the subject and relation, but not the object. Without a companion
+        # lift the target is expanded correctly, then loses to lexical chunks
+        # before it reaches final evidence. Keep the lift below REFERENCES:
+        # citations are stronger structural commitments, while OpenIE facts
+        # remain model-extracted and bounded by provenance/confidence gates.
+        for ex in expanded:
+            if ex.reason != "semantic_relation" or not ex.anchor_hit:
+                continue
+            cand = by_id.get(ex.node.id)
+            anchor = by_id.get(ex.anchor_hit)
+            if cand is None or anchor is None:
+                continue
+            factor = _semantic_relation_lift_factor(ex)
+            cand.total = max(
+                cand.total,
+                factor * anchor.total,
+            )
+
         scored.sort(key=lambda s: s.total, reverse=True)
         return scored
+
+
+def _semantic_relation_lift_factor(ex: ExpandedNode) -> float:
+    relation = (getattr(ex, "edge_kind", "") or "").lower()
+    base = _SEMANTIC_RELATION_COMPANION_FACTORS.get(
+        relation,
+        _SEMANTIC_RELATION_DEFAULT_FACTOR,
+    )
+    try:
+        confidence = max(0.0, min(1.0, float(getattr(ex, "edge_confidence", 1.0))))
+    except (TypeError, ValueError):
+        confidence = 1.0
+    # Keep low-confidence extracted facts visible but bounded. The floor avoids
+    # turning the relation axis into a hard delete; pollution handling can still
+    # downrank or flag suspect memories separately.
+    return base * (0.5 + 0.5 * confidence)

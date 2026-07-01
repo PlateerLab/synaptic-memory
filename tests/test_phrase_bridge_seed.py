@@ -1,4 +1,4 @@
-"""v0.27 — query→phrase dense seed in EvidenceSearch.
+"""v0.27/v0.30 — query→entity-hub dense seed in EvidenceSearch.
 
 Builds a synthetic corpus where two chunks share a single phrase hub
 (NodeKind.ENTITY, tagged ``_phrase``) but use different surface terms
@@ -133,6 +133,50 @@ async def test_query_phrase_bridge_seeds_chunks():
     bridge_ids = {c.id for c in bridge_chunks}
     assert "chunk_A" in bridge_ids
     assert "chunk_B" in bridge_ids
+
+
+@pytest.mark.asyncio
+async def test_phrase_bridge_includes_embedded_openie_entity_hubs():
+    """OpenIE entity hubs use MENTIONS edges but should seed chunks the
+    same way phrase hubs do."""
+    slots = {"roadmap": 0}
+    embedder = _DirectedEmbedder(slots=slots, dim=4)
+
+    backend = MemoryBackend()
+    await backend.connect()
+    chunk = Node(
+        id="chunk_openie",
+        kind=NodeKind.CHUNK,
+        title="openie_doc",
+        content="opaque policy paragraph",
+        level=ConsolidationLevel.L0_RAW,
+        properties={"doc_id": "openie_doc"},
+    )
+    entity = Node(
+        id="ent_roadmap",
+        kind=NodeKind.ENTITY,
+        title="roadmap",
+        content="",
+        tags=["_openie", "_openie_entity"],
+        level=ConsolidationLevel.L0_RAW,
+        embedding=await embedder.embed("roadmap"),
+    )
+    await backend.save_node(chunk)
+    await backend.save_node(entity)
+    await backend.save_edge(
+        Edge(
+            id="openie_mention",
+            source_id=chunk.id,
+            target_id=entity.id,
+            kind=EdgeKind.MENTIONS,
+            weight=0.8,
+        )
+    )
+
+    searcher = EvidenceSearch(backend=backend, embedder=embedder, query_phrase_seed_k=5)
+    q_emb = await embedder.embed("roadmap")
+    bridge_chunks = await searcher._seed_via_phrase_bridges(q_emb, top_k_phrases=5, seen_ids=set())
+    assert [node.id for node in bridge_chunks] == ["chunk_openie"]
 
 
 @pytest.mark.asyncio

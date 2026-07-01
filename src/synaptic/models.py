@@ -22,6 +22,10 @@ def _str_dict() -> dict[str, str]:
     return {}
 
 
+def _float_dict() -> dict[str, float]:
+    return {}
+
+
 class ConsolidationLevel(StrEnum):
     L0_RAW = "L0"
     L1_SPRINT = "L1"
@@ -75,6 +79,40 @@ class EdgeKind(StrEnum):
     REFERENCES = "references"
 
 
+class MemoryEventKind(StrEnum):
+    INGEST = "ingest"
+    UPDATE = "update"
+    DELETE = "delete"
+    SEMANTIC_EXTRACT = "semantic_extract"
+    RETRIEVAL = "retrieval"
+    FEEDBACK = "feedback"
+    MAINTENANCE = "maintenance"
+    SIGNAL = "signal"
+
+
+class FeedbackSignal(StrEnum):
+    EXPLICIT_POSITIVE = "explicit_positive"
+    EXPLICIT_NEGATIVE = "explicit_negative"
+    SELECTED = "selected"
+    IGNORED = "ignored"
+    TASK_SUCCESS = "task_success"
+    TASK_FAILURE = "task_failure"
+    TEST_PASS = "test_pass"  # noqa: S105 - feedback signal name, not a secret
+    TEST_FAIL = "test_fail"
+
+
+class MemorySignalKind(StrEnum):
+    NEW_ENTITY = "new_entity"
+    NEW_RELATION = "new_relation"
+    RELATION_REINFORCED = "relation_reinforced"
+    POSSIBLE_CONFLICT = "possible_conflict"
+    POSSIBLE_SUPERSESSION = "possible_supersession"
+    STALE_MEMORY = "stale_memory"
+    DRIFT_SPIKE = "drift_spike"
+    LOW_CONFIDENCE_RELATION = "low_confidence_relation"
+    REPEATED_FAILURE = "repeated_failure"
+
+
 @dataclass(slots=True)
 class Node:
     id: str = field(default_factory=_new_id)
@@ -92,6 +130,138 @@ class Node:
     source: str = ""
     created_at: float = field(default_factory=time)
     updated_at: float = field(default_factory=time)
+
+
+@dataclass(slots=True)
+class MemoryScope:
+    """Scope that keeps memory reinforcement from leaking across users/tasks."""
+
+    workspace_id: str = ""
+    user_id: str = ""
+    session_id: str = ""
+    domain: str = ""
+    promote_to_global: bool = False
+
+    @property
+    def key(self) -> str:
+        return memory_scope_key(self)
+
+
+def memory_scope_key(scope: MemoryScope | None, *, global_scope: bool = False) -> str:
+    """Return the storage key for a memory scope.
+
+    Specificity is intentional: session feedback should not automatically
+    dominate the whole workspace, and workspace feedback should not
+    silently become global.
+    """
+    if global_scope:
+        return "global"
+    if scope is None:
+        return "global"
+    if scope.session_id:
+        return f"session:{scope.session_id}"
+    if scope.user_id:
+        return f"user:{scope.user_id}"
+    if scope.workspace_id:
+        return f"workspace:{scope.workspace_id}"
+    if scope.domain:
+        return f"domain:{scope.domain}"
+    return "global"
+
+
+def _scope() -> MemoryScope:
+    return MemoryScope()
+
+
+@dataclass(slots=True)
+class MemoryEvent:
+    """Durable ledger entry for memory creation, extraction, feedback, and upkeep."""
+
+    id: str = field(default_factory=_new_id)
+    kind: str | MemoryEventKind = MemoryEventKind.INGEST
+    scope: MemoryScope = field(default_factory=_scope)
+    source: str = ""
+    source_id: str = ""
+    content_hash: str = ""
+    node_ids: list[str] = field(default_factory=_str_list)
+    edge_ids: list[str] = field(default_factory=_str_list)
+    confidence: float = 1.0
+    properties: dict[str, str] = field(default_factory=_str_dict)
+    created_at: float = field(default_factory=time)
+
+
+@dataclass(slots=True)
+class RetrievalEvent:
+    """One retrieval or feedback observation.
+
+    ``success`` is tri-state on purpose: implicit signals such as
+    ``selected`` are useful, but should not be treated as ground truth.
+    """
+
+    id: str = field(default_factory=_new_id)
+    query: str = ""
+    scope: MemoryScope = field(default_factory=_scope)
+    returned_node_ids: list[str] = field(default_factory=_str_list)
+    selected_node_ids: list[str] = field(default_factory=_str_list)
+    success: bool | None = None
+    signal: str | FeedbackSignal = FeedbackSignal.SELECTED
+    confidence: float = 1.0
+    created_at: float = field(default_factory=time)
+    properties: dict[str, str] = field(default_factory=_str_dict)
+
+
+@dataclass(slots=True)
+class MemoryScore:
+    """Scope-local reinforcement score for a node or edge."""
+
+    scope_key: str = "global"
+    node_id: str = ""
+    edge_id: str = ""
+    access_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    score: float = 0.0
+    updated_at: float = field(default_factory=time)
+
+
+@dataclass(slots=True)
+class MemorySignal:
+    """A non-destructive warning or lifecycle signal emitted by the monitor."""
+
+    id: str = field(default_factory=_new_id)
+    kind: str | MemorySignalKind = MemorySignalKind.NEW_ENTITY
+    scope: MemoryScope = field(default_factory=_scope)
+    node_ids: list[str] = field(default_factory=_str_list)
+    edge_ids: list[str] = field(default_factory=_str_list)
+    confidence: float = 1.0
+    reason: str = ""
+    properties: dict[str, str] = field(default_factory=_str_dict)
+    created_at: float = field(default_factory=time)
+
+
+@dataclass(slots=True)
+class MemoryHealthReport:
+    """Compact operational health summary for the memory layer."""
+
+    scope_key: str = "global"
+    total_nodes: int = 0
+    total_edges: int = 0
+    memory_events: int = 0
+    retrieval_events: int = 0
+    signal_count: int = 0
+    new_entity_count: int = 0
+    new_relation_count: int = 0
+    relation_reinforced_count: int = 0
+    suspect_count: int = 0
+    conflict_signal_count: int = 0
+    stale_signal_count: int = 0
+    repeated_failure_count: int = 0
+    low_confidence_relation_count: int = 0
+    drift_spike_count: int = 0
+    openie_artifact_count: int = 0
+    openie_failure_rate: float = 0.0
+    top_reinforced_node_ids: list[str] = field(default_factory=_str_list)
+    generated_at: float = field(default_factory=time)
 
 
 def _sparse_dict() -> dict[int, float]:
@@ -114,6 +284,7 @@ class Edge:
     target_id: str = ""
     kind: EdgeKind = EdgeKind.RELATED
     weight: float = 1.0
+    properties: dict[str, str] = field(default_factory=_str_dict)
     created_at: float = field(default_factory=time)
 
 
@@ -143,7 +314,9 @@ class SearchResult:
     nodes: list[ActivatedNode] = field(default_factory=_activated_list)
     total_candidates: int = 0
     search_time_ms: float = 0.0
+    timings_ms: dict[str, float] = field(default_factory=_float_dict)
     stages_used: list[str] = field(default_factory=_str_list)
+    event_id: str = ""
 
 
 @dataclass(slots=True)

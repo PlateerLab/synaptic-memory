@@ -15,7 +15,9 @@ from synaptic.extensions.document_ingester import (
     JsonlDocumentSource,
 )
 from synaptic.extensions.domain_profile import DomainProfile
-from synaptic.models import NodeKind
+from synaptic.extensions.entity_extractor_openie import LLMOpenIEExtractor
+from synaptic.extensions.entity_ids import deterministic_entity_id
+from synaptic.models import EdgeKind, MemoryEventKind, NodeKind
 
 
 def _sample_doc(
@@ -43,6 +45,40 @@ def _chunk(doc_id: str, index: int, text: str) -> ChunkRecord:
     )
 
 
+class _FakeOpenIELLM:
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def generate(self, **kwargs):
+        self.calls.append(kwargs)
+        return json.dumps(
+            {
+                "entities": [{"canonical": "Acme", "type": "org", "confidence": 0.9}],
+                "triples": [],
+            }
+        )
+
+
+class _CountingBatchBackend(MemoryBackend):
+    def __init__(self):
+        super().__init__()
+        self.node_batch_sizes: list[int] = []
+        self.edge_batch_sizes: list[int] = []
+        self.memory_event_batch_sizes: list[int] = []
+
+    async def save_nodes_batch(self, nodes):
+        self.node_batch_sizes.append(len(nodes))
+        await super().save_nodes_batch(nodes)
+
+    async def save_edges_batch(self, edges):
+        self.edge_batch_sizes.append(len(edges))
+        await super().save_edges_batch(edges)
+
+    async def save_memory_events_batch(self, events):
+        self.memory_event_batch_sizes.append(len(events))
+        await super().save_memory_events_batch(events)
+
+
 # --- Basic ingest ---
 
 
@@ -61,6 +97,10 @@ class TestBasicIngest:
 
         docs = await backend.list_nodes(kind=NodeKind.ENTITY, limit=100)
         assert any(n.title == "제목" for n in docs)
+        events = await backend.list_memory_events(kind=MemoryEventKind.INGEST)
+        assert len(events) == 1
+        assert events[0].source_id == "d1"
+        assert events[0].content_hash
 
     @pytest.mark.asyncio
     async def test_doc_with_chunks_creates_contains_and_next_chunk_edges(self):
@@ -90,6 +130,31 @@ class TestBasicIngest:
             c.content for c in sorted(chunks, key=lambda c: int(c.properties.get("chunk_index", 0)))
         ]
         assert texts == ["첫 번째 청크", "두 번째 청크", "세 번째 청크"]
+
+    @pytest.mark.asyncio
+    async def test_doc_nodes_and_edges_are_saved_in_batches(self):
+        backend = _CountingBatchBackend()
+        profile = DomainProfile.generic_korean()
+        ingester = DocumentIngester(profile=profile, backend=backend)
+
+        doc = _sample_doc(
+            "d1",
+            "Doc 1",
+            chunks=[
+                _chunk("d1", 0, "첫 번째 청크"),
+                _chunk("d1", 1, "두 번째 청크"),
+                _chunk("d1", 2, "세 번째 청크"),
+            ],
+        )
+
+        stats = await ingester.ingest(InMemoryDocumentSource([doc]))
+
+        assert stats.documents_ingested == 1
+        assert stats.chunks_created == 3
+        assert stats.edges_created == 5
+        assert backend.node_batch_sizes == [4]
+        assert backend.edge_batch_sizes == [5]
+        assert backend.memory_event_batch_sizes == [1]
 
     @pytest.mark.asyncio
     async def test_category_created_once_across_docs(self):
@@ -203,6 +268,15 @@ class TestMergeStrategy:
         assert "new chunk a" in chunk_texts
         assert "new chunk b" in chunk_texts
         assert "old chunk" not in chunk_texts
+        delete_events = await backend.list_memory_events(kind=MemoryEventKind.DELETE, limit=10)
+        assert len(delete_events) == 1
+        assert len(delete_events[0].node_ids) == 2
+        assert len(delete_events[0].edge_ids) >= 1
+        assert delete_events[0].properties["previous_title"] == "V1"
+        assert delete_events[0].properties["replacement_content_hash"]
+        update_events = await backend.list_memory_events(kind=MemoryEventKind.UPDATE, limit=10)
+        assert len(update_events) == 1
+        assert len(update_events[0].node_ids) == 3
 
     @pytest.mark.asyncio
     async def test_invalid_merge_strategy_raises(self):
@@ -250,6 +324,90 @@ class TestIdempotent:
         assert doc_count == 1
         assert chunk_count == 2
         assert cat_count == 1
+
+
+# --- Optional OpenIE post-pass ---
+
+
+class TestOpenIEPostPass:
+    @pytest.mark.asyncio
+    async def test_openie_extractor_not_called_when_profile_disabled(self):
+        backend = MemoryBackend()
+        profile = DomainProfile.generic_english()
+        llm = _FakeOpenIELLM()
+        ingester = DocumentIngester(
+            profile=profile,
+            backend=backend,
+            openie_extractor=LLMOpenIEExtractor(llm),
+        )
+        doc = _sample_doc("d1", "Doc", chunks=[_chunk("d1", 0, "Acme content")])
+
+        stats = await ingester.ingest(InMemoryDocumentSource([doc]))
+
+        assert stats.openie_gated is True
+        assert stats.openie_gate_reason == "profile openie_enabled=false"
+        assert stats.openie_chunks_scanned == 0
+        assert llm.calls == []
+        assert await backend.get_node(deterministic_entity_id("Acme")) is None
+        assert await backend.list_memory_events(kind=MemoryEventKind.SEMANTIC_EXTRACT) == []
+
+    @pytest.mark.asyncio
+    async def test_openie_enabled_without_extractor_is_gated(self):
+        backend = MemoryBackend()
+        profile = DomainProfile(name="openie", locale="en", openie_enabled=True)
+        ingester = DocumentIngester(profile=profile, backend=backend)
+        doc = _sample_doc("d1", "Doc", chunks=[_chunk("d1", 0, "Acme content")])
+
+        stats = await ingester.ingest(InMemoryDocumentSource([doc]))
+
+        assert stats.openie_gated is True
+        assert stats.openie_gate_reason == "profile openie_enabled=true but no openie_extractor"
+        assert stats.openie_chunks_scanned == 0
+        assert await backend.list_memory_events(kind=MemoryEventKind.SEMANTIC_EXTRACT) == []
+
+    @pytest.mark.asyncio
+    async def test_openie_enabled_runs_post_pass_after_chunk_ingest(self):
+        backend = MemoryBackend()
+        profile = DomainProfile(name="openie", locale="en", openie_enabled=True)
+        llm = _FakeOpenIELLM()
+        ingester = DocumentIngester(
+            profile=profile,
+            backend=backend,
+            openie_extractor=LLMOpenIEExtractor(llm),
+        )
+        doc = _sample_doc(
+            "d1",
+            "Doc",
+            chunks=[_chunk("d1", 0, "Acme Roadmap content"), _chunk("d1", 1, "")],
+        )
+
+        stats = await ingester.ingest(InMemoryDocumentSource([doc]))
+
+        assert stats.openie_gated is False
+        assert stats.openie_gate_reason == ""
+        assert stats.openie_chunks_scanned == 2
+        assert stats.openie_chunks_selected == 1
+        assert stats.openie_entity_nodes_touched == 1
+        assert stats.openie_extraction_failures == 0
+        assert len(llm.calls) == 1
+        acme = await backend.get_node(deterministic_entity_id("Acme"))
+        assert acme is not None
+        assert "_openie" in acme.tags
+        events = await backend.list_memory_events(kind=MemoryEventKind.SEMANTIC_EXTRACT)
+        assert len(events) == 1
+        assert deterministic_entity_id("Acme") in events[0].node_ids
+        assert events[0].properties["linker"] == "OpenIELinker"
+        assert events[0].properties["extractor"] == "LLMOpenIEExtractor"
+        assert events[0].properties["prompt_version"].startswith("openie-")
+        chunks = await backend.list_nodes(kind=NodeKind.CHUNK, limit=100)
+        first_chunk = next(c for c in chunks if c.properties["chunk_index"] == "0")
+        chunk_edges = [
+            edge
+            for edge in await backend.get_edges(first_chunk.id, direction="outgoing")
+            if edge.kind == EdgeKind.MENTIONS
+        ]
+        assert chunk_edges
+        assert chunk_edges[0].properties["source_event_id"] == events[0].id
 
 
 # --- JSONL source ---

@@ -68,6 +68,7 @@ CREATE REL TABLE IF NOT EXISTS Edge (
     id STRING,
     kind STRING,
     weight DOUBLE,
+    properties_json STRING,
     created_at DOUBLE
 )
 """
@@ -262,11 +263,13 @@ class KuzuBackend:
             await self._execute(
                 """MATCH ()-[r:Edge {id: $id}]->()
                 SET r.kind = $kind,
-                    r.weight = $weight""",
+                    r.weight = $weight,
+                    r.properties_json = $properties_json""",
                 {
                     "id": edge.id,
                     "kind": str(edge.kind),
                     "weight": float(edge.weight),
+                    "properties_json": json.dumps(edge.properties),
                 },
             )
             return
@@ -277,6 +280,7 @@ class KuzuBackend:
                 id: $id,
                 kind: $kind,
                 weight: $weight,
+                properties_json: $properties_json,
                 created_at: $created_at
             }]->(b)""",
             {
@@ -285,6 +289,7 @@ class KuzuBackend:
                 "id": edge.id,
                 "kind": str(edge.kind),
                 "weight": float(edge.weight),
+                "properties_json": json.dumps(edge.properties),
                 "created_at": float(edge.created_at),
             },
         )
@@ -294,7 +299,8 @@ class KuzuBackend:
             result = await self._execute(
                 "MATCH (a:Node {id: $id})-[r:Edge]->(b:Node) "
                 "RETURN r.id AS id, r.kind AS kind, r.weight AS weight, "
-                "r.created_at AS created_at, a.id AS src, b.id AS tgt",
+                "r.properties_json AS properties_json, r.created_at AS created_at, "
+                "a.id AS src, b.id AS tgt",
                 {"id": node_id},
             )
             return _rows_to_edges(result)
@@ -302,7 +308,8 @@ class KuzuBackend:
             result = await self._execute(
                 "MATCH (a:Node)-[r:Edge]->(b:Node {id: $id}) "
                 "RETURN r.id AS id, r.kind AS kind, r.weight AS weight, "
-                "r.created_at AS created_at, a.id AS src, b.id AS tgt",
+                "r.properties_json AS properties_json, r.created_at AS created_at, "
+                "a.id AS src, b.id AS tgt",
                 {"id": node_id},
             )
             return _rows_to_edges(result)
@@ -321,8 +328,13 @@ class KuzuBackend:
     async def update_edge(self, edge: Edge) -> None:
         await self._execute(
             """MATCH ()-[r:Edge {id: $id}]->()
-            SET r.weight = $weight, r.kind = $kind""",
-            {"id": edge.id, "weight": float(edge.weight), "kind": str(edge.kind)},
+            SET r.weight = $weight, r.kind = $kind, r.properties_json = $properties_json""",
+            {
+                "id": edge.id,
+                "weight": float(edge.weight),
+                "kind": str(edge.kind),
+                "properties_json": json.dumps(edge.properties),
+            },
         )
 
     async def delete_edge(self, edge_id: str) -> None:
@@ -400,6 +412,7 @@ class KuzuBackend:
                 target_id=str(row_dict.get("edge_tgt", "")),
                 kind=_safe_edge_kind(str(row_dict.get("edge_kind", "related"))),
                 weight=float(row_dict.get("edge_weight", 1.0) or 1.0),
+                properties=_safe_json_dict(row_dict.get("edge_properties_json")),
                 created_at=float(row_dict.get("edge_created_at", 0.0) or 0.0),
             )
             out.append((node, edge))
@@ -415,7 +428,8 @@ class KuzuBackend:
             "WHERE b.id <> $id "
             "RETURN b.*, "
             "r.id AS edge_id, r.kind AS edge_kind, "
-            "r.weight AS edge_weight, r.created_at AS edge_created_at, "
+            "r.weight AS edge_weight, r.properties_json AS edge_properties_json, "
+            "r.created_at AS edge_created_at, "
             "a.id AS edge_src, b.id AS edge_tgt",
             {"id": node_id},
         )
@@ -426,7 +440,8 @@ class KuzuBackend:
             "WHERE a.id <> $id "
             "RETURN a.*, "
             "r.id AS edge_id, r.kind AS edge_kind, "
-            "r.weight AS edge_weight, r.created_at AS edge_created_at, "
+            "r.weight AS edge_weight, r.properties_json AS edge_properties_json, "
+            "r.created_at AS edge_created_at, "
             "a.id AS edge_src, b.id AS edge_tgt",
             {"id": node_id},
         )
@@ -609,6 +624,18 @@ def _safe_edge_kind(value: str) -> EdgeKind:
         return EdgeKind.RELATED
 
 
+def _safe_json_dict(value: object) -> dict[str, str]:
+    if not isinstance(value, str) or not value:
+        return {}
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items()}
+
+
 def _result_rows(result: kuzu.QueryResult) -> list[list[Any]]:
     """Drain a QueryResult into a list of row lists."""
     rows: list[list[Any]] = []
@@ -631,11 +658,7 @@ def _row_to_node(row: list[Any], columns: list[str], *, prefix: str = "n.") -> N
         else:
             by_name[col] = val
 
-    props_raw = by_name.get("properties_json") or "{}"
-    try:
-        properties = json.loads(props_raw) if isinstance(props_raw, str) else {}
-    except json.JSONDecodeError:
-        properties = {}
+    properties = _safe_json_dict(by_name.get("properties_json"))
 
     tags_raw = by_name.get("tags_json") or "[]"
     try:
@@ -678,6 +701,7 @@ def _rows_to_edges(result: kuzu.QueryResult) -> list[Edge]:
                 target_id=str(d.get("tgt", "")),
                 kind=_safe_edge_kind(str(d.get("kind", "related"))),
                 weight=float(d.get("weight", 1.0) or 1.0),
+                properties=_safe_json_dict(d.get("properties_json")),
                 created_at=float(d.get("created_at", 0.0) or 0.0),
             )
         )

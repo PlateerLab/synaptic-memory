@@ -10,8 +10,12 @@ from synaptic.models import (
     DigestResult,
     Edge,
     EdgeKind,
+    MemoryEvent,
+    MemoryScope,
+    MemoryScore,
     Node,
     NodeKind,
+    RetrievalEvent,
 )
 
 
@@ -81,6 +85,51 @@ class StorageBackend(Protocol):
     # Maintenance
     async def prune_edges(self, *, weight_below: float = 0.1) -> int: ...
     async def decay_vitality(self, *, factor: float = 0.95) -> int: ...
+
+
+class MemoryEventBackend(Protocol):
+    """Optional backend capability for durable memory/retrieval ledgers."""
+
+    async def save_memory_event(self, event: MemoryEvent) -> None: ...
+    async def save_memory_events_batch(self, events: Sequence[MemoryEvent]) -> None: ...
+    async def list_memory_events(
+        self,
+        *,
+        kind: str | None = None,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[MemoryEvent]: ...
+    async def save_retrieval_event(self, event: RetrievalEvent) -> None: ...
+    async def get_retrieval_event(self, event_id: str) -> RetrievalEvent | None: ...
+    async def list_retrieval_events(
+        self,
+        *,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[RetrievalEvent]: ...
+
+
+class MemoryScoreBackend(Protocol):
+    """Optional backend capability for scope-aware reinforcement scores."""
+
+    async def save_memory_score(self, score: MemoryScore) -> None: ...
+    async def get_memory_score(
+        self,
+        scope_key: str,
+        *,
+        node_id: str = "",
+        edge_id: str = "",
+    ) -> MemoryScore | None: ...
+    async def list_memory_scores(
+        self,
+        *,
+        scope_key: str | None = None,
+        node_ids: list[str] | None = None,
+        edge_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[MemoryScore]: ...
 
 
 class GraphTraversal(Protocol):

@@ -19,7 +19,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from synaptic.models import EdgeKind, NodeKind
+from synaptic.extensions.entity_ids import canonical_entity_text, deterministic_entity_id
+from synaptic.models import ConsolidationLevel, EdgeKind, Node, NodeKind
 
 if TYPE_CHECKING:
     from synaptic.extensions.chunk_entity_index import ChunkEntityIndex
@@ -248,7 +249,9 @@ class SpaCyEntityExtractor:
         chunk_entity_index: ChunkEntityIndex | None = getattr(graph, "_chunk_entity_index", None)
 
         for entity in entities:
-            normalized_key = entity.text.lower()
+            canonical = canonical_entity_text(entity.text)
+            normalized_key = canonical.lower()
+            entity_node_id = deterministic_entity_id(canonical)
 
             # Check cache for existing entity node
             if normalized_key in self._entity_cache:
@@ -268,13 +271,30 @@ class SpaCyEntityExtractor:
                     continue
                 del self._entity_cache[normalized_key]
 
-            # Create new entity node (via store to avoid relation_detector duplication)
-            entity_node = await graph._store.add_node(
-                title=entity.text,
-                content="",
-                kind=NodeKind.ENTITY,
-                tags=["_spacy", f"_label:{entity.label}"],
-            )
+            existing = await graph.backend.get_node(entity_node_id)
+            if existing is not None:
+                tags = list(existing.tags or [])
+                for tag in ("_spacy", f"_label:{entity.label}"):
+                    if tag not in tags:
+                        tags.append(tag)
+                existing.tags = tags
+                if not existing.title:
+                    existing.title = canonical
+                existing.properties = dict(existing.properties or {})
+                existing.properties.setdefault("entity_label", entity.label)
+                await graph.backend.update_node(existing)
+                entity_node = existing
+            else:
+                entity_node = Node(
+                    id=entity_node_id,
+                    kind=NodeKind.ENTITY,
+                    title=canonical,
+                    content="",
+                    tags=["_spacy", f"_label:{entity.label}"],
+                    level=ConsolidationLevel.L0_RAW,
+                    properties={"entity_label": entity.label},
+                )
+                await graph.backend.save_node(entity_node)
 
             self._entity_cache[normalized_key] = entity_node.id
 

@@ -8,7 +8,7 @@ Supports JSON-mode generation:
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,16 @@ logger = logging.getLogger(__name__)
 class LLMProvider(Protocol):
     """Generate text completions from an LLM."""
 
-    async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str: ...
+    async def generate(
+        self,
+        *,
+        system: str,
+        user: str,
+        max_tokens: int = 1024,
+        temperature: float | None = 0.0,
+        seed: int | None = None,
+        response_schema: dict[str, Any] | None = None,
+    ) -> str: ...
 
 
 class OllamaLLMProvider:
@@ -48,18 +57,32 @@ class OllamaLLMProvider:
         self._model = model
         self._timeout = timeout
 
-    async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
+    async def generate(
+        self,
+        *,
+        system: str,
+        user: str,
+        max_tokens: int = 1024,
+        temperature: float | None = 0.0,
+        seed: int | None = None,
+        response_schema: dict[str, Any] | None = None,
+    ) -> str:
         """Generate a JSON completion via Ollama /api/generate."""
         import aiohttp
 
         url = f"{self._base_url}/api/generate"
+        options: dict[str, Any] = {"num_predict": max_tokens}
+        if temperature is not None:
+            options["temperature"] = temperature
+        if seed is not None:
+            options["seed"] = seed
         payload = {
             "model": self._model,
             "system": system,
             "prompt": user,
-            "format": "json",
+            "format": response_schema or "json",
             "stream": False,
-            "options": {"num_predict": max_tokens},
+            "options": options,
         }
 
         timeout = aiohttp.ClientTimeout(total=self._timeout)
@@ -112,7 +135,16 @@ class OpenAILLMProvider:
         self._model = model
         self._timeout = timeout
 
-    async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
+    async def generate(
+        self,
+        *,
+        system: str,
+        user: str,
+        max_tokens: int = 1024,
+        temperature: float | None = 0.0,
+        seed: int | None = None,
+        response_schema: dict[str, Any] | None = None,
+    ) -> str:
         """Generate a JSON completion via OpenAI-compatible chat API."""
         import aiohttp
 
@@ -121,21 +153,42 @@ class OpenAILLMProvider:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
-        payload = {
+        response_format = _openai_response_format(response_schema)
+        payload: dict[str, Any] = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
+            "response_format": response_format,
         }
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if seed is not None:
+            payload["seed"] = seed
 
         timeout = aiohttp.ClientTimeout(total=self._timeout)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, headers=headers, json=payload) as resp:
                 if resp.status != 200:
                     body = await resp.text()
+                    if _should_retry_json_object(response_format, resp.status):
+                        logger.warning(
+                            "LLM API rejected json_schema response_format; retrying with json_object"
+                        )
+                        fallback_payload = dict(payload)
+                        fallback_payload["response_format"] = {"type": "json_object"}
+                        async with session.post(url, headers=headers, json=fallback_payload) as retry:
+                            if retry.status == 200:
+                                data = await retry.json()
+                                return data["choices"][0]["message"]["content"]  # type: ignore[no-any-return]
+                            retry_body = await retry.text()
+                        msg = (
+                            f"LLM API error {retry.status} after json_object fallback "
+                            f"(initial {resp.status}: {body[:200]}): {retry_body[:200]}"
+                        )
+                        raise RuntimeError(msg)
                     msg = f"LLM API error {resp.status}: {body[:200]}"
                     raise RuntimeError(msg)
                 data = await resp.json()
@@ -167,7 +220,16 @@ class AnthropicLLMProvider:
         self._model = model
         self._timeout = timeout
 
-    async def generate(self, *, system: str, user: str, max_tokens: int = 1024) -> str:
+    async def generate(
+        self,
+        *,
+        system: str,
+        user: str,
+        max_tokens: int = 1024,
+        temperature: float | None = 0.0,
+        seed: int | None = None,
+        response_schema: dict[str, Any] | None = None,
+    ) -> str:
         """Generate a completion via Anthropic Messages API."""
         import aiohttp
 
@@ -177,12 +239,18 @@ class AnthropicLLMProvider:
             "x-api-key": self._api_key,
             "anthropic-version": "2023-06-01",
         }
-        payload = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "max_tokens": max_tokens,
             "system": system,
             "messages": [{"role": "user", "content": user}],
         }
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if seed is not None:
+            logger.debug("Anthropic provider ignores seed=%s", seed)
+        if response_schema is not None:
+            logger.debug("Anthropic provider ignores response_schema")
 
         timeout = aiohttp.ClientTimeout(total=self._timeout)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -194,3 +262,26 @@ class AnthropicLLMProvider:
                 data = await resp.json()
 
         return data["content"][0]["text"]  # type: ignore[no-any-return]
+
+
+def _openai_response_format(response_schema: dict[str, Any] | None) -> dict[str, Any]:
+    """Build an OpenAI-compatible JSON response_format payload."""
+    if response_schema is None:
+        return {"type": "json_object"}
+    if response_schema.get("type") in {"json_object", "json_schema"}:
+        return response_schema
+    if "name" in response_schema and "schema" in response_schema:
+        return {"type": "json_schema", "json_schema": response_schema}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "synaptic_response",
+            "schema": response_schema,
+            "strict": True,
+        },
+    }
+
+
+def _should_retry_json_object(response_format: dict[str, Any], status: int) -> bool:
+    """Return True when a local OpenAI-compatible server likely lacks schema mode."""
+    return status in {400, 422} and response_format.get("type") == "json_schema"

@@ -161,8 +161,15 @@ from synaptic.models import (
     ConsolidationLevel,
     Edge,
     EdgeKind,
+    FeedbackSignal,
+    MemoryEvent,
+    MemoryEventKind,
+    MemoryScope,
+    MemoryScore,
     Node,
     NodeKind,
+    RetrievalEvent,
+    memory_scope_key,
 )
 
 try:
@@ -201,13 +208,59 @@ CREATE TABLE IF NOT EXISTS syn_edges (
     target_id TEXT NOT NULL REFERENCES syn_nodes(id) ON DELETE CASCADE,
     kind TEXT NOT NULL DEFAULT 'related',
     weight REAL NOT NULL DEFAULT 1.0,
+    properties_json TEXT NOT NULL DEFAULT '{}',
     created_at REAL NOT NULL,
     UNIQUE(source_id, target_id, kind)
+);
+
+CREATE TABLE IF NOT EXISTS syn_memory_events (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    scope_key TEXT NOT NULL DEFAULT 'global',
+    scope_json TEXT NOT NULL DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT '',
+    source_id TEXT NOT NULL DEFAULT '',
+    content_hash TEXT NOT NULL DEFAULT '',
+    node_ids_json TEXT NOT NULL DEFAULT '[]',
+    edge_ids_json TEXT NOT NULL DEFAULT '[]',
+    confidence REAL NOT NULL DEFAULT 1.0,
+    properties_json TEXT NOT NULL DEFAULT '{}',
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS syn_retrieval_events (
+    id TEXT PRIMARY KEY,
+    query TEXT NOT NULL DEFAULT '',
+    scope_key TEXT NOT NULL DEFAULT 'global',
+    scope_json TEXT NOT NULL DEFAULT '{}',
+    returned_node_ids_json TEXT NOT NULL DEFAULT '[]',
+    selected_node_ids_json TEXT NOT NULL DEFAULT '[]',
+    success INTEGER,
+    signal TEXT NOT NULL DEFAULT 'selected',
+    confidence REAL NOT NULL DEFAULT 1.0,
+    properties_json TEXT NOT NULL DEFAULT '{}',
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS syn_memory_scores (
+    scope_key TEXT NOT NULL,
+    node_id TEXT NOT NULL DEFAULT '',
+    edge_id TEXT NOT NULL DEFAULT '',
+    access_count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0.0,
+    updated_at REAL NOT NULL,
+    PRIMARY KEY(scope_key, node_id, edge_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_syn_edges_source ON syn_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_target ON syn_edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_syn_nodes_kind_level ON syn_nodes(kind, level);
+CREATE INDEX IF NOT EXISTS idx_syn_memory_events_scope ON syn_memory_events(scope_key, created_at);
+CREATE INDEX IF NOT EXISTS idx_syn_memory_events_kind ON syn_memory_events(kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_syn_retrieval_events_scope ON syn_retrieval_events(scope_key, created_at);
+CREATE INDEX IF NOT EXISTS idx_syn_memory_scores_node ON syn_memory_scores(node_id, score);
 """
 
 
@@ -297,6 +350,12 @@ class SQLiteBackend:
         if "embedding_json" not in columns:
             await self._conn.execute(
                 "ALTER TABLE syn_nodes ADD COLUMN embedding_json TEXT NOT NULL DEFAULT '[]'"
+            )
+        async with self._conn.execute("PRAGMA table_info(syn_edges)") as cur:
+            edge_columns = {row[1] for row in await cur.fetchall()}
+        if "properties_json" not in edge_columns:
+            await self._conn.execute(
+                "ALTER TABLE syn_edges ADD COLUMN properties_json TEXT NOT NULL DEFAULT '{}'"
             )
         await self._conn.commit()
 
@@ -459,10 +518,22 @@ class SQLiteBackend:
     async def save_edge(self, edge: Edge) -> None:
         db = self._db()
         await db.execute(
-            """INSERT INTO syn_edges (id, source_id, target_id, kind, weight, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET weight=excluded.weight""",
-            (edge.id, edge.source_id, edge.target_id, str(edge.kind), edge.weight, edge.created_at),
+            """INSERT INTO syn_edges
+            (id, source_id, target_id, kind, weight, properties_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET
+                id=excluded.id,
+                weight=excluded.weight,
+                properties_json=excluded.properties_json""",
+            (
+                edge.id,
+                edge.source_id,
+                edge.target_id,
+                str(edge.kind),
+                edge.weight,
+                json.dumps(edge.properties),
+                edge.created_at,
+            ),
         )
         await db.commit()
 
@@ -482,8 +553,8 @@ class SQLiteBackend:
     async def update_edge(self, edge: Edge) -> None:
         db = self._db()
         await db.execute(
-            "UPDATE syn_edges SET weight=?, kind=? WHERE id=?",
-            (edge.weight, str(edge.kind), edge.id),
+            "UPDATE syn_edges SET weight=?, kind=?, properties_json=? WHERE id=?",
+            (edge.weight, str(edge.kind), json.dumps(edge.properties), edge.id),
         )
         await db.commit()
 
@@ -491,6 +562,192 @@ class SQLiteBackend:
         db = self._db()
         await db.execute("DELETE FROM syn_edges WHERE id = ?", (edge_id,))
         await db.commit()
+
+    # --- Memory operating layer ---
+
+    async def save_memory_event(self, event: MemoryEvent) -> None:
+        db = self._db()
+        await db.execute(
+            _UPSERT_MEMORY_EVENT_SQL,
+            _memory_event_row(event),
+        )
+        await db.commit()
+
+    async def save_memory_events_batch(self, events: Sequence[MemoryEvent]) -> None:
+        if not events:
+            return
+        db = self._db()
+        await db.executemany(_UPSERT_MEMORY_EVENT_SQL, [_memory_event_row(event) for event in events])
+        await db.commit()
+
+    async def list_memory_events(
+        self,
+        *,
+        kind: str | None = None,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[MemoryEvent]:
+        db = self._db()
+        clauses: list[str] = []
+        params: list[object] = []
+        if kind is not None:
+            clauses.append("kind = ?")
+            params.append(str(kind))
+        if scope is not None:
+            clauses.append("scope_key = ?")
+            params.append(memory_scope_key(scope))
+        if since is not None:
+            clauses.append("created_at >= ?")
+            params.append(float(since))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(int(limit))
+        async with db.execute(
+            f"SELECT * FROM syn_memory_events{where} ORDER BY created_at DESC LIMIT ?",
+            params,
+        ) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_memory_event(r) for r in rows]
+
+    async def save_retrieval_event(self, event: RetrievalEvent) -> None:
+        db = self._db()
+        success = None if event.success is None else int(event.success)
+        await db.execute(
+            """INSERT INTO syn_retrieval_events
+            (id, query, scope_key, scope_json, returned_node_ids_json,
+             selected_node_ids_json, success, signal, confidence,
+             properties_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                query=excluded.query,
+                scope_key=excluded.scope_key,
+                scope_json=excluded.scope_json,
+                returned_node_ids_json=excluded.returned_node_ids_json,
+                selected_node_ids_json=excluded.selected_node_ids_json,
+                success=excluded.success,
+                signal=excluded.signal,
+                confidence=excluded.confidence,
+                properties_json=excluded.properties_json,
+                created_at=excluded.created_at""",
+            (
+                event.id,
+                event.query,
+                memory_scope_key(event.scope),
+                _scope_to_json(event.scope),
+                json.dumps(event.returned_node_ids),
+                json.dumps(event.selected_node_ids),
+                success,
+                str(event.signal),
+                event.confidence,
+                json.dumps(event.properties),
+                event.created_at,
+            ),
+        )
+        await db.commit()
+
+    async def get_retrieval_event(self, event_id: str) -> RetrievalEvent | None:
+        db = self._db()
+        async with db.execute("SELECT * FROM syn_retrieval_events WHERE id = ?", (event_id,)) as cur:
+            row = await cur.fetchone()
+        return _row_to_retrieval_event(row) if row is not None else None
+
+    async def list_retrieval_events(
+        self,
+        *,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[RetrievalEvent]:
+        db = self._db()
+        clauses: list[str] = []
+        params: list[object] = []
+        if scope is not None:
+            clauses.append("scope_key = ?")
+            params.append(memory_scope_key(scope))
+        if since is not None:
+            clauses.append("created_at >= ?")
+            params.append(float(since))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(int(limit))
+        async with db.execute(
+            f"SELECT * FROM syn_retrieval_events{where} ORDER BY created_at DESC LIMIT ?",
+            params,
+        ) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_retrieval_event(r) for r in rows]
+
+    async def save_memory_score(self, score: MemoryScore) -> None:
+        db = self._db()
+        await db.execute(
+            """INSERT INTO syn_memory_scores
+            (scope_key, node_id, edge_id, access_count, success_count,
+             failure_count, score, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(scope_key, node_id, edge_id) DO UPDATE SET
+                access_count=excluded.access_count,
+                success_count=excluded.success_count,
+                failure_count=excluded.failure_count,
+                score=excluded.score,
+                updated_at=excluded.updated_at""",
+            (
+                score.scope_key,
+                score.node_id,
+                score.edge_id,
+                score.access_count,
+                score.success_count,
+                score.failure_count,
+                score.score,
+                score.updated_at,
+            ),
+        )
+        await db.commit()
+
+    async def get_memory_score(
+        self,
+        scope_key: str,
+        *,
+        node_id: str = "",
+        edge_id: str = "",
+    ) -> MemoryScore | None:
+        db = self._db()
+        async with db.execute(
+            """SELECT * FROM syn_memory_scores
+            WHERE scope_key = ? AND node_id = ? AND edge_id = ?""",
+            (scope_key, node_id, edge_id),
+        ) as cur:
+            row = await cur.fetchone()
+        return _row_to_memory_score(row) if row is not None else None
+
+    async def list_memory_scores(
+        self,
+        *,
+        scope_key: str | None = None,
+        node_ids: list[str] | None = None,
+        edge_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[MemoryScore]:
+        db = self._db()
+        clauses: list[str] = []
+        params: list[object] = []
+        if scope_key is not None:
+            clauses.append("scope_key = ?")
+            params.append(scope_key)
+        if node_ids:
+            placeholders = ",".join("?" for _ in node_ids)
+            clauses.append(f"node_id IN ({placeholders})")
+            params.extend(node_ids)
+        if edge_ids:
+            placeholders = ",".join("?" for _ in edge_ids)
+            clauses.append(f"edge_id IN ({placeholders})")
+            params.extend(edge_ids)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(int(limit))
+        async with db.execute(
+            f"SELECT * FROM syn_memory_scores{where} ORDER BY score DESC LIMIT ?",
+            params,
+        ) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_memory_score(r) for r in rows]
 
     # --- Batch read ---
 
@@ -976,13 +1233,26 @@ class SQLiteBackend:
             return
         db = self._db()
         rows = [
-            (e.id, e.source_id, e.target_id, str(e.kind), e.weight, e.created_at) for e in edges
+            (
+                e.id,
+                e.source_id,
+                e.target_id,
+                str(e.kind),
+                e.weight,
+                json.dumps(e.properties),
+                e.created_at,
+            )
+            for e in edges
         ]
         try:
             await db.executemany(
-                """INSERT INTO syn_edges (id, source_id, target_id, kind, weight, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET weight=excluded.weight""",
+                """INSERT INTO syn_edges
+                (id, source_id, target_id, kind, weight, properties_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source_id, target_id, kind) DO UPDATE SET
+                    id=excluded.id,
+                    weight=excluded.weight,
+                    properties_json=excluded.properties_json""",
                 rows,
             )
             await db.commit()
@@ -1085,11 +1355,146 @@ def _row_to_node(row: aiosqlite.Row) -> Node:
 
 
 def _row_to_edge(row: aiosqlite.Row) -> Edge:
+    props_raw = row["properties_json"] if "properties_json" in row.keys() else "{}"
     return Edge(
         id=row["id"],
         source_id=row["source_id"],
         target_id=row["target_id"],
         kind=EdgeKind(row["kind"]),
         weight=row["weight"],
+        properties=json.loads(props_raw) if props_raw else {},
         created_at=row["created_at"],
+    )
+
+
+def _scope_to_json(scope: MemoryScope) -> str:
+    return json.dumps(
+        {
+            "workspace_id": scope.workspace_id,
+            "user_id": scope.user_id,
+            "session_id": scope.session_id,
+            "domain": scope.domain,
+            "promote_to_global": scope.promote_to_global,
+        }
+    )
+
+
+_UPSERT_MEMORY_EVENT_SQL = """INSERT INTO syn_memory_events
+    (id, kind, scope_key, scope_json, source, source_id, content_hash,
+     node_ids_json, edge_ids_json, confidence, properties_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+        kind=excluded.kind,
+        scope_key=excluded.scope_key,
+        scope_json=excluded.scope_json,
+        source=excluded.source,
+        source_id=excluded.source_id,
+        content_hash=excluded.content_hash,
+        node_ids_json=excluded.node_ids_json,
+        edge_ids_json=excluded.edge_ids_json,
+        confidence=excluded.confidence,
+        properties_json=excluded.properties_json,
+        created_at=excluded.created_at"""
+
+
+def _memory_event_row(event: MemoryEvent) -> tuple[object, ...]:
+    return (
+        event.id,
+        str(event.kind),
+        memory_scope_key(event.scope),
+        _scope_to_json(event.scope),
+        event.source,
+        event.source_id,
+        event.content_hash,
+        json.dumps(event.node_ids),
+        json.dumps(event.edge_ids),
+        event.confidence,
+        json.dumps(event.properties),
+        event.created_at,
+    )
+
+
+def _scope_from_json(raw: str | None) -> MemoryScope:
+    if not raw:
+        return MemoryScope()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return MemoryScope()
+    if not isinstance(data, dict):
+        return MemoryScope()
+    return MemoryScope(
+        workspace_id=str(data.get("workspace_id") or ""),
+        user_id=str(data.get("user_id") or ""),
+        session_id=str(data.get("session_id") or ""),
+        domain=str(data.get("domain") or ""),
+        promote_to_global=bool(data.get("promote_to_global", False)),
+    )
+
+
+def _json_str_list(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return [str(x) for x in data] if isinstance(data, list) else []
+
+
+def _json_str_dict(raw: str | None) -> dict[str, str]:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items()}
+
+
+def _row_to_memory_event(row: aiosqlite.Row) -> MemoryEvent:
+    return MemoryEvent(
+        id=row["id"],
+        kind=MemoryEventKind(row["kind"]),
+        scope=_scope_from_json(row["scope_json"]),
+        source=row["source"],
+        source_id=row["source_id"],
+        content_hash=row["content_hash"],
+        node_ids=_json_str_list(row["node_ids_json"]),
+        edge_ids=_json_str_list(row["edge_ids_json"]),
+        confidence=float(row["confidence"]),
+        properties=_json_str_dict(row["properties_json"]),
+        created_at=float(row["created_at"]),
+    )
+
+
+def _row_to_retrieval_event(row: aiosqlite.Row) -> RetrievalEvent:
+    success_raw = row["success"]
+    success = None if success_raw is None else bool(success_raw)
+    return RetrievalEvent(
+        id=row["id"],
+        query=row["query"],
+        scope=_scope_from_json(row["scope_json"]),
+        returned_node_ids=_json_str_list(row["returned_node_ids_json"]),
+        selected_node_ids=_json_str_list(row["selected_node_ids_json"]),
+        success=success,
+        signal=FeedbackSignal(row["signal"]),
+        confidence=float(row["confidence"]),
+        properties=_json_str_dict(row["properties_json"]),
+        created_at=float(row["created_at"]),
+    )
+
+
+def _row_to_memory_score(row: aiosqlite.Row) -> MemoryScore:
+    return MemoryScore(
+        scope_key=row["scope_key"],
+        node_id=row["node_id"],
+        edge_id=row["edge_id"],
+        access_count=int(row["access_count"]),
+        success_count=int(row["success_count"]),
+        failure_count=int(row["failure_count"]),
+        score=float(row["score"]),
+        updated_at=float(row["updated_at"]),
     )

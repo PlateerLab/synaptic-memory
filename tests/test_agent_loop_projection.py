@@ -265,6 +265,39 @@ def test_search_score_preserved_through_projection():
     assert parsed["data"]["results"][0]["score"] == 0.87
 
 
+def test_raw_openie_provenance_properties_filtered_from_tool_projection():
+    r = {
+        "tool": "deep_search",
+        "ok": True,
+        "data": {
+            "evidence": [
+                {
+                    "id": "n1",
+                    "title": "Evidence",
+                    "snippet": "answer-bearing snippet",
+                    "properties": {
+                        "doc_id": "doc-1",
+                        "source": "manual.pdf",
+                        "page": "7",
+                        "source_event_id": "evt_secretly_long",
+                        "source_chunk_id": "chunk_123",
+                        "prompt_version": "openie-v1",
+                        "extractor": "LLMOpenIEExtractor",
+                        "model": "deepseek-v4-flash",
+                        "is_openie": "true",
+                        "support_count": "3",
+                    },
+                }
+            ]
+        },
+    }
+
+    out = project_tool_result(r)
+    props = json.loads(out)["data"]["evidence"][0]["properties"]
+
+    assert props == {"doc_id": "doc-1", "source": "manual.pdf", "page": "7"}
+
+
 def test_unknown_tool_result_still_projected():
     r = {
         "tool": "brand_new_tool",

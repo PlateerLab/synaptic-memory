@@ -213,6 +213,22 @@ class DomainProfile:
         max_df_ratio: Upper bound on ``df / total_chunks`` — prevents
             ubiquitous terms (metadata headers, etc.) from becoming
             entities.
+        openie_min_candidate_entities: Minimum number of DF-retained
+            candidate entities a chunk must contain before the optional
+            OpenIE pass spends an LLM call on it.
+        openie_sample_rate: Deterministic sampling fraction for the
+            optional OpenIE pass. ``1.0`` means no sampling.
+        openie_max_chunks: Maximum selected chunks for one OpenIE pass.
+        openie_max_concurrency: Maximum concurrent LLM extraction calls
+            for the optional OpenIE post-pass. Graph writes are still
+            applied in deterministic chunk order.
+        openie_model_profile: Optional model-specific defaults. Known
+            values: ``qwen36_local``, ``deepseek_v4_flash``,
+            ``generic_openai_compatible``.
+        openie_max_output_tokens: Max LLM completion tokens for one
+            OpenIE chunk extraction.
+        openie_max_triples_per_chunk: Cap on triples materialized per
+            chunk so a noisy model cannot flood the graph.
         min_phrase_len: Minimum character length per phrase.
         max_phrase_len: Maximum character length per phrase.
     """
@@ -288,6 +304,21 @@ class DomainProfile:
     #   intra-scope matcher so a "제5조" inside such a citation is not
     #   mis-resolved to the citing document's own scope.
     reference_crossscope_pattern: re.Pattern[str] | None = None
+    # --- Optional LLM OpenIE semantic layer (v0.30 P0) ---
+    # Off by default. Callers must opt in explicitly and inject an LLM
+    # extractor; the deterministic structural ingest path never runs
+    # OpenIE merely because a profile exists.
+    openie_enabled: bool = False
+    openie_alias_map: dict[str, str] = field(default_factory=dict)
+    openie_relation_whitelist: tuple[str, ...] = ()
+    openie_min_candidate_entities: int = 2
+    openie_max_candidate_df_ratio: float = 0.3
+    openie_sample_rate: float = 1.0
+    openie_max_chunks: int = 1_000_000
+    openie_max_concurrency: int = 4
+    openie_model_profile: str = ""
+    openie_max_output_tokens: int = 1024
+    openie_max_triples_per_chunk: int = 24
 
     def stopwords(self) -> frozenset[str]:
         """Effective stopword set = locale default ∪ extra."""
@@ -394,6 +425,17 @@ class DomainProfile:
                 if self.reference_crossscope_pattern is not None
                 else ""
             ),
+            "openie_enabled": self.openie_enabled,
+            "openie_alias_map": dict(sorted(self.openie_alias_map.items())),
+            "openie_relation_whitelist": list(self.openie_relation_whitelist),
+            "openie_min_candidate_entities": self.openie_min_candidate_entities,
+            "openie_max_candidate_df_ratio": self.openie_max_candidate_df_ratio,
+            "openie_sample_rate": self.openie_sample_rate,
+            "openie_max_chunks": self.openie_max_chunks,
+            "openie_max_concurrency": self.openie_max_concurrency,
+            "openie_model_profile": self.openie_model_profile,
+            "openie_max_output_tokens": self.openie_max_output_tokens,
+            "openie_max_triples_per_chunk": self.openie_max_triples_per_chunk,
         }
         return out
 
@@ -420,6 +462,19 @@ class DomainProfile:
         lines.append(f"max_df_ratio = {data['max_df_ratio']}")
         lines.append(f"min_phrase_len = {data['min_phrase_len']}")
         lines.append(f"max_phrase_len = {data['max_phrase_len']}")
+        lines.append(f"openie_min_candidate_entities = {data['openie_min_candidate_entities']}")
+        lines.append(f"openie_max_candidate_df_ratio = {data['openie_max_candidate_df_ratio']}")
+        lines.append(f"openie_sample_rate = {data['openie_sample_rate']}")
+        lines.append(f"openie_max_chunks = {data['openie_max_chunks']}")
+        lines.append(f"openie_max_concurrency = {data['openie_max_concurrency']}")
+        lines.append(f"openie_max_output_tokens = {data['openie_max_output_tokens']}")
+        lines.append(f"openie_max_triples_per_chunk = {data['openie_max_triples_per_chunk']}")
+        if data.get("openie_model_profile"):
+            lines.append(
+                f'openie_model_profile = "{_toml_escape(str(data["openie_model_profile"]))}"'
+            )
+        if data.get("openie_enabled"):
+            lines.append("openie_enabled = true")
         for ref_key in (
             "reference_key_property",
             "reference_scope_property",
@@ -436,6 +491,7 @@ class DomainProfile:
             "metadata_strip_patterns",
             "reference_patterns",
             "entity_hint_patterns",
+            "openie_relation_whitelist",
         ):
             items = data[key]
             if not isinstance(items, list) or not items:
@@ -459,6 +515,13 @@ class DomainProfile:
             lines.append("[authority_by_kind]")
             for k, v in auth.items():
                 lines.append(f'"{_toml_escape(str(k))}" = {v}')
+            lines.append("")
+
+        aliases = data.get("openie_alias_map", {})
+        if isinstance(aliases, dict) and aliases:
+            lines.append("[openie_alias_map]")
+            for k, v in aliases.items():
+                lines.append(f'"{_toml_escape(str(k))}" = "{_toml_escape(str(v))}"')
             lines.append("")
 
         path.write_text("\n".join(lines), encoding="utf-8")
@@ -581,6 +644,20 @@ class DomainProfile:
                     continue
                 table_query_hints[table_name] = [str(h) for h in hints if isinstance(h, str) and h]
 
+        openie_alias_map: dict[str, str] = {}
+        aliases_raw = data.get("openie_alias_map", {})
+        if isinstance(aliases_raw, dict):
+            for key, value in aliases_raw.items():
+                if isinstance(key, str) and isinstance(value, str):
+                    openie_alias_map[key] = value
+
+        whitelist_raw = data.get("openie_relation_whitelist", [])
+        openie_relation_whitelist = (
+            tuple(str(x) for x in whitelist_raw if isinstance(x, str))
+            if isinstance(whitelist_raw, list)
+            else ()
+        )
+
         def _opt_pattern(field_name: str) -> re.Pattern[str] | None:
             raw = data.get(field_name, "")
             if not isinstance(raw, str) or not raw:
@@ -614,6 +691,17 @@ class DomainProfile:
             reference_crossscope_pattern=reference_crossscope_pattern,
             reference_key_property=str(data.get("reference_key_property", "")),
             reference_scope_property=str(data.get("reference_scope_property", "")),
+            openie_enabled=bool(data.get("openie_enabled", False)),
+            openie_alias_map=openie_alias_map,
+            openie_relation_whitelist=openie_relation_whitelist,
+            openie_min_candidate_entities=int(data.get("openie_min_candidate_entities", 2)),
+            openie_max_candidate_df_ratio=float(data.get("openie_max_candidate_df_ratio", 0.3)),
+            openie_sample_rate=float(data.get("openie_sample_rate", 1.0)),
+            openie_max_chunks=int(data.get("openie_max_chunks", 1_000_000)),
+            openie_max_concurrency=int(data.get("openie_max_concurrency", 4)),
+            openie_model_profile=str(data.get("openie_model_profile", "")),
+            openie_max_output_tokens=int(data.get("openie_max_output_tokens", 1024)),
+            openie_max_triples_per_chunk=int(data.get("openie_max_triples_per_chunk", 24)),
         )
 
 

@@ -12,12 +12,45 @@ from pathlib import Path
 import pytest
 
 from synaptic import SynapticGraph
+from synaptic.models import EdgeKind, NodeKind
+
+
+class _FakeOpenIEExtractor:
+    def __init__(self):
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def extract_and_link(self, graph, node_id: str, title: str, content: str):
+        self.calls.append((node_id, title, content))
+        return [f"hub_{node_id}"]
 
 
 @pytest.fixture
 def tmp_db():
     with tempfile.TemporaryDirectory() as d:
         yield str(Path(d) / "test.db")
+
+
+@pytest.fixture(autouse=True)
+async def close_created_graphs(monkeypatch):
+    created: list[SynapticGraph] = []
+    original_from_chunks = SynapticGraph.from_chunks
+    original_from_chunks_sync = SynapticGraph.from_chunks_sync
+
+    async def _from_chunks(cls, *args, **kwargs):
+        graph = await original_from_chunks(*args, **kwargs)
+        created.append(graph)
+        return graph
+
+    def _from_chunks_sync(cls, *args, **kwargs):
+        graph = original_from_chunks_sync(*args, **kwargs)
+        created.append(graph)
+        return graph
+
+    monkeypatch.setattr(SynapticGraph, "from_chunks", classmethod(_from_chunks))
+    monkeypatch.setattr(SynapticGraph, "from_chunks_sync", classmethod(_from_chunks_sync))
+    yield
+    while created:
+        await created.pop().close()
 
 
 class TestFromChunks:
@@ -58,6 +91,56 @@ class TestFromChunks:
         result = await graph.search("iPhone Apple")
         assert len(result.nodes) >= 1
 
+    async def test_chunks_with_same_doc_id_create_chunk_chain(self, tmp_db):
+        chunks = [
+            {
+                "content": "Acme depends on Roadmap.",
+                "title": "Doc A",
+                "doc_id": "doc_a",
+                "chunk_index": 0,
+            },
+            {
+                "content": "Roadmap depends on Budget.",
+                "title": "Doc A",
+                "doc_id": "doc_a",
+                "chunk_index": 1,
+            },
+        ]
+
+        graph = await SynapticGraph.from_chunks(chunks, db=tmp_db)
+
+        chunk_nodes = await graph._backend.list_nodes(kind=NodeKind.CHUNK, limit=10)
+        assert len(chunk_nodes) == 2
+        assert {n.properties["doc_id"] for n in chunk_nodes} == {"doc_a"}
+
+        first = next(n for n in chunk_nodes if n.properties["chunk_index"] == "0")
+        edges = await graph._backend.get_edges(first.id, direction="outgoing")
+        assert any(edge.kind == EdgeKind.NEXT_CHUNK for edge in edges)
+
+    async def test_openie_extractor_not_called_without_opt_in(self, tmp_db):
+        extractor = _FakeOpenIEExtractor()
+
+        await SynapticGraph.from_chunks(
+            [{"content": "Acme depends on Roadmap.", "title": "Doc"}],
+            db=tmp_db,
+            openie_extractor=extractor,
+        )
+
+        assert extractor.calls == []
+
+    async def test_openie_extractor_runs_when_opted_in(self, tmp_db):
+        extractor = _FakeOpenIEExtractor()
+
+        await SynapticGraph.from_chunks(
+            [{"content": "Acme depends on Roadmap.", "title": "Doc"}],
+            db=tmp_db,
+            openie_extractor=extractor,
+            openie_enabled=True,
+        )
+
+        assert len(extractor.calls) == 1
+        assert extractor.calls[0][2] == "Acme depends on Roadmap."
+
     async def test_auto_doc_id_when_missing(self, tmp_db):
         """Missing doc_id should be auto-generated."""
         chunks = [
@@ -67,6 +150,52 @@ class TestFromChunks:
         graph = await SynapticGraph.from_chunks(chunks, db=tmp_db)
         stats = await graph.stats()
         assert stats["total_nodes"] >= 2
+
+    async def test_auto_doc_id_is_deterministic(self, tmp_path):
+        chunks = [
+            {"content": "First chunk text"},
+            {"content": "Second chunk text"},
+        ]
+
+        graph_a = await SynapticGraph.from_chunks(chunks, db=str(tmp_path / "a.db"))
+        graph_b = await SynapticGraph.from_chunks(chunks, db=str(tmp_path / "b.db"))
+
+        nodes_a = await graph_a._backend.list_nodes(limit=100)
+        nodes_b = await graph_b._backend.list_nodes(limit=100)
+        assert sorted(n.id for n in nodes_a) == sorted(n.id for n in nodes_b)
+        assert sorted(n.properties.get("doc_id", "") for n in nodes_a) == sorted(
+            n.properties.get("doc_id", "") for n in nodes_b
+        )
+
+        edges_a = {
+            edge.id
+            for node in nodes_a
+            for edge in await graph_a._backend.get_edges(node.id, direction="outgoing")
+        }
+        edges_b = {
+            edge.id
+            for node in nodes_b
+            for edge in await graph_b._backend.get_edges(node.id, direction="outgoing")
+        }
+        assert edges_a == edges_b
+
+        await graph_a.close()
+        await graph_b.close()
+
+    async def test_auto_doc_id_groups_chunks_by_source(self, tmp_db):
+        chunks = [
+            {"content": "Page one", "title": "Manual", "source": "/docs/manual.pdf"},
+            {"content": "Page two", "title": "Manual", "source": "/docs/manual.pdf"},
+        ]
+
+        graph = await SynapticGraph.from_chunks(chunks, db=tmp_db)
+
+        chunk_nodes = await graph._backend.list_nodes(kind=NodeKind.CHUNK, limit=10)
+        assert len(chunk_nodes) == 2
+        assert len({n.properties["doc_id"] for n in chunk_nodes}) == 1
+        first = next(n for n in chunk_nodes if n.properties["chunk_index"] == "0")
+        edges = await graph._backend.get_edges(first.id, direction="outgoing")
+        assert any(edge.kind == EdgeKind.NEXT_CHUNK for edge in edges)
 
     async def test_empty_content_skipped(self, tmp_db):
         """Chunks with empty content are silently dropped."""

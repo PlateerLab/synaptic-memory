@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS syn_edges (
     target_id   TEXT NOT NULL REFERENCES syn_nodes(id) ON DELETE CASCADE,
     kind        TEXT NOT NULL DEFAULT 'related',
     weight      REAL NOT NULL DEFAULT 1.0,
+    properties_json TEXT NOT NULL DEFAULT '{}',
     created_at  DOUBLE PRECISION NOT NULL,
     UNIQUE(source_id, target_id, kind)
 );
@@ -110,6 +111,12 @@ class PostgreSQLBackend:
             try:
                 await conn.execute(
                     "ALTER TABLE syn_nodes ADD COLUMN properties_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            except Exception:
+                pass  # Column already exists
+            try:
+                await conn.execute(
+                    "ALTER TABLE syn_edges ADD COLUMN properties_json TEXT NOT NULL DEFAULT '{}'"
                 )
             except Exception:
                 pass  # Column already exists
@@ -240,14 +247,19 @@ class PostgreSQLBackend:
     async def save_edge(self, edge: Edge) -> None:
         pool = self._get_pool()
         await pool.execute(
-            """INSERT INTO syn_edges (id, source_id, target_id, kind, weight, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET weight=EXCLUDED.weight""",
+            """INSERT INTO syn_edges
+            (id, source_id, target_id, kind, weight, properties_json, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT(source_id, target_id, kind) DO UPDATE SET
+                id=EXCLUDED.id,
+                weight=EXCLUDED.weight,
+                properties_json=EXCLUDED.properties_json""",
             edge.id,
             edge.source_id,
             edge.target_id,
             str(edge.kind),
             edge.weight,
+            json.dumps(edge.properties),
             edge.created_at,
         )
 
@@ -266,9 +278,10 @@ class PostgreSQLBackend:
     async def update_edge(self, edge: Edge) -> None:
         pool = self._get_pool()
         await pool.execute(
-            "UPDATE syn_edges SET weight=$1, kind=$2 WHERE id=$3",
+            "UPDATE syn_edges SET weight=$1, kind=$2, properties_json=$3 WHERE id=$4",
             edge.weight,
             str(edge.kind),
+            json.dumps(edge.properties),
             edge.id,
         )
 
@@ -471,12 +484,14 @@ def _row_to_node(row: asyncpg.Record) -> Node:
 
 
 def _row_to_edge(row: asyncpg.Record) -> Edge:
+    props_raw = row.get("properties_json", "{}")
     return Edge(
         id=row["id"],
         source_id=row["source_id"],
         target_id=row["target_id"],
         kind=EdgeKind(row["kind"]),
         weight=row["weight"],
+        properties=json.loads(props_raw) if props_raw else {},
         created_at=row["created_at"],
     )
 

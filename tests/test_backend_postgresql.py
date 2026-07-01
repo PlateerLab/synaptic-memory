@@ -14,9 +14,12 @@ import pytest
 from synaptic.backends.postgresql import PostgreSQLBackend
 from synaptic.models import Edge, EdgeKind, Node, NodeKind
 
-PG_DSN = os.environ.get("PG_DSN", "postgresql://ailab:ailab123@localhost:5432/plateerag")
+PG_DSN = os.environ.get("PG_DSN")
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not PG_DSN, reason="set PG_DSN to run PostgreSQL integration tests"),
+]
 
 _PREFIX = "test_"
 
@@ -99,6 +102,28 @@ class TestPostgreSQLEdges:
         edges = await pg.get_edges(_tid("ea"), direction="outgoing")
         assert len(edges) >= 1
         assert any(e.kind == EdgeKind.CAUSED for e in edges)
+
+    async def test_edge_properties_roundtrip(self, pg: PostgreSQLBackend) -> None:
+        await pg.save_node(Node(id=_tid("epa"), title="A"))
+        await pg.save_node(Node(id=_tid("epb"), title="B"))
+        await pg.save_edge(
+            Edge(
+                id=_tid("ep1"),
+                source_id=_tid("epa"),
+                target_id=_tid("epb"),
+                kind=EdgeKind.RELATED,
+                properties={
+                    "source_event_id": "evt_pg",
+                    "model": "deterministic",
+                    "confidence": "0.87",
+                },
+            )
+        )
+
+        edges = await pg.get_edges(_tid("epa"), direction="outgoing")
+        edge = next(e for e in edges if e.id == _tid("ep1"))
+        assert edge.properties["source_event_id"] == "evt_pg"
+        assert edge.properties["model"] == "deterministic"
 
 
 class TestPostgreSQLSearch:

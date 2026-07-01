@@ -35,6 +35,13 @@ class TestFactoryConstructors:
     def test_default_locale_is_multi(self):
         profile = DomainProfile(name="test")
         assert profile.locale == "multi"
+        assert profile.openie_enabled is False
+        assert profile.openie_min_candidate_entities == 2
+        assert profile.openie_sample_rate == 1.0
+        assert profile.openie_max_concurrency == 4
+        assert profile.openie_model_profile == ""
+        assert profile.openie_max_output_tokens == 1024
+        assert profile.openie_max_triples_per_chunk == 24
 
 
 class TestLocaleDefaults:
@@ -106,10 +113,20 @@ class TestTomlLoader:
             """
             name = "krra"
             locale = "ko"
+            openie_enabled = true
+            openie_min_candidate_entities = 3
+            openie_max_candidate_df_ratio = 0.2
+            openie_sample_rate = 0.25
+            openie_max_chunks = 500
+            openie_max_concurrency = 8
+            openie_model_profile = "deepseek_v4_flash"
+            openie_max_output_tokens = 4096
+            openie_max_triples_per_chunk = 12
             stopwords_extra = ["분류번호", "진단항목"]
             metadata_strip_patterns = ["<Document-Metadata>.*?</Document-Metadata>"]
             reference_patterns = ["(.+?)에 따라", "(.+?)에 의거"]
             entity_hint_patterns = ['\\\\(([주사재])\\\\)([가-힣]+)']
+            openie_relation_whitelist = ["depends_on", "related"]
             min_df = 5
             max_df_ratio = 0.25
             min_phrase_len = 4
@@ -118,6 +135,9 @@ class TestTomlLoader:
             [ontology_hints]
             "규정 및 지침" = "rule"
             "운영계획" = "DECISION"
+
+            [openie_alias_map]
+            "ACME Inc." = "Acme"
             """,
         )
         profile = DomainProfile.load(path)
@@ -131,6 +151,17 @@ class TestTomlLoader:
         assert profile.max_df_ratio == 0.25
         assert profile.min_phrase_len == 4
         assert profile.max_phrase_len == 15
+        assert profile.openie_enabled is True
+        assert profile.openie_alias_map == {"ACME Inc.": "Acme"}
+        assert profile.openie_relation_whitelist == ("depends_on", "related")
+        assert profile.openie_min_candidate_entities == 3
+        assert profile.openie_max_candidate_df_ratio == 0.2
+        assert profile.openie_sample_rate == 0.25
+        assert profile.openie_max_chunks == 500
+        assert profile.openie_max_concurrency == 8
+        assert profile.openie_model_profile == "deepseek_v4_flash"
+        assert profile.openie_max_output_tokens == 4096
+        assert profile.openie_max_triples_per_chunk == 12
         # ontology_hints — both lowercase "rule" and uppercase "DECISION" work
         assert profile.ontology_hints["규정 및 지침"] == NodeKind.RULE
         assert profile.ontology_hints["운영계획"] == NodeKind.DECISION
