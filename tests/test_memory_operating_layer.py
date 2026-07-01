@@ -837,6 +837,11 @@ async def test_scope_boost_is_capped_without_reversing_base_relevance():
     assert result.nodes[1].resonance <= result.nodes[0].resonance
     assert result.nodes[1].resonance == pytest.approx(1.0)
     assert result.nodes[1].resonance <= 0.96 * 1.10
+    assert result.diagnostics["memory_scope_boosted_nodes"] == 1.0
+    assert result.diagnostics["memory_scope_node_score_hits"] == 1.0
+    assert result.diagnostics["memory_scope_edge_score_hits"] == 0.0
+    assert result.diagnostics["memory_scope_max_abs_boost"] == pytest.approx(0.10)
+    assert result.diagnostics["memory_scope_order_clamps"] == 1.0
 
 
 @pytest.mark.asyncio
@@ -876,6 +881,11 @@ async def test_scope_boost_uses_edge_score_for_endpoint_without_node_score():
     assert result.nodes[1].resonance == pytest.approx(1.0)
     assert result.nodes[1].resonance <= result.nodes[0].resonance
     assert result.nodes[1].resonance <= 0.96 * 1.10
+    assert result.diagnostics["memory_scope_boosted_nodes"] == 1.0
+    assert result.diagnostics["memory_scope_node_score_hits"] == 0.0
+    assert result.diagnostics["memory_scope_edge_score_hits"] == 1.0
+    assert result.diagnostics["memory_scope_max_abs_boost"] == pytest.approx(0.10)
+    assert result.diagnostics["memory_scope_order_clamps"] == 1.0
 
 
 @pytest.mark.asyncio
@@ -1057,6 +1067,8 @@ async def test_search_applies_high_confidence_suspect_signal_penalty(monkeypatch
     assert [item.node.id for item in result.nodes] == ["clean", "suspect"]
     suspect_item = next(item for item in result.nodes if item.node.id == "suspect")
     assert suspect_item.resonance == pytest.approx(0.95)
+    assert result.diagnostics["memory_signal_penalized_nodes"] == 1.0
+    assert result.diagnostics["memory_signal_max_penalty"] == pytest.approx(0.05)
 
 
 @pytest.mark.asyncio
@@ -1105,6 +1117,8 @@ async def test_memory_signal_penalty_resolves_edge_only_signal_targets():
     assert [item.node.id for item in result.nodes] == [clean.id, suspect.id]
     suspect_item = next(item for item in result.nodes if item.node.id == suspect.id)
     assert suspect_item.resonance == pytest.approx(0.95)
+    assert result.diagnostics["memory_signal_penalized_nodes"] == 1.0
+    assert result.diagnostics["memory_signal_max_penalty"] == pytest.approx(0.05)
 
 
 @pytest.mark.asyncio

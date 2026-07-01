@@ -2831,6 +2831,9 @@ class SynapticGraph:
         if not local_by_node and not global_by_node and not edge_by_node:
             return
         previous_resonance: float | None = None
+        boosted_nodes = 0
+        clamped_nodes = 0
+        max_abs_boost = 0.0
         for item in result.nodes:
             raw = (
                 local_by_node.get(item.node.id, 0.0)
@@ -2839,12 +2842,23 @@ class SynapticGraph:
             )
             raw = max(-1.0, min(1.0, raw))
             boost = max(-0.10, min(0.10, raw * 0.10))
+            if boost != 0.0:
+                boosted_nodes += 1
+                max_abs_boost = max(max_abs_boost, abs(boost))
             item.activation = max(0.0, item.activation * (1.0 + boost))
             item.resonance = max(0.0, item.resonance * (1.0 + boost))
             if previous_resonance is not None and item.resonance > previous_resonance:
                 item.resonance = previous_resonance
                 item.activation = min(item.activation, previous_resonance)
+                clamped_nodes += 1
             previous_resonance = item.resonance
+        result.diagnostics["memory_scope_boosted_nodes"] = float(boosted_nodes)
+        result.diagnostics["memory_scope_node_score_hits"] = float(
+            len(set(local_by_node) | set(global_by_node))
+        )
+        result.diagnostics["memory_scope_edge_score_hits"] = float(len(edge_by_node))
+        result.diagnostics["memory_scope_max_abs_boost"] = max_abs_boost
+        result.diagnostics["memory_scope_order_clamps"] = float(clamped_nodes)
 
     async def _apply_memory_signal_penalties(
         self,
@@ -2902,6 +2916,8 @@ class SynapticGraph:
             item.activation = max(0.0, item.activation * factor)
             item.resonance = max(0.0, item.resonance * factor)
         result.nodes.sort(key=lambda item: item.resonance, reverse=True)
+        result.diagnostics["memory_signal_penalized_nodes"] = float(len(penalties))
+        result.diagnostics["memory_signal_max_penalty"] = max(penalties.values())
 
     async def _candidate_edge_targets(
         self,
