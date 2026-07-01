@@ -27,6 +27,9 @@ cache/replay harness가 들어갔다.
      유지됐다.
    - 추가 40-row live warm batch로 50% coverage까지 올렸고, cache-only gate에서
      relation target expansion이 `2/98 -> 90/98`로 유지됐다.
+   - 다음 50-row batch는 transient 빈 응답 2건이 있었지만 failure manifest 재시도로
+     둘 다 성공했고, 75% coverage gate에서 relation target expansion이
+     `3/96 -> 80/96`으로 유지됐다.
 
 따라서 이 문서는 **foundation merge 직후의 deterministic 검증 + DeepSeek
 Flash live warm 결과 + 다음 scale eval 계획**을 기록한다.
@@ -581,6 +584,188 @@ Relation lift:
 
 ---
 
+## DeepSeek Flash 75% Coverage Eval
+
+50% coverage 이후 `openie_cache_missing_deepseek_to50_fast_rerun.jsonl` 기준으로
+dry-run을 실행했다. 50개 row를 추가 warm하면 75% coverage에 도달하는 것으로
+계산됐다.
+
+```bash
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --openie-cache-warm-input \
+    ~/synaptic-eval/openie_cache_missing_deepseek_to50_fast_rerun.jsonl \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --llm-model deepseek-v4-flash \
+  --openie-model-profile deepseek_v4_flash \
+  --openie-cache-warm-dry-run \
+  --openie-cache-warm-limit 50 \
+  --openie-cache-warm-total-chunks 200 \
+  --openie-cache-warm-target-coverage 0.75 \
+  --openie-cache-warm-pending-output \
+    ~/synaptic-eval/openie_cache_pending_deepseek_to75_dryrun_50.jsonl \
+  --results ~/synaptic-eval/openie_cache_warm_dryrun_deepseek_to75_results.json
+```
+
+Dry-run result:
+
+| 항목 | 값 |
+|---|---:|
+| rows loaded | `100` |
+| rows pending | `50` |
+| deferred by limit | `50` |
+| existing covered chunks | `100/200` |
+| projected after batch | `150/200` |
+| projected coverage | `75.0%` |
+| target reachable | `true` |
+
+50-row live warm:
+
+```bash
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --openie-cache-warm-input \
+    ~/synaptic-eval/openie_cache_missing_deepseek_to50_fast_rerun.jsonl \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --llm-base-url https://api.deepseek.com/v1 \
+  --llm-model deepseek-v4-flash \
+  --llm-api-key-env DEEPSEEK_API_KEY \
+  --openie-model-profile deepseek_v4_flash \
+  --openie-cache-warm-limit 50 \
+  --openie-cache-warm-total-chunks 200 \
+  --openie-cache-warm-target-coverage 0.75 \
+  --openie-cache-warm-pending-output \
+    ~/synaptic-eval/openie_cache_pending_deepseek_to75_50.jsonl \
+  --openie-cache-warm-failure-output \
+    ~/synaptic-eval/openie_cache_failures_deepseek_to75_50.jsonl \
+  --results ~/synaptic-eval/openie_cache_warm_deepseek_to75_results.json
+```
+
+Warm result:
+
+| 항목 | 값 |
+|---|---:|
+| rows attempted | `50` |
+| rows succeeded | `48` |
+| extraction failures | `2` |
+| new entities | `251` |
+| new triples | `162` |
+| cache entries after warm | `152` |
+| projected after batch | `148/200` |
+| projected coverage | `74.0%` |
+| elapsed | `849.8s` |
+
+두 실패 row는 DeepSeek가 빈 body를 반환해 `OpenIE response is not a JSON object`
+로 기록된 transient failure였다. failure manifest만 별도 재시도했다.
+
+```bash
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --openie-cache-warm-input \
+    ~/synaptic-eval/openie_cache_failures_deepseek_to75_50.jsonl \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --llm-base-url https://api.deepseek.com/v1 \
+  --llm-model deepseek-v4-flash \
+  --llm-api-key-env DEEPSEEK_API_KEY \
+  --openie-model-profile deepseek_v4_flash \
+  --openie-cache-warm-limit 2 \
+  --openie-cache-warm-failure-output \
+    ~/synaptic-eval/openie_cache_failures_deepseek_to75_retry_2.jsonl \
+  --results ~/synaptic-eval/openie_cache_warm_deepseek_to75_retry_2_results.json
+```
+
+Retry result:
+
+| 항목 | 값 |
+|---|---:|
+| rows attempted | `2` |
+| rows succeeded | `2` |
+| extraction failures | `0` |
+| new entities | `10` |
+| new triples | `8` |
+| cache entries after retry | `154` |
+| elapsed | `52.5s` |
+
+주의: retry 입력은 failure manifest 2개 row만 담고 있으므로 coverage projection은
+과대 계산된다. 최종 coverage는 아래 cache-only scoring 결과를 기준으로 본다.
+
+Audit after 75% warm:
+
+| 항목 | 값 |
+|---|---:|
+| cache lines | `154` |
+| unique keys | `154` |
+| parseable records | `154` |
+| invalid JSON | `0` |
+| invalid records | `0` |
+| empty records | `6` |
+| entities | `783` |
+| triples | `524` |
+| result | PASS |
+
+Cache-only scoring at 75% coverage:
+
+```bash
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --max-input-chunks 200 \
+  --openie-source-limit 200 \
+  --openie-max-chunks 150 \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --openie-cache-only \
+  --llm-model deepseek-v4-flash \
+  --relation-probe-limit 100 \
+  --min-relation-expanded-lift 20 \
+  --min-relation-evidence-lift 10 \
+  --min-strong-relation-evidence-rate 0.5 \
+  --min-openie-cache-coverage 0.75 \
+  --embed-base-url "" \
+  --results ~/synaptic-eval/mz_openie_cache_deepseek_to75_results.json
+```
+
+Scoring result:
+
+| 항목 | 값 |
+|---|---:|
+| cache eligible chunks | `150/200` |
+| cache coverage | `75.0%` |
+| relation edges created | `466` |
+| OpenIE artifacts | `1,810` |
+| extraction failures | `0` |
+| baseline R@1 | `93.2%` |
+| OpenIE R@1 | `90.9%` |
+| baseline R@5 | `100.0%` |
+| OpenIE R@5 | `100.0%` |
+| cache coverage gate | PASS |
+| relation probe gate | PASS |
+| revertibility gate | PASS |
+
+Relation probe at 75% coverage:
+
+| 지표 | graph expansion off | graph expansion on |
+|---|---:|---:|
+| relation target expanded | `3/96` | `80/96` |
+| relation evidence hit | `3/96` | `28/96` |
+| strong relation evidence | `2/39` | `24/39` |
+
+Relation lift:
+
+| 지표 | 값 |
+|---|---:|
+| expanded lift | `+77` |
+| evidence lift | `+25` |
+| strong expanded lift | `+34` |
+| strong evidence lift | `+22` |
+
+해석:
+
+- 75% coverage까지 총 `145`개 DeepSeek extraction row가 cache에 성공적으로
+  추가됐다.
+- 75% warm 중 transient failure가 2건 있었지만 failure manifest 재시도로 모두
+  복구됐다. 이 흐름은 cache warming retry path가 실제로 유용함을 보여준다.
+- 75% cache-only scoring에서도 R@5 no-regress, relation gate, revertibility가
+  유지됐다.
+- official scale gates는 runtime을 bounded하게 유지하기 위해 계속
+  `relation_probe_limit=100` 기준으로 기록한다.
+
+---
+
 ## Current Interpretation
 
 작업 전의 기본 RAG는 "질의와 직접 유사한 chunk" 중심이었다. PR #10 이후에는:
@@ -595,7 +780,7 @@ Relation lift:
 
 아직 남은 증명:
 
-- DeepSeek Flash live extraction 200 chunk batch.
+- DeepSeek Flash live extraction 200 chunk / 100% coverage batch.
 - Qwen3.6 small quality reference 재측정.
 - cache coverage가 올라간 상태에서 R@1/R@5와 relation evidence lift가 유지되는지
   확인.
