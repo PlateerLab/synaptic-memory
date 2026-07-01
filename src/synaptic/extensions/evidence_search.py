@@ -56,6 +56,7 @@ from synaptic.extensions.graph_expander import (
     ExpansionBudget,
     GraphExpander,
 )
+from synaptic.extensions.graph_read_cache import GraphReadCache
 from synaptic.extensions.hybrid_reranker import (
     HybridReranker,
     RerankerWeights,
@@ -650,6 +651,7 @@ class EvidenceSearch:
 
         # Step 3 — shallow graph expansion
         stage_t0 = time()
+        graph_reads = GraphReadCache(self._backend)
         if self._graph_expansion:
             q_terms = (
                 frozenset(t for t in query.lower().split() if len(t) > 1)
@@ -661,6 +663,7 @@ class EvidenceSearch:
                 seed_nodes=all_seeds,
                 budget=self._expansion_budget,
                 query_terms=q_terms,
+                read_cache=graph_reads,
             )
         else:
             # Ablation: skip graph expansion — feed only the seeds (as 0-hop
@@ -684,13 +687,18 @@ class EvidenceSearch:
                     {nid: score for nid, score in fts_scores.items()},
                     damping=0.85,
                     top_k=k * 3,
+                    read_cache=graph_reads,
                 )
                 from synaptic.extensions.graph_expander import ExpandedNode
 
                 expanded_ids = {e.node.id for e in expanded}
+                missing_node_ids = [
+                    node_id for node_id, _ppr_score in ppr_results if node_id not in expanded_ids
+                ]
+                ppr_nodes = await graph_reads.get_nodes(missing_node_ids)
                 for node_id, ppr_score in ppr_results:
                     if node_id not in expanded_ids:
-                        node = await self._backend.get_node(node_id)
+                        node = ppr_nodes.get(node_id)
                         if node:
                             expanded.append(
                                 ExpandedNode(

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from synaptic.extensions.graph_read_cache import GraphReadCache
 from synaptic.models import EdgeKind, NodeKind
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ async def personalized_pagerank(
     max_iter: int = 50,
     tol: float = 1e-6,
     top_k: int = 20,
+    read_cache: GraphReadCache | None = None,
 ) -> list[tuple[str, float]]:
     """Perform PPR and return top-k (node_id, score) pairs.
 
@@ -66,6 +68,7 @@ async def personalized_pagerank(
     """
     if not seed_scores:
         return []
+    reads = read_cache or GraphReadCache(backend)
 
     # --- 1. BFS to discover the reachable subgraph (depth 2 from seeds) ---
     # adjacency: source -> [(target, weight), ...]
@@ -84,7 +87,7 @@ async def personalized_pagerank(
             visited.add(nid)
             if nid not in adj:
                 adj[nid] = []
-            edges = await backend.get_edges(nid, direction="both")
+            edges = await reads.get_edges(nid, direction="both")
             for edge in edges:
                 # Determine the neighbor
                 if edge.source_id == nid:
@@ -179,6 +182,7 @@ async def personalized_pagerank_v2(
     top_k: int = 20,
     edge_weight_floor: float = 0.15,
     passage_boost: float = 1.5,
+    read_cache: GraphReadCache | None = None,
 ) -> list[tuple[str, float]]:
     """HippoRAG2-inspired PPR v2 with noise reduction.
 
@@ -204,6 +208,7 @@ async def personalized_pagerank_v2(
     """
     if not seed_scores:
         return []
+    reads = read_cache or GraphReadCache(backend)
 
     # --- 1. BFS subgraph discovery (depth 2) ---
     adj: dict[str, list[tuple[str, float]]] = {}
@@ -225,11 +230,11 @@ async def personalized_pagerank_v2(
 
             # Track node kind for chunk/entity awareness
             if nid not in node_kinds:
-                node = await backend.get_node(nid)
+                node = await reads.get_node(nid)
                 if node:
                     node_kinds[nid] = str(node.kind)
 
-            edges = await backend.get_edges(nid, direction="both")
+            edges = await reads.get_edges(nid, direction="both")
             for edge in edges:
                 if edge.source_id == nid:
                     neighbor_id = edge.target_id
@@ -238,7 +243,7 @@ async def personalized_pagerank_v2(
 
                 # Track neighbor kind
                 if neighbor_id not in node_kinds:
-                    neighbor_node = await backend.get_node(neighbor_id)
+                    neighbor_node = await reads.get_node(neighbor_id)
                     if neighbor_node:
                         node_kinds[neighbor_id] = str(neighbor_node.kind)
 

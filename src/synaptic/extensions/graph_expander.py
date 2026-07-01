@@ -63,6 +63,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from synaptic.extensions.graph_read_cache import GraphReadCache
 from synaptic.models import EdgeKind, Node, NodeKind
 
 if TYPE_CHECKING:
@@ -168,6 +169,7 @@ class GraphExpander:
         seed_nodes: list[Node],
         budget: ExpansionBudget | None = None,
         query_terms: frozenset[str] | None = None,
+        read_cache: GraphReadCache | None = None,
     ) -> list[ExpandedNode]:
         """Produce an expanded candidate list from anchors and seeds.
 
@@ -183,6 +185,7 @@ class GraphExpander:
         would otherwise be dropped before the reranker. None = prior behaviour.
         """
         budget = budget or ExpansionBudget()
+        reads = read_cache or GraphReadCache(self._backend)
         state = _ExpansionState(budget, q_terms=query_terms or frozenset())
 
         # Step 1 — seeds are always included first.
@@ -196,24 +199,24 @@ class GraphExpander:
         # category / chunk expansion. Turns "follow the citation"
         # multi-hop retrieval into a single structural hop.
         # No-op on corpora without REFERENCES edges.
-        await self._expand_references(seed_nodes, state)
+        await self._expand_references(seed_nodes, state, reads)
 
         # Step 3 — walk category siblings. Categories are a cheap way
         # to surface cross-document context that lexical FTS misses.
-        await self._expand_category_siblings(anchors, state)
+        await self._expand_category_siblings(anchors, state, reads)
 
         # Step 4 — for every seed document, pull its chunks; for every
         # seed chunk, pull its parent document (and its sibling chunks).
         # This is the "stay inside the same document" expansion.
-        await self._expand_document_scope(seed_nodes, state)
+        await self._expand_document_scope(seed_nodes, state, reads)
 
         # Step 5 — chunk-next sequence walk. Cheap and often useful for
         # narrative documents where the relevant answer spans neighbours.
-        await self._expand_chunk_next(seed_nodes, state)
+        await self._expand_chunk_next(seed_nodes, state, reads)
 
         # Step 6 — entity mentions. Only triggers if the corpus has
         # ENTITY hub nodes (post-processed by EntityLinker).
-        await self._expand_entity_mentions(seed_nodes, state)
+        await self._expand_entity_mentions(seed_nodes, state, reads)
 
         # Step 7 — RELATED edges (FK relationships for structured data) and
         # opt-in OpenIE semantic relation edges.
@@ -222,7 +225,7 @@ class GraphExpander:
         # product→reviews). For OpenIE entity hubs, typed relation edges
         # represent memory facts (e.g., concept→depends_on→policy). These are
         # valuable for relation-only discovery that lexical RAG cannot see.
-        await self._expand_related(seed_nodes, state)
+        await self._expand_related(seed_nodes, state, reads)
 
         return state.results()
 
@@ -232,6 +235,7 @@ class GraphExpander:
         self,
         anchors: QueryAnchors,
         state: _ExpansionState,
+        reads: GraphReadCache,
     ) -> None:
         """From category anchors, surface documents in the same category.
 
@@ -243,7 +247,7 @@ class GraphExpander:
             if state.is_full():
                 return
             try:
-                hops = await self._backend.get_neighbors(cat_id, depth=1)
+                hops = await reads.get_neighbors(cat_id, depth=1)
             except Exception as exc:
                 logger.debug("category expansion failed for %s: %s", cat_id, exc)
                 continue
@@ -268,6 +272,7 @@ class GraphExpander:
         self,
         seed_nodes: list[Node],
         state: _ExpansionState,
+        reads: GraphReadCache,
     ) -> None:
         """Pull sibling chunks for seed chunks and child chunks for seed docs.
 
@@ -280,7 +285,7 @@ class GraphExpander:
             if state.is_full():
                 return
             try:
-                edges = await self._backend.get_edges(seed.id, direction="both")
+                edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("edge fetch failed for %s: %s", seed.id, exc)
                 continue
@@ -295,7 +300,7 @@ class GraphExpander:
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
                 if state.contains(other_id):
                     continue
-                other = await self._backend.get_node(other_id)
+                other = await reads.get_node(other_id)
                 if other is None:
                     continue
                 state.add(
@@ -312,6 +317,7 @@ class GraphExpander:
         self,
         seed_nodes: list[Node],
         state: _ExpansionState,
+        reads: GraphReadCache,
     ) -> None:
         """Walk NEXT_CHUNK edges forward and backward from seed chunks."""
         chunks = [n for n in seed_nodes if n.kind == NodeKind.CHUNK]
@@ -322,7 +328,7 @@ class GraphExpander:
             if state.is_full():
                 return
             try:
-                edges = await self._backend.get_edges(seed.id, direction="both")
+                edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("chunk-next fetch failed for %s: %s", seed.id, exc)
                 continue
@@ -335,7 +341,7 @@ class GraphExpander:
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
                 if state.contains(other_id):
                     continue
-                other = await self._backend.get_node(other_id)
+                other = await reads.get_node(other_id)
                 if other is None:
                     continue
                 state.add(
@@ -351,6 +357,7 @@ class GraphExpander:
         self,
         seed_nodes: list[Node],
         state: _ExpansionState,
+        reads: GraphReadCache,
     ) -> None:
         """If a seed is an ENTITY hub, add its MENTIONS sources.
 
@@ -366,7 +373,7 @@ class GraphExpander:
             if state.is_full():
                 return
             try:
-                edges = await self._backend.get_edges(seed.id, direction="incoming")
+                edges = await reads.get_edges(seed.id, direction="incoming")
             except Exception as exc:
                 logger.debug("entity expansion failed for %s: %s", seed.id, exc)
                 continue
@@ -380,7 +387,7 @@ class GraphExpander:
                 src_id = edge.source_id
                 if state.contains(src_id):
                     continue
-                src = await self._backend.get_node(src_id)
+                src = await reads.get_node(src_id)
                 if src is None:
                     continue
                 state.add(
@@ -397,6 +404,7 @@ class GraphExpander:
         self,
         seed_nodes: list[Node],
         state: _ExpansionState,
+        reads: GraphReadCache,
     ) -> None:
         """Walk relation edges from seed ENTITY nodes.
 
@@ -418,7 +426,7 @@ class GraphExpander:
             if state.is_full():
                 return
             try:
-                edges = await self._backend.get_edges(seed.id, direction="both")
+                edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("related expansion failed for %s: %s", seed.id, exc)
                 continue
@@ -437,7 +445,7 @@ class GraphExpander:
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
                 if state.contains(other_id):
                     continue
-                other = await self._backend.get_node(other_id)
+                other = await reads.get_node(other_id)
                 if other is None:
                     continue
                 state.add(
@@ -456,6 +464,7 @@ class GraphExpander:
         self,
         seed_nodes: list[Node],
         state: _ExpansionState,
+        reads: GraphReadCache,
     ) -> None:
         """Walk REFERENCES edges from seed nodes (explicit cross-references).
 
@@ -472,7 +481,7 @@ class GraphExpander:
             if state.is_full():
                 return
             try:
-                edges = await self._backend.get_edges(seed.id, direction="both")
+                edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("reference expansion failed for %s: %s", seed.id, exc)
                 continue
@@ -486,7 +495,7 @@ class GraphExpander:
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
                 if state.contains(other_id):
                     continue
-                other = await self._backend.get_node(other_id)
+                other = await reads.get_node(other_id)
                 if other is None:
                     continue
                 state.add(
