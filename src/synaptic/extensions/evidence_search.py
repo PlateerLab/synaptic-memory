@@ -109,6 +109,7 @@ class EvidenceSearchResult:
     evidence: list[Evidence] = field(default_factory=list)
     elapsed_ms: float = 0.0
     timings_ms: dict[str, float] = field(default_factory=dict)
+    diagnostics: dict[str, float] = field(default_factory=dict)
     sub_queries: list[str] = field(default_factory=list)
 
 
@@ -392,6 +393,7 @@ class EvidenceSearch:
         """
         t0 = time()
         timings_ms: dict[str, float] = {}
+        diagnostics: dict[str, float] = {}
 
         # Step 0 — embed the query if an embedder is wired up.
         # The caller can also pass query_embedding directly; the
@@ -551,6 +553,10 @@ class EvidenceSearch:
                 logger.debug("phrase-bridge seeding failed: %s", exc)
 
         all_seeds = list(fts_nodes) + vec_seeds + prf_seeds + phrase_bridge_seeds
+        diagnostics["fts_seed_count"] = float(len(fts_nodes))
+        diagnostics["vector_seed_count"] = float(len(vec_seeds))
+        diagnostics["prf_seed_count"] = float(len(prf_seeds))
+        diagnostics["phrase_bridge_seed_count"] = float(len(phrase_bridge_seeds))
         timings_ms["vector"] = (time() - stage_t0) * 1000
 
         # Step 2c+ — table hint seed augmentation (v0.17.1).
@@ -647,6 +653,7 @@ class EvidenceSearch:
                 for node_id, score in rrf.items():
                     normalised = 0.10 + 0.85 * (score / rrf_max)
                     fts_scores[node_id] = max(fts_scores.get(node_id, 0.0), normalised)
+        diagnostics["seed_count"] = float(len(all_seeds))
         timings_ms["seed_extra"] = (time() - stage_t0) * 1000
 
         # Step 3 — shallow graph expansion
@@ -677,6 +684,7 @@ class EvidenceSearch:
                 ExpandedNode(node=n, reason="seed", hops=0, anchor_hit=None) for n in all_seeds
             ]
         timings_ms["expand_graph"] = (time() - graph_stage_t0) * 1000
+        diagnostics["expanded_count_before_ppr"] = float(len(expanded))
 
         # Step 3b — PPR graph discovery. Uses FTS seeds as teleport
         # nodes and walks the graph via PPR to find nodes reachable
@@ -684,6 +692,9 @@ class EvidenceSearch:
         # neither FTS nor vector search found. Discovered nodes are
         # added to the expanded set with a graph-based score.
         ppr_stage_t0 = time()
+        diagnostics["ppr_result_count"] = 0.0
+        diagnostics["ppr_missing_count"] = 0.0
+        diagnostics["ppr_added_count"] = 0.0
         if fts_scores and self._graph_expansion:
             try:
                 ppr_timings: dict[str, float] = {}
@@ -709,12 +720,15 @@ class EvidenceSearch:
                 from synaptic.extensions.graph_expander import ExpandedNode
 
                 expanded_ids = {e.node.id for e in expanded}
+                diagnostics["ppr_result_count"] = float(len(ppr_results))
                 ppr_fetch_t0 = time()
                 missing_node_ids = [
                     node_id for node_id, _ppr_score in ppr_results if node_id not in expanded_ids
                 ]
+                diagnostics["ppr_missing_count"] = float(len(missing_node_ids))
                 ppr_nodes = await graph_reads.get_nodes(missing_node_ids)
                 timings_ms["expand_ppr_fetch"] = (time() - ppr_fetch_t0) * 1000
+                ppr_added = 0
                 for node_id, ppr_score in ppr_results:
                     if node_id not in expanded_ids:
                         node = ppr_nodes.get(node_id)
@@ -728,10 +742,13 @@ class EvidenceSearch:
                                 )
                             )
                             fts_scores[node_id] = ppr_score * 0.5
+                            ppr_added += 1
+                diagnostics["ppr_added_count"] = float(ppr_added)
             except Exception:
                 pass  # PPR failure is non-fatal
         timings_ms["expand_ppr"] = (time() - ppr_stage_t0) * 1000
         timings_ms["expand"] = (time() - stage_t0) * 1000
+        diagnostics["expanded_count"] = float(len(expanded))
 
         # Step 4 — hybrid reranking
         stage_t0 = time()
@@ -748,6 +765,7 @@ class EvidenceSearch:
             anchor_categories=anchor_category_set,
             weights=tilt,
         )
+        diagnostics["scored_count"] = float(len(scored))
 
         # Lazy-load per-corpus calibration once (auto-disable reranker
         # on FTS-already-strong corpora; see calibration.py).
@@ -854,6 +872,7 @@ class EvidenceSearch:
             per_document_cap=per_document_cap,
             anchor_categories=anchor_category_set,
         )
+        diagnostics["evidence_count"] = float(len(evidence))
         timings_ms["aggregate"] = (time() - stage_t0) * 1000
 
         elapsed_ms = (time() - t0) * 1000
@@ -876,6 +895,7 @@ class EvidenceSearch:
             evidence=evidence,
             elapsed_ms=elapsed_ms,
             timings_ms=timings_ms,
+            diagnostics=diagnostics,
             sub_queries=sub_queries,
         )
 

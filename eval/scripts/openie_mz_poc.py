@@ -93,6 +93,7 @@ class ScoreSummary:
     by_type: dict[str, list[int]] = field(default_factory=lambda: defaultdict(lambda: [0, 0]))
     search_times_ms: list[float] = field(default_factory=list)
     stage_timings_ms: dict[str, float] = field(default_factory=dict)
+    diagnostics: dict[str, float] = field(default_factory=dict)
 
     def add(self, query_type: str, docs: list[str], gold_files: list[str]) -> None:
         gold = {reg_name(path) for path in gold_files}
@@ -112,6 +113,10 @@ class ScoreSummary:
         self.search_times_ms.append(float(search_time_ms))
         for key, value in timings_ms.items():
             self.stage_timings_ms[key] = self.stage_timings_ms.get(key, 0.0) + float(value)
+
+    def record_diagnostics(self, diagnostics: dict[str, float]) -> None:
+        for key, value in diagnostics.items():
+            self.diagnostics[key] = self.diagnostics.get(key, 0.0) + float(value)
 
     def line(self) -> str:
         if self.n == 0:
@@ -154,6 +159,7 @@ class ScoreSummary:
             "r10": self.recall_at(10),
             "by_type": by_type,
             "timing": _timing_summary(self.search_times_ms, self.stage_timings_ms),
+            "diagnostics": _diagnostic_summary(self.n, self.diagnostics),
         }
 
     def clone_as(self, name: str) -> ScoreSummary:
@@ -162,6 +168,7 @@ class ScoreSummary:
             clone.by_type[key] = list(value)
         clone.search_times_ms = list(self.search_times_ms)
         clone.stage_timings_ms = dict(self.stage_timings_ms)
+        clone.diagnostics = dict(self.diagnostics)
         return clone
 
 
@@ -188,6 +195,18 @@ def _timing_summary(
         "avg_ms": round(total / n, 3),
         "p95_ms": round(ordered[p95_index], 3),
         "stages": stages,
+    }
+
+
+def _diagnostic_summary(n: int, diagnostics: dict[str, float]) -> dict[str, dict[str, float]]:
+    if n == 0:
+        return {}
+    return {
+        key: {
+            "total": round(value, 3),
+            "avg": round(value / n, 3),
+        }
+        for key, value in sorted(diagnostics.items())
     }
 
 
@@ -1261,6 +1280,7 @@ async def score_db(
                 float(getattr(result, "search_time_ms", 0.0) or 0.0),
                 dict(getattr(result, "timings_ms", {}) or {}),
             )
+            summary.record_diagnostics(dict(getattr(result, "diagnostics", {}) or {}))
     finally:
         await graph.close()
     return summary
