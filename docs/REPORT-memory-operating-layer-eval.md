@@ -944,8 +944,9 @@ Memory health snapshot:
 | GraphExpander default budget cap | `mz_openie_expbudget40_results.json` | `1.9s` | `0:08.38` | PASS |
 | SynapticGraph FTS seed fanout v2 | `mz_openie_seedfanout1_results.json` | `0.9s` | `0:05.07` | PASS |
 | GraphExpander saturated path skip | `mz_openie_graphskip_saturated_results.json` | `0.7s` | `0:09.46` | PASS |
+| SQLite FTS LIKE deficit cap | `mz_openie_ftslike_deficit_results.json` | `1.5s` | `0:04.88` | PASS |
 
-핵심 검색/게이트 지표는 최신 GraphExpander saturated path skip run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 SQLite FTS LIKE deficit cap run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -963,20 +964,20 @@ Memory health snapshot:
 | aggregate pool limit | `30 avg/query` |
 | FTS seed count | `1,128 total / 25.6 avg` |
 | scored candidates | baseline `1,266 / 28.8 avg`, OpenIE `1,508 / 34.3 avg` |
-| baseline aggregate stage | `45.9ms total / 1.0ms avg` |
-| OpenIE aggregate stage | `40.3ms total / 0.9ms avg` |
-| baseline FTS stage | `52.6ms total / 1.2ms avg` |
-| OpenIE FTS stage | `51.4ms total / 1.2ms avg` |
-| baseline expand stage | `33.3ms total / 0.8ms avg` |
-| baseline expand_graph / expand_ppr | `32.3ms / 0.9ms` |
-| baseline graph seed_prefetch / document | `0.0ms / 13.6ms` |
+| baseline aggregate stage | `44.7ms total / 1.0ms avg` |
+| OpenIE aggregate stage | `42.3ms total / 1.0ms avg` |
+| baseline FTS stage | `48.4ms total / 1.1ms avg` |
+| OpenIE FTS stage | `52.9ms total / 1.2ms avg` |
+| baseline expand stage | `31.1ms total / 0.7ms avg` |
+| baseline expand_graph / expand_ppr | `30.1ms / 1.0ms` |
+| baseline graph seed_prefetch / document | `0.0ms / 12.9ms` |
 | baseline PPR bfs / iterate | `0.6ms / 0.1ms` |
 | baseline PPR added candidates | `0 total / 0.0 avg` |
 | baseline PPR seed count | `1,128 total / 25.6 avg` |
-| OpenIE expand stage | `44.6ms total / 1.0ms avg` |
-| OpenIE expand_graph / expand_ppr | `42.2ms / 2.3ms` |
-| OpenIE graph seed_prefetch / document | `0.0ms / 12.1ms` |
-| OpenIE graph related / entity | `9.3ms / 9.6ms` |
+| OpenIE expand stage | `46.5ms total / 1.1ms avg` |
+| OpenIE expand_graph / expand_ppr | `44.0ms / 2.4ms` |
+| OpenIE graph seed_prefetch / document | `0.0ms / 12.4ms` |
+| OpenIE graph related / entity | `9.8ms / 10.1ms` |
 | OpenIE PPR bfs / iterate | `0.8ms / 0.3ms` |
 | OpenIE PPR skipped saturated | `37/44 queries` |
 | OpenIE PPR result count | `68 total / 1.5 avg` |
@@ -1201,6 +1202,14 @@ per-chunk fallback을 유지한다.
   no-regress, relation expanded/evidence `93/93`, `47/93`를 유지했다.
   Baseline GraphExpander stage는 `35.5ms -> 32.3ms`, OpenIE GraphExpander stage는
   `45.7ms -> 42.2ms`, OpenIE related path는 `13.1ms -> 9.3ms`로 줄었다.
+- SQLite FTS LIKE deficit cap은 FTS5 pass가 이미 일부 결과를 채웠을 때 LIKE
+  fallback scan limit을 기존 `limit*2`에서 `max(limit, deficit*2)`로 줄인다.
+  FTS hit가 0개인 query는 기존 `limit*2` 안전선을 유지하고, FTS가 거의 채운
+  query만 초과 materialization을 줄인다. 200-chunk cache-only gate는 PASS했고,
+  R@5 no-regress, relation expanded/evidence `93/93`, `47/93`, scored candidates
+  baseline/OpenIE `1,266/1,508`을 그대로 유지했다. 최신 run의 stage timing은
+  baseline FTS `52.6ms -> 48.4ms`, OpenIE FTS `51.4ms -> 52.9ms`로 실행 노이즈가
+  섞였으므로 이 변화는 recall-preserving fallback read bound로 해석한다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
@@ -1216,10 +1225,12 @@ per-chunk fallback을 유지한다.
 - 남은 큰 검색-stage 비용은 aggregate selection, FTS, OpenIE GraphExpander의
   document-scope/related/entity path다. FTS seed fanout v2 이후 FTS는 더 이상
   unbounded seed over-fetch 비용이 아니고, GraphExpander saturated path skip 이후
-  budget이 찬 path의 backend read도 제거됐지만, 200-chunk gate 기준에서 이 stage들은
-  아직 직접 측정 가능하다. PPR BFS/read/iterate는 같은 기준으로 더 이상 지배 병목이
-  아니다. Baseline document ingest write path, OpenIE replay write path, aggregate
-  tokenisation/Jaccard recomputation path도 같은 기준에서 지배 병목이 아니다.
+  budget이 찬 path의 backend read도 제거됐으며, SQLite LIKE fallback도 deficit
+  기준으로 bounded 됐다. 다만 200-chunk gate 기준에서 aggregate selection, FTS,
+  OpenIE GraphExpander document/related/entity path는 아직 직접 측정 가능하다.
+  PPR BFS/read/iterate는 같은 기준으로 더 이상 지배 병목이 아니다. Baseline document
+  ingest write path, OpenIE replay write path, aggregate tokenisation/Jaccard
+  recomputation path도 같은 기준에서 지배 병목이 아니다.
 
 ---
 
