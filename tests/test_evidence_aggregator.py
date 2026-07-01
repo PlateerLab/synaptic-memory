@@ -172,6 +172,18 @@ class TestBasicSelection:
 
         assert result[0].node.id == "high"
 
+    def test_terminal_pick_does_not_tokenise_for_future_similarity(self):
+        agg = EvidenceAggregator()
+        scored = [
+            _scored("high", total=0.95, content="high score content"),
+            _scored("mid", total=0.5, content="middle score content"),
+        ]
+
+        result = agg.aggregate(scored=scored, k=1)
+
+        assert result[0].node.id == "high"
+        assert agg._token_cache == {}
+
 
 # --- MMR duplicate suppression ---
 

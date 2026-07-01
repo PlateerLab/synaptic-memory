@@ -384,9 +384,10 @@ class EvidenceAggregator:
             chosen = remaining.pop(best_idx)
             evidence = _make_evidence(chosen, reason="top_score")
             selected.append(evidence)
-            selected_entries.append(cand_entry(chosen))
             if evidence.document_id:
                 doc_counts[evidence.document_id] = doc_counts.get(evidence.document_id, 0) + 1
+            if len(selected) < k:
+                selected_entries.append(cand_entry(chosen))
 
             # Companion attach — a document the chosen node explicitly
             # cites (REFERENCES edge) rides in *with* it as a bundle.
@@ -401,9 +402,10 @@ class EvidenceAggregator:
                 remaining.remove(comp)
                 comp_ev = _make_evidence(comp, reason="reference_companion")
                 selected.append(comp_ev)
-                selected_entries.append(cand_entry(comp))
                 if comp_ev.document_id:
                     doc_counts[comp_ev.document_id] = doc_counts.get(comp_ev.document_id, 0) + 1
+                if len(selected) < k:
+                    selected_entries.append(cand_entry(comp))
 
         return selected
 
