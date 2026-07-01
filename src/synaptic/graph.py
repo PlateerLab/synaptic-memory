@@ -3233,8 +3233,15 @@ class SynapticGraph:
         retrieval_events = await self._list_retrieval_events(
             scope=scope, since=since, limit=100_000
         )
-        scores = await self._list_memory_scores(
-            scope_key=memory_scope_key(effective_scope),
+        score_scope_key = memory_scope_key(effective_scope)
+        top_node_scores = await self._list_memory_scores(
+            scope_key=score_scope_key,
+            edge_ids=[""],
+            limit=10,
+        )
+        top_edge_scores = await self._list_memory_scores(
+            scope_key=score_scope_key,
+            node_ids=[""],
             limit=10,
         )
 
@@ -3313,8 +3320,8 @@ class SynapticGraph:
             memory_penalized_node_count=penalized_node_count,
             max_memory_scope_boost=max_scope_boost,
             max_memory_signal_penalty=max_signal_penalty,
-            top_reinforced_node_ids=[score.node_id for score in scores if score.node_id],
-            top_reinforced_edge_ids=[score.edge_id for score in scores if score.edge_id],
+            top_reinforced_node_ids=[score.node_id for score in top_node_scores if score.node_id],
+            top_reinforced_edge_ids=[score.edge_id for score in top_edge_scores if score.edge_id],
         )
 
     async def _semantic_extract_drift_signals(
@@ -3524,12 +3531,19 @@ class SynapticGraph:
         self,
         *,
         scope_key: str,
+        node_ids: list[str] | None = None,
+        edge_ids: list[str] | None = None,
         limit: int,
     ) -> list[MemoryScore]:
         lister = getattr(self._backend, "list_memory_scores", None)
         if not callable(lister):
             return []
-        return await lister(scope_key=scope_key, limit=limit)
+        return await lister(
+            scope_key=scope_key,
+            node_ids=node_ids,
+            edge_ids=edge_ids,
+            limit=limit,
+        )
 
     async def agent_search(
         self,

@@ -268,6 +268,27 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - `memory_health()`가 node 강화 summary뿐 아니라 edge/relation 강화 summary도 노출한다.
 - relation memory가 강화됐는지 health report만 보고도 추적할 수 있다.
 
+후속 top reinforced edge starvation guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_top_edges_unstarved_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `28/28` |
+| top reinforced node count | `10` |
+| top reinforced edge ids | `poc_edge_score_boost_relation` 포함 |
+
+추가로 검증된 동작:
+
+- node score가 health top score list를 채워도 edge/relation 강화 summary가 사라지지 않는다.
+- node와 edge top reinforced summary는 각각 독립적으로 최대 10개까지 유지된다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
