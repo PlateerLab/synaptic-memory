@@ -1293,8 +1293,9 @@ async def relation_probe_for_db(
             limit=limit,
             max_per_source_relation=max_per_source_relation,
         )
-        no_graph = EvidenceSearch(backend=backend, graph_expansion=False)
-        with_graph = EvidenceSearch(backend=backend)
+        search_backend = _RelationProbeCachedBackend(backend)
+        no_graph = EvidenceSearch(backend=search_backend, graph_expansion=False)
+        with_graph = EvidenceSearch(backend=search_backend)
         for source, target, edge in probes:
             query = _relation_probe_query(source.title, edge.kind)
             if _contains_title(query, target.title):
@@ -1347,6 +1348,51 @@ async def relation_probe_for_db(
     finally:
         await backend.close()
     return summary
+
+
+class _RelationProbeCachedBackend:
+    """Read-through cache shared by no-graph and graph relation-probe searches."""
+
+    __slots__ = ("_backend", "_edges", "_fts", "_neighbors", "_nodes")
+
+    def __init__(self, backend: SqliteGraphBackend) -> None:
+        self._backend = backend
+        self._nodes: dict[str, Node | None] = {}
+        self._edges: dict[tuple[str, str], list[Edge]] = {}
+        self._fts: dict[tuple[str, int, bool], object] = {}
+        self._neighbors: dict[tuple[str, int], object] = {}
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._backend, name)
+
+    async def get_node(self, node_id: str) -> Node | None:
+        if node_id in self._nodes:
+            return self._nodes[node_id]
+        node = await self._backend.get_node(node_id)
+        self._nodes[node_id] = node
+        return node
+
+    async def get_edges(self, node_id: str, *, direction: str = "both") -> list[Edge]:
+        key = (node_id, direction)
+        if key not in self._edges:
+            self._edges[key] = await self._backend.get_edges(node_id, direction=direction)
+        return self._edges[key]
+
+    async def get_neighbors(self, node_id: str, *, depth: int = 1) -> object:
+        key = (node_id, depth)
+        if key not in self._neighbors:
+            self._neighbors[key] = await self._backend.get_neighbors(node_id, depth=depth)
+        return self._neighbors[key]
+
+    async def search_fts(self, query: str, *, limit: int = 20, with_scores: bool = False) -> object:
+        key = (query, limit, with_scores)
+        if key not in self._fts:
+            self._fts[key] = await self._backend.search_fts(
+                query,
+                limit=limit,
+                with_scores=with_scores,
+            )
+        return self._fts[key]
 
 
 async def _openie_relation_probes(

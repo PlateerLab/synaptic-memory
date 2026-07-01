@@ -7,6 +7,7 @@ import json
 import sys
 from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -707,6 +708,72 @@ async def test_relation_probe_records_graph_lift_for_openie_relation(tmp_path: P
     assert payload["relation_groups"]["weak"]["n"] == 0
     assert payload["probes"][0]["target_id"] == "ent_roadmap"
     assert payload["probes"][0]["confidence"] == pytest.approx(0.9)
+
+
+@pytest.mark.asyncio
+async def test_relation_probe_shares_fts_cache_between_ablation_searches(
+    monkeypatch,
+    tmp_path: Path,
+):
+    db_path = tmp_path / "probe_cache.db"
+    original_backend = openie_mz_poc.SqliteGraphBackend
+    backend = original_backend(str(db_path))
+    await backend.connect()
+    try:
+        await backend.save_node(
+            Node(
+                id="ent_acme",
+                kind=NodeKind.ENTITY,
+                title="Acme",
+                content="Acme depends on another plan.",
+                tags=["_openie", "_openie_entity"],
+            )
+        )
+        await backend.save_node(
+            Node(
+                id="ent_roadmap",
+                kind=NodeKind.ENTITY,
+                title="Roadmap",
+                content="Release milestones.",
+                tags=["_openie", "_openie_entity"],
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="openie_acme_depends_roadmap",
+                source_id="ent_acme",
+                target_id="ent_roadmap",
+                kind=EdgeKind.DEPENDS_ON,
+                weight=0.9,
+                properties={"is_openie": "true", "relation": "depends_on"},
+            )
+        )
+    finally:
+        await backend.close()
+
+    class CountingBackend(original_backend):
+        search_fts_calls: ClassVar[int] = 0
+
+        async def search_fts(self, query: str, *, limit: int = 20, with_scores: bool = False):
+            type(self).search_fts_calls += 1
+            return await super().search_fts(query, limit=limit, with_scores=with_scores)
+
+    class FtsOnlyEvidenceSearch:
+        def __init__(self, backend, graph_expansion=True):
+            self.backend = backend
+            self.graph_expansion = graph_expansion
+
+        async def search(self, query: str, k: int = 10):
+            await self.backend.search_fts(query, limit=k)
+            return SimpleNamespace(expanded=[], evidence=[])
+
+    monkeypatch.setattr(openie_mz_poc, "SqliteGraphBackend", CountingBackend)
+    monkeypatch.setattr(openie_mz_poc, "EvidenceSearch", FtsOnlyEvidenceSearch)
+
+    summary = await relation_probe_for_db(db_path, limit=1, search_k=3)
+
+    assert summary.n == 1
+    assert CountingBackend.search_fts_calls == 1
 
 
 @pytest.mark.asyncio
