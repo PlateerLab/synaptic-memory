@@ -186,6 +186,13 @@ def _prop_int(props: dict[str, str], key: str, default: int) -> int:
         return default
 
 
+def _prop_csv_ids(props: dict[str, str], key: str) -> list[str]:
+    raw = str(props.get(key, "") or "")
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def _node_source_label(node: Node) -> str:
     props = node.properties or {}
     return (
@@ -2826,6 +2833,8 @@ class SynapticGraph:
             return
         current_scope_key = memory_scope_key(scope or MemoryScope())
         signal_nodes = await self._backend.list_nodes(kind=NodeKind.OBSERVATION, limit=100_000)
+        relevant_signals: list[tuple[dict[str, str], float]] = []
+        signal_edge_ids: set[str] = set()
         penalties: dict[str, float] = {}
         for signal_node in signal_nodes:
             tags = set(signal_node.tags or [])
@@ -2842,8 +2851,19 @@ class SynapticGraph:
                 _MEMORY_SIGNAL_MAX_RANKING_PENALTY,
                 max(0.0, confidence * _MEMORY_SIGNAL_MAX_RANKING_PENALTY),
             )
-            for node_id in props.get("node_ids", "").split(","):
-                node_id = node_id.strip()
+            relevant_signals.append((props, penalty))
+            signal_edge_ids.update(_prop_csv_ids(props, "edge_ids"))
+        if not relevant_signals:
+            return
+        edge_targets = await self._signal_edge_targets(
+            candidate_node_ids=node_ids,
+            edge_ids=signal_edge_ids,
+        )
+        for props, penalty in relevant_signals:
+            target_ids = set(_prop_csv_ids(props, "node_ids"))
+            for edge_id in _prop_csv_ids(props, "edge_ids"):
+                target_ids.update(edge_targets.get(edge_id, set()))
+            for node_id in target_ids:
                 if node_id in node_ids:
                     penalties[node_id] = max(penalties.get(node_id, 0.0), penalty)
         if not penalties:
@@ -2856,6 +2876,33 @@ class SynapticGraph:
             item.activation = max(0.0, item.activation * factor)
             item.resonance = max(0.0, item.resonance * factor)
         result.nodes.sort(key=lambda item: item.resonance, reverse=True)
+
+    async def _signal_edge_targets(
+        self,
+        *,
+        candidate_node_ids: set[str],
+        edge_ids: set[str],
+    ) -> dict[str, set[str]]:
+        targets: dict[str, set[str]] = {edge_id: set() for edge_id in edge_ids}
+        if not candidate_node_ids or not edge_ids:
+            return targets
+        batch_get_edges = getattr(self._backend, "get_edges_batch", None)
+        edges_to_scan: list[Edge] = []
+        if callable(batch_get_edges):
+            edge_groups = await batch_get_edges(list(candidate_node_ids), direction="both")
+            for edges_for_node in edge_groups.values():
+                edges_to_scan.extend(edges_for_node)
+        else:
+            for node_id in candidate_node_ids:
+                edges_to_scan.extend(await self._backend.get_edges(node_id, direction="both"))
+        for edge in edges_to_scan:
+            if edge.id not in targets:
+                continue
+            if edge.source_id in candidate_node_ids:
+                targets[edge.id].add(edge.source_id)
+            if edge.target_id in candidate_node_ids:
+                targets[edge.id].add(edge.target_id)
+        return targets
 
     async def scan_memory_signals(
         self,

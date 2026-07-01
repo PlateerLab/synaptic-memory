@@ -390,6 +390,57 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         )
         await graph._apply_memory_signal_penalties(penalty_result, scope=scope)
         penalized_failed = next(item for item in penalty_result.nodes if item.node.id == failed.id)
+        edge_only_suspect = Node(
+            id="poc_edge_only_signal_suspect",
+            title="Edge-only signal endpoint",
+            content="This endpoint should be demoted through a suspect relation signal.",
+        )
+        edge_only_linked = Node(
+            id="poc_edge_only_signal_linked",
+            title="Linked endpoint",
+            content="This endpoint is connected by the suspect relation.",
+        )
+        edge_only_clean = Node(
+            id="poc_edge_only_signal_clean",
+            title="Clean edge-only comparator",
+            content="This memory is not connected to the suspect relation.",
+        )
+        await backend.save_node(edge_only_suspect)
+        await backend.save_node(edge_only_linked)
+        await backend.save_node(edge_only_clean)
+        await backend.save_edge(
+            Edge(
+                id="poc_edge_only_signal_relation",
+                source_id=edge_only_suspect.id,
+                target_id=edge_only_linked.id,
+                kind=EdgeKind.RELATED,
+            )
+        )
+        await backend.save_node(
+            Node(
+                id="poc_edge_only_signal_node",
+                kind=NodeKind.OBSERVATION,
+                title="Edge-only suspect signal",
+                tags=["_memory_signal", "_memory_suspect"],
+                properties={
+                    "scope_key": scope.key,
+                    "edge_ids": "poc_edge_only_signal_relation",
+                    "confidence": "1.0",
+                    "signal_kind": str(MemorySignalKind.REPEATED_FAILURE),
+                },
+            )
+        )
+        edge_only_penalty_result = SearchResult(
+            query="edge-only pollution penalty",
+            nodes=[
+                ActivatedNode(node=edge_only_suspect, activation=1.0, resonance=1.0),
+                ActivatedNode(node=edge_only_clean, activation=0.98, resonance=0.98),
+            ],
+        )
+        await graph._apply_memory_signal_penalties(edge_only_penalty_result, scope=scope)
+        edge_only_penalized = next(
+            item for item in edge_only_penalty_result.nodes if item.node.id == edge_only_suspect.id
+        )
 
         selected_before_success = (
             selected_before_feedback.success_count if selected_before_feedback else -1
@@ -484,6 +535,11 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and penalized_failed.resonance < 0.98
                 and penalized_failed.resonance >= 0.95
             ),
+            "edge_only_signal_demoted_endpoint": (
+                edge_only_penalty_result.nodes[0].node.id == edge_only_clean.id
+                and edge_only_penalized.resonance < 0.98
+                and edge_only_penalized.resonance >= 0.95
+            ),
             "health_report_populated": (
                 health.memory_events >= 4
                 and health.retrieval_events >= 3
@@ -542,6 +598,10 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 "health": asdict(health),
                 "penalty_order": [item.node.id for item in penalty_result.nodes],
                 "penalized_failed_resonance": _round(penalized_failed.resonance),
+                "edge_only_penalty_order": [
+                    item.node.id for item in edge_only_penalty_result.nodes
+                ],
+                "edge_only_penalized_resonance": _round(edge_only_penalized.resonance),
                 "search_time_ms": _round(result.search_time_ms),
                 "timings_ms": {key: _round(value) for key, value in result.timings_ms.items()},
             },

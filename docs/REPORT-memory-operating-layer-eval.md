@@ -121,6 +121,31 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
   drift-spike signal이 생성된다.
 - suspect memory는 자동 삭제되지 않고 flag/penalty/health report로 관리된다.
 
+후속 edge-only signal penalty 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_edge_signal_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `22/22` |
+| memory events | `22` |
+| retrieval events | `8` |
+| signal events | `9` |
+| suspect count | `9` |
+
+추가로 검증된 동작:
+
+- edge-only suspect signal도 `edge_ids`를 검색 결과 node의 연결 edge에 매칭해
+  endpoint 후보에 bounded penalty를 적용한다.
+- node-local signal, scope score repeated failure signal, stale/supersession signal의
+  기존 동작은 유지된다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash

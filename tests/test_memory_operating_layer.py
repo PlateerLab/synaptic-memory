@@ -1021,6 +1021,54 @@ async def test_search_applies_high_confidence_suspect_signal_penalty(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_memory_signal_penalty_resolves_edge_only_signal_targets():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    suspect = Node(id="edge_suspect", title="Suspect relation endpoint")
+    linked = Node(id="edge_linked", title="Linked endpoint")
+    clean = Node(id="edge_clean", title="Clean memory")
+    await backend.save_node(suspect)
+    await backend.save_node(linked)
+    await backend.save_node(clean)
+    await backend.save_edge(
+        Edge(
+            id="suspect_relation",
+            source_id=suspect.id,
+            target_id=linked.id,
+            kind=EdgeKind.RELATED,
+        )
+    )
+    await backend.save_node(
+        Node(
+            id="sig_edge_only",
+            kind=NodeKind.OBSERVATION,
+            title="Edge-only memory signal",
+            tags=["_memory_signal", "_memory_suspect"],
+            properties={
+                "scope_key": scope.key,
+                "edge_ids": "suspect_relation",
+                "confidence": "1.0",
+                "signal_kind": str(MemorySignalKind.REPEATED_FAILURE),
+            },
+        )
+    )
+    result = SearchResult(
+        query="policy",
+        nodes=[
+            ActivatedNode(node=suspect, activation=1.0, resonance=1.0),
+            ActivatedNode(node=clean, activation=0.98, resonance=0.98),
+        ],
+    )
+
+    await graph._apply_memory_signal_penalties(result, scope=scope)
+
+    assert [item.node.id for item in result.nodes] == [clean.id, suspect.id]
+    suspect_item = next(item for item in result.nodes if item.node.id == suspect.id)
+    assert suspect_item.resonance == pytest.approx(0.95)
+
+
+@pytest.mark.asyncio
 async def test_memory_signal_penalty_ignores_low_confidence_and_other_scope():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)
