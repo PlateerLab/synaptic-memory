@@ -862,6 +862,13 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 >= 1
                 and health.signal_kind_counts.get(str(MemorySignalKind.REPEATED_FAILURE), 0) >= 1
             ),
+            "health_reports_signal_pressure": (
+                health.growth_signal_count >= 1
+                and health.suspect_count >= 1
+                and health.growth_signal_rate > 0.0
+                and health.suspect_signal_rate > 0.0
+                and _round(health.growth_signal_rate + health.suspect_signal_rate) == 1.0
+            ),
             "health_reports_growth_targets": (
                 growth_entity.id in health.top_growth_node_ids
                 and growth_edge.id in health.top_growth_edge_ids

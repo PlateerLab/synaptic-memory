@@ -1713,7 +1713,10 @@ async def test_memory_monitor_flags_recent_growth_and_reinforcement_signals_idem
     assert health.new_entity_count == 1
     assert health.new_relation_count == 1
     assert health.relation_reinforced_count == 1
+    assert health.growth_signal_count == 3
     assert health.suspect_count == 0
+    assert health.growth_signal_rate == pytest.approx(1.0)
+    assert health.suspect_signal_rate == pytest.approx(0.0)
     assert health.top_growth_node_ids == [new_entity.id, old_entity.id]
     assert health.top_growth_edge_ids == ["recent_reinforced_relation"]
     assert health.top_growth_node_counts == {
@@ -1961,6 +1964,10 @@ async def test_memory_monitor_flags_entity_property_conflicts_by_source():
 
     health = await graph.memory_health()
     assert health.conflict_signal_count >= 1
+    assert health.growth_signal_count == 0
+    assert health.suspect_count == 1
+    assert health.growth_signal_rate == pytest.approx(0.0)
+    assert health.suspect_signal_rate == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
