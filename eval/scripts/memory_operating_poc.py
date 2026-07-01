@@ -790,6 +790,20 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 in penalty_provenance_health.top_penalty_edge_ids
                 and scope_clean.id in penalty_provenance_health.top_penalized_node_ids
             ),
+            "health_reports_penalty_provenance_counts": (
+                strong_negative_edge_signal is not None
+                and penalty_provenance_health.top_penalty_signal_counts.get(
+                    strong_negative_edge_signal.id,
+                    0,
+                )
+                >= 1
+                and penalty_provenance_health.top_penalty_edge_counts.get(
+                    "poc_edge_score_demoted_relation",
+                    0,
+                )
+                >= 1
+                and penalty_provenance_health.top_penalized_node_counts.get(scope_clean.id, 0) >= 1
+            ),
             "health_report_populated": (
                 health.memory_events >= 4
                 and health.retrieval_events >= 3

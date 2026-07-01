@@ -3448,6 +3448,15 @@ class SynapticGraph:
                 node_id for node_id, _ in penalized_node_counts.most_common(10)
             ],
             top_penalty_edge_ids=[edge_id for edge_id, _ in penalty_edge_counts.most_common(10)],
+            top_penalty_signal_counts={
+                signal_id: count for signal_id, count in penalty_signal_counts.most_common(10)
+            },
+            top_penalized_node_counts={
+                node_id: count for node_id, count in penalized_node_counts.most_common(10)
+            },
+            top_penalty_edge_counts={
+                edge_id: count for edge_id, count in penalty_edge_counts.most_common(10)
+            },
         )
 
     async def _semantic_extract_drift_signals(

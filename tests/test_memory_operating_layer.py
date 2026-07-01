@@ -1373,6 +1373,12 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
     assert health.top_penalty_signal_ids == ["sig_penalty_a", "sig_penalty_b"]
     assert health.top_penalized_node_ids == ["node_penalized_a", "node_penalized_b"]
     assert health.top_penalty_edge_ids == ["edge_penalty_a", "edge_penalty_b"]
+    assert health.top_penalty_signal_counts == {"sig_penalty_a": 2, "sig_penalty_b": 1}
+    assert health.top_penalized_node_counts == {
+        "node_penalized_a": 2,
+        "node_penalized_b": 1,
+    }
+    assert health.top_penalty_edge_counts == {"edge_penalty_a": 2, "edge_penalty_b": 1}
 
 
 @pytest.mark.asyncio

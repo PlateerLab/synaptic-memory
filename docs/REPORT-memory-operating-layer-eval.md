@@ -1734,6 +1734,13 @@ per-chunk fallback을 유지한다.
   유지했다. 이전 reference companion skip run 대비 aggregate stage는 baseline
   `44.569ms -> 43.737ms`, OpenIE `42.748ms -> 40.529ms`였으며, 이는 품질 변화 없는
   stale-scan cleanup으로 해석한다.
+- Memory health penalty provenance counts는 health report가 감점 원인 signal/edge/node의
+  상위 ID뿐 아니라 반복 횟수 map도 함께 노출하게 한다. 이로써 운영자가 한 번 발생한
+  감점과 반복적으로 검색 품질을 누르는 오염 신호를 구분할 수 있다. POC gate는
+  `health_reports_penalty_provenance_counts`를 추가해 `39/39` PASS했다. 대표 결과는
+  `top_penalty_signal_counts={"memsig_32d1378cc670e496": 1, "poc_edge_only_signal_node": 1}`,
+  `top_penalized_node_counts={"poc_scope_clean_memory": 1, "poc_edge_only_signal_suspect": 1}`,
+  `top_penalty_edge_counts={"poc_edge_score_demoted_relation": 1, "poc_edge_only_signal_relation": 1}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
