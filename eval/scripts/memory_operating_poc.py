@@ -566,6 +566,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and edge_boosted_item.resonance >= 0.999
                 and edge_boosted_item.resonance <= edge_boost_result.nodes[0].resonance
             ),
+            "memory_ranking_diagnostics_populated": (
+                edge_boost_result.diagnostics.get("memory_scope_boosted_nodes") == 1.0
+                and edge_boost_result.diagnostics.get("memory_scope_edge_score_hits") == 1.0
+                and edge_boost_result.diagnostics.get("memory_scope_max_abs_boost", 0.0) > 0.0
+                and penalty_result.diagnostics.get("memory_signal_penalized_nodes") == 1.0
+                and penalty_result.diagnostics.get("memory_signal_max_penalty", 0.0) > 0.0
+                and edge_only_penalty_result.diagnostics.get("memory_signal_penalized_nodes") == 1.0
+            ),
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id
                 and roundtrip_openie.properties.get("model") == "deterministic"
@@ -645,13 +653,16 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 "global_prior_resonance": _round(global_prior_result.nodes[1].resonance),
                 "edge_score_boost_order": [item.node.id for item in edge_boost_result.nodes],
                 "edge_score_boosted_resonance": _round(edge_boosted_item.resonance),
+                "edge_score_boost_diagnostics": dict(edge_boost_result.diagnostics),
                 "health": asdict(health),
                 "penalty_order": [item.node.id for item in penalty_result.nodes],
                 "penalized_failed_resonance": _round(penalized_failed.resonance),
+                "penalty_diagnostics": dict(penalty_result.diagnostics),
                 "edge_only_penalty_order": [
                     item.node.id for item in edge_only_penalty_result.nodes
                 ],
                 "edge_only_penalized_resonance": _round(edge_only_penalized.resonance),
+                "edge_only_penalty_diagnostics": dict(edge_only_penalty_result.diagnostics),
                 "search_time_ms": _round(result.search_time_ms),
                 "timings_ms": {key: _round(value) for key, value in result.timings_ms.items()},
             },

@@ -171,6 +171,32 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - edge score boost는 기존 relevance order를 뒤집지 않고 cap 안에서만 작동한다.
 - edge-only suspect signal penalty gate도 함께 유지된다.
 
+후속 memory ranking diagnostics 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_diagnostics_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `24/24` |
+| scope boosted nodes | `1` |
+| scope edge score hits | `1` |
+| max abs boost | `0.10` |
+| signal penalized nodes | `1` |
+| edge-only signal penalized nodes | `1` |
+
+추가로 검증된 동작:
+
+- scope/node/edge reinforcement boost와 memory signal penalty가 검색 결과
+  `diagnostics`에 관측 가능한 numeric signal로 남는다.
+- 운영/평가 레이어가 memory layer의 ranking 개입 여부를 SearchResult만 보고도
+  추적할 수 있다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
