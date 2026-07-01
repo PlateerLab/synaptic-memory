@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from time import time
 from typing import TYPE_CHECKING
 
 from synaptic.extensions.graph_read_cache import GraphReadCache
@@ -170,6 +171,7 @@ class GraphExpander:
         budget: ExpansionBudget | None = None,
         query_terms: frozenset[str] | None = None,
         read_cache: GraphReadCache | None = None,
+        timings_ms: dict[str, float] | None = None,
     ) -> list[ExpandedNode]:
         """Produce an expanded candidate list from anchors and seeds.
 
@@ -189,11 +191,15 @@ class GraphExpander:
         state = _ExpansionState(budget, q_terms=query_terms or frozenset())
 
         # Step 1 — seeds are always included first.
+        stage_t0 = time()
         for node in seed_nodes:
             state.add(ExpandedNode(node=node, reason="seed", hops=0))
+        _record_timing(timings_ms, "expand_graph_seed", stage_t0)
 
+        stage_t0 = time()
         if seed_nodes and not state.is_full():
             await reads.get_edges_many([node.id for node in seed_nodes], direction="both")
+        _record_timing(timings_ms, "expand_graph_seed_prefetch", stage_t0)
 
         # Step 2 — REFERENCES edges (explicit document cross-references,
         # e.g. a statute article citing another article). Runs first
@@ -202,24 +208,34 @@ class GraphExpander:
         # category / chunk expansion. Turns "follow the citation"
         # multi-hop retrieval into a single structural hop.
         # No-op on corpora without REFERENCES edges.
+        stage_t0 = time()
         await self._expand_references(seed_nodes, state, reads)
+        _record_timing(timings_ms, "expand_graph_references", stage_t0)
 
         # Step 3 — walk category siblings. Categories are a cheap way
         # to surface cross-document context that lexical FTS misses.
+        stage_t0 = time()
         await self._expand_category_siblings(anchors, state, reads)
+        _record_timing(timings_ms, "expand_graph_category", stage_t0)
 
         # Step 4 — for every seed document, pull its chunks; for every
         # seed chunk, pull its parent document (and its sibling chunks).
         # This is the "stay inside the same document" expansion.
+        stage_t0 = time()
         await self._expand_document_scope(seed_nodes, state, reads)
+        _record_timing(timings_ms, "expand_graph_document", stage_t0)
 
         # Step 5 — chunk-next sequence walk. Cheap and often useful for
         # narrative documents where the relevant answer spans neighbours.
+        stage_t0 = time()
         await self._expand_chunk_next(seed_nodes, state, reads)
+        _record_timing(timings_ms, "expand_graph_chunk_next", stage_t0)
 
         # Step 6 — entity mentions. Only triggers if the corpus has
         # ENTITY hub nodes (post-processed by EntityLinker).
+        stage_t0 = time()
         await self._expand_entity_mentions(seed_nodes, state, reads)
+        _record_timing(timings_ms, "expand_graph_entity", stage_t0)
 
         # Step 7 — RELATED edges (FK relationships for structured data) and
         # opt-in OpenIE semantic relation edges.
@@ -228,7 +244,9 @@ class GraphExpander:
         # product→reviews). For OpenIE entity hubs, typed relation edges
         # represent memory facts (e.g., concept→depends_on→policy). These are
         # valuable for relation-only discovery that lexical RAG cannot see.
+        stage_t0 = time()
         await self._expand_related(seed_nodes, state, reads)
+        _record_timing(timings_ms, "expand_graph_related", stage_t0)
 
         return state.results()
 
@@ -530,6 +548,12 @@ def _edge_confidence(edge: object) -> float:
         return max(0.0, min(1.0, float(raw)))
     except (TypeError, ValueError):
         return 1.0
+
+
+def _record_timing(timings_ms: dict[str, float] | None, key: str, started_at: float) -> None:
+    if timings_ms is None:
+        return
+    timings_ms[key] = timings_ms.get(key, 0.0) + (time() - started_at) * 1000
 
 
 @dataclass(slots=True)

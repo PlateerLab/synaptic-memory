@@ -665,6 +665,7 @@ class EvidenceSearch:
                 budget=self._expansion_budget,
                 query_terms=q_terms,
                 read_cache=graph_reads,
+                timings_ms=timings_ms,
             )
         else:
             # Ablation: skip graph expansion — feed only the seeds (as 0-hop

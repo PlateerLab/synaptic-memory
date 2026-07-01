@@ -108,6 +108,31 @@ class TestSeedPath:
         assert results[0].reason == "seed"
         assert results[0].hops == 0
 
+    async def test_optional_timings_break_down_expansion_paths(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        nodes = await _build_fixture(backend)
+        expander = GraphExpander(backend=backend)
+        timings: dict[str, float] = {}
+
+        await expander.expand(
+            anchors=QueryAnchors(query="규정", categories=["규정"], category_node_ids=["cat_rule"]),
+            seed_nodes=[nodes["chunk_r1a"]],
+            timings_ms=timings,
+        )
+
+        assert {
+            "expand_graph_seed",
+            "expand_graph_seed_prefetch",
+            "expand_graph_references",
+            "expand_graph_category",
+            "expand_graph_document",
+            "expand_graph_chunk_next",
+            "expand_graph_entity",
+            "expand_graph_related",
+        }.issubset(timings)
+        assert all(value >= 0 for value in timings.values())
+
 
 # --- Category sibling expansion ---
 
