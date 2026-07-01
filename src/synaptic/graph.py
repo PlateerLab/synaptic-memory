@@ -3369,13 +3369,23 @@ class SynapticGraph:
             MemorySignalKind.REPEATED_FAILURE,
             MemorySignalKind.DRIFT_SPIKE,
         }
+        growth_kinds = {
+            MemorySignalKind.NEW_ENTITY,
+            MemorySignalKind.NEW_RELATION,
+            MemorySignalKind.RELATION_REINFORCED,
+        }
         suspect_node_counts: Counter[str] = Counter()
         suspect_edge_counts: Counter[str] = Counter()
+        growth_node_counts: Counter[str] = Counter()
+        growth_edge_counts: Counter[str] = Counter()
         for signal in signals:
-            if MemorySignalKind(str(signal.kind)) not in suspect_kinds:
-                continue
-            suspect_node_counts.update(signal.node_ids)
-            suspect_edge_counts.update(signal.edge_ids)
+            signal_kind = MemorySignalKind(str(signal.kind))
+            if signal_kind in suspect_kinds:
+                suspect_node_counts.update(signal.node_ids)
+                suspect_edge_counts.update(signal.edge_ids)
+            if signal_kind in growth_kinds:
+                growth_node_counts.update(signal.node_ids)
+                growth_edge_counts.update(signal.edge_ids)
         openie_nodes = sum(
             1
             for node in nodes
@@ -3513,6 +3523,14 @@ class SynapticGraph:
             ),
             drift_spike_count=signal_kinds.count(MemorySignalKind.DRIFT_SPIKE),
             signal_kind_counts=dict(signal_kind_counts),
+            top_growth_node_ids=[node_id for node_id, _ in growth_node_counts.most_common(10)],
+            top_growth_edge_ids=[edge_id for edge_id, _ in growth_edge_counts.most_common(10)],
+            top_growth_node_counts={
+                node_id: count for node_id, count in growth_node_counts.most_common(10)
+            },
+            top_growth_edge_counts={
+                edge_id: count for edge_id, count in growth_edge_counts.most_common(10)
+            },
             feedback_event_count=feedback_event_count,
             feedback_success_count=feedback_success_count,
             feedback_failure_count=feedback_failure_count,

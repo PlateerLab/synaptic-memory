@@ -1813,6 +1813,13 @@ per-chunk fallback을 유지한다.
   `top_feedback_success_node_counts={"poc_consolidation_candidate": 3, "poc_hebbian_left": 1, "poc_hebbian_right": 1, "31a23be60d364c14": 1}`,
   `top_feedback_failure_node_counts={"poc_scoped_negative_memory": 1}`,
   `top_feedback_neutral_node_counts={"31a23be60d364c14": 1}`였다.
+- Memory health growth target summaries는 `new_entity`, `new_relation`,
+  `relation_reinforced` lifecycle signal이 가리키는 node/edge를 target count map으로 노출한다.
+  증가하는 데이터가 어떤 기억과 관계를 실제로 키우는지 health report에서 바로 볼 수 있다.
+  POC gate는 `health_reports_growth_targets`를 추가해 `51/51` PASS했다. 대표 결과는
+  `top_growth_node_counts`에 `poc_growth_entity=3`, `top_growth_edge_counts`에
+  `poc_growth_reinforced_relation=2`가 포함됐고,
+  `signal_kind_counts={"new_entity": 3, "relation_reinforced": 1, "new_relation": 5, ...}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
