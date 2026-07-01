@@ -951,8 +951,9 @@ Memory health snapshot:
 | SQLite FTS skip embedding materialization | `mz_openie_fts_skip_embedding_rerun_results.json` | `0.8s` | `0:10.18` | PASS |
 | EvidenceAggregator sorted pool fast path | `mz_openie_agg_sort_refindex_rerun_results.json` | `0.9s` | `0:11.33` | PASS |
 | GraphExpander category light edge reads | `mz_openie_category_light_edges_rerun_results.json` | `2.7s` | `0:18.44` | PASS |
+| GraphExpander selective relation light reads | `mz_openie_selective_related_light_results.json` | `0.8s` | `0:10.96` | PASS |
 
-핵심 검색/게이트 지표는 최신 GraphExpander category light edge reads rerun에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 GraphExpander selective relation light reads rerun에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -970,22 +971,22 @@ Memory health snapshot:
 | aggregate pool limit | `30 avg/query` |
 | FTS seed count | `1,128 total / 25.6 avg` |
 | scored candidates | baseline `1,266 / 28.8 avg`, OpenIE `1,508 / 34.3 avg` |
-| baseline aggregate stage | `44.0ms total / 1.0ms avg` |
-| OpenIE aggregate stage | `40.5ms total / 0.9ms avg` |
-| baseline FTS stage | `47.3ms total / 1.1ms avg` |
-| OpenIE FTS stage | `50.3ms total / 1.1ms avg` |
-| baseline expand stage | `30.2ms total / 0.7ms avg` |
-| baseline expand_graph / expand_ppr | `29.2ms / 0.9ms` |
-| baseline graph references / document | `3.8ms / 13.0ms` |
+| baseline aggregate stage | `42.9ms total / 1.0ms avg` |
+| OpenIE aggregate stage | `40.1ms total / 0.9ms avg` |
+| baseline FTS stage | `45.5ms total / 1.0ms avg` |
+| OpenIE FTS stage | `48.6ms total / 1.1ms avg` |
+| baseline expand stage | `30.6ms total / 0.7ms avg` |
+| baseline expand_graph / expand_ppr | `29.6ms / 0.9ms` |
+| baseline graph references / document | `3.8ms / 13.3ms` |
 | baseline graph category | `0.07ms total / 0.002ms avg` |
-| baseline PPR bfs / iterate | `0.7ms / 0.1ms` |
+| baseline PPR bfs / iterate | `0.6ms / 0.1ms` |
 | baseline PPR added candidates | `0 total / 0.0 avg` |
 | baseline PPR seed count | `1,128 total / 25.6 avg` |
-| OpenIE expand stage | `42.7ms total / 1.0ms avg` |
-| OpenIE expand_graph / expand_ppr | `40.4ms / 2.3ms` |
-| OpenIE graph references / document | `4.1ms / 12.3ms` |
-| OpenIE graph related / entity | `9.7ms / 9.0ms` |
-| OpenIE graph category | `0.07ms total / 0.002ms avg` |
+| OpenIE expand stage | `40.8ms total / 0.9ms avg` |
+| OpenIE expand_graph / expand_ppr | `38.5ms / 2.2ms` |
+| OpenIE graph references / document | `3.8ms / 11.5ms` |
+| OpenIE graph related / entity | `9.5ms / 8.6ms` |
+| OpenIE graph category | `0.06ms total / 0.001ms avg` |
 | OpenIE PPR bfs / iterate | `0.8ms / 0.3ms` |
 | OpenIE PPR skipped saturated | `37/44 queries` |
 | OpenIE PPR result count | `68 total / 1.5 avg` |
@@ -1278,6 +1279,20 @@ per-chunk fallback을 유지한다.
   `138.3ms -> 137.4ms`였다. Category path 자체는 `0.03-0.07ms` 수준이라 wall-time
   claim보다 read-shape correctness와 large-category materialization reduction으로
   해석한다.
+- GraphExpander selective relation light reads는 relation expansion에서 generic
+  `RELATED` edge는 traversal fields만 materialize하고, `DEPENDS_ON`, `PART_OF`,
+  `CAUSED` 같은 typed OpenIE relation만 provenance metadata를 유지한다. 단순히
+  `RELATED`와 typed relation을 두 번 읽으면 SQLite round-trip이 늘고 related evidence가
+  `47/93 -> 46/93`으로 흔들렸기 때문에, backend optional method
+  `get_edges_batch_filtered_selective_light()`와 `GraphReadCache` wrapper를 추가해 한 번의
+  filtered read 안에서 light/full materialization을 나눈다. Memory/SQLite tests는
+  `RELATED` properties가 비워지고 typed relation confidence는 유지되는지 확인한다.
+  200-chunk cache-only gate는 PASS했고, R@5 no-regress, relation expanded/evidence
+  `93/93`, `47/93`, scored candidates baseline/OpenIE `1,266/1,508`을 유지했다.
+  최신 run 기준 OpenIE graph related path는 `9.7ms -> 9.5ms`, OpenIE total search는
+  `137.4ms -> 133.4ms`였다. 작은 run의 wall time은 FTS/SQLite noise가 있으므로,
+  이 변화는 broad speedup claim보다 provenance-free RELATED materialization을 제거하는
+  no-regress foundation으로 해석한다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

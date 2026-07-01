@@ -191,6 +191,50 @@ class MemoryBackend:
     ) -> dict[str, list[Edge]]:
         return await self.get_edges_batch_filtered(node_ids, direction=direction, kinds=kinds)
 
+    async def get_edges_batch_filtered_selective_light(
+        self,
+        node_ids: list[str],
+        *,
+        direction: str = "both",
+        light_kinds: Sequence[str | EdgeKind],
+        full_kinds: Sequence[str | EdgeKind],
+    ) -> dict[str, list[Edge]]:
+        result: dict[str, list[Edge]] = {nid: [] for nid in dict.fromkeys(node_ids)}
+        if not result:
+            return result
+        light_set = {
+            kind.value if isinstance(kind, EdgeKind) else str(kind) for kind in light_kinds
+        }
+        full_set = {kind.value if isinstance(kind, EdgeKind) else str(kind) for kind in full_kinds}
+        kind_set = light_set | full_set
+        if not kind_set:
+            return result
+        node_set = set(result)
+        for edge in self._edges.values():
+            edge_kind = edge.kind.value if isinstance(edge.kind, EdgeKind) else str(edge.kind)
+            if edge_kind not in kind_set:
+                continue
+            materialized = edge
+            if edge_kind in light_set:
+                materialized = Edge(
+                    id=edge.id,
+                    source_id=edge.source_id,
+                    target_id=edge.target_id,
+                    kind=edge.kind,
+                    weight=edge.weight,
+                    properties={},
+                    created_at=edge.created_at,
+                )
+            if direction in ("both", "outgoing") and edge.source_id in node_set:
+                result[edge.source_id].append(materialized)
+            if (
+                direction in ("both", "incoming")
+                and edge.target_id in node_set
+                and not (direction == "both" and edge.target_id == edge.source_id)
+            ):
+                result[edge.target_id].append(materialized)
+        return result
+
     async def has_edges_of_kind(self, kind: str | EdgeKind) -> bool:
         kind_value = kind.value if isinstance(kind, EdgeKind) else str(kind)
         return any(

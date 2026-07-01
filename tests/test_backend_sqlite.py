@@ -153,6 +153,44 @@ class TestSQLiteEdges:
         assert light[n1.id][0].kind == EdgeKind.RELATED
         assert light[n1.id][0].properties == {}
 
+    async def test_get_edges_batch_filtered_selective_light_keeps_only_full_properties(
+        self, sqlite: SQLiteBackend
+    ) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        n3 = Node(title="C")
+        for node in (n1, n2, n3):
+            await sqlite.save_node(node)
+        await sqlite.save_edge(
+            Edge(
+                id="related",
+                source_id=n1.id,
+                target_id=n2.id,
+                kind=EdgeKind.RELATED,
+                properties={"confidence": "0.6"},
+            )
+        )
+        await sqlite.save_edge(
+            Edge(
+                id="depends",
+                source_id=n1.id,
+                target_id=n3.id,
+                kind=EdgeKind.DEPENDS_ON,
+                properties={"confidence": "0.9", "is_openie": "true"},
+            )
+        )
+
+        mixed = await sqlite.get_edges_batch_filtered_selective_light(
+            [n1.id],
+            direction="both",
+            light_kinds=[EdgeKind.RELATED],
+            full_kinds=[EdgeKind.DEPENDS_ON],
+        )
+
+        by_id = {edge.id: edge for edge in mixed[n1.id]}
+        assert by_id["related"].properties == {}
+        assert by_id["depends"].properties["confidence"] == "0.9"
+
     async def test_has_edges_of_kind_tracks_existing_edge_kinds(
         self, sqlite: SQLiteBackend
     ) -> None:

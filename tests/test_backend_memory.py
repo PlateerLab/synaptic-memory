@@ -114,6 +114,44 @@ class TestMemoryBackendEdges:
         assert incoming[n1.id][0].id == "c_a"
         assert incoming[n2.id][0].id == "a_b"
 
+    async def test_get_edges_batch_filtered_selective_light_keeps_only_full_properties(
+        self, backend: MemoryBackend
+    ) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        n3 = Node(title="C")
+        for node in (n1, n2, n3):
+            await backend.save_node(node)
+        await backend.save_edge(
+            Edge(
+                id="related",
+                source_id=n1.id,
+                target_id=n2.id,
+                kind=EdgeKind.RELATED,
+                properties={"confidence": "0.6"},
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="depends",
+                source_id=n1.id,
+                target_id=n3.id,
+                kind=EdgeKind.DEPENDS_ON,
+                properties={"confidence": "0.9", "is_openie": "true"},
+            )
+        )
+
+        mixed = await backend.get_edges_batch_filtered_selective_light(
+            [n1.id],
+            direction="both",
+            light_kinds=[EdgeKind.RELATED],
+            full_kinds=[EdgeKind.DEPENDS_ON],
+        )
+
+        by_id = {edge.id: edge for edge in mixed[n1.id]}
+        assert by_id["related"].properties == {}
+        assert by_id["depends"].properties["confidence"] == "0.9"
+
 
 class TestMemoryBackendSearch:
     async def test_fts_basic(self, backend: MemoryBackend) -> None:

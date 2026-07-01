@@ -542,8 +542,8 @@ async def test_references_expansion_skips_edge_reads_when_kind_absent():
         ) -> dict[str, list[Edge]]:
             kind_values = tuple(sorted(str(kind) for kind in kinds))
             self.edge_filtered_light_batch_calls.append((tuple(node_ids), direction, kind_values))
-            return await super().get_edges_batch_filtered_light(
-                node_ids, direction=direction, kinds=kinds
+            return await MemoryBackend.get_edges_batch_filtered(
+                self, node_ids, direction=direction, kinds=kinds
             )
 
     backend = CountingMemoryBackend()
@@ -577,6 +577,9 @@ async def test_seed_edges_are_cached_across_expansion_paths():
             self.edge_filtered_batch_calls: list[tuple[tuple[str, ...], str, tuple[str, ...]]] = []
             self.edge_filtered_light_batch_calls: list[
                 tuple[tuple[str, ...], str, tuple[str, ...]]
+            ] = []
+            self.edge_selective_batch_calls: list[
+                tuple[tuple[str, ...], str, tuple[str, ...], tuple[str, ...]]
             ] = []
             self.node_calls: list[str] = []
             self.node_batch_calls: list[tuple[str, ...]] = []
@@ -621,8 +624,29 @@ async def test_seed_edges_are_cached_across_expansion_paths():
         ) -> dict[str, list[Edge]]:
             kind_values = tuple(sorted(str(kind) for kind in kinds))
             self.edge_filtered_light_batch_calls.append((tuple(node_ids), direction, kind_values))
-            return await super().get_edges_batch_filtered_light(
-                node_ids, direction=direction, kinds=kinds
+            return await MemoryBackend.get_edges_batch_filtered(
+                self, node_ids, direction=direction, kinds=kinds
+            )
+
+        async def get_edges_batch_filtered_selective_light(
+            self,
+            node_ids: list[str],
+            *,
+            direction: str = "both",
+            light_kinds: list[str | EdgeKind],
+            full_kinds: list[str | EdgeKind],
+        ) -> dict[str, list[Edge]]:
+            light_values = tuple(sorted(str(kind) for kind in light_kinds))
+            full_values = tuple(sorted(str(kind) for kind in full_kinds))
+            self.edge_selective_batch_calls.append(
+                (tuple(node_ids), direction, light_values, full_values)
+            )
+            return await MemoryBackend.get_edges_batch_filtered_selective_light(
+                self,
+                node_ids,
+                direction=direction,
+                light_kinds=light_kinds,
+                full_kinds=full_kinds,
             )
 
     backend = CountingMemoryBackend()
@@ -630,15 +654,31 @@ async def test_seed_edges_are_cached_across_expansion_paths():
     seed = Node(id="seed", kind=NodeKind.ENTITY, title="Seed", content="seed")
     cited = Node(id="cited", kind=NodeKind.ENTITY, title="Cited", content="cited")
     related = Node(id="related", kind=NodeKind.ENTITY, title="Related", content="related")
-    for node in (seed, cited, related):
+    semantic = Node(id="semantic", kind=NodeKind.ENTITY, title="Semantic", content="semantic")
+    for node in (seed, cited, related, semantic):
         await backend.save_node(node)
     await backend.save_edge(Edge(source_id=seed.id, target_id=cited.id, kind=EdgeKind.REFERENCES))
-    await backend.save_edge(Edge(source_id=seed.id, target_id=related.id, kind=EdgeKind.RELATED))
+    await backend.save_edge(
+        Edge(source_id=seed.id, target_id=related.id, kind=EdgeKind.RELATED, weight=0.6)
+    )
+    await backend.save_edge(
+        Edge(
+            source_id=seed.id,
+            target_id=semantic.id,
+            kind=EdgeKind.DEPENDS_ON,
+            properties={"is_openie": "true", "confidence": "0.7"},
+        )
+    )
 
     expander = GraphExpander(backend=backend)
     results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[seed])
 
-    assert {"cited", "related"}.issubset({r.node.id for r in results})
+    by_id = {r.node.id: r for r in results}
+    assert {"cited", "related", "semantic"}.issubset(by_id)
+    assert by_id["related"].reason == "related"
+    assert by_id["related"].edge_confidence == pytest.approx(0.6)
+    assert by_id["semantic"].reason == "semantic_relation"
+    assert by_id["semantic"].edge_confidence == pytest.approx(0.7)
     assert backend.edge_calls == []
     assert backend.edge_batch_calls == []
     assert any(
@@ -646,12 +686,17 @@ async def test_seed_edges_are_cached_across_expansion_paths():
         for call in backend.edge_filtered_light_batch_calls
     )
     assert any(
-        call[0] == ("seed",) and call[1] == "both" and str(EdgeKind.RELATED) in call[2]
-        for call in backend.edge_filtered_batch_calls
+        call[0] == ("seed",)
+        and call[1] == "both"
+        and call[2] == (str(EdgeKind.RELATED),)
+        and str(EdgeKind.DEPENDS_ON) in call[3]
+        and str(EdgeKind.RELATED) not in call[3]
+        for call in backend.edge_selective_batch_calls
     )
+    assert all(str(EdgeKind.RELATED) not in call[2] for call in backend.edge_filtered_batch_calls)
     assert backend.node_calls == []
     assert ("cited",) in backend.node_batch_calls
-    assert ("related",) in backend.node_batch_calls
+    assert any({"related", "semantic"}.issubset(call) for call in backend.node_batch_calls)
 
 
 @pytest.mark.asyncio

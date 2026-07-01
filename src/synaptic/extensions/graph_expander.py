@@ -83,6 +83,7 @@ _OPENIE_ENTITY_RELATION_KINDS = {
     EdgeKind.CONTRADICTS,
     EdgeKind.SUPERSEDES,
 }
+_OPENIE_TYPED_RELATION_KINDS = _OPENIE_ENTITY_RELATION_KINDS - {EdgeKind.RELATED}
 
 
 @dataclass(slots=True)
@@ -573,11 +574,13 @@ class GraphExpander:
         node_ids: list[str] = []
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
+        entity_ids = [node.id for node in entities]
         try:
-            edge_map = await reads.get_edges_many_by_kind(
-                [node.id for node in entities],
+            edge_map = await reads.get_edges_many_by_kind_selective_light(
+                entity_ids,
                 direction="both",
-                kinds=sorted(_OPENIE_ENTITY_RELATION_KINDS, key=lambda kind: kind.value),
+                light_kinds=[EdgeKind.RELATED],
+                full_kinds=sorted(_OPENIE_TYPED_RELATION_KINDS, key=lambda kind: kind.value),
             )
         except Exception as exc:
             logger.debug("related edge batch failed for entity seeds: %s", exc)
