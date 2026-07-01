@@ -257,6 +257,7 @@ class TestPipelineShape:
             "ppr_result_count",
             "ppr_missing_count",
             "ppr_added_count",
+            "ppr_skipped_saturated",
             "expanded_count",
             "scored_count",
             "evidence_count",
@@ -475,6 +476,41 @@ class TestPipelineShape:
 
         assert result.diagnostics["ppr_result_count"] == 3.0
         assert result.diagnostics["ppr_missing_count"] <= 3.0
+
+    async def test_ppr_skips_when_expanded_saturates_aggregate_pool(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        seed = Node(
+            id="seed",
+            kind=NodeKind.CHUNK,
+            title="seedonly",
+            content="seedonly lexical anchor",
+        )
+        direct = Node(
+            id="direct",
+            kind=NodeKind.CHUNK,
+            title="direct",
+            content="direct graph neighbour",
+        )
+        await backend.save_node(seed)
+        await backend.save_node(direct)
+        await backend.save_edge(
+            Edge(
+                id="seed_direct",
+                source_id=seed.id,
+                target_id=direct.id,
+                kind=EdgeKind.RELATED,
+            )
+        )
+
+        result = await EvidenceSearch(
+            backend=backend,
+            aggregate_candidate_pool_limit=1,
+        ).search("seedonly", k=3)
+
+        assert result.diagnostics["ppr_skipped_saturated"] == 1.0
+        assert result.diagnostics["ppr_result_count"] == 0.0
+        assert "direct" not in {item.node.id for item in result.expanded}
 
     async def test_openie_entity_seed_does_not_crowd_source_evidence(self):
         backend = MemoryBackend()

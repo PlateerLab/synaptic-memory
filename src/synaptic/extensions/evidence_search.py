@@ -722,6 +722,11 @@ class EvidenceSearch:
             ]
         timings_ms["expand_graph"] = (time() - graph_stage_t0) * 1000
         diagnostics["expanded_count_before_ppr"] = float(len(expanded))
+        aggregate_pool_limit = (
+            _aggregate_candidate_pool_limit(k)
+            if self._aggregate_candidate_pool_limit is None
+            else max(0, self._aggregate_candidate_pool_limit)
+        )
 
         # Step 3b — PPR graph discovery. Uses FTS seeds as teleport
         # nodes and walks the graph via PPR to find nodes reachable
@@ -735,7 +740,9 @@ class EvidenceSearch:
         diagnostics["ppr_result_count"] = 0.0
         diagnostics["ppr_missing_count"] = 0.0
         diagnostics["ppr_added_count"] = 0.0
-        if ppr_seed_scores and self._graph_expansion:
+        ppr_skipped_saturated = aggregate_pool_limit > 0 and len(expanded) >= aggregate_pool_limit
+        diagnostics["ppr_skipped_saturated"] = 1.0 if ppr_skipped_saturated else 0.0
+        if ppr_seed_scores and self._graph_expansion and not ppr_skipped_saturated:
             try:
                 ppr_timings: dict[str, float] = {}
                 ppr_results = await personalized_pagerank(
@@ -907,11 +914,6 @@ class EvidenceSearch:
 
         # Step 5 — evidence aggregation with diversity
         stage_t0 = time()
-        aggregate_pool_limit = (
-            _aggregate_candidate_pool_limit(k)
-            if self._aggregate_candidate_pool_limit is None
-            else max(0, self._aggregate_candidate_pool_limit)
-        )
         evidence = self._aggregator.aggregate(
             scored=scored,
             k=k,

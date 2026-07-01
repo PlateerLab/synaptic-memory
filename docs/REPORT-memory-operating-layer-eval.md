@@ -940,8 +940,9 @@ Memory health snapshot:
 | EvidenceSearch aggregate pool min v2 | `mz_openie_aggpool48_results.json` | `1.7s` | `0:06.01` | PASS |
 | EvidenceSearch aggregate pool min v3 | `mz_openie_aggpool24_results.json` | `0.8s` | `0:05.76` | PASS |
 | EvidenceSearch PPR result cap v2 | `mz_openie_pprtop1_results.json` | `2.4s` | `0:10.01` | PASS |
+| EvidenceSearch saturated PPR skip | `mz_openie_pprskip_saturated_results.json` | `0.8s` | `0:10.03` | PASS |
 
-핵심 검색/게이트 지표는 최신 EvidenceSearch PPR result cap v2 run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 EvidenceSearch saturated PPR skip run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -958,23 +959,24 @@ Memory health snapshot:
 | suspect memories | `31` |
 | aggregate pool limit | `30 avg/query` |
 | FTS seed count | `2,238 total / 50.9 avg` |
-| scored candidates | baseline `2,610 / 59.3 avg`, OpenIE `3,277 / 74.5 avg` |
-| baseline aggregate stage | `85.4ms total / 1.9ms avg` |
-| OpenIE aggregate stage | `84.0ms total / 1.9ms avg` |
-| baseline FTS stage | `68.9ms total / 1.6ms avg` |
-| OpenIE FTS stage | `71.9ms total / 1.6ms avg` |
-| baseline expand stage | `60.7ms total / 1.4ms avg` |
-| baseline expand_graph / expand_ppr | `46.8ms / 13.9ms` |
-| baseline graph seed_prefetch / document | `0.0ms / 20.4ms` |
-| baseline PPR bfs / iterate | `7.3ms / 4.1ms` |
+| scored candidates | baseline `2,610 / 59.3 avg`, OpenIE `3,212 / 73.0 avg` |
+| baseline aggregate stage | `87.1ms total / 2.0ms avg` |
+| OpenIE aggregate stage | `89.0ms total / 2.0ms avg` |
+| baseline FTS stage | `70.7ms total / 1.6ms avg` |
+| OpenIE FTS stage | `74.5ms total / 1.7ms avg` |
+| baseline expand stage | `48.9ms total / 1.1ms avg` |
+| baseline expand_graph / expand_ppr | `47.6ms / 1.2ms` |
+| baseline graph seed_prefetch / document | `0.0ms / 20.7ms` |
+| baseline PPR bfs / iterate | `0.7ms / 0.1ms` |
 | baseline PPR added candidates | `0 total / 0.0 avg` |
 | baseline PPR seed count | `1,202 total / 27.3 avg` |
-| OpenIE expand stage | `105.9ms total / 2.4ms avg` |
-| OpenIE expand_graph / expand_ppr | `67.9ms / 37.9ms` |
-| OpenIE graph seed_prefetch / document | `0.0ms / 20.0ms` |
-| OpenIE PPR bfs / iterate | `16.4ms / 11.8ms` |
-| OpenIE PPR result count | `1,178 total / 26.8 avg` |
-| OpenIE PPR added candidates | `115 total / 2.6 avg` |
+| OpenIE expand stage | `74.9ms total / 1.7ms avg` |
+| OpenIE expand_graph / expand_ppr | `72.3ms / 2.5ms` |
+| OpenIE graph seed_prefetch / document | `0.0ms / 21.5ms` |
+| OpenIE PPR bfs / iterate | `0.8ms / 0.3ms` |
+| OpenIE PPR skipped saturated | `37/44 queries` |
+| OpenIE PPR result count | `68 total / 1.5 avg` |
+| OpenIE PPR added candidates | `50 total / 1.1 avg` |
 | OpenIE PPR seed count | `1,202 total / 27.3 avg` |
 
 주의: PR #17은 OpenIE entity node의 불필요한 `updated_at` 갱신을 줄이므로,
@@ -1167,6 +1169,14 @@ per-chunk fallback을 유지한다.
   OpenIE expand stage는 `110.3ms -> 105.9ms`로 소폭 감소했다. 같은 run의 FTS와
   OpenIE replay elapsed는 흔들렸으므로, 이 변화는 full-wall speedup이 아니라
   useful relation discovery를 유지한 candidate-pressure reduction으로 해석한다.
+- EvidenceSearch saturated PPR skip은 aggregate cap이 켜져 있고 GraphExpander가
+  이미 final aggregate pool 이상의 후보를 만든 query에서 discovery PPR을 생략한다.
+  PPR은 현재 expanded set 밖 후보를 추가하는 데만 쓰이므로, 후보 풀이 이미 충분한
+  query에서는 downstream recall을 해치지 않고 graph materialisation/iteration을
+  피할 수 있다. 200-chunk cache-only gate는 PASS했고, R@5 no-regress,
+  relation expanded/evidence `93/93`, `47/93`를 유지했다. PPR은 `37/44`개 query에서
+  skip됐고, OpenIE PPR stage는 `37.9ms -> 2.5ms`, OpenIE expand stage는
+  `105.9ms -> 74.9ms`, scored candidates는 `3,277 -> 3,212`로 줄었다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
@@ -1180,10 +1190,10 @@ per-chunk fallback을 유지한다.
 - 50-chunk OpenIE link micro-benchmark는 run-level materialization에서
   `save_nodes_batch=1`, `save_openie_edges_batch=1`로 완료됐다.
 - 남은 큰 검색-stage 비용은 FTS, aggregate selection, OpenIE GraphExpander의
-  seed prefetch/document-scope path, 그리고 OpenIE PPR의 useful-candidate cost다.
-  PPR BFS/read, baseline document ingest write path, OpenIE replay write path,
-  aggregate tokenisation/Jaccard recomputation path는 200-chunk gate 기준으로 더
-  이상 지배 병목이 아니다.
+  document-scope/related/entity path다. Saturated PPR skip 이후 PPR BFS/read/iterate는
+  200-chunk gate 기준으로 더 이상 지배 병목이 아니다. Baseline document ingest
+  write path, OpenIE replay write path, aggregate tokenisation/Jaccard recomputation
+  path도 같은 기준에서 지배 병목이 아니다.
 
 ---
 
