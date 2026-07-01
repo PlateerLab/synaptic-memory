@@ -955,6 +955,7 @@ Memory health snapshot:
 | GraphExpander entity hub mention filter | `mz_openie_entity_hub_mentions_rerun_results.json` | `0.7s` | `0:05.59` | PASS |
 | GraphExpander document related skip | `mz_openie_skip_document_related_results.json` | `1.0s` | `0:10.70` | PASS |
 | GraphExpander document-scope PART_OF guard | `mz_openie_document_scope_partof_results.json` | `1.7s` | `0:09.18` | PASS |
+| SQLite FTS light LIKE fallback | `mz_openie_fts_like_light_results.json` | `2.5s` | `0:10.13` | PASS |
 
 핵심 검색/게이트 지표는 GraphExpander document related skip run에서도 유지됐다:
 
@@ -1325,6 +1326,15 @@ per-chunk fallback을 유지한다.
   expanded/evidence `93/93`, `47/93`, scored candidates baseline/OpenIE `1,266/1,508`을
   유지했다. 이 run에서는 candidate count 변화가 없어 performance claim보다 graph path
   semantics cleanup으로 해석한다.
+- SQLite FTS light LIKE fallback은 FTS5가 못 잡은 substring 후보를 보충할 때 처음부터
+  full `syn_nodes` row를 materialize하지 않고 `id/title/content`만 읽어 substring 점수를
+  계산한 뒤, 최종 `limit`에 살아남는 LIKE 후보만 full node로 로드한다. FTS5 hit band와
+  LIKE fallback band, `with_scores=True` contract, `include_embedding=False` 동작은 유지한다.
+  200-chunk cache-only gate는 두 번 모두 PASS했고, R@5 no-regress, relation
+  expanded/evidence `93/93`, `47/93`, FTS seed count baseline/OpenIE `1,128/1,128`을
+  유지했다. Run별 FTS latency는 baseline `50.2ms -> 53.4ms -> 46.1ms`, OpenIE
+  `52.8ms -> 49.3ms -> 59.2ms`로 흔들렸으므로 broad speedup claim보다
+  LIKE-fallback JSON/embedding materialization reduction으로 해석한다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

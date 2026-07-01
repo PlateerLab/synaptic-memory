@@ -1350,19 +1350,19 @@ class SQLiteBackend:
             for t in terms:
                 like = f"%{t}%"
                 params.extend([like, like])
-            params.append(_like_fallback_limit(limit, len(scored_nodes)))
-            like_sql = (
-                f"SELECT {_node_select_columns(include_embedding=include_embedding)} "
-                f"FROM syn_nodes WHERE {like_parts} LIMIT ?"
-            )
+            fallback_limit = _like_fallback_limit(limit, len(scored_nodes))
+            params.append(fallback_limit)
+            like_sql = f"SELECT id, title, content FROM syn_nodes WHERE {like_parts} LIMIT ?"
             async with db.execute(like_sql, params) as cur:
                 rows2 = await cur.fetchall()
+
+            like_scored: list[tuple[str, float]] = []
             for r in rows2:
-                node = _row_to_node(r)
-                if node.id in scored_nodes:
+                node_id = r["id"]
+                if node_id in scored_nodes:
                     continue
-                title_lower = node.title.lower()
-                content_lower = node.content.lower()
+                title_lower = (r["title"] or "").lower()
+                content_lower = (r["content"] or "").lower()
                 sub = sum(
                     3.0 if t.lower() in title_lower else 1.0
                     for t in terms
@@ -1370,7 +1370,21 @@ class SQLiteBackend:
                 )
                 if sub > 0:
                     # Use large positive offset so substring hits sort after FTS5
-                    scored_nodes[node.id] = (node, 10000.0 - sub)
+                    like_scored.append((node_id, 10000.0 - sub))
+
+            remaining_slots = max(0, limit - len(scored_nodes))
+            if like_scored and remaining_slots:
+                like_scored.sort(key=lambda item: item[1])
+                survivors = like_scored[:remaining_slots]
+                like_nodes = await _fetch_nodes_by_ids(
+                    db,
+                    [node_id for node_id, _raw in survivors],
+                    include_embedding=include_embedding,
+                )
+                for node_id, raw in survivors:
+                    node = like_nodes.get(node_id)
+                    if node is not None:
+                        scored_nodes[node_id] = (node, raw)
 
         # Sort: FTS5 negatives first (ascending), then substring positives
         ranked = sorted(scored_nodes.values(), key=lambda x: x[1])[:limit]
@@ -1872,6 +1886,24 @@ def _node_select_columns(alias: str = "", *, include_embedding: bool = True) -> 
         for col in _NODE_SELECT_COLUMNS
         if include_embedding or col != "embedding_json"
     )
+
+
+async def _fetch_nodes_by_ids(
+    db: aiosqlite.Connection,
+    node_ids: list[str],
+    *,
+    include_embedding: bool = True,
+) -> dict[str, Node]:
+    if not node_ids:
+        return {}
+    placeholders = ",".join("?" for _ in node_ids)
+    sql = (
+        f"SELECT {_node_select_columns(include_embedding=include_embedding)} "
+        f"FROM syn_nodes WHERE id IN ({placeholders})"
+    )
+    async with db.execute(sql, node_ids) as cur:
+        rows = await cur.fetchall()
+    return {node.id: node for node in (_row_to_node(row) for row in rows)}
 
 
 def _row_to_node(row: aiosqlite.Row) -> Node:

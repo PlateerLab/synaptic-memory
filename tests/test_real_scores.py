@@ -95,6 +95,31 @@ async def test_sqlite_search_fts_respects_requested_limit():
 
 
 @pytest.mark.asyncio
+async def test_sqlite_search_fts_like_fallback_keeps_rank_and_limit():
+    b = SqliteGraphBackend(":memory:")
+    await b.connect()
+    try:
+        title_hit = _chunk("title_hit", "Alpha project", "nothing else")
+        title_hit.embedding = [0.1, 0.2, 0.3]
+        await b.save_node(title_hit)
+        await b.save_node(_chunk("content_hit", "Other", "Alpha appears in content"))
+        await b.save_node(_chunk("miss", "Other", "unrelated"))
+
+        plain = await b.search_fts("lph", limit=1)
+        light = await b.search_fts("lph", limit=1, include_embedding=False)
+        scored = await b.search_fts("lph", limit=1, with_scores=True)
+
+        assert [node.id for node in plain] == ["title_hit"]
+        assert plain[0].embedding == [0.1, 0.2, 0.3]
+        assert [node.id for node in light] == ["title_hit"]
+        assert light[0].embedding == []
+        assert [node.id for node, _score in scored] == ["title_hit"]
+        assert scored[0][1] <= 0.30
+    finally:
+        await b.close()
+
+
+@pytest.mark.asyncio
 async def test_evidence_real_scores_flag_engages_on_sqlite(monkeypatch):
     b = SqliteGraphBackend(":memory:")
     await b.connect()
