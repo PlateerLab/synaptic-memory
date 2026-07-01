@@ -182,6 +182,15 @@ class MemoryBackend:
                 result[edge.target_id].append(edge)
         return result
 
+    async def get_edges_batch_filtered_light(
+        self,
+        node_ids: list[str],
+        *,
+        direction: str = "both",
+        kinds: Sequence[str | EdgeKind],
+    ) -> dict[str, list[Edge]]:
+        return await self.get_edges_batch_filtered(node_ids, direction=direction, kinds=kinds)
+
     async def has_edges_of_kind(self, kind: str | EdgeKind) -> bool:
         kind_value = kind.value if isinstance(kind, EdgeKind) else str(kind)
         return any(

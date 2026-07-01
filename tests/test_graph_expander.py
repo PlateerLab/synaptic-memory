@@ -276,6 +276,9 @@ class TestBudget:
                 self.edge_filtered_batch_calls: list[
                     tuple[tuple[str, ...], str, tuple[str, ...]]
                 ] = []
+                self.edge_filtered_light_batch_calls: list[
+                    tuple[tuple[str, ...], str, tuple[str, ...]]
+                ] = []
 
             async def get_neighbors(
                 self,
@@ -301,6 +304,23 @@ class TestBudget:
                     kinds=kinds,
                 )
 
+            async def get_edges_batch_filtered_light(
+                self,
+                node_ids: list[str],
+                *,
+                direction: str = "both",
+                kinds: list[str | EdgeKind],
+            ) -> dict[str, list[Edge]]:
+                kind_values = tuple(sorted(str(kind) for kind in kinds))
+                self.edge_filtered_light_batch_calls.append(
+                    (tuple(node_ids), direction, kind_values)
+                )
+                return await super().get_edges_batch_filtered_light(
+                    node_ids,
+                    direction=direction,
+                    kinds=kinds,
+                )
+
         backend = CountingMemoryBackend()
         await backend.connect()
         nodes = await _build_fixture(backend)
@@ -319,6 +339,7 @@ class TestBudget:
         assert [r.node.id for r in results] == ["doc_r1"]
         assert backend.neighbor_calls == []
         assert backend.edge_filtered_batch_calls == []
+        assert backend.edge_filtered_light_batch_calls == []
 
     async def test_no_duplicates(self):
         backend = MemoryBackend()
@@ -415,6 +436,9 @@ async def test_references_expansion_skips_edge_reads_when_kind_absent():
             super().__init__()
             self.has_kind_calls: list[str] = []
             self.edge_filtered_batch_calls: list[tuple[tuple[str, ...], str, tuple[str, ...]]] = []
+            self.edge_filtered_light_batch_calls: list[
+                tuple[tuple[str, ...], str, tuple[str, ...]]
+            ] = []
 
         async def has_edges_of_kind(self, kind: str | EdgeKind) -> bool:
             self.has_kind_calls.append(str(kind))
@@ -433,6 +457,19 @@ async def test_references_expansion_skips_edge_reads_when_kind_absent():
                 node_ids, direction=direction, kinds=kinds
             )
 
+        async def get_edges_batch_filtered_light(
+            self,
+            node_ids: list[str],
+            *,
+            direction: str = "both",
+            kinds: list[str | EdgeKind],
+        ) -> dict[str, list[Edge]]:
+            kind_values = tuple(sorted(str(kind) for kind in kinds))
+            self.edge_filtered_light_batch_calls.append((tuple(node_ids), direction, kind_values))
+            return await super().get_edges_batch_filtered_light(
+                node_ids, direction=direction, kinds=kinds
+            )
+
     backend = CountingMemoryBackend()
     await backend.connect()
     seed = Node(id="solo", kind=NodeKind.ENTITY, title="Solo", content="x")
@@ -444,6 +481,11 @@ async def test_references_expansion_skips_edge_reads_when_kind_absent():
     assert [r.reason for r in results] == ["seed"]
     assert backend.has_kind_calls == [str(EdgeKind.REFERENCES)]
     assert (("solo",), "both", (str(EdgeKind.REFERENCES),)) not in backend.edge_filtered_batch_calls
+    assert (
+        ("solo",),
+        "both",
+        (str(EdgeKind.REFERENCES),),
+    ) not in backend.edge_filtered_light_batch_calls
 
 
 @pytest.mark.asyncio
@@ -457,6 +499,9 @@ async def test_seed_edges_are_cached_across_expansion_paths():
             self.edge_calls: list[tuple[str, str]] = []
             self.edge_batch_calls: list[tuple[tuple[str, ...], str]] = []
             self.edge_filtered_batch_calls: list[tuple[tuple[str, ...], str, tuple[str, ...]]] = []
+            self.edge_filtered_light_batch_calls: list[
+                tuple[tuple[str, ...], str, tuple[str, ...]]
+            ] = []
             self.node_calls: list[str] = []
             self.node_batch_calls: list[tuple[str, ...]] = []
 
@@ -491,6 +536,19 @@ async def test_seed_edges_are_cached_across_expansion_paths():
                 node_ids, direction=direction, kinds=kinds
             )
 
+        async def get_edges_batch_filtered_light(
+            self,
+            node_ids: list[str],
+            *,
+            direction: str = "both",
+            kinds: list[str | EdgeKind],
+        ) -> dict[str, list[Edge]]:
+            kind_values = tuple(sorted(str(kind) for kind in kinds))
+            self.edge_filtered_light_batch_calls.append((tuple(node_ids), direction, kind_values))
+            return await super().get_edges_batch_filtered_light(
+                node_ids, direction=direction, kinds=kinds
+            )
+
     backend = CountingMemoryBackend()
     await backend.connect()
     seed = Node(id="seed", kind=NodeKind.ENTITY, title="Seed", content="seed")
@@ -509,7 +567,7 @@ async def test_seed_edges_are_cached_across_expansion_paths():
     assert backend.edge_batch_calls == []
     assert any(
         call == (("seed",), "both", (str(EdgeKind.REFERENCES),))
-        for call in backend.edge_filtered_batch_calls
+        for call in backend.edge_filtered_light_batch_calls
     )
     assert any(
         call[0] == ("seed",) and call[1] == "both" and str(EdgeKind.RELATED) in call[2]
