@@ -917,8 +917,9 @@ Memory health snapshot:
 | PR #19 relation probe read cache | `mz_openie_cache_deepseek_to100_probecache_results.json` | `724.3s` | `15:15.56` | PASS |
 | batched node/event writes | `mz_openie_cache_deepseek_to100_batchnodes_results.json` | `126.0s` | `4:44.47` | PASS |
 | batched document ingest writes | `mz_openie_cache_deepseek_to100_ingestbatch_results.json` | `117.3s` | `2:23.41` | PASS |
+| batched OpenIE link results | `mz_openie_cache_deepseek_to100_linkbatch_results.json` | `3.6s` | `0:31.89` | PASS |
 
-핵심 검색/게이트 지표는 최신 batched document ingest run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 batched OpenIE link results run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -929,10 +930,10 @@ Memory health snapshot:
 | cache hits/misses | `200/0` |
 | OpenIE artifacts | `2,403` |
 | relation edges | `627` |
-| relation expanded lift | `+88` |
-| relation evidence lift | `+33` |
-| memory health signals | `940` |
-| suspect memories | `41` |
+| relation expanded lift | `+89` |
+| relation evidence lift | `+31` |
+| memory health signals | `930` |
+| suspect memories | `31` |
 
 주의: PR #17은 OpenIE entity node의 불필요한 `updated_at` 갱신을 줄이므로,
 relation probe와 health signal의 세부 카운트는 이전 run과 소폭 달라졌다. 다만
@@ -956,6 +957,11 @@ node와 structural edge를 문서마다 flush하지 않고 ingest-run batch로 �
 같은 source 안에 같은 `doc_id`가 다시 나오면 pending writes를 먼저 flush해서
 기존 skip/replace 의미를 유지한다.
 
+batched OpenIE link results run은 `LLMOpenIEExtractor.link_results()`가 selected
+chunks의 extraction 결과를 먼저 deterministic write plan으로 만든 뒤, entity hub
+upsert와 OpenIE edge upsert를 run-level batch로 저장한다. 기존 extractor는
+per-chunk fallback을 유지한다.
+
 성능 변화:
 
 - PR #14 이후 OpenIE elapsed는 `2131.8s -> 1508.6s`로 `29.2%` 감소했다.
@@ -966,6 +972,9 @@ node와 structural edge를 문서마다 flush하지 않고 ingest-run batch로 �
 - batched document ingest write 이후 full wall time은 `35:31.83 -> 2:23.41`로
   `93.3%` 감소했고, 이전 best인 batched node/event write run 대비 `49.6%`
   추가 감소했다.
+- batched OpenIE link results 이후 OpenIE elapsed는 `117.3s -> 3.6s`, full wall
+  time은 `2:23.41 -> 0:31.89`로 추가 감소했다. 최초 fixed run 대비 wall time은
+  `98.5%` 감소했다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
@@ -976,9 +985,11 @@ node와 structural edge를 문서마다 flush하지 않고 ingest-run batch로 �
   `640.20ms`로 `2.72x` 빨랐다. 300-edge old fallback은 1분 이상 걸려 중단했다.
 - 200-doc/200-chunk SQLite ingest micro-benchmark는 document-per-flush path
   `92.006s` 대비 ingest-run batch `2.683s`로 `34.3x` 빨랐다.
-- 남은 큰 비용은 OpenIE replay 자체와 full scoring/probe/gate의 고정 비용이다.
-  Baseline document ingest write path와 OpenIE replay write path는 200-chunk gate
-  기준으로 더 이상 지배 병목이 아니다.
+- 50-chunk OpenIE link micro-benchmark는 run-level materialization에서
+  `save_nodes_batch=1`, `save_openie_edges_batch=1`로 완료됐다.
+- 남은 큰 비용은 full scoring/probe/gate의 고정 비용이다. Baseline document ingest
+  write path와 OpenIE replay write path는 200-chunk gate 기준으로 더 이상 지배
+  병목이 아니다.
 
 ---
 
