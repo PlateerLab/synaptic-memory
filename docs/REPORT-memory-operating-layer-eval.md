@@ -1827,6 +1827,12 @@ per-chunk fallback을 유지한다.
   `feedback_failure_rate=0.142857`, `feedback_neutral_rate=0.142857`,
   `memory_score_positive_rate=0.833333`, `memory_score_negative_rate=0.166667`,
   `memory_score_neutral_rate=0.0`이었다.
+- Memory health signal pressure는 lifecycle/growth signal과 suspect/pollution signal의
+  비율을 health report에 직접 노출한다. 따라서 증가하는 기억이 정상적으로 자라는 중인지,
+  오염/충돌/실패 신호가 같은 비중으로 커지는지 운영자가 count를 직접 나누지 않고 볼 수 있다.
+  POC gate는 `health_reports_signal_pressure`를 추가해 `53/53` PASS했다. 대표 결과는
+  `signal_count=18`, `growth_signal_count=9`, `suspect_count=9`,
+  `growth_signal_rate=0.5`, `suspect_signal_rate=0.5`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

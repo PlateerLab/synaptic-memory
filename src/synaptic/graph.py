@@ -3374,6 +3374,8 @@ class SynapticGraph:
             MemorySignalKind.NEW_RELATION,
             MemorySignalKind.RELATION_REINFORCED,
         }
+        growth_signal_count = sum(1 for kind in signal_kinds if kind in growth_kinds)
+        suspect_signal_count = sum(1 for kind in signal_kinds if kind in suspect_kinds)
         suspect_node_counts: Counter[str] = Counter()
         suspect_edge_counts: Counter[str] = Counter()
         growth_node_counts: Counter[str] = Counter()
@@ -3522,7 +3524,10 @@ class SynapticGraph:
             new_entity_count=signal_kinds.count(MemorySignalKind.NEW_ENTITY),
             new_relation_count=signal_kinds.count(MemorySignalKind.NEW_RELATION),
             relation_reinforced_count=signal_kinds.count(MemorySignalKind.RELATION_REINFORCED),
-            suspect_count=sum(1 for kind in signal_kinds if kind in suspect_kinds),
+            growth_signal_count=growth_signal_count,
+            suspect_count=suspect_signal_count,
+            growth_signal_rate=(growth_signal_count / len(signals) if signals else 0.0),
+            suspect_signal_rate=(suspect_signal_count / len(signals) if signals else 0.0),
             conflict_signal_count=signal_kinds.count(MemorySignalKind.POSSIBLE_CONFLICT),
             possible_supersession_count=signal_kinds.count(MemorySignalKind.POSSIBLE_SUPERSESSION),
             stale_signal_count=signal_kinds.count(MemorySignalKind.STALE_MEMORY),

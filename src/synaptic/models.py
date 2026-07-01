@@ -273,7 +273,10 @@ class MemoryHealthReport:
     new_entity_count: int = 0
     new_relation_count: int = 0
     relation_reinforced_count: int = 0
+    growth_signal_count: int = 0
     suspect_count: int = 0
+    growth_signal_rate: float = 0.0
+    suspect_signal_rate: float = 0.0
     conflict_signal_count: int = 0
     possible_supersession_count: int = 0
     stale_signal_count: int = 0
