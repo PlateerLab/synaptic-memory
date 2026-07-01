@@ -1805,6 +1805,14 @@ per-chunk fallback을 유지한다.
   결과는 `memory_score_count=28`, `memory_score_node_count=24`,
   `memory_score_edge_count=4`, `memory_score_positive_count=24`,
   `memory_score_negative_count=4`, `memory_score_neutral_count=0`이었다.
+- Memory health feedback target summaries는 retrieval feedback ledger의 selected node IDs를
+  전체/성공/실패/중립 target count map으로 노출한다. Score로 가공되기 전의 raw feedback 대상이
+  health report에 남으므로 어떤 기억이 성공/실패 피드백을 받았는지 바로 확인할 수 있다.
+  POC gate는 `health_reports_feedback_targets`를 추가해 `50/50` PASS했다. 대표 결과는
+  `top_feedback_node_counts={"poc_consolidation_candidate": 3, "31a23be60d364c14": 2, "poc_hebbian_left": 1, "poc_hebbian_right": 1, "poc_scoped_negative_memory": 1}`,
+  `top_feedback_success_node_counts={"poc_consolidation_candidate": 3, "poc_hebbian_left": 1, "poc_hebbian_right": 1, "31a23be60d364c14": 1}`,
+  `top_feedback_failure_node_counts={"poc_scoped_negative_memory": 1}`,
+  `top_feedback_neutral_node_counts={"31a23be60d364c14": 1}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

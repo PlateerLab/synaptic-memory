@@ -671,6 +671,12 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and health.feedback_signal_counts.get(str(FeedbackSignal.TASK_SUCCESS), 0) >= 5
                 and health.feedback_signal_counts.get(str(FeedbackSignal.TASK_FAILURE), 0) >= 1
             ),
+            "health_reports_feedback_targets": (
+                health.top_feedback_node_counts.get(selected_node_ids[0], 0) >= 2
+                and health.top_feedback_success_node_counts.get(selected_node_ids[0], 0) >= 1
+                and health.top_feedback_failure_node_counts.get(scoped_negative.id, 0) >= 1
+                and health.top_feedback_neutral_node_counts.get(selected_node_ids[0], 0) >= 1
+            ),
             "health_reports_memory_event_kind_counts": (
                 health.memory_event_kind_counts.get(str(MemoryEventKind.INGEST), 0) >= 1
                 and health.memory_event_kind_counts.get(str(MemoryEventKind.SEMANTIC_EXTRACT), 0)

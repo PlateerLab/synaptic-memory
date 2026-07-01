@@ -1465,6 +1465,14 @@ async def test_memory_health_summarizes_feedback_outcomes():
         str(FeedbackSignal.TASK_SUCCESS): 1,
         str(FeedbackSignal.EXPLICIT_NEGATIVE): 1,
     }
+    assert health.top_feedback_node_ids == ["a", "b"]
+    assert health.top_feedback_success_node_ids == ["a"]
+    assert health.top_feedback_failure_node_ids == ["b"]
+    assert health.top_feedback_neutral_node_ids == ["a"]
+    assert health.top_feedback_node_counts == {"a": 2, "b": 1}
+    assert health.top_feedback_success_node_counts == {"a": 1}
+    assert health.top_feedback_failure_node_counts == {"b": 1}
+    assert health.top_feedback_neutral_node_counts == {"a": 1}
 
 
 @pytest.mark.asyncio
