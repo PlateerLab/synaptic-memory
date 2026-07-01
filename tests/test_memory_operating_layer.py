@@ -1197,7 +1197,7 @@ async def test_memory_monitor_flags_suspect_memory_without_deleting_it():
     await backend.save_node(failed)
     await backend.save_edge(
         Edge(
-            id="openie_c1",
+            id="custom_openie_c1",
             source_id="a",
             target_id="b",
             kind=EdgeKind.CONTRADICTS,
@@ -1214,7 +1214,7 @@ async def test_memory_monitor_flags_suspect_memory_without_deleting_it():
 
     health = await graph.memory_health()
     assert health.suspect_count >= 3
-    assert health.openie_artifact_count >= 1
+    assert health.openie_artifact_count == 1
 
 
 @pytest.mark.asyncio

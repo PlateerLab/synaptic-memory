@@ -3268,7 +3268,11 @@ class SynapticGraph:
             for node in nodes
             if "_openie" in (node.tags or []) or "_openie_entity" in (node.tags or [])
         )
-        openie_edges = sum(1 for edge in edges if edge.id.startswith("openie_"))
+        openie_edges = sum(
+            1
+            for edge in edges
+            if edge.id.startswith("openie_") or _prop_bool(edge.properties, "is_openie")
+        )
         boosted_retrieval_count = 0
         penalized_retrieval_count = 0
         boosted_node_count = 0

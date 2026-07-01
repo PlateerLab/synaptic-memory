@@ -215,7 +215,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             )
 
         openie_edge = Edge(
-            id="openie_poc_alpha_beta",
+            id="poc_alpha_beta_openie_relation",
             source_id=alpha.id,
             target_id=beta.id,
             kind=EdgeKind.RELATED,
@@ -613,6 +613,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 "poc_edge_score_boost_relation" in ranking_health.top_reinforced_edge_ids
                 and len(ranking_health.top_reinforced_node_ids) == 10
             ),
+            "health_counts_openie_edges_by_provenance": health.openie_artifact_count == 1,
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id
                 and roundtrip_openie.properties.get("model") == "deterministic"
