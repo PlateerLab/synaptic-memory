@@ -315,7 +315,7 @@ class GraphExpander:
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
         try:
-            edge_map = await reads.get_edges_many_by_kind(
+            edge_map = await reads.get_edges_many_by_kind_light(
                 [node.id for node in document_scope_seeds],
                 direction="both",
                 kinds=[EdgeKind.CONTAINS, EdgeKind.PART_OF],
@@ -386,7 +386,7 @@ class GraphExpander:
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
         try:
-            edge_map = await reads.get_edges_many_by_kind(
+            edge_map = await reads.get_edges_many_by_kind_light(
                 [node.id for node in chunks],
                 direction="both",
                 kinds=[EdgeKind.NEXT_CHUNK],
@@ -455,7 +455,7 @@ class GraphExpander:
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
         try:
-            edge_map = await reads.get_edges_many_by_kind(
+            edge_map = await reads.get_edges_many_by_kind_light(
                 [node.id for node in entities],
                 direction="incoming",
                 kinds=[EdgeKind.MENTIONS],
@@ -625,7 +625,7 @@ class GraphExpander:
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
         try:
-            edge_map = await reads.get_edges_many_by_kind(
+            edge_map = await reads.get_edges_many_by_kind_light(
                 [node.id for node in seed_nodes],
                 direction="both",
                 kinds=[EdgeKind.REFERENCES],
