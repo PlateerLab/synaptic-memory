@@ -694,6 +694,11 @@ class EvidenceSearch:
                     # not high-precision stationary probabilities.
                     max_iter=20,
                     tol=1e-5,
+                    # GraphExpander has already pulled 1-hop neighbours.
+                    # For discovery, one PPR materialisation layer is enough
+                    # to rank those direct relation targets without reading
+                    # every neighbour's own edge list.
+                    bfs_depth=1,
                     top_k=k * 3,
                     read_cache=graph_reads,
                     timings_ms=ppr_timings,

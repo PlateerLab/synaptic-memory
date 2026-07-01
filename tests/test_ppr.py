@@ -219,6 +219,24 @@ class TestPPRGraph:
         assert nodes[1].id in result_ids
         assert nodes[2].id in result_ids
 
+    async def test_bfs_depth_can_be_lowered_for_discovery(self, graph: SynapticGraph) -> None:
+        """Callers can use shallow PPR discovery to avoid reading second-layer edges."""
+        seed = await graph.add("Seed", "Seed")
+        direct = await graph.add("Direct", "Direct")
+        indirect = await graph.add("Indirect", "Indirect")
+        await graph.link(seed.id, direct.id, kind=EdgeKind.RELATED)
+        await graph.link(direct.id, indirect.id, kind=EdgeKind.RELATED)
+
+        shallow = await personalized_pagerank(graph.backend, {seed.id: 1.0}, bfs_depth=1)
+        default = await personalized_pagerank(graph.backend, {seed.id: 1.0})
+
+        shallow_ids = {nid for nid, _score in shallow}
+        default_ids = {nid for nid, _score in default}
+        assert seed.id in shallow_ids
+        assert direct.id in shallow_ids
+        assert indirect.id not in shallow_ids
+        assert indirect.id in default_ids
+
     async def test_cycle_graph(self, graph: SynapticGraph) -> None:
         """PPR handles cycles gracefully."""
         a = await graph.add("A", "A")

@@ -48,6 +48,7 @@ async def personalized_pagerank(
     max_iter: int = 50,
     tol: float = 1e-6,
     top_k: int = 20,
+    bfs_depth: int = 2,
     read_cache: GraphReadCache | None = None,
     timings_ms: dict[str, float] | None = None,
 ) -> list[tuple[str, float]]:
@@ -64,6 +65,7 @@ async def personalized_pagerank(
         max_iter: Maximum power-iteration steps.
         tol: Convergence threshold (L1 norm of rank change).
         top_k: Number of top-ranked nodes to return.
+        bfs_depth: How many graph layers to materialize from the seeds.
 
     Returns:
         List of (node_id, ppr_score) sorted descending by score.
@@ -78,9 +80,8 @@ async def personalized_pagerank(
     adj: dict[str, list[tuple[str, float]]] = {}
     visited: set[str] = set()
     frontier = set(seed_scores.keys())
-    bfs_depth = 2
 
-    for _ in range(bfs_depth):
+    for _ in range(max(0, bfs_depth)):
         if not frontier:
             break
         next_frontier: set[str] = set()
@@ -166,6 +167,7 @@ async def personalized_pagerank_v2(
     max_iter: int = 50,
     tol: float = 1e-6,
     top_k: int = 20,
+    bfs_depth: int = 2,
     edge_weight_floor: float = 0.15,
     passage_boost: float = 1.5,
     read_cache: GraphReadCache | None = None,
@@ -187,6 +189,7 @@ async def personalized_pagerank_v2(
         max_iter: Max iterations.
         tol: Convergence threshold.
         top_k: Top results to return.
+        bfs_depth: How many graph layers to materialize from the seeds.
         edge_weight_floor: Zero out edges below this weight.
         passage_boost: Teleport weight multiplier for CHUNK nodes.
 
@@ -203,9 +206,8 @@ async def personalized_pagerank_v2(
     node_kinds: dict[str, str] = {}  # node_id → kind
     visited: set[str] = set()
     frontier = set(seed_scores.keys())
-    bfs_depth = 2
 
-    for _ in range(bfs_depth):
+    for _ in range(max(0, bfs_depth)):
         if not frontier:
             break
         next_frontier: set[str] = set()
