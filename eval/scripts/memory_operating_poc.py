@@ -687,6 +687,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 ranking_health.memory_score_scope_counts.get(scope.key, 0) >= 1
                 and ranking_health.memory_score_scope_counts.get("global", 0) >= 1
             ),
+            "health_reports_score_totals": (
+                ranking_health.memory_score_count >= ranking_health.memory_score_node_count
+                and ranking_health.memory_score_node_count >= 1
+                and ranking_health.memory_score_edge_count >= 1
+                and ranking_health.memory_score_positive_count >= 1
+                and ranking_health.memory_score_negative_count >= 1
+                and ranking_health.memory_score_neutral_count >= 0
+            ),
             "health_reports_semantic_failure_buckets": (
                 health.semantic_extract_failure_counts.get(drift_profile_key, 0) == 3
                 and health.semantic_extract_attempt_counts.get(drift_profile_key, 0) == 3

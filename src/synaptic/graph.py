@@ -3327,6 +3327,11 @@ class SynapticGraph:
             memory_scope_key(event.scope) for event in retrieval_events
         )
         memory_score_scope_counts = Counter(score.scope_key for score in all_scores)
+        memory_score_node_count = sum(1 for score in all_scores if score.node_id)
+        memory_score_edge_count = sum(1 for score in all_scores if score.edge_id)
+        memory_score_positive_count = sum(1 for score in all_scores if score.score > 0)
+        memory_score_negative_count = sum(1 for score in all_scores if score.score < 0)
+        memory_score_neutral_count = sum(1 for score in all_scores if score.score == 0)
         semantic_events = [
             event for event in memory_events if str(event.kind) == MemoryEventKind.SEMANTIC_EXTRACT
         ]
@@ -3479,6 +3484,12 @@ class SynapticGraph:
             retrieval_events=len(retrieval_events),
             retrieval_event_scope_counts=dict(retrieval_event_scope_counts),
             memory_score_scope_counts=dict(memory_score_scope_counts),
+            memory_score_count=len(all_scores),
+            memory_score_node_count=memory_score_node_count,
+            memory_score_edge_count=memory_score_edge_count,
+            memory_score_positive_count=memory_score_positive_count,
+            memory_score_negative_count=memory_score_negative_count,
+            memory_score_neutral_count=memory_score_neutral_count,
             signal_count=len(signals),
             new_entity_count=signal_kinds.count(MemorySignalKind.NEW_ENTITY),
             new_relation_count=signal_kinds.count(MemorySignalKind.NEW_RELATION),
