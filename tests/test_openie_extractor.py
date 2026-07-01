@@ -229,7 +229,9 @@ async def test_openie_parser_salvages_complete_items_from_truncated_response():
     ids = await extractor.extract_and_link(graph, "chunk_1", "T", "Acme depends on Roadmap")
 
     assert deterministic_entity_id("Acme") in ids
-    acme_edges = await graph.backend.get_edges(deterministic_entity_id("Acme"), direction="outgoing")
+    acme_edges = await graph.backend.get_edges(
+        deterministic_entity_id("Acme"), direction="outgoing"
+    )
     assert any(edge.kind == EdgeKind.DEPENDS_ON for edge in acme_edges)
 
 
@@ -389,7 +391,9 @@ async def test_openie_linker_prefilters_chunks_by_candidate_entities():
             content="Acme depends on Roadmap.",
         )
     )
-    await backend.save_node(Node(id="chunk_b", kind=NodeKind.CHUNK, title="Doc", content="Acme only."))
+    await backend.save_node(
+        Node(id="chunk_b", kind=NodeKind.CHUNK, title="Doc", content="Acme only.")
+    )
     await backend.save_node(Node(id="chunk_c", kind=NodeKind.CHUNK, title="Doc", content=""))
     extractor = _FakeExtractor()
 

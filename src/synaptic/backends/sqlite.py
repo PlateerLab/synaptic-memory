@@ -577,7 +577,9 @@ class SQLiteBackend:
         if not events:
             return
         db = self._db()
-        await db.executemany(_UPSERT_MEMORY_EVENT_SQL, [_memory_event_row(event) for event in events])
+        await db.executemany(
+            _UPSERT_MEMORY_EVENT_SQL, [_memory_event_row(event) for event in events]
+        )
         await db.commit()
 
     async def list_memory_events(
@@ -647,7 +649,9 @@ class SQLiteBackend:
 
     async def get_retrieval_event(self, event_id: str) -> RetrievalEvent | None:
         db = self._db()
-        async with db.execute("SELECT * FROM syn_retrieval_events WHERE id = ?", (event_id,)) as cur:
+        async with db.execute(
+            "SELECT * FROM syn_retrieval_events WHERE id = ?", (event_id,)
+        ) as cur:
             row = await cur.fetchone()
         return _row_to_retrieval_event(row) if row is not None else None
 

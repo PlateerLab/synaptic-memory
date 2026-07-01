@@ -270,9 +270,7 @@ def test_audit_openie_cache_reports_bad_rows_and_duplicates(tmp_path: Path):
     assert summary.entities == 2
     assert summary.triples == 1
     bad_rows = [
-        json.loads(line)
-        for line in bad_output.read_text(encoding="utf-8").splitlines()
-        if line
+        json.loads(line) for line in bad_output.read_text(encoding="utf-8").splitlines() if line
     ]
     assert [row["reason"] for row in bad_rows] == [
         "invalid_json_line",
@@ -283,9 +281,7 @@ def test_audit_openie_cache_reports_bad_rows_and_duplicates(tmp_path: Path):
     assert payload["openie_cache_audit"]["passed"] is False
     assert payload["openie_cache_audit"]["bad_rows_output"] == str(bad_output)
     compact_rows = [
-        json.loads(line)
-        for line in compact_output.read_text(encoding="utf-8").splitlines()
-        if line
+        json.loads(line) for line in compact_output.read_text(encoding="utf-8").splitlines() if line
     ]
     assert compact_rows == [{"key": "k1", "raw": newer_raw}]
     assert payload["openie_cache_audit"]["compact_output"] == str(compact_output)
@@ -375,9 +371,7 @@ async def test_warm_openie_cache_writes_failure_manifest(monkeypatch, tmp_path: 
     assert summary.failure_output == str(failure_output)
     assert cache_path.read_text(encoding="utf-8").count("\n") == 1
     failed_rows = [
-        json.loads(line)
-        for line in failure_output.read_text(encoding="utf-8").splitlines()
-        if line
+        json.loads(line) for line in failure_output.read_text(encoding="utf-8").splitlines() if line
     ]
     assert failed_rows == [
         {
@@ -456,9 +450,7 @@ async def test_warm_openie_cache_dry_run_counts_pending_without_llm(tmp_path: Pa
     assert summary.cache_misses == 0
     assert cache_path.read_text(encoding="utf-8") == before
     pending_rows = [
-        json.loads(line)
-        for line in pending_output.read_text(encoding="utf-8").splitlines()
-        if line
+        json.loads(line) for line in pending_output.read_text(encoding="utf-8").splitlines() if line
     ]
     assert pending_rows == [
         {"title": "Pending title", "content": "Pending body", "doc_id": "doc-pending"}

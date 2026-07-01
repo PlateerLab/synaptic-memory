@@ -281,9 +281,7 @@ class OpenIELinker:
         )
         if max_concurrency is None:
             max_concurrency = (
-                int(getattr(profile, "openie_max_concurrency", 1))
-                if profile is not None
-                else 1
+                int(getattr(profile, "openie_max_concurrency", 1)) if profile is not None else 1
             )
         self._max_concurrency = max(1, int(max_concurrency))
         self._entity_hint_patterns = (
@@ -569,9 +567,9 @@ class LLMOpenIEExtractor:
         for ent in result.entities:
             if ent.confidence < _CONFIDENCE_FLOOR:
                 continue
-            canonical = aliases.get(canonical_entity_text(ent.canonical).lower()) or self._canonical(
-                ent.canonical
-            )
+            canonical = aliases.get(
+                canonical_entity_text(ent.canonical).lower()
+            ) or self._canonical(ent.canonical)
             if not canonical:
                 continue
             hub_id = await self._ensure_entity(
@@ -990,9 +988,7 @@ def _extractor_event_properties(extractor: object) -> dict[str, str]:
     if model:
         props["model"] = model
     prompt_version = str(
-        getattr(extractor, "prompt_version", "")
-        or getattr(extractor, "_prompt_version", "")
-        or ""
+        getattr(extractor, "prompt_version", "") or getattr(extractor, "_prompt_version", "") or ""
     )
     if not prompt_version and hasattr(extractor, "_max_output_tokens"):
         prompt_version = _PROMPT_VERSION

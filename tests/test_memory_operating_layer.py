@@ -400,8 +400,7 @@ async def test_task_success_feedback_reuses_retrieval_nodes_for_hebbian_edges():
     related = [
         edge
         for edge in edges
-        if {edge.source_id, edge.target_id} == {alpha.id, beta.id}
-        and edge.kind == EdgeKind.RELATED
+        if {edge.source_id, edge.target_id} == {alpha.id, beta.id} and edge.kind == EdgeKind.RELATED
     ]
     assert related
     assert related[0].weight > 0
@@ -438,8 +437,7 @@ async def test_global_task_feedback_updates_node_and_edge_scores_once():
     related = [
         edge
         for edge in edges
-        if {edge.source_id, edge.target_id} == {alpha.id, beta.id}
-        and edge.kind == EdgeKind.RELATED
+        if {edge.source_id, edge.target_id} == {alpha.id, beta.id} and edge.kind == EdgeKind.RELATED
     ]
     assert related
     global_edge_score = await backend.get_memory_score("global", edge_id=related[0].id)
@@ -476,8 +474,7 @@ async def test_public_reinforce_records_feedback_ledger_and_scores():
     related = [
         edge
         for edge in edges
-        if {edge.source_id, edge.target_id} == {alpha.id, beta.id}
-        and edge.kind == EdgeKind.RELATED
+        if {edge.source_id, edge.target_id} == {alpha.id, beta.id} and edge.kind == EdgeKind.RELATED
     ]
     assert related
     global_edge_score = await backend.get_memory_score("global", edge_id=related[0].id)
@@ -508,11 +505,7 @@ async def test_implicit_feedback_does_not_create_hebbian_edges_or_counts():
     assert updated_beta.success_count == 0
     assert updated_beta.failure_count == 0
     edges = await backend.get_edges(alpha.id, direction="both")
-    assert [
-        edge
-        for edge in edges
-        if {edge.source_id, edge.target_id} == {alpha.id, beta.id}
-    ] == []
+    assert [edge for edge in edges if {edge.source_id, edge.target_id} == {alpha.id, beta.id}] == []
 
 
 @pytest.mark.asyncio
@@ -546,11 +539,7 @@ async def test_ignored_feedback_is_weak_scope_local_signal_without_counts():
     assert local_score.score == pytest.approx(-0.01)
     assert await backend.get_memory_score("global", node_id=alpha.id) is None
     edges = await backend.get_edges(alpha.id, direction="both")
-    assert [
-        edge
-        for edge in edges
-        if {edge.source_id, edge.target_id} == {alpha.id, beta.id}
-    ] == []
+    assert [edge for edge in edges if {edge.source_id, edge.target_id} == {alpha.id, beta.id}] == []
 
 
 @pytest.mark.asyncio
@@ -833,9 +822,7 @@ async def test_scope_boost_is_capped_without_reversing_base_relevance():
     boosted = Node(id="boosted", title="Boosted memory")
     await backend.save_node(high)
     await backend.save_node(boosted)
-    await backend.save_memory_score(
-        MemoryScore(scope_key=scope.key, node_id="boosted", score=1.0)
-    )
+    await backend.save_memory_score(MemoryScore(scope_key=scope.key, node_id="boosted", score=1.0))
     result = SearchResult(
         query="policy",
         nodes=[
@@ -861,9 +848,7 @@ async def test_search_applies_scope_boost_cap_on_public_path(monkeypatch):
     boosted = Node(id="public_boosted", title="Boosted memory")
     await backend.save_node(high)
     await backend.save_node(boosted)
-    await backend.save_memory_score(
-        MemoryScore(scope_key=scope.key, node_id=boosted.id, score=1.0)
-    )
+    await backend.save_memory_score(MemoryScore(scope_key=scope.key, node_id=boosted.id, score=1.0))
 
     class FakeEvidenceSearch:
         async def search(self, query: str, **_: object) -> SimpleNamespace:
@@ -905,9 +890,7 @@ async def test_scoped_search_uses_global_prior_without_reversing_relevance():
     globally_boosted = Node(id="global", title="Globally promoted memory")
     await backend.save_node(high)
     await backend.save_node(globally_boosted)
-    await backend.save_memory_score(
-        MemoryScore(scope_key="global", node_id="global", score=1.0)
-    )
+    await backend.save_memory_score(MemoryScore(scope_key="global", node_id="global", score=1.0))
     result = SearchResult(
         query="policy",
         nodes=[
@@ -971,12 +954,8 @@ async def test_scope_local_negative_can_counter_global_prior():
     mixed = Node(id="mixed", title="Mixed feedback memory")
     await backend.save_node(clean)
     await backend.save_node(mixed)
-    await backend.save_memory_score(
-        MemoryScore(scope_key="global", node_id="mixed", score=1.0)
-    )
-    await backend.save_memory_score(
-        MemoryScore(scope_key=scope.key, node_id="mixed", score=-1.0)
-    )
+    await backend.save_memory_score(MemoryScore(scope_key="global", node_id="mixed", score=1.0))
+    await backend.save_memory_score(MemoryScore(scope_key=scope.key, node_id="mixed", score=-1.0))
     result = SearchResult(
         query="policy",
         nodes=[
@@ -1165,9 +1144,7 @@ async def test_memory_monitor_flags_recent_growth_and_reinforcement_signals_idem
     assert MemorySignalKind.NEW_RELATION in by_kind
     assert by_kind[MemorySignalKind.NEW_RELATION].edge_ids == ["recent_reinforced_relation"]
     assert MemorySignalKind.RELATION_REINFORCED in by_kind
-    assert by_kind[MemorySignalKind.RELATION_REINFORCED].edge_ids == [
-        "recent_reinforced_relation"
-    ]
+    assert by_kind[MemorySignalKind.RELATION_REINFORCED].edge_ids == ["recent_reinforced_relation"]
     assert {str(signal.kind) for signal in second}.issuperset(
         {
             str(MemorySignalKind.NEW_ENTITY),

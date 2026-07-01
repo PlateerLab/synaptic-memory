@@ -347,9 +347,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         memory_events = await backend.list_memory_events(scope=scope, limit=1000)
         retrieval_events = await backend.list_retrieval_events(scope=scope, limit=1000)
         signal_events = [
-            event
-            for event in memory_events
-            if str(event.kind) == str(MemoryEventKind.SIGNAL)
+            event for event in memory_events if str(event.kind) == str(MemoryEventKind.SIGNAL)
         ]
         signal_event_source_ids = {event.source_id for event in signal_events}
         scanned_signal_ids = {signal.id for signal in signals}
@@ -391,9 +389,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ],
         )
         await graph._apply_memory_signal_penalties(penalty_result, scope=scope)
-        penalized_failed = next(
-            item for item in penalty_result.nodes if item.node.id == failed.id
-        )
+        penalized_failed = next(item for item in penalty_result.nodes if item.node.id == failed.id)
 
         selected_before_success = (
             selected_before_feedback.success_count if selected_before_feedback else -1
@@ -458,26 +454,18 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and after_consolidation.level == ConsolidationLevel.L1_SPRINT
                 and consolidation_candidate.id in consolidation_result.nodes_updated
             ),
-            "scope_score_repeated_failure_signal_created": (
-                scope_score_failure_signal is not None
-            ),
-            "entity_property_conflict_signal_created": (
-                property_conflict_signal is not None
-            ),
-            "superseded_target_stale_signal_created": (
-                superseded_stale_signal is not None
-            ),
+            "scope_score_repeated_failure_signal_created": (scope_score_failure_signal is not None),
+            "entity_property_conflict_signal_created": (property_conflict_signal is not None),
+            "superseded_target_stale_signal_created": (superseded_stale_signal is not None),
             "signal_events_recorded_idempotently": (
                 bool(scanned_signal_ids)
                 and scanned_signal_ids.issubset(signal_event_source_ids)
                 and len(signal_events) == len(signal_event_source_ids)
             ),
             "global_prior_applied_without_reversing_scope_order": (
-                [item.node.id for item in global_prior_result.nodes]
-                == [beta.id, global_prior.id]
+                [item.node.id for item in global_prior_result.nodes] == [beta.id, global_prior.id]
                 and global_prior_result.nodes[1].resonance >= 0.999
-                and global_prior_result.nodes[1].resonance
-                <= global_prior_result.nodes[0].resonance
+                and global_prior_result.nodes[1].resonance <= global_prior_result.nodes[0].resonance
             ),
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id
@@ -489,8 +477,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 str(MemorySignalKind.LOW_CONFIDENCE_RELATION),
                 str(MemorySignalKind.REPEATED_FAILURE),
             }.issubset(set(signal_kinds)),
-            "drift_spike_signal_created": str(MemorySignalKind.DRIFT_SPIKE)
-            in set(signal_kinds),
+            "drift_spike_signal_created": str(MemorySignalKind.DRIFT_SPIKE) in set(signal_kinds),
             "suspect_memory_not_deleted": failed_after_scan is not None,
             "high_confidence_signal_demoted_suspect": (
                 penalty_result.nodes[0].node.id == scoped_negative.id

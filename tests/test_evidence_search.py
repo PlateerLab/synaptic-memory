@@ -227,9 +227,7 @@ class TestPipelineShape:
         result = await searcher.search("규정")
         assert result.elapsed_ms > 0
         assert result.timings_ms
-        assert {"anchor", "fts", "expand", "rerank", "aggregate"}.issubset(
-            set(result.timings_ms)
-        )
+        assert {"anchor", "fts", "expand", "rerank", "aggregate"}.issubset(set(result.timings_ms))
 
     async def test_expanded_larger_than_seeds(self):
         backend = MemoryBackend()

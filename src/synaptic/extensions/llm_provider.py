@@ -179,7 +179,9 @@ class OpenAILLMProvider:
                         )
                         fallback_payload = dict(payload)
                         fallback_payload["response_format"] = {"type": "json_object"}
-                        async with session.post(url, headers=headers, json=fallback_payload) as retry:
+                        async with session.post(
+                            url, headers=headers, json=fallback_payload
+                        ) as retry:
                             if retry.status == 200:
                                 data = await retry.json()
                                 return data["choices"][0]["message"]["content"]  # type: ignore[no-any-return]

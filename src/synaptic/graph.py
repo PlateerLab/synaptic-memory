@@ -2599,7 +2599,9 @@ class SynapticGraph:
             confidence=confidence,
         )
         promote_globally = self._should_promote_feedback_globally(effective_scope, signal)
-        has_distinct_global_scope = promote_globally and memory_scope_key(effective_scope) != "global"
+        has_distinct_global_scope = (
+            promote_globally and memory_scope_key(effective_scope) != "global"
+        )
         if has_distinct_global_scope:
             await self._update_scope_scores(
                 MemoryScope(promote_to_global=True),
@@ -3010,9 +3012,10 @@ class SynapticGraph:
                             },
                         )
                     )
-            if _prop_bool(edge.properties, "is_openie") and _prop_float(
-                edge.properties, "confidence", 1.0
-            ) < 0.6:
+            if (
+                _prop_bool(edge.properties, "is_openie")
+                and _prop_float(edge.properties, "confidence", 1.0) < 0.6
+            ):
                 signals.append(
                     self._make_signal(
                         MemorySignalKind.LOW_CONFIDENCE_RELATION,
@@ -3079,9 +3082,7 @@ class SynapticGraph:
                 )
                 repeated_failure_targets.add(target)
 
-        signals.extend(
-            await self._semantic_extract_drift_signals(effective_scope, since=since)
-        )
+        signals.extend(await self._semantic_extract_drift_signals(effective_scope, since=since))
         for signal in signals:
             await self._persist_memory_signal(signal)
         return signals
@@ -3098,7 +3099,9 @@ class SynapticGraph:
         nodes = await self._backend.list_nodes(limit=100_000)
         edges = await self._all_edges(nodes)
         memory_events = await self._list_memory_events(scope=scope, since=since, limit=100_000)
-        retrieval_events = await self._list_retrieval_events(scope=scope, since=since, limit=100_000)
+        retrieval_events = await self._list_retrieval_events(
+            scope=scope, since=since, limit=100_000
+        )
         scores = await self._list_memory_scores(
             scope_key=memory_scope_key(effective_scope),
             limit=10,
@@ -3107,8 +3110,12 @@ class SynapticGraph:
         semantic_events = [
             event for event in memory_events if str(event.kind) == MemoryEventKind.SEMANTIC_EXTRACT
         ]
-        failures = sum(_prop_int(event.properties, "extraction_failures", 0) for event in semantic_events)
-        selected = sum(_prop_int(event.properties, "chunks_selected", 0) for event in semantic_events)
+        failures = sum(
+            _prop_int(event.properties, "extraction_failures", 0) for event in semantic_events
+        )
+        selected = sum(
+            _prop_int(event.properties, "chunks_selected", 0) for event in semantic_events
+        )
         signal_kinds = [MemorySignalKind(str(signal.kind)) for signal in signals]
         suspect_kinds = {
             MemorySignalKind.POSSIBLE_CONFLICT,
@@ -3134,9 +3141,7 @@ class SynapticGraph:
             signal_count=len(signals),
             new_entity_count=signal_kinds.count(MemorySignalKind.NEW_ENTITY),
             new_relation_count=signal_kinds.count(MemorySignalKind.NEW_RELATION),
-            relation_reinforced_count=signal_kinds.count(
-                MemorySignalKind.RELATION_REINFORCED
-            ),
+            relation_reinforced_count=signal_kinds.count(MemorySignalKind.RELATION_REINFORCED),
             suspect_count=sum(1 for kind in signal_kinds if kind in suspect_kinds),
             conflict_signal_count=signal_kinds.count(MemorySignalKind.POSSIBLE_CONFLICT),
             stale_signal_count=signal_kinds.count(MemorySignalKind.STALE_MEMORY),

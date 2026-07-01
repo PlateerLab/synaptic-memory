@@ -84,8 +84,7 @@ async def _skip_if_llm_unavailable(
                 if resp.status != 200:
                     text = await resp.text()
                     pytest.skip(
-                        f"LLM endpoint unavailable: GET {health_url} -> "
-                        f"{resp.status} {text[:120]}"
+                        f"LLM endpoint unavailable: GET {health_url} -> {resp.status} {text[:120]}"
                     )
     except (TimeoutError, aiohttp.ClientError) as exc:
         pytest.skip(f"LLM endpoint unavailable: {base_url} ({exc})")

@@ -634,9 +634,7 @@ def load_documents(chunks_path: Path, *, max_input_chunks: int = 0) -> list[Docu
 
 def profile_from_args(args: argparse.Namespace, *, openie_enabled: bool) -> DomainProfile:
     whitelist = tuple(
-        item.strip()
-        for item in args.openie_relation_whitelist.split(",")
-        if item.strip()
+        item.strip() for item in args.openie_relation_whitelist.split(",") if item.strip()
     )
     model_profile = args.openie_model_profile or _infer_openie_model_profile(args.llm_model)
     max_output_tokens = args.openie_max_output_tokens
@@ -845,9 +843,7 @@ async def embed_missing_openie_nodes(
     """Embed OpenIE-created entity hubs that were added after baseline indexing."""
     nodes = await backend.list_nodes(kind=NodeKind.ENTITY, limit=1_000_000)
     pending = [
-        node
-        for node in nodes
-        if not node.embedding and "_openie_entity" in (node.tags or [])
+        node for node in nodes if not node.embedding and "_openie_entity" in (node.tags or [])
     ]
     embedded = 0
     for i in range(0, len(pending), batch_size):
@@ -861,8 +857,7 @@ async def embed_missing_openie_nodes(
         vecs = list(vecs_raw or [])
         if len(vecs) != len(batch):
             print(
-                "[openie] embedding batch failed: "
-                f"expected {len(batch)} vectors, got {len(vecs)}"
+                f"[openie] embedding batch failed: expected {len(batch)} vectors, got {len(vecs)}"
             )
             continue
         changed = []
@@ -1231,9 +1226,7 @@ async def score_db(
 ) -> ScoreSummary:
     present_docs = await list_doc_ids(db_path)
     scored = [
-        q
-        for q in queries
-        if any(str(gold) in present_docs for gold in q.get("gold_files", []))
+        q for q in queries if any(str(gold) in present_docs for gold in q.get("gold_files", []))
     ]
     summary = ScoreSummary(name=name)
     if not scored:
@@ -1261,7 +1254,9 @@ async def score_db(
                 per_document_cap=1,
             )
             docs = hits_to_doc_ids(result, limit=10)
-            summary.add(str(row.get("type") or row.get("src") or "unknown"), docs, row["gold_files"])
+            summary.add(
+                str(row.get("type") or row.get("src") or "unknown"), docs, row["gold_files"]
+            )
             summary.record_timing(
                 float(getattr(result, "search_time_ms", 0.0) or 0.0),
                 dict(getattr(result, "timings_ms", {}) or {}),
@@ -1468,7 +1463,9 @@ async def list_doc_ids(db_path: Path) -> set[str]:
     await backend.connect()
     try:
         nodes = await backend.list_nodes(kind=NodeKind.ENTITY, limit=1_000_000)
-        return {node.properties.get("doc_id", "") for node in nodes if node.properties.get("doc_id")}
+        return {
+            node.properties.get("doc_id", "") for node in nodes if node.properties.get("doc_id")
+        }
     finally:
         await backend.close()
 
@@ -1607,12 +1604,12 @@ async def evaluate_gates(
         relation_expanded_lift_ok = expanded_lift >= required_expanded_lift
         relation_evidence_lift_ok = evidence_lift >= required_evidence_lift
         strong_relation_evidence_ok = (
-            strong_rate >= required_strong_rate if int(strong["n"]) > 0 else required_strong_rate <= 0.0
+            strong_rate >= required_strong_rate
+            if int(strong["n"]) > 0
+            else required_strong_rate <= 0.0
         )
         relation_probe_ok = (
-            relation_expanded_lift_ok
-            and relation_evidence_lift_ok
-            and strong_relation_evidence_ok
+            relation_expanded_lift_ok and relation_evidence_lift_ok and strong_relation_evidence_ok
         )
     elif relation_threshold_requested:
         relation_expanded_lift_ok = False
@@ -1810,7 +1807,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-strong-relation-evidence-rate", type=float, default=0.0)
     parser.add_argument("--min-openie-cache-coverage", type=float, default=0.0)
     parser.add_argument("--min-delta-r5", type=float, default=0.0)
-    parser.add_argument("--verify-revertibility", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--verify-revertibility", action=argparse.BooleanOptionalAction, default=True
+    )
     parser.add_argument("--fail-on-gate", action=argparse.BooleanOptionalAction, default=True)
     return parser.parse_args()
 
