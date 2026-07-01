@@ -8,6 +8,7 @@ import json
 import pytest
 
 from synaptic.backends.memory import MemoryBackend
+from synaptic.backends.sqlite import SQLiteBackend
 from synaptic.extensions.entity_extractor_openie import (
     ChainedEntityExtractor,
     LLMOpenIEExtractor,
@@ -321,6 +322,107 @@ async def test_openie_purge_removes_semantic_layer_and_keeps_structural_nodes():
     assert await graph.backend.get_node(deterministic_entity_id("Acme")) is None
     chunk_edges = await graph.backend.get_edges("chunk_1", direction="outgoing")
     assert not any(e.id.startswith("openie_") for e in chunk_edges)
+
+
+@pytest.mark.asyncio
+async def test_openie_bulk_purge_sqlite_removes_nodes_edges_and_fts_rows(tmp_path):
+    backend = SQLiteBackend(tmp_path / "openie.db")
+    await backend.connect()
+    try:
+        await backend.save_node(
+            Node(
+                id="chunk_sqlite",
+                kind=NodeKind.CHUNK,
+                title="Source chunk",
+                content="Acme extracted by OpenIE",
+            )
+        )
+        await backend.save_node(
+            Node(id="plain_sqlite", kind=NodeKind.CHUNK, title="Plain", content="kept")
+        )
+        await backend.save_node(
+            Node(
+                id="openie_acme",
+                kind=NodeKind.ENTITY,
+                title="Acme",
+                content="OpenIE Acme entity",
+                tags=["_openie", "_openie_entity"],
+            )
+        )
+        await backend.save_node(
+            Node(
+                id="openie_roadmap",
+                kind=NodeKind.ENTITY,
+                title="Roadmap",
+                content="OpenIE Roadmap entity",
+                tags=["_openie"],
+            )
+        )
+        await backend.save_node(
+            Node(
+                id="lookalike",
+                kind=NodeKind.ENTITY,
+                title="Lookalike",
+                content="This only has the derived OpenIE tag",
+                tags=["_openie_entity"],
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="openie_mentions_acme",
+                source_id="chunk_sqlite",
+                target_id="openie_acme",
+                kind=EdgeKind.MENTIONS,
+                properties={"is_openie": "true"},
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="openie_related_acme_roadmap",
+                source_id="openie_acme",
+                target_id="openie_roadmap",
+                kind=EdgeKind.RELATED,
+                properties={"is_openie": "true"},
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="manual_to_openie",
+                source_id="chunk_sqlite",
+                target_id="openie_acme",
+                kind=EdgeKind.DEPENDS_ON,
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="structural_kept",
+                source_id="chunk_sqlite",
+                target_id="plain_sqlite",
+                kind=EdgeKind.CONTAINS,
+            )
+        )
+
+        assert any(n.id == "openie_acme" for n in await backend.search_fts("Acme"))
+
+        deleted = await purge_openie_artifacts(backend)
+
+        assert deleted == 4
+        assert await backend.get_node("openie_acme") is None
+        assert await backend.get_node("openie_roadmap") is None
+        assert await backend.get_node("chunk_sqlite") is not None
+        assert await backend.get_node("plain_sqlite") is not None
+        assert await backend.get_node("lookalike") is not None
+        chunk_edges = await backend.get_edges("chunk_sqlite", direction="outgoing")
+        assert {edge.id for edge in chunk_edges} == {"structural_kept"}
+        assert not any(n.id == "openie_acme" for n in await backend.search_fts("Acme"))
+        async with backend._db().execute(
+            "SELECT COUNT(*) FROM syn_nodes_fts WHERE node_id IN (?, ?)",
+            ("openie_acme", "openie_roadmap"),
+        ) as cur:
+            row = await cur.fetchone()
+        assert row[0] == 0
+    finally:
+        await backend.close()
 
 
 @pytest.mark.asyncio

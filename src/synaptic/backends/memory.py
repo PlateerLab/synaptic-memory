@@ -125,6 +125,21 @@ class MemoryBackend:
     async def delete_edge(self, edge_id: str) -> None:
         self._edges.pop(edge_id, None)
 
+    async def purge_openie_artifacts(self, *, node_limit: int = 1_000_000) -> int:
+        edge_ids = [edge_id for edge_id in self._edges if edge_id.startswith("openie_")]
+        node_ids = [
+            node_id for node_id, node in self._nodes.items() if "_openie" in (node.tags or [])
+        ][:node_limit]
+        for edge_id in edge_ids:
+            self._edges.pop(edge_id, None)
+        for node_id in node_ids:
+            self._nodes.pop(node_id, None)
+        openie_nodes = set(node_ids)
+        for edge_id, edge in list(self._edges.items()):
+            if edge.source_id in openie_nodes or edge.target_id in openie_nodes:
+                del self._edges[edge_id]
+        return len(edge_ids) + len(node_ids)
+
     # --- Memory operating layer ---
 
     async def save_memory_event(self, event: MemoryEvent) -> None:

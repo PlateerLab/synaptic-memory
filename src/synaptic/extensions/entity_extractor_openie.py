@@ -859,6 +859,10 @@ async def purge_openie_artifacts(backend: StorageBackend, *, node_limit: int = 1
     ``_openie`` tag. Existing phrase/spaCy hubs touched by OpenIE are
     kept, but their OpenIE relation edges are removed.
     """
+    bulk_purge = getattr(backend, "purge_openie_artifacts", None)
+    if callable(bulk_purge):
+        return int(await bulk_purge(node_limit=node_limit))
+
     deleted = 0
     nodes = await backend.list_nodes(limit=node_limit)
     edge_ids: set[str] = set()

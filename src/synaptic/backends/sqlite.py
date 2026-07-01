@@ -563,6 +563,65 @@ class SQLiteBackend:
         await db.execute("DELETE FROM syn_edges WHERE id = ?", (edge_id,))
         await db.commit()
 
+    async def purge_openie_artifacts(self, *, node_limit: int = 1_000_000) -> int:
+        """Bulk-delete the reversible OpenIE layer in one transaction.
+
+        The generic purge path calls ``delete_edge`` / ``delete_node`` once per
+        artifact, which commits every row and makes revertibility checks slow at
+        full cache coverage. SQLite can do the same logical purge set-wise:
+        remove deterministic ``openie_`` edges, remove FTS rows for
+        ``_openie`` nodes, then delete those nodes and let FK cascade clean up
+        any remaining edges attached to them.
+        """
+        db = self._db()
+        await db.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS syn_openie_purge_nodes (id TEXT PRIMARY KEY)"
+        )
+        await db.execute("DELETE FROM syn_openie_purge_nodes")
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO syn_openie_purge_nodes(id)
+            SELECT id
+              FROM syn_nodes
+             WHERE EXISTS (
+                   SELECT 1
+                     FROM json_each(syn_nodes.tags_json) AS tag
+                    WHERE tag.value = ?
+             )
+             LIMIT ?
+            """,
+            ("_openie", node_limit),
+        )
+        async with db.execute(
+            "SELECT COUNT(*) AS cnt FROM syn_edges WHERE id LIKE ? ESCAPE '\\'",
+            ("openie\\_%",),
+        ) as cur:
+            edge_count = int((await cur.fetchone())["cnt"])
+        async with db.execute("SELECT COUNT(*) AS cnt FROM syn_openie_purge_nodes") as cur:
+            node_count = int((await cur.fetchone())["cnt"])
+
+        await db.execute(
+            "DELETE FROM syn_edges WHERE id LIKE ? ESCAPE '\\'",
+            ("openie\\_%",),
+        )
+        await db.execute(
+            """
+            DELETE FROM syn_nodes_fts
+             WHERE node_id IN (SELECT id FROM syn_openie_purge_nodes)
+            """
+        )
+        await db.execute(
+            """
+            DELETE FROM syn_nodes
+             WHERE id IN (SELECT id FROM syn_openie_purge_nodes)
+            """
+        )
+        await db.execute("DELETE FROM syn_openie_purge_nodes")
+        await db.commit()
+        if edge_count or node_count:
+            self.invalidate_vector_index()
+        return edge_count + node_count
+
     # --- Memory operating layer ---
 
     async def save_memory_event(self, event: MemoryEvent) -> None:
