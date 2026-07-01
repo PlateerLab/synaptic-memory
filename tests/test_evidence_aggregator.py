@@ -83,6 +83,14 @@ class TestHelpers:
         assert _jaccard(set(), {"foo"}) == 0.0
         assert _jaccard({"foo"}, set()) == 0.0
 
+    def test_token_cache_key_includes_content(self):
+        agg = EvidenceAggregator()
+        first = agg._tokens_for(_node("same", content="alpha beta"))
+        second = agg._tokens_for(_node("same", content="gamma delta"))
+
+        assert first == {"alpha", "beta"}
+        assert second == {"gamma", "delta"}
+
 
 # --- Basic selection ---
 
@@ -428,3 +436,62 @@ class TestReferenceCompanionAttach:
         )
         result = agg.aggregate(scored=[chosen, orphan], k=1)
         assert {e.node.id for e in result} == {"anchor"}
+
+
+class TestBoundedPassagePool:
+    def test_document_diversity_candidate_survives_pool_bound(self):
+        agg = EvidenceAggregator(candidate_pool_limit=3)
+        same_doc = [
+            _scored(
+                f"a{i}",
+                total=1.0 - i * 0.01,
+                content=f"shared source section {i}",
+                doc_id="doc_A",
+            )
+            for i in range(8)
+        ]
+        outsider = _scored(
+            "outsider",
+            total=0.1,
+            content="separate source evidence",
+            doc_id="doc_B",
+        )
+
+        result = agg.aggregate(scored=[*same_doc, outsider], k=2, per_document_cap=1)
+
+        assert [e.node.id for e in result] == ["a0", "outsider"]
+
+    def test_category_candidate_survives_pool_bound(self):
+        agg = EvidenceAggregator(candidate_pool_limit=2)
+        scored = [
+            _scored("rules_a", total=0.9, content="rules alpha", category="규정"),
+            _scored("rules_b", total=0.8, content="rules beta", category="규정"),
+            _scored("ops", total=0.1, content="operations gamma", category="운영계획"),
+        ]
+
+        result = agg.aggregate(
+            scored=scored,
+            k=2,
+            anchor_categories={"규정", "운영계획"},
+        )
+
+        assert {e.node.id for e in result} == {"rules_a", "ops"}
+
+    def test_reference_companion_survives_pool_bound(self):
+        agg = EvidenceAggregator(candidate_pool_limit=1)
+        anchor = _scored("anchor", total=0.9, content="anchor body", doc_id="anchor")
+        companion = ScoredCandidate(
+            node=_node("cited", content="cited body", doc_id="cited"),
+            total=0.01,
+            lexical=0.0,
+            semantic=0.0,
+            graph=0.1,
+            structural=0.0,
+            reason="references",
+            anchor_id="anchor",
+        )
+        filler = _scored("filler", total=0.8, content="filler body", doc_id="filler")
+
+        result = agg.aggregate(scored=[anchor, filler, companion], k=2)
+
+        assert {e.node.id for e in result} == {"anchor", "cited"}

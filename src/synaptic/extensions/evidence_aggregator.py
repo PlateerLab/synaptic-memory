@@ -25,8 +25,9 @@ Three mechanics do the work:
    cross-category questions ("어떻게 규정과 운영계획이 충돌하나") see
    both sides of the evidence.
 
-The aggregator is deterministic and pure — same input, same output —
-which matters for regression-style eval.
+The aggregator is deterministic — same input, same output — and keeps only
+bounded token fingerprints as an internal speed cache. That matters for
+regression-style eval while avoiding repeated tokenisation across queries.
 
 Example::
 
@@ -70,6 +71,8 @@ _TOKEN = re.compile(r"[A-Za-z가-힣]{2,}")
 # Max REFERENCES-companion documents pulled in alongside a single chosen
 # node, to bound fan-out on heavily cross-referential corpora.
 _MAX_COMPANIONS_PER_ANCHOR = 3
+
+_TOKEN_CACHE_MAX = 4096
 
 
 def _tokens(text: str) -> set[str]:
@@ -120,8 +123,8 @@ class Evidence:
 class EvidenceAggregator:
     """Select the final evidence set from a reranked candidate pool.
 
-    The aggregator is stateless — every call is independent — so one
-    instance can serve concurrent queries safely.
+    The aggregator is deterministic. It keeps a bounded per-instance token
+    cache, but every call's selection state is independent.
 
     Args:
         mmr_lambda: MMR blending parameter. ``1.0`` disables diversity
@@ -135,16 +138,19 @@ class EvidenceAggregator:
             they're still high-scoring.
     """
 
-    __slots__ = ("_lambda", "_sim_threshold")
+    __slots__ = ("_lambda", "_pool_limit", "_sim_threshold", "_token_cache")
 
     def __init__(
         self,
         *,
         mmr_lambda: float = 0.7,
         similarity_threshold: float = 0.85,
+        candidate_pool_limit: int = 0,
     ) -> None:
         self._lambda = mmr_lambda
         self._sim_threshold = similarity_threshold
+        self._pool_limit = max(0, candidate_pool_limit)
+        self._token_cache: dict[tuple[str, str], set[str]] = {}
 
     def aggregate(
         self,
@@ -245,7 +251,17 @@ class EvidenceAggregator:
         if not scored or k <= 0:
             return []
 
-        remaining = list(scored)
+        remaining = (
+            _bounded_passage_pool(
+                scored,
+                k=k,
+                per_document_cap=per_document_cap,
+                anchor_categories=anchor_categories,
+                limit=self._pool_limit,
+            )
+            if self._pool_limit
+            else list(scored)
+        )
         selected: list[Evidence] = []
         selected_tokens: list[set[str]] = []
         doc_counts: dict[str, int] = {}
@@ -256,7 +272,7 @@ class EvidenceAggregator:
             cache_key = id(cand)
             cached = token_cache.get(cache_key)
             if cached is None:
-                cached = _tokens(cand.node.content)
+                cached = self._tokens_for(cand.node)
                 token_cache[cache_key] = cached
             return cached
 
@@ -383,6 +399,18 @@ class EvidenceAggregator:
                 best = cand
         return best
 
+    def _tokens_for(self, node: Node) -> set[str]:
+        content = node.content or ""
+        key = (node.id, content)
+        cached = self._token_cache.get(key)
+        if cached is not None:
+            return cached
+        tokens = _tokens(content)
+        if len(self._token_cache) >= _TOKEN_CACHE_MAX:
+            self._token_cache.pop(next(iter(self._token_cache)))
+        self._token_cache[key] = tokens
+        return tokens
+
     def _passes_similarity(
         self,
         evidence: Evidence,
@@ -394,6 +422,86 @@ class EvidenceAggregator:
         cand_tokens = _tokens(evidence.node.content)
         sim_max = max((_jaccard(cand_tokens, t) for t in existing_tokens), default=0.0)
         return sim_max < self._sim_threshold
+
+
+def _bounded_passage_pool(
+    scored: list[ScoredCandidate],
+    *,
+    k: int,
+    per_document_cap: int,
+    anchor_categories: set[str] | None,
+    limit: int,
+) -> list[ScoredCandidate]:
+    """Return a small MMR pool plus protected tail candidates.
+
+    The reranker already sorts by relevance in production, but tests and
+    external callers may pass unsorted candidates. We therefore choose the
+    base pool by score while preserving original order in the returned list
+    for deterministic tie handling.
+    """
+    if limit <= 0 or len(scored) <= limit:
+        return list(scored)
+
+    ranked = sorted(enumerate(scored), key=lambda item: item[1].total, reverse=True)
+    keep: set[int] = {idx for idx, _cand in ranked[:limit]}
+
+    # Category coverage may intentionally pick a lower-scored representative.
+    # Keep the best candidate for each requested category even if it sits just
+    # outside the global score head.
+    if anchor_categories:
+        for category in anchor_categories:
+            best_idx = _best_category_index(ranked, category)
+            if best_idx is not None:
+                keep.add(best_idx)
+
+    # Per-document caps can force the final selection below the score head
+    # when many high-ranked chunks come from one source. Keep enough distinct
+    # document representatives for the greedy pass to fill k slots.
+    doc_target = k
+    if per_document_cap > 1:
+        doc_target = max(1, math.ceil(k / per_document_cap) + 2)
+    seen_docs: set[str] = set()
+    for idx, cand in ranked:
+        doc_id = (cand.node.properties or {}).get("doc_id", "")
+        if not doc_id or doc_id in seen_docs:
+            continue
+        keep.add(idx)
+        seen_docs.add(doc_id)
+        if len(seen_docs) >= doc_target:
+            break
+
+    # REFERENCES companions are low-scoring by design: the anchor document
+    # carries the query match and the cited document rides with it. If an
+    # anchor survives the pool bound, keep up to the normal companion fan-out.
+    kept_anchor_ids = {
+        scored[idx].node.id
+        for idx in keep
+        if scored[idx].reason != "references" and scored[idx].node.id
+    }
+    refs_by_anchor: dict[str, int] = {}
+    for idx, cand in ranked:
+        if cand.reason != "references" or cand.anchor_id not in kept_anchor_ids:
+            continue
+        count = refs_by_anchor.get(cand.anchor_id, 0)
+        if count >= _MAX_COMPANIONS_PER_ANCHOR:
+            continue
+        keep.add(idx)
+        refs_by_anchor[cand.anchor_id] = count + 1
+
+    return [cand for idx, cand in enumerate(scored) if idx in keep]
+
+
+def _best_category_index(
+    ranked: list[tuple[int, ScoredCandidate]],
+    category: str,
+) -> int | None:
+    cat_lower = category.lower()
+    for idx, cand in ranked:
+        props = cand.node.properties or {}
+        node_cat = (props.get("category") or "").lower()
+        if node_cat and cat_lower in node_cat:
+            return idx
+    return None
 
 
 def _passes_token_similarity(
