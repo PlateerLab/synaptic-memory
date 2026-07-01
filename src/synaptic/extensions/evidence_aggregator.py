@@ -249,6 +249,29 @@ class EvidenceAggregator:
         selected: list[Evidence] = []
         selected_tokens: list[set[str]] = []
         doc_counts: dict[str, int] = {}
+        token_cache: dict[int, set[str]] = {}
+        sim_cache: dict[int, tuple[int, float]] = {}
+
+        def cand_tokens(cand: ScoredCandidate) -> set[str]:
+            cache_key = id(cand)
+            cached = token_cache.get(cache_key)
+            if cached is None:
+                cached = _tokens(cand.node.content)
+                token_cache[cache_key] = cached
+            return cached
+
+        def max_selected_similarity(cand: ScoredCandidate) -> float:
+            if not selected_tokens:
+                return 0.0
+            cache_key = id(cand)
+            checked_count, sim_max = sim_cache.get(cache_key, (0, 0.0))
+            if checked_count >= len(selected_tokens):
+                return sim_max
+            tokens = cand_tokens(cand)
+            for selected in selected_tokens[checked_count:]:
+                sim_max = max(sim_max, _jaccard(tokens, selected))
+            sim_cache[cache_key] = (len(selected_tokens), sim_max)
+            return sim_max
 
         # --- Pass 1: category coverage ---
         if anchor_categories:
@@ -259,9 +282,10 @@ class EvidenceAggregator:
                 if pick is None:
                     continue
                 evidence = _make_evidence(pick, reason="category_coverage")
-                if self._passes_similarity(evidence, selected_tokens):
+                pick_tokens = cand_tokens(pick)
+                if _passes_token_similarity(pick_tokens, selected_tokens, self._sim_threshold):
                     selected.append(evidence)
-                    selected_tokens.append(_tokens(evidence.node.content))
+                    selected_tokens.append(pick_tokens)
                     if evidence.document_id:
                         doc_counts[evidence.document_id] = (
                             doc_counts.get(evidence.document_id, 0) + 1
@@ -273,6 +297,12 @@ class EvidenceAggregator:
             best_idx = -1
             best_adj = -math.inf
             for i, cand in enumerate(remaining):
+                # Document cap check can reject many same-source chunks before
+                # we pay the tokenisation/Jaccard cost.
+                doc_id = (cand.node.properties or {}).get("doc_id", "")
+                if doc_id and doc_counts.get(doc_id, 0) >= per_document_cap:
+                    continue
+
                 # A node reached via a REFERENCES edge is a deliberate
                 # cross-reference, not a redundant near-duplicate — yet
                 # cited documents in the same corpus share boilerplate
@@ -282,19 +312,13 @@ class EvidenceAggregator:
                 # as duplicates) but still compete on the normal MMR-
                 # adjusted score, so they cannot crowd out the seeds.
                 is_reference = cand.reason == "references"
-                cand_tokens = _tokens(cand.node.content)
-                sim_max = max(
-                    (_jaccard(cand_tokens, t) for t in selected_tokens),
-                    default=0.0,
-                )
+                if selected_tokens:
+                    sim_max = max_selected_similarity(cand)
+                else:
+                    sim_max = 0.0
                 if sim_max >= self._sim_threshold and not is_reference:
                     continue
                 adjusted = self._lambda * cand.total - (1.0 - self._lambda) * sim_max
-
-                # Document cap check
-                doc_id = (cand.node.properties or {}).get("doc_id", "")
-                if doc_id and doc_counts.get(doc_id, 0) >= per_document_cap:
-                    continue
 
                 if adjusted > best_adj:
                     best_adj = adjusted
@@ -306,7 +330,7 @@ class EvidenceAggregator:
             chosen = remaining.pop(best_idx)
             evidence = _make_evidence(chosen, reason="top_score")
             selected.append(evidence)
-            selected_tokens.append(_tokens(evidence.node.content))
+            selected_tokens.append(cand_tokens(chosen))
             if evidence.document_id:
                 doc_counts[evidence.document_id] = doc_counts.get(evidence.document_id, 0) + 1
 
@@ -323,7 +347,7 @@ class EvidenceAggregator:
                 remaining.remove(comp)
                 comp_ev = _make_evidence(comp, reason="reference_companion")
                 selected.append(comp_ev)
-                selected_tokens.append(_tokens(comp_ev.node.content))
+                selected_tokens.append(cand_tokens(comp))
                 if comp_ev.document_id:
                     doc_counts[comp_ev.document_id] = doc_counts.get(comp_ev.document_id, 0) + 1
 
@@ -370,6 +394,17 @@ class EvidenceAggregator:
         cand_tokens = _tokens(evidence.node.content)
         sim_max = max((_jaccard(cand_tokens, t) for t in existing_tokens), default=0.0)
         return sim_max < self._sim_threshold
+
+
+def _passes_token_similarity(
+    candidate_tokens: set[str],
+    existing_tokens: list[set[str]],
+    threshold: float,
+) -> bool:
+    if not existing_tokens:
+        return True
+    sim_max = max((_jaccard(candidate_tokens, t) for t in existing_tokens), default=0.0)
+    return sim_max < threshold
 
 
 def _make_evidence(cand: ScoredCandidate, *, reason: str) -> Evidence:

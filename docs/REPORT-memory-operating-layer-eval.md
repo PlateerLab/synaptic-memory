@@ -918,8 +918,9 @@ Memory health snapshot:
 | batched node/event writes | `mz_openie_cache_deepseek_to100_batchnodes_results.json` | `126.0s` | `4:44.47` | PASS |
 | batched document ingest writes | `mz_openie_cache_deepseek_to100_ingestbatch_results.json` | `117.3s` | `2:23.41` | PASS |
 | batched OpenIE link results | `mz_openie_cache_deepseek_to100_linkbatch_results.json` | `3.6s` | `0:31.89` | PASS |
+| evidence aggregate similarity cache | `mz_openie_cache_deepseek_to100_simcache_results.json` | `1.2s` | `0:16.28` | PASS |
 
-핵심 검색/게이트 지표는 최신 batched OpenIE link results run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 evidence aggregate similarity cache run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -934,6 +935,8 @@ Memory health snapshot:
 | relation evidence lift | `+31` |
 | memory health signals | `930` |
 | suspect memories | `31` |
+| baseline aggregate stage | `383.1ms total / 8.7ms avg` |
+| OpenIE aggregate stage | `383.6ms total / 8.7ms avg` |
 
 주의: PR #17은 OpenIE entity node의 불필요한 `updated_at` 갱신을 줄이므로,
 relation probe와 health signal의 세부 카운트는 이전 run과 소폭 달라졌다. 다만
@@ -975,6 +978,10 @@ per-chunk fallback을 유지한다.
 - batched OpenIE link results 이후 OpenIE elapsed는 `117.3s -> 3.6s`, full wall
   time은 `2:23.41 -> 0:31.89`로 추가 감소했다. 최초 fixed run 대비 wall time은
   `98.5%` 감소했다.
+- evidence aggregate similarity cache 이후 aggregate stage는 baseline
+  `6667.3ms -> 383.1ms`, OpenIE `6621.6ms -> 383.6ms`로 감소했다. full wall
+  time은 `0:31.89 -> 0:16.28`로 추가 감소했고, R@5/relation probe/revertibility
+  gate는 PASS를 유지했다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
@@ -987,9 +994,9 @@ per-chunk fallback을 유지한다.
   `92.006s` 대비 ingest-run batch `2.683s`로 `34.3x` 빨랐다.
 - 50-chunk OpenIE link micro-benchmark는 run-level materialization에서
   `save_nodes_batch=1`, `save_openie_edges_batch=1`로 완료됐다.
-- 남은 큰 비용은 full scoring/probe/gate의 고정 비용이다. Baseline document ingest
-  write path와 OpenIE replay write path는 200-chunk gate 기준으로 더 이상 지배
-  병목이 아니다.
+- 남은 큰 검색-stage 비용은 graph expand다. Baseline document ingest write path,
+  OpenIE replay write path, evidence aggregate path는 200-chunk gate 기준으로 더
+  이상 지배 병목이 아니다.
 
 ---
 
