@@ -122,6 +122,20 @@ class MemoryBackend:
         if edge.id in self._edges:
             self._edges[edge.id] = edge
 
+    async def stamp_openie_edges_event(self, edge_ids: Sequence[str], event_id: str) -> int:
+        updated = 0
+        for edge_id in set(edge_ids):
+            edge = self._edges.get(edge_id)
+            if edge is None:
+                continue
+            props = dict(edge.properties or {})
+            if props.get("source_event_id") == event_id:
+                continue
+            props["source_event_id"] = event_id
+            edge.properties = props
+            updated += 1
+        return updated
+
     async def delete_edge(self, edge_id: str) -> None:
         self._edges.pop(edge_id, None)
 

@@ -85,15 +85,23 @@ class _CountingSQLiteBackend(SQLiteBackend):
         self.node_get_count = 0
         self.node_save_count = 0
         self.node_update_count = 0
+        self.node_batch_calls = 0
+        self.node_batch_count = 0
         self.openie_batch_calls = 0
         self.openie_batch_edge_count = 0
+        self.openie_stamp_calls = 0
+        self.openie_stamp_edge_count = 0
 
     def reset_counts(self):
         self.node_get_count = 0
         self.node_save_count = 0
         self.node_update_count = 0
+        self.node_batch_calls = 0
+        self.node_batch_count = 0
         self.openie_batch_calls = 0
         self.openie_batch_edge_count = 0
+        self.openie_stamp_calls = 0
+        self.openie_stamp_edge_count = 0
 
     async def get_node(self, node_id: str):
         self.node_get_count += 1
@@ -107,10 +115,20 @@ class _CountingSQLiteBackend(SQLiteBackend):
         self.node_update_count += 1
         return await super().update_node(node)
 
+    async def save_nodes_batch(self, nodes):
+        self.node_batch_calls += 1
+        self.node_batch_count += len(nodes)
+        return await super().save_nodes_batch(nodes)
+
     async def save_openie_edges_batch(self, edges):
         self.openie_batch_calls += 1
         self.openie_batch_edge_count += len(edges)
         return await super().save_openie_edges_batch(edges)
+
+    async def stamp_openie_edges_event(self, edge_ids, event_id):
+        self.openie_stamp_calls += 1
+        self.openie_stamp_edge_count += len(edge_ids)
+        return await super().stamp_openie_edges_event(edge_ids, event_id)
 
 
 async def _graph_with_chunk() -> SynapticGraph:
@@ -615,7 +633,9 @@ async def test_openie_does_not_update_complete_existing_entity(tmp_path):
         )
 
         assert backend.node_update_count == 0
-        assert backend.node_save_count == 1
+        assert backend.node_save_count == 0
+        assert backend.node_batch_calls == 1
+        assert backend.node_batch_count == 1
         assert await backend.get_node(acme_id) is not None
         assert await backend.get_node(deterministic_entity_id("Roadmap")) is not None
     finally:
@@ -644,9 +664,18 @@ async def test_openie_linker_caches_entity_nodes_within_post_pass(tmp_path):
         assert stats.chunks_selected == 2
         assert stats.entity_nodes_touched == 1
         assert backend.node_get_count == 1
-        assert backend.node_save_count == 1
+        assert backend.node_save_count == 0
+        assert backend.node_batch_calls == 1
+        assert backend.node_batch_count == 1
         assert backend.node_update_count == 0
         assert backend.openie_batch_calls == 2
+        assert backend.openie_stamp_calls == 1
+        assert backend.openie_stamp_edge_count == len(stats.edge_ids)
+        events = await backend.list_memory_events(kind=MemoryEventKind.SEMANTIC_EXTRACT)
+        assert len(events) == 1
+        edges = await backend.get_edges(deterministic_entity_id("Acme"), direction="incoming")
+        assert edges
+        assert all(edge.properties["source_event_id"] == events[0].id for edge in edges)
     finally:
         await backend.close()
 

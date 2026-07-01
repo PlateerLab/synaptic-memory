@@ -915,8 +915,9 @@ Memory health snapshot:
 | PR #15 batch edge replay | `mz_openie_cache_deepseek_to100_batch_results.json` | `955.4s` | `18:25.66` | PASS |
 | PR #17 entity replay cache | `mz_openie_cache_deepseek_to100_entitycache_results.json` | `614.9s` | `11:41.07` | PASS |
 | PR #19 relation probe read cache | `mz_openie_cache_deepseek_to100_probecache_results.json` | `724.3s` | `15:15.56` | PASS |
+| batched node/event writes | `mz_openie_cache_deepseek_to100_batchnodes_results.json` | `126.0s` | `4:44.47` | PASS |
 
-핵심 검색/게이트 지표는 PR #17 이후에도 유지됐다:
+핵심 검색/게이트 지표는 최신 batched node/event write run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -944,18 +945,28 @@ read-through cache를 공유한다. Unit test는 duplicate FTS 호출 제거를 
 현재 "품질 유지 + read-path 중복 제거"로만 해석하고 full-eval 성능 개선으로
 계산하지 않는다.
 
+batched node/event write run은 OpenIE entity hub 보장을 chunk 안에서
+`save_nodes_batch`로 모으고, semantic extract event의 `source_event_id` stamping을
+backend bulk update로 처리한다. 100% cache-only gate는 PASS했고, relation probe와
+memory health count는 PR #17/#19 계열과 같은 수준을 유지했다.
+
 성능 변화:
 
 - PR #14 이후 OpenIE elapsed는 `2131.8s -> 1508.6s`로 `29.2%` 감소했다.
 - PR #15 이후 OpenIE elapsed는 `2131.8s -> 955.4s`로 `55.2%` 감소했다.
 - PR #17 이후 OpenIE elapsed는 `2131.8s -> 614.9s`로 `71.2%` 감소했다.
+- batched node/event write 이후 OpenIE elapsed는 `2131.8s -> 126.0s`로
+  `94.1%` 감소했고, 이전 best인 PR #17 대비 `79.5%` 추가 감소했다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
   `save_node()` `1`, `update_node()` `0`으로 같은 hub 반복 조회/갱신을 제거했다.
-- 남은 큰 비용은 OpenIE replay의 node/edge write path와 full scoring/search
-  roundtrip이다. Relation probe의 중복 FTS 제거만으로는 full gate wall time을
-  지배하지 못했다.
+- 50-entity SQLite link micro-benchmark는 fallback 개별 node save
+  `9,576.92ms` 대비 batch node save `243.45ms`로 `39.34x` 빨랐다.
+- 30-edge event stamp micro-benchmark는 old fallback `1,739.87ms` 대비 bulk stamp
+  `640.20ms`로 `2.72x` 빨랐다. 300-edge old fallback은 1분 이상 걸려 중단했다.
+- 남은 큰 비용은 full scoring/search roundtrip과 baseline DB build/copy 구간이다.
+  OpenIE replay write path는 200-chunk gate 기준으로 더 이상 지배 병목이 아니다.
 
 ---
 

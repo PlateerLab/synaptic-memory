@@ -559,6 +559,41 @@ class SQLiteBackend:
         )
         await db.commit()
 
+    async def stamp_openie_edges_event(self, edge_ids: Sequence[str], event_id: str) -> int:
+        """Set provenance event id on OpenIE edges in one transaction."""
+        if not edge_ids:
+            return 0
+        db = self._db()
+        unique_ids = sorted(set(edge_ids))
+        updates: list[tuple[str, str]] = []
+        for offset in range(0, len(unique_ids), 500):
+            chunk = unique_ids[offset : offset + 500]
+            placeholders = ",".join("?" for _ in chunk)
+            async with db.execute(
+                f"SELECT id, properties_json FROM syn_edges WHERE id IN ({placeholders})",
+                chunk,
+            ) as cur:
+                rows = await cur.fetchall()
+            for row in rows:
+                props = _json_str_dict(row["properties_json"])
+                if props.get("source_event_id") == event_id:
+                    continue
+                props["source_event_id"] = event_id
+                updates.append((json.dumps(props), row["id"]))
+
+        if not updates:
+            return 0
+        try:
+            await db.executemany(
+                "UPDATE syn_edges SET properties_json=? WHERE id=?",
+                updates,
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+        return len(updates)
+
     async def delete_edge(self, edge_id: str) -> None:
         db = self._db()
         await db.execute("DELETE FROM syn_edges WHERE id = ?", (edge_id,))
