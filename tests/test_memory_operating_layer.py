@@ -1926,5 +1926,9 @@ async def test_memory_monitor_flags_semantic_extraction_drift_spike():
     assert drift_node.properties["failure_rate"] == "1.000000"
 
     health = await graph.memory_health(scope=scope)
+    profile_key = "source=openie;extractor=OpenIELinker;model=unstable-model;prompt_version=v-drift"
     assert health.drift_spike_count >= 1
     assert health.suspect_count >= 1
+    assert health.semantic_extract_failure_counts[profile_key] == 3
+    assert health.semantic_extract_attempt_counts[profile_key] == 3
+    assert health.semantic_extract_failure_rates[profile_key] == pytest.approx(1.0)

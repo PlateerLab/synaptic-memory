@@ -241,6 +241,15 @@ def _infer_openie_model_profile(model: str) -> str:
     return ""
 
 
+def _semantic_extract_profile_key(event: MemoryEvent) -> str:
+    props = event.properties or {}
+    source = event.source or "unknown"
+    extractor = props.get("extractor", "") or event.source_id or "unknown"
+    model = props.get("model", "") or "unknown"
+    prompt_version = props.get("prompt_version", "") or "unknown"
+    return f"source={source};extractor={extractor};model={model};prompt_version={prompt_version}"
+
+
 _MEMORY_SIGNAL_MIN_PENALTY_CONFIDENCE = 0.7
 _MEMORY_SIGNAL_MAX_RANKING_PENALTY = 0.05
 _MEMORY_STRONG_NEGATIVE_SCORE_SIGNAL_THRESHOLD = -0.5
@@ -3316,6 +3325,20 @@ class SynapticGraph:
         selected = sum(
             _prop_int(event.properties, "chunks_selected", 0) for event in semantic_events
         )
+        semantic_failure_counts: Counter[str] = Counter()
+        semantic_attempt_counts: Counter[str] = Counter()
+        for event in semantic_events:
+            profile_key = _semantic_extract_profile_key(event)
+            event_failures = _prop_int(event.properties, "extraction_failures", 0)
+            event_selected = _prop_int(event.properties, "chunks_selected", 0)
+            event_attempts = max(event_selected, event_failures)
+            if event_attempts > 0:
+                semantic_attempt_counts[profile_key] += event_attempts
+            if event_failures > 0:
+                semantic_failure_counts[profile_key] += event_failures
+        top_semantic_failure_keys = [
+            profile_key for profile_key, _ in semantic_failure_counts.most_common(10)
+        ]
         signal_kinds = [MemorySignalKind(str(signal.kind)) for signal in signals]
         signal_kind_counts = Counter(str(kind) for kind in signal_kinds)
         suspect_kinds = {
@@ -3459,6 +3482,22 @@ class SynapticGraph:
             feedback_signal_counts=dict(feedback_signal_counts),
             openie_artifact_count=openie_nodes + openie_edges,
             openie_failure_rate=(failures / selected) if selected else 0.0,
+            semantic_extract_failure_counts={
+                profile_key: semantic_failure_counts[profile_key]
+                for profile_key in top_semantic_failure_keys
+            },
+            semantic_extract_attempt_counts={
+                profile_key: semantic_attempt_counts[profile_key]
+                for profile_key in top_semantic_failure_keys
+            },
+            semantic_extract_failure_rates={
+                profile_key: (
+                    semantic_failure_counts[profile_key] / semantic_attempt_counts[profile_key]
+                    if semantic_attempt_counts[profile_key]
+                    else 0.0
+                )
+                for profile_key in top_semantic_failure_keys
+            },
             memory_boosted_retrieval_count=boosted_retrieval_count,
             memory_demoted_retrieval_count=demoted_retrieval_count,
             memory_adjusted_retrieval_count=adjusted_retrieval_count,

@@ -276,6 +276,9 @@ class MemoryHealthReport:
     feedback_signal_counts: dict[str, int] = field(default_factory=_int_dict)
     openie_artifact_count: int = 0
     openie_failure_rate: float = 0.0
+    semantic_extract_failure_counts: dict[str, int] = field(default_factory=_int_dict)
+    semantic_extract_attempt_counts: dict[str, int] = field(default_factory=_int_dict)
+    semantic_extract_failure_rates: dict[str, float] = field(default_factory=_float_dict)
     memory_boosted_retrieval_count: int = 0
     memory_demoted_retrieval_count: int = 0
     memory_adjusted_retrieval_count: int = 0

@@ -1773,6 +1773,14 @@ per-chunk fallback을 유지한다.
   POC gate는 `health_reports_memory_event_kind_counts`를 추가해 `44/44` PASS했다. 대표
   결과는 `memory_events=22`,
   `memory_event_kind_counts={"signal": 9, "feedback": 7, "retrieval": 1, "semantic_extract": 4, "ingest": 1}`였다.
+- Memory health semantic failure buckets는 semantic extraction 실패를
+  `source/extractor/model/prompt_version` 단위로 집계해 failure/attempt/rate map으로 노출한다.
+  특정 OpenIE 모델이나 prompt version에서 실패가 몰리는지 health report에서 바로 확인할 수
+  있다. POC gate는 `health_reports_semantic_failure_buckets`를 추가해 `45/45` PASS했다.
+  대표 결과는
+  `semantic_extract_failure_counts={"source=openie;extractor=fixture;model=drift-fixture;prompt_version=poc-drift-v1": 3}`,
+  `semantic_extract_attempt_counts={"source=openie;extractor=fixture;model=drift-fixture;prompt_version=poc-drift-v1": 3}`,
+  `semantic_extract_failure_rates={"source=openie;extractor=fixture;model=drift-fixture;prompt_version=poc-drift-v1": 1.0}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
