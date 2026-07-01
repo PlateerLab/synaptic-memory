@@ -138,7 +138,7 @@ class ExpansionBudget:
     """
 
     max_per_anchor: int = 20
-    max_total_expanded: int = 100
+    max_total_expanded: int = 40
     max_hops: int = 1
     category_sibling_limit: int = 10
 
