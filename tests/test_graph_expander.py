@@ -565,6 +565,69 @@ async def test_references_expansion_skips_edge_reads_when_kind_absent():
 
 
 @pytest.mark.asyncio
+async def test_entity_mentions_skip_plain_entity_seed():
+    """Plain ENTITY seeds are documents/rows, not mention hub seeds."""
+
+    class CountingMemoryBackend(MemoryBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.edge_filtered_light_batch_calls: list[
+                tuple[tuple[str, ...], str, tuple[str, ...]]
+            ] = []
+
+        async def get_edges_batch_filtered_light(
+            self,
+            node_ids: list[str],
+            *,
+            direction: str = "both",
+            kinds: list[str | EdgeKind],
+        ) -> dict[str, list[Edge]]:
+            kind_values = tuple(sorted(str(kind) for kind in kinds))
+            self.edge_filtered_light_batch_calls.append((tuple(node_ids), direction, kind_values))
+            return await MemoryBackend.get_edges_batch_filtered(
+                self, node_ids, direction=direction, kinds=kinds
+            )
+
+    backend = CountingMemoryBackend()
+    await backend.connect()
+    seed = Node(id="entity", kind=NodeKind.ENTITY, title="Entity", content="x")
+    hub = Node(id="hub", kind=NodeKind.ENTITY, title="Hub", content="", tags=["_phrase"])
+    chunk = Node(id="chunk", kind=NodeKind.CHUNK, title="Chunk", content="x")
+    await backend.save_node(seed)
+    await backend.save_node(hub)
+    await backend.save_node(chunk)
+    await backend.save_edge(Edge(source_id=chunk.id, target_id=hub.id, kind=EdgeKind.MENTIONS))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[seed])
+
+    assert [r.reason for r in results] == ["seed"]
+    assert (
+        ("entity",),
+        "incoming",
+        (str(EdgeKind.MENTIONS),),
+    ) not in backend.edge_filtered_light_batch_calls
+
+
+@pytest.mark.asyncio
+async def test_entity_mentions_expand_phrase_hub_sources():
+    backend = MemoryBackend()
+    await backend.connect()
+    hub = Node(id="hub", kind=NodeKind.ENTITY, title="Hub", content="", tags=["_phrase"])
+    chunk = Node(id="chunk", kind=NodeKind.CHUNK, title="Chunk", content="source")
+    await backend.save_node(hub)
+    await backend.save_node(chunk)
+    await backend.save_edge(Edge(source_id=chunk.id, target_id=hub.id, kind=EdgeKind.MENTIONS))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[hub])
+
+    by_id = {r.node.id: r for r in results}
+    assert by_id["chunk"].reason == "entity_mention"
+    assert by_id["chunk"].anchor_hit == "hub"
+
+
+@pytest.mark.asyncio
 async def test_seed_edges_are_cached_across_expansion_paths():
     """A seed can be inspected by REFERENCES, document-scope, and RELATED
     paths. The per-search cache should make that one backend edge read."""

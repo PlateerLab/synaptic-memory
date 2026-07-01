@@ -84,6 +84,7 @@ _OPENIE_ENTITY_RELATION_KINDS = {
     EdgeKind.SUPERSEDES,
 }
 _OPENIE_TYPED_RELATION_KINDS = _OPENIE_ENTITY_RELATION_KINDS - {EdgeKind.RELATED}
+_ENTITY_MENTION_TAGS = frozenset({"_phrase", "_openie_entity", "_llm_enriched", "_spacy"})
 
 
 @dataclass(slots=True)
@@ -485,7 +486,7 @@ class GraphExpander:
         is the common case right now. Kept in place so Phase G ontology
         work lights up for free.
         """
-        entities = [n for n in seed_nodes if n.kind == NodeKind.ENTITY]
+        entities = [n for n in seed_nodes if _is_entity_mention_seed(n)]
         if not entities:
             return
 
@@ -755,6 +756,13 @@ async def _has_edges_of_kind(backend: object, kind: EdgeKind) -> bool | None:
 def _is_document_scope_seed(node: Node) -> bool:
     tags = node.tags or []
     return "_openie_entity" not in tags
+
+
+def _is_entity_mention_seed(node: Node) -> bool:
+    if node.kind != NodeKind.ENTITY:
+        return False
+    tags = set(node.tags or [])
+    return bool(tags & _ENTITY_MENTION_TAGS)
 
 
 def _record_timing(timings_ms: dict[str, float] | None, key: str, started_at: float) -> None:
