@@ -584,6 +584,30 @@ class TestBoundedPassagePool:
 
         assert {e.node.id for e in result} == {"anchor", "cited"}
 
+    def test_reference_companion_is_not_selected_twice_after_attach(self):
+        agg = EvidenceAggregator(candidate_pool_limit=4)
+        anchor = _scored("anchor", total=0.9, content="anchor body", doc_id="anchor")
+        companion = ScoredCandidate(
+            node=_node("cited", content="cited body", doc_id="cited"),
+            total=0.8,
+            lexical=0.0,
+            semantic=0.0,
+            graph=0.1,
+            structural=0.0,
+            reason="references",
+            anchor_id="anchor",
+        )
+        filler = _scored("filler", total=0.7, content="filler body", doc_id="filler")
+
+        result = agg.aggregate(scored=[anchor, companion, filler], k=3)
+
+        assert [e.node.id for e in result] == ["anchor", "cited", "filler"]
+        assert [e.reason for e in result] == [
+            "top_score",
+            "reference_companion",
+            "top_score",
+        ]
+
     def test_call_level_pool_limit_overrides_instance_default(self):
         agg = EvidenceAggregator(candidate_pool_limit=0)
         same_doc = [

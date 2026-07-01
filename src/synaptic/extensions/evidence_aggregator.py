@@ -353,6 +353,8 @@ class EvidenceAggregator:
             best_idx = -1
             best_adj = -math.inf
             for i, cand in enumerate(remaining):
+                if id(cand) not in remaining_ids:
+                    continue
                 if (
                     remaining_sorted_by_total
                     and best_idx >= 0
@@ -412,7 +414,6 @@ class EvidenceAggregator:
             if companions:
                 companion_ids = {id(comp) for comp in companions}
                 remaining_ids.difference_update(companion_ids)
-                remaining = [cand for cand in remaining if id(cand) not in companion_ids]
             for comp in companions:
                 comp_ev = _make_evidence(comp, reason="reference_companion")
                 selected.append(comp_ev)
