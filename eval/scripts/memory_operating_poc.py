@@ -718,6 +718,26 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and ranking_health.memory_score_negative_count >= 1
                 and ranking_health.memory_score_neutral_count >= 0
             ),
+            "health_reports_quality_rates": (
+                health.feedback_success_rate > health.feedback_failure_rate > 0.0
+                and health.feedback_neutral_rate > 0.0
+                and _round(
+                    health.feedback_success_rate
+                    + health.feedback_failure_rate
+                    + health.feedback_neutral_rate
+                )
+                == 1.0
+                and ranking_health.memory_score_positive_rate
+                > ranking_health.memory_score_negative_rate
+                > 0.0
+                and ranking_health.memory_score_neutral_rate >= 0.0
+                and _round(
+                    ranking_health.memory_score_positive_rate
+                    + ranking_health.memory_score_negative_rate
+                    + ranking_health.memory_score_neutral_rate
+                )
+                == 1.0
+            ),
             "health_reports_semantic_failure_buckets": (
                 health.semantic_extract_failure_counts.get(drift_profile_key, 0) == 3
                 and health.semantic_extract_attempt_counts.get(drift_profile_key, 0) == 3

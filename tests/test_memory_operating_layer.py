@@ -1460,6 +1460,9 @@ async def test_memory_health_summarizes_feedback_outcomes():
     assert health.feedback_success_count == 1
     assert health.feedback_failure_count == 1
     assert health.feedback_neutral_count == 1
+    assert health.feedback_success_rate == pytest.approx(1 / 3)
+    assert health.feedback_failure_rate == pytest.approx(1 / 3)
+    assert health.feedback_neutral_rate == pytest.approx(1 / 3)
     assert health.feedback_signal_counts == {
         str(FeedbackSignal.SELECTED): 1,
         str(FeedbackSignal.TASK_SUCCESS): 1,
@@ -1590,6 +1593,9 @@ async def test_memory_health_summarizes_score_scope_counts():
     assert scoped_health.memory_score_positive_count == 3
     assert scoped_health.memory_score_negative_count == 1
     assert scoped_health.memory_score_neutral_count == 1
+    assert scoped_health.memory_score_positive_rate == pytest.approx(3 / 5)
+    assert scoped_health.memory_score_negative_rate == pytest.approx(1 / 5)
+    assert scoped_health.memory_score_neutral_rate == pytest.approx(1 / 5)
     assert scoped_health.top_reinforced_node_ids == ["a"]
     assert scoped_health.top_reinforced_edge_ids == ["edge_a"]
     assert global_health.memory_score_scope_counts == scoped_health.memory_score_scope_counts
