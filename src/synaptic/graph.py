@@ -239,6 +239,7 @@ def _infer_openie_model_profile(model: str) -> str:
 
 _MEMORY_SIGNAL_MIN_PENALTY_CONFIDENCE = 0.7
 _MEMORY_SIGNAL_MAX_RANKING_PENALTY = 0.05
+_MEMORY_STRONG_NEGATIVE_SCORE_SIGNAL_THRESHOLD = -0.5
 _MEMORY_DRIFT_MIN_FAILURES = 3
 _MEMORY_DRIFT_MIN_FAILURE_RATE = 0.25
 _MEMORY_PROPERTY_CONFLICT_IGNORED_KEYS = frozenset(
@@ -3194,22 +3195,41 @@ class SynapticGraph:
                 target = score.node_id or score.edge_id
                 if not target or target in repeated_failure_targets:
                     continue
-                if score.failure_count < 3 or score.failure_count <= score.success_count:
+                repeated_failure = (
+                    score.failure_count >= 3 and score.failure_count > score.success_count
+                )
+                strong_negative = score.score <= _MEMORY_STRONG_NEGATIVE_SCORE_SIGNAL_THRESHOLD
+                if not repeated_failure and not strong_negative:
                     continue
                 node_ids = [score.node_id] if score.node_id else []
                 edge_ids = [score.edge_id] if score.edge_id else []
+                signal_type = (
+                    "repeated_negative_feedback"
+                    if repeated_failure
+                    else "strong_negative_scope_score"
+                )
+                confidence = (
+                    0.75 if repeated_failure else min(0.9, max(0.7, 0.55 + abs(score.score) * 0.35))
+                )
+                reason = (
+                    "scope score has repeated negative retrieval feedback"
+                    if repeated_failure
+                    else "scope score is strongly negative from retrieval feedback"
+                )
                 signals.append(
                     self._make_signal(
                         MemorySignalKind.REPEATED_FAILURE,
                         signal_scope,
                         node_ids=node_ids,
                         edge_ids=edge_ids,
-                        confidence=0.75,
-                        reason="scope score has repeated negative retrieval feedback",
+                        confidence=confidence,
+                        reason=reason,
                         properties={
+                            "score_signal_type": signal_type,
                             "score_scope_key": score.scope_key,
                             "score_failure_count": str(score.failure_count),
                             "score_success_count": str(score.success_count),
+                            "score_access_count": str(score.access_count),
                             "score": f"{score.score:.6f}",
                         },
                     )

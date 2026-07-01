@@ -383,6 +383,31 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - scope score가 음수로 누적된 node/edge를 `memory_health()`에서 직접 확인할 수 있다.
 - reinforced summary는 양수 score만, demoted summary는 음수 score만 분리해서 보여준다.
 
+후속 strong negative scope score signal guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_strong_negative_signal_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `33/33` |
+| strong_negative_scope_score_signal_created | `true` |
+| signal_kind | `repeated_failure` |
+| score_signal_type | `strong_negative_scope_score` |
+| signal tags | `_memory_signal`, `_memory_suspect` |
+| score | `-1.000000` |
+
+추가로 검증된 동작:
+
+- `failure_count >= 3`이 아니어도 scope score가 강하게 음수이면 suspect signal 후보가 된다.
+- top demoted memory가 health summary에만 머물지 않고 pollution monitor signal로 연결된다.
+- signal provenance에는 `score_scope_key`, feedback count, score가 metadata로 남는다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
