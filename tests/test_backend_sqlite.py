@@ -96,6 +96,55 @@ class TestSQLiteEdges:
         assert incoming[n1.id][0].id == "c_a"
         assert incoming[n2.id][0].id == "a_b"
 
+    async def test_get_edges_batch_filtered_limits_kind_and_keeps_properties(
+        self, sqlite: SQLiteBackend
+    ) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        n3 = Node(title="C")
+        for node in (n1, n2, n3):
+            await sqlite.save_node(node)
+        await sqlite.save_edge(
+            Edge(
+                id="related",
+                source_id=n1.id,
+                target_id=n2.id,
+                kind=EdgeKind.RELATED,
+                properties={"confidence": "0.9"},
+            )
+        )
+        await sqlite.save_edge(
+            Edge(id="contains", source_id=n1.id, target_id=n3.id, kind=EdgeKind.CONTAINS)
+        )
+
+        filtered = await sqlite.get_edges_batch_filtered(
+            [n1.id], direction="both", kinds=[EdgeKind.RELATED]
+        )
+
+        assert [edge.id for edge in filtered[n1.id]] == ["related"]
+        assert filtered[n1.id][0].properties["confidence"] == "0.9"
+
+    async def test_get_edges_batch_light_skips_properties(self, sqlite: SQLiteBackend) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        await sqlite.save_node(n1)
+        await sqlite.save_node(n2)
+        await sqlite.save_edge(
+            Edge(
+                id="related",
+                source_id=n1.id,
+                target_id=n2.id,
+                kind=EdgeKind.RELATED,
+                properties={"confidence": "0.9"},
+            )
+        )
+
+        light = await sqlite.get_edges_batch_light([n1.id], direction="outgoing")
+
+        assert [edge.id for edge in light[n1.id]] == ["related"]
+        assert light[n1.id][0].kind == EdgeKind.RELATED
+        assert light[n1.id][0].properties == {}
+
     async def test_batch_upsert_converges_on_source_target_kind(
         self, sqlite: SQLiteBackend
     ) -> None:

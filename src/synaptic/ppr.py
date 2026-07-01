@@ -49,6 +49,7 @@ async def personalized_pagerank(
     tol: float = 1e-6,
     top_k: int = 20,
     bfs_depth: int = 2,
+    light_edges: bool = False,
     read_cache: GraphReadCache | None = None,
     timings_ms: dict[str, float] | None = None,
 ) -> list[tuple[str, float]]:
@@ -66,6 +67,9 @@ async def personalized_pagerank(
         tol: Convergence threshold (L1 norm of rank change).
         top_k: Number of top-ranked nodes to return.
         bfs_depth: How many graph layers to materialize from the seeds.
+        light_edges: Use traversal-only edge reads when the backend supports
+            them. This skips edge metadata/provenance loading for PPR paths
+            that only need source/target/kind/weight.
 
     Returns:
         List of (node_id, ppr_score) sorted descending by score.
@@ -86,7 +90,10 @@ async def personalized_pagerank(
             break
         next_frontier: set[str] = set()
         frontier_nodes = [nid for nid in frontier if nid not in visited]
-        frontier_edges = await reads.get_edges_many(frontier_nodes, direction="both")
+        if light_edges:
+            frontier_edges = await reads.get_edges_many_light(frontier_nodes, direction="both")
+        else:
+            frontier_edges = await reads.get_edges_many(frontier_nodes, direction="both")
         for nid in frontier_nodes:
             if nid in visited:
                 continue

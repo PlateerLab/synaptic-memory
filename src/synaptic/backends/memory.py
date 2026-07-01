@@ -9,6 +9,7 @@ from difflib import SequenceMatcher
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
+    EdgeKind,
     MemoryEvent,
     MemoryScope,
     MemoryScore,
@@ -126,6 +127,51 @@ class MemoryBackend:
             return result
         node_set = set(result)
         for edge in self._edges.values():
+            if direction in ("both", "outgoing") and edge.source_id in node_set:
+                result[edge.source_id].append(edge)
+            if (
+                direction in ("both", "incoming")
+                and edge.target_id in node_set
+                and not (direction == "both" and edge.target_id == edge.source_id)
+            ):
+                result[edge.target_id].append(edge)
+        return result
+
+    async def get_edges_batch_light(
+        self, node_ids: list[str], *, direction: str = "both"
+    ) -> dict[str, list[Edge]]:
+        result: dict[str, list[Edge]] = {nid: [] for nid in dict.fromkeys(node_ids)}
+        if not result:
+            return result
+        node_set = set(result)
+        for edge in self._edges.values():
+            if direction in ("both", "outgoing") and edge.source_id in node_set:
+                result[edge.source_id].append(edge)
+            if (
+                direction in ("both", "incoming")
+                and edge.target_id in node_set
+                and not (direction == "both" and edge.target_id == edge.source_id)
+            ):
+                result[edge.target_id].append(edge)
+        return result
+
+    async def get_edges_batch_filtered(
+        self,
+        node_ids: list[str],
+        *,
+        direction: str = "both",
+        kinds: Sequence[str | EdgeKind],
+    ) -> dict[str, list[Edge]]:
+        result: dict[str, list[Edge]] = {nid: [] for nid in dict.fromkeys(node_ids)}
+        if not result:
+            return result
+        kind_set = {kind.value if isinstance(kind, EdgeKind) else str(kind) for kind in kinds}
+        if not kind_set:
+            return result
+        node_set = set(result)
+        for edge in self._edges.values():
+            if edge.kind.value not in kind_set:
+                continue
             if direction in ("both", "outgoing") and edge.source_id in node_set:
                 result[edge.source_id].append(edge)
             if (

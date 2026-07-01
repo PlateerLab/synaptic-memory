@@ -257,6 +257,8 @@ CREATE TABLE IF NOT EXISTS syn_memory_scores (
 
 CREATE INDEX IF NOT EXISTS idx_syn_edges_source ON syn_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_target ON syn_edges(target_id);
+CREATE INDEX IF NOT EXISTS idx_syn_edges_source_kind ON syn_edges(source_id, kind);
+CREATE INDEX IF NOT EXISTS idx_syn_edges_target_kind ON syn_edges(target_id, kind);
 CREATE INDEX IF NOT EXISTS idx_syn_nodes_kind_level ON syn_nodes(kind, level);
 CREATE INDEX IF NOT EXISTS idx_syn_memory_events_scope ON syn_memory_events(scope_key, created_at);
 CREATE INDEX IF NOT EXISTS idx_syn_memory_events_kind ON syn_memory_events(kind, created_at);
@@ -576,6 +578,109 @@ class SQLiteBackend:
                     f"OR target_id IN ({placeholders})"
                 )
                 params = list(chunk) + list(chunk)
+
+            async with db.execute(sql, params) as cur:
+                rows = await cur.fetchall()
+
+            for row in rows:
+                edge = _row_to_edge(row)
+                if direction in ("both", "outgoing") and edge.source_id in chunk_set:
+                    result[edge.source_id].append(edge)
+                if (
+                    direction in ("both", "incoming")
+                    and edge.target_id in chunk_set
+                    and not (direction == "both" and edge.target_id == edge.source_id)
+                ):
+                    result[edge.target_id].append(edge)
+        return result
+
+    async def get_edges_batch_light(
+        self, node_ids: list[str], *, direction: str = "both"
+    ) -> dict[str, list[Edge]]:
+        unique_ids = list(dict.fromkeys(node_ids))
+        result: dict[str, list[Edge]] = {nid: [] for nid in unique_ids}
+        if not unique_ids:
+            return result
+
+        db = self._db()
+        for offset in range(0, len(unique_ids), 500):
+            chunk = unique_ids[offset : offset + 500]
+            chunk_set = set(chunk)
+            placeholders = ",".join("?" for _ in chunk)
+            if direction == "outgoing":
+                sql = (
+                    "SELECT id, source_id, target_id, kind, weight, created_at "
+                    f"FROM syn_edges WHERE source_id IN ({placeholders})"
+                )
+                params: list[str] = list(chunk)
+            elif direction == "incoming":
+                sql = (
+                    "SELECT id, source_id, target_id, kind, weight, created_at "
+                    f"FROM syn_edges WHERE target_id IN ({placeholders})"
+                )
+                params = list(chunk)
+            else:
+                sql = (
+                    "SELECT id, source_id, target_id, kind, weight, created_at "
+                    f"FROM syn_edges WHERE source_id IN ({placeholders}) "
+                    f"OR target_id IN ({placeholders})"
+                )
+                params = list(chunk) + list(chunk)
+
+            async with db.execute(sql, params) as cur:
+                rows = await cur.fetchall()
+
+            for row in rows:
+                edge = _row_to_edge_light(row)
+                if direction in ("both", "outgoing") and edge.source_id in chunk_set:
+                    result[edge.source_id].append(edge)
+                if (
+                    direction in ("both", "incoming")
+                    and edge.target_id in chunk_set
+                    and not (direction == "both" and edge.target_id == edge.source_id)
+                ):
+                    result[edge.target_id].append(edge)
+        return result
+
+    async def get_edges_batch_filtered(
+        self,
+        node_ids: list[str],
+        *,
+        direction: str = "both",
+        kinds: Sequence[str | EdgeKind],
+    ) -> dict[str, list[Edge]]:
+        unique_ids = list(dict.fromkeys(node_ids))
+        result: dict[str, list[Edge]] = {nid: [] for nid in unique_ids}
+        kind_values = [kind.value if isinstance(kind, EdgeKind) else str(kind) for kind in kinds]
+        kind_values = list(dict.fromkeys(kind_values))
+        if not unique_ids or not kind_values:
+            return result
+
+        db = self._db()
+        kind_placeholders = ",".join("?" for _ in kind_values)
+        for offset in range(0, len(unique_ids), 500):
+            chunk = unique_ids[offset : offset + 500]
+            chunk_set = set(chunk)
+            node_placeholders = ",".join("?" for _ in chunk)
+            if direction == "outgoing":
+                sql = (
+                    f"SELECT * FROM syn_edges WHERE source_id IN ({node_placeholders}) "
+                    f"AND kind IN ({kind_placeholders})"
+                )
+                params: list[str] = list(chunk) + kind_values
+            elif direction == "incoming":
+                sql = (
+                    f"SELECT * FROM syn_edges WHERE target_id IN ({node_placeholders}) "
+                    f"AND kind IN ({kind_placeholders})"
+                )
+                params = list(chunk) + kind_values
+            else:
+                sql = (
+                    f"SELECT * FROM syn_edges WHERE "
+                    f"(source_id IN ({node_placeholders}) OR target_id IN ({node_placeholders})) "
+                    f"AND kind IN ({kind_placeholders})"
+                )
+                params = list(chunk) + list(chunk) + kind_values
 
             async with db.execute(sql, params) as cur:
                 rows = await cur.fetchall()
@@ -1601,6 +1706,18 @@ def _row_to_edge(row: aiosqlite.Row) -> Edge:
         kind=EdgeKind(row["kind"]),
         weight=row["weight"],
         properties=json.loads(props_raw) if props_raw else {},
+        created_at=row["created_at"],
+    )
+
+
+def _row_to_edge_light(row: aiosqlite.Row) -> Edge:
+    return Edge(
+        id=row["id"],
+        source_id=row["source_id"],
+        target_id=row["target_id"],
+        kind=EdgeKind(row["kind"]),
+        weight=row["weight"],
+        properties={},
         created_at=row["created_at"],
     )
 
