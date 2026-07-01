@@ -12,6 +12,13 @@ from typing import TYPE_CHECKING, cast
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_FTS_SEED_MIN = 20
+_DEFAULT_FTS_SEED_MULTIPLIER = 2
+
+
+def _default_fts_seed_limit(limit: int) -> int:
+    return max(_DEFAULT_FTS_SEED_MIN, max(0, limit) * _DEFAULT_FTS_SEED_MULTIPLIER)
+
 
 def _nfc(s: str) -> str:
     """NFC-normalize a string. macOS HFS+ stores Korean as NFD; without this,
@@ -2368,7 +2375,7 @@ class SynapticGraph:
                 reranking for this query even when one is wired; ``True``
                 is the same as ``None``.
             fts_seed_limit: Per-call FTS seed-pool size. ``None`` uses
-                the ``max(20, limit * 3)`` default heuristic.
+                the ``max(20, limit * 2)`` default heuristic.
             per_document_cap: Per-call cap on evidence items from any
                 single document — lower = more source diversity.
                 ``None`` uses the pipeline default (2).
@@ -2424,9 +2431,11 @@ class SynapticGraph:
         searcher = self._get_evidence_search(active_reranker)
         search_kwargs: dict[str, object] = {
             "k": limit,
-            # Match the over-fetch heuristic agent_search_tool uses so
-            # the reranker sees a richer pool than ``limit`` itself.
-            "fts_seed_limit": fts_seed_limit if fts_seed_limit is not None else max(20, limit * 3),
+            # Keep a bounded lexical over-fetch so the reranker sees a richer
+            # pool than ``limit`` itself without flooding expansion.
+            "fts_seed_limit": (
+                fts_seed_limit if fts_seed_limit is not None else _default_fts_seed_limit(limit)
+            ),
         }
         if per_document_cap is not None:
             search_kwargs["per_document_cap"] = per_document_cap
