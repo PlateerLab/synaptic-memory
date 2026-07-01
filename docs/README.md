@@ -36,6 +36,11 @@ Consolidation (L0→L3) 등 초기 아이디어. 지금도 살아있는 부분�
 GraphRAG (Microsoft), LightRAG, LazyGraphRAG 등과의 비교. 어떤 차이가 있고
 왜 Synaptic Memory를 선택할지에 대한 가이드.
 
+### [REPORT-memory-operating-layer-eval.md](REPORT-memory-operating-layer-eval.md)
+v0.30 memory operating layer merge 직후 평가 보고서. event/feedback ledger,
+scope-aware reinforcement, OpenIE relation expansion, cache-only smoke, DeepSeek
+Flash live eval 준비 상태를 정리합니다.
+
 ---
 
 ## 🗺 계획 / 로드맵
