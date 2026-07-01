@@ -264,24 +264,62 @@ class GraphExpander:
     ) -> None:
         """From category anchors, surface documents in the same category.
 
-        Uses ``get_neighbors`` with ``depth=1`` so we go category → doc
-        in a single hop. The backend's neighbour call returns the edge
-        too, but we only care about the node here.
+        Uses filtered PART_OF edges instead of the generic neighbour walk so a
+        large category does not materialize every adjacent node/edge kind before
+        the expansion budget trims it.
         """
-        for cat_id in anchors.category_node_ids:
-            if state.is_full():
-                return
-            try:
-                hops = await reads.get_neighbors(cat_id, depth=1)
-            except Exception as exc:
-                logger.debug("category expansion failed for %s: %s", cat_id, exc)
-                continue
+        category_ids = list(dict.fromkeys(anchors.category_node_ids))
+        if not category_ids:
+            return
 
+        try:
+            edge_map = await reads.get_edges_many_by_kind_light(
+                category_ids,
+                direction="both",
+                kinds=[EdgeKind.PART_OF],
+            )
+        except Exception as exc:
+            logger.debug("category edge batch failed: %s", exc)
+            return
+
+        groups: list[tuple[str, list[str]]] = []
+        node_ids: list[str] = []
+        seen: set[str] = set()
+        offer_limit = state.remaining_capacity()
+        for cat_id in category_ids:
+            if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
+                break
+
+            candidate_ids: list[str] = []
+            for edge in edge_map.get(cat_id, []):
+                if (
+                    state.is_full()
+                    or len(candidate_ids) >= state.budget.category_sibling_limit
+                    or (offer_limit is not None and len(node_ids) >= offer_limit)
+                ):
+                    break
+                if edge.kind != EdgeKind.PART_OF:
+                    continue
+                other_id = edge.target_id if edge.source_id == cat_id else edge.source_id
+                if other_id == cat_id or state.contains(other_id) or other_id in candidate_ids:
+                    continue
+                candidate_ids.append(other_id)
+                if other_id not in seen:
+                    node_ids.append(other_id)
+                    seen.add(other_id)
+            if candidate_ids:
+                groups.append((cat_id, candidate_ids))
+
+        nodes = await reads.get_nodes(node_ids)
+        for cat_id, candidate_ids in groups:
             added = 0
-            for node, _edge in hops:
+            for node_id in candidate_ids:
                 if state.is_full() or added >= state.budget.category_sibling_limit:
                     break
-                if node.id == cat_id:
+                if state.contains(node_id):
+                    continue
+                node = nodes.get(node_id)
+                if node is None:
                     continue
                 state.add(
                     ExpandedNode(

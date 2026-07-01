@@ -187,6 +187,82 @@ class TestCategorySiblings:
         doc_count = sum(1 for r in results if r.reason == "category_sibling")
         assert doc_count == 1
 
+    async def test_category_siblings_use_light_part_of_edges_and_batch_nodes(self):
+        class CountingMemoryBackend(MemoryBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.neighbor_calls: list[str] = []
+                self.node_calls: list[str] = []
+                self.node_batch_calls: list[tuple[str, ...]] = []
+                self.edge_filtered_light_batch_calls: list[
+                    tuple[tuple[str, ...], str, tuple[str, ...]]
+                ] = []
+
+            async def get_neighbors(
+                self,
+                node_id: str,
+                *,
+                depth: int = 1,
+            ) -> list[tuple[Node, Edge]]:
+                self.neighbor_calls.append(node_id)
+                return await super().get_neighbors(node_id, depth=depth)
+
+            async def get_node(self, node_id: str) -> Node | None:
+                self.node_calls.append(node_id)
+                return await super().get_node(node_id)
+
+            async def get_nodes_batch(self, node_ids: list[str]) -> list[Node]:
+                self.node_batch_calls.append(tuple(node_ids))
+                return await super().get_nodes_batch(node_ids)
+
+            async def get_edges_batch_filtered_light(
+                self,
+                node_ids: list[str],
+                *,
+                direction: str = "both",
+                kinds: list[str | EdgeKind],
+            ) -> dict[str, list[Edge]]:
+                kind_values = tuple(sorted(str(kind) for kind in kinds))
+                self.edge_filtered_light_batch_calls.append(
+                    (tuple(node_ids), direction, kind_values)
+                )
+                return await super().get_edges_batch_filtered_light(
+                    node_ids,
+                    direction=direction,
+                    kinds=kinds,
+                )
+
+        backend = CountingMemoryBackend()
+        await backend.connect()
+        nodes = await _build_fixture(backend)
+        noise = Node(id="noise", kind=NodeKind.ENTITY, title="Noise", content="noise")
+        await backend.save_node(noise)
+        await backend.save_edge(
+            Edge(
+                id="noise_rel",
+                source_id=nodes["cat_rule"].id,
+                target_id=noise.id,
+                kind=EdgeKind.RELATED,
+            )
+        )
+        expander = GraphExpander(backend=backend)
+
+        results = await expander.expand(
+            anchors=QueryAnchors(query="규정", category_node_ids=["cat_rule"]),
+            seed_nodes=[],
+        )
+
+        by_reason = {r.node.id: r.reason for r in results}
+        assert by_reason["doc_r1"] == "category_sibling"
+        assert by_reason["doc_r2"] == "category_sibling"
+        assert "noise" not in by_reason
+        assert backend.neighbor_calls == []
+        assert backend.node_calls == []
+        assert ("doc_r1", "doc_r2") in backend.node_batch_calls
+        assert backend.edge_filtered_light_batch_calls == [
+            (("cat_rule",), "both", (str(EdgeKind.PART_OF),))
+        ]
+
 
 # --- Document scope ---
 
