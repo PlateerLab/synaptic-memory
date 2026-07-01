@@ -399,6 +399,21 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ],
         )
         await graph._apply_scope_boost(negative_scope_result, scope)
+        await backend.save_edge(
+            Edge(
+                id="poc_edge_score_demoted_relation",
+                source_id=scope_demoted.id,
+                target_id=scope_clean.id,
+                kind=EdgeKind.RELATED,
+            )
+        )
+        await backend.save_memory_score(
+            MemoryScore(
+                scope_key=scope.key,
+                edge_id="poc_edge_score_demoted_relation",
+                score=-1.0,
+            )
+        )
         edge_boosted = Node(
             id="poc_edge_score_boosted_memory",
             title="Edge score boosted memory",
@@ -656,6 +671,10 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             "health_top_edges_not_starved_by_node_scores": (
                 "poc_edge_score_boost_relation" in ranking_health.top_reinforced_edge_ids
                 and len(ranking_health.top_reinforced_node_ids) == 10
+            ),
+            "health_reports_top_demoted_scores": (
+                scope_demoted.id in ranking_health.top_demoted_node_ids
+                and "poc_edge_score_demoted_relation" in ranking_health.top_demoted_edge_ids
             ),
             "health_counts_openie_edges_by_provenance": health.openie_artifact_count == 1,
             "edge_provenance_roundtrip": (

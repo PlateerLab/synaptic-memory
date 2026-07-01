@@ -3248,16 +3248,26 @@ class SynapticGraph:
             scope=scope, since=since, limit=100_000
         )
         score_scope_key = memory_scope_key(effective_scope)
-        top_node_scores = await self._list_memory_scores(
+        node_scores = await self._list_memory_scores(
             scope_key=score_scope_key,
             edge_ids=[""],
-            limit=10,
+            limit=100_000,
         )
-        top_edge_scores = await self._list_memory_scores(
+        edge_scores = await self._list_memory_scores(
             scope_key=score_scope_key,
             node_ids=[""],
-            limit=10,
+            limit=100_000,
         )
+        top_node_scores = [score for score in node_scores if score.node_id and score.score > 0][:10]
+        top_edge_scores = [score for score in edge_scores if score.edge_id and score.score > 0][:10]
+        top_demoted_node_scores = sorted(
+            (score for score in node_scores if score.node_id and score.score < 0),
+            key=lambda score: score.score,
+        )[:10]
+        top_demoted_edge_scores = sorted(
+            (score for score in edge_scores if score.edge_id and score.score < 0),
+            key=lambda score: score.score,
+        )[:10]
 
         semantic_events = [
             event for event in memory_events if str(event.kind) == MemoryEventKind.SEMANTIC_EXTRACT
@@ -3380,6 +3390,12 @@ class SynapticGraph:
             max_memory_signal_penalty=max_signal_penalty,
             top_reinforced_node_ids=[score.node_id for score in top_node_scores if score.node_id],
             top_reinforced_edge_ids=[score.edge_id for score in top_edge_scores if score.edge_id],
+            top_demoted_node_ids=[
+                score.node_id for score in top_demoted_node_scores if score.node_id
+            ],
+            top_demoted_edge_ids=[
+                score.edge_id for score in top_demoted_edge_scores if score.edge_id
+            ],
         )
 
     async def _semantic_extract_drift_signals(

@@ -361,6 +361,28 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - retrieval ledger에 기록된 scope demotion diagnostics가 `memory_health()` summary로 집계된다.
 - positive boost, negative demotion, 전체 adjustment count를 health report에서 분리해서 볼 수 있다.
 
+후속 top demoted score summary guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_top_demoted_summary_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `32/32` |
+| health_reports_top_demoted_scores | `true` |
+| top demoted node ids | `poc_scope_demoted_memory`, `poc_scope_score_failed_memory`, `poc_scoped_negative_memory` |
+| top demoted edge ids | `poc_edge_score_demoted_relation` |
+
+추가로 검증된 동작:
+
+- scope score가 음수로 누적된 node/edge를 `memory_health()`에서 직접 확인할 수 있다.
+- reinforced summary는 양수 score만, demoted summary는 음수 score만 분리해서 보여준다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
