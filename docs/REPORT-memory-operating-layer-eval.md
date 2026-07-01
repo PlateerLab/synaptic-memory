@@ -248,6 +248,26 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - 운영자는 health report만 봐도 최근 검색에서 memory boost/penalty가 몇 번, 얼마나
   개입했는지 확인할 수 있다.
 
+후속 top reinforced edge health 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_top_edges_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `27/27` |
+| top reinforced edge ids | `poc_edge_score_boost_relation`, `ca22935c4fa14f9c` |
+
+추가로 검증된 동작:
+
+- `memory_health()`가 node 강화 summary뿐 아니라 edge/relation 강화 summary도 노출한다.
+- relation memory가 강화됐는지 health report만 보고도 추적할 수 있다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash

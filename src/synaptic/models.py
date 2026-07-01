@@ -267,6 +267,7 @@ class MemoryHealthReport:
     max_memory_scope_boost: float = 0.0
     max_memory_signal_penalty: float = 0.0
     top_reinforced_node_ids: list[str] = field(default_factory=_str_list)
+    top_reinforced_edge_ids: list[str] = field(default_factory=_str_list)
     generated_at: float = field(default_factory=time)
 
 

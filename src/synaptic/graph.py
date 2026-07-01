@@ -3314,6 +3314,7 @@ class SynapticGraph:
             max_memory_scope_boost=max_scope_boost,
             max_memory_signal_penalty=max_signal_penalty,
             top_reinforced_node_ids=[score.node_id for score in scores if score.node_id],
+            top_reinforced_edge_ids=[score.edge_id for score in scores if score.edge_id],
         )
 
     async def _semantic_extract_drift_signals(
