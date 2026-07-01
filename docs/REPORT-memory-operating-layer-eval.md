@@ -1798,6 +1798,13 @@ per-chunk fallback을 유지한다.
   개인/프로젝트 편향이 global memory를 지배하는지 운영자가 바로 확인할 수 있다. POC gate는
   `health_reports_score_scope_counts`를 추가해 `48/48` PASS했다. 대표 결과는
   `memory_score_scope_counts={"global": 6, "user:eval-user": 22}`였다.
+- Memory health score totals는 reinforcement score ledger의 전체 row 수, node/edge 분포,
+  positive/negative/neutral 분포를 scalar로 노출한다. 운영자는 score ledger가 강화 쪽으로
+  쌓이는지, 감점이 과도하게 늘어나는지, edge score가 실제로 생기는지 health report에서 바로
+  볼 수 있다. POC gate는 `health_reports_score_totals`를 추가해 `49/49` PASS했다. 대표
+  결과는 `memory_score_count=28`, `memory_score_node_count=24`,
+  `memory_score_edge_count=4`, `memory_score_positive_count=24`,
+  `memory_score_negative_count=4`, `memory_score_neutral_count=0`이었다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
