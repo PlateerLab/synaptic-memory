@@ -192,6 +192,9 @@ class GraphExpander:
         for node in seed_nodes:
             state.add(ExpandedNode(node=node, reason="seed", hops=0))
 
+        if seed_nodes and not state.is_full():
+            await reads.get_edges_many([node.id for node in seed_nodes], direction="both")
+
         # Step 2 — REFERENCES edges (explicit document cross-references,
         # e.g. a statute article citing another article). Runs first
         # among the expansion paths: a cited document is the highest-value

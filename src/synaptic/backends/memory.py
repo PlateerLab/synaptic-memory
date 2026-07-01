@@ -118,6 +118,24 @@ class MemoryBackend:
                 result.append(edge)
         return result
 
+    async def get_edges_batch(
+        self, node_ids: list[str], *, direction: str = "both"
+    ) -> dict[str, list[Edge]]:
+        result: dict[str, list[Edge]] = {nid: [] for nid in dict.fromkeys(node_ids)}
+        if not result:
+            return result
+        node_set = set(result)
+        for edge in self._edges.values():
+            if direction in ("both", "outgoing") and edge.source_id in node_set:
+                result[edge.source_id].append(edge)
+            if (
+                direction in ("both", "incoming")
+                and edge.target_id in node_set
+                and not (direction == "both" and edge.target_id == edge.source_id)
+            ):
+                result[edge.target_id].append(edge)
+        return result
+
     async def update_edge(self, edge: Edge) -> None:
         if edge.id in self._edges:
             self._edges[edge.id] = edge

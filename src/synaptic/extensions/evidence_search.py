@@ -652,6 +652,7 @@ class EvidenceSearch:
         # Step 3 — shallow graph expansion
         stage_t0 = time()
         graph_reads = GraphReadCache(self._backend)
+        graph_stage_t0 = time()
         if self._graph_expansion:
             q_terms = (
                 frozenset(t for t in query.lower().split() if len(t) > 1)
@@ -674,12 +675,14 @@ class EvidenceSearch:
             expanded = [
                 ExpandedNode(node=n, reason="seed", hops=0, anchor_hit=None) for n in all_seeds
             ]
+        timings_ms["expand_graph"] = (time() - graph_stage_t0) * 1000
 
         # Step 3b — PPR graph discovery. Uses FTS seeds as teleport
         # nodes and walks the graph via PPR to find nodes reachable
         # through structural paths (PART_OF, CONTAINS, MENTIONS) that
         # neither FTS nor vector search found. Discovered nodes are
         # added to the expanded set with a graph-based score.
+        ppr_stage_t0 = time()
         if fts_scores and self._graph_expansion:
             try:
                 ppr_results = await personalized_pagerank(
@@ -711,6 +714,7 @@ class EvidenceSearch:
                             fts_scores[node_id] = ppr_score * 0.5
             except Exception:
                 pass  # PPR failure is non-fatal
+        timings_ms["expand_ppr"] = (time() - ppr_stage_t0) * 1000
         timings_ms["expand"] = (time() - stage_t0) * 1000
 
         # Step 4 — hybrid reranking

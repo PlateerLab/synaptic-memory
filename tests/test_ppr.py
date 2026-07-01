@@ -87,10 +87,17 @@ class TestPPRBasic:
             def __init__(self) -> None:
                 super().__init__()
                 self.edge_calls: list[tuple[str, str]] = []
+                self.edge_batch_calls: list[tuple[tuple[str, ...], str]] = []
 
             async def get_edges(self, node_id: str, *, direction: str = "both") -> list[Edge]:
                 self.edge_calls.append((node_id, direction))
                 return await super().get_edges(node_id, direction=direction)
+
+            async def get_edges_batch(
+                self, node_ids: list[str], *, direction: str = "both"
+            ) -> dict[str, list[Edge]]:
+                self.edge_batch_calls.append((tuple(node_ids), direction))
+                return await super().get_edges_batch(node_ids, direction=direction)
 
         backend = CountingMemoryBackend()
         await backend.connect()
@@ -100,11 +107,13 @@ class TestPPRBasic:
         await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
 
         backend.edge_calls.clear()
+        backend.edge_batch_calls.clear()
         reads = GraphReadCache(backend)
         await reads.get_edges(a.id, direction="both")
         await personalized_pagerank(backend, {a.id: 1.0}, read_cache=reads)
 
-        assert backend.edge_calls.count((a.id, "both")) == 1
+        assert backend.edge_calls == []
+        assert sum(1 for node_ids, _direction in backend.edge_batch_calls if a.id in node_ids) == 1
 
 
 class TestPPRDamping:

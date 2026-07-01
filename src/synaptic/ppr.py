@@ -81,13 +81,15 @@ async def personalized_pagerank(
         if not frontier:
             break
         next_frontier: set[str] = set()
-        for nid in frontier:
+        frontier_nodes = [nid for nid in frontier if nid not in visited]
+        frontier_edges = await reads.get_edges_many(frontier_nodes, direction="both")
+        for nid in frontier_nodes:
             if nid in visited:
                 continue
             visited.add(nid)
             if nid not in adj:
                 adj[nid] = []
-            edges = await reads.get_edges(nid, direction="both")
+            edges = frontier_edges.get(nid, [])
             for edge in edges:
                 # Determine the neighbor
                 if edge.source_id == nid:
@@ -221,7 +223,9 @@ async def personalized_pagerank_v2(
         if not frontier:
             break
         next_frontier: set[str] = set()
-        for nid in frontier:
+        frontier_nodes = [nid for nid in frontier if nid not in visited]
+        frontier_edges = await reads.get_edges_many(frontier_nodes, direction="both")
+        for nid in frontier_nodes:
             if nid in visited:
                 continue
             visited.add(nid)
@@ -234,7 +238,7 @@ async def personalized_pagerank_v2(
                 if node:
                     node_kinds[nid] = str(node.kind)
 
-            edges = await reads.get_edges(nid, direction="both")
+            edges = frontier_edges.get(nid, [])
             for edge in edges:
                 if edge.source_id == nid:
                     neighbor_id = edge.target_id
