@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import unicodedata
 from difflib import SequenceMatcher
 from time import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,59 @@ def _parse_sqlite_url(conn: str) -> str:
     return conn
 
 
+def _stable_auto_chunk_doc_id(
+    chunk: dict,
+    *,
+    ordinal: int,
+    title: str,
+    content: str,
+) -> str:
+    """Deterministic fallback doc_id for ``from_chunks`` records.
+
+    Prefer source/title when present so adjacent chunks from the same
+    parsed document coalesce. With no stable document hint, include the
+    input ordinal to preserve the historical "one anonymous chunk = one
+    anonymous document" shape while remaining replay-safe.
+    """
+    source = str(chunk.get("source") or "")
+    category = str(chunk.get("category") or "")
+    if source.strip():
+        payload: dict[str, object] = {"source": source, "category": category}
+    elif str(chunk.get("title") or "").strip():
+        payload = {"title": title, "category": category}
+    else:
+        payload = {"ordinal": ordinal, "content": content}
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return f"auto_{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
+
+
+def _node_content_hash(node: Node) -> str:
+    payload = {
+        "id": node.id,
+        "kind": str(node.kind),
+        "title": node.title,
+        "content": node.content,
+        "tags": list(node.tags or []),
+        "properties": dict(node.properties or {}),
+        "source": node.source,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _edge_content_hash(edge: Edge) -> str:
+    payload = {
+        "id": edge.id,
+        "source_id": edge.source_id,
+        "target_id": edge.target_id,
+        "kind": str(edge.kind),
+        "weight": edge.weight,
+        "properties": dict(edge.properties or {}),
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 from synaptic.agent_search import AgentSearch, SearchIntent, suggest_intent
 from synaptic.cache import NodeCache
 from synaptic.consolidation import ConsolidationCascade
@@ -58,14 +112,25 @@ from synaptic.models import (
     Edge,
     EdgeKind,
     EvidenceChain,
+    FeedbackSignal,
     MaintenanceResult,
+    MemoryEvent,
+    MemoryEventKind,
+    MemoryHealthReport,
+    MemoryScope,
+    MemoryScore,
+    MemorySignal,
+    MemorySignalKind,
     Node,
     NodeKind,
+    RetrievalEvent,
     SearchResult,
+    memory_scope_key,
 )
 from synaptic.ontology import OntologyRegistry, build_agent_ontology
 from synaptic.protocols import (
     Digester,
+    EntityExtractor,
     KindClassifier,
     QueryDecomposer,
     QueryRewriter,
@@ -78,6 +143,95 @@ from synaptic.store import Store
 
 if TYPE_CHECKING:
     from synaptic.extensions.llm_provider import LLMProvider
+
+
+def _feedback_score_delta(
+    signal: FeedbackSignal,
+    success: bool | None,
+    confidence: float,
+) -> float:
+    if success is True:
+        return 0.20 * confidence
+    if success is False:
+        return -0.25 * confidence
+    if signal == FeedbackSignal.SELECTED:
+        return 0.02 * confidence
+    if signal == FeedbackSignal.IGNORED:
+        return -0.01 * confidence
+    return 0.0
+
+
+def _prop_bool(props: dict[str, str], key: str) -> bool:
+    return str(props.get(key, "")).lower() in {"1", "true", "yes", "y"}
+
+
+def _prop_float(props: dict[str, str], key: str, default: float) -> float:
+    try:
+        return float(props.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _prop_int(props: dict[str, str], key: str, default: int) -> int:
+    try:
+        return int(float(props.get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _node_source_label(node: Node) -> str:
+    props = node.properties or {}
+    return (
+        node.source
+        or props.get("source", "")
+        or props.get("source_id", "")
+        or props.get("doc_id", "")
+        or props.get("source_event_id", "")
+        or props.get("source_chunk_id", "")
+        or node.id
+    )
+
+
+def _openie_output_tokens_for_profile(profile: str, requested: int) -> int:
+    requested = max(1, int(requested))
+    if profile == "deepseek_v4_flash" and requested == 1024:
+        return 4096
+    return requested
+
+
+def _infer_openie_model_profile(model: str) -> str:
+    model_l = model.lower()
+    if "deepseek-v4-flash" in model_l or "deepseek_v4_flash" in model_l:
+        return "deepseek_v4_flash"
+    if "qwen3.6" in model_l or "qwen36" in model_l:
+        return "qwen36_local"
+    return ""
+
+
+_MEMORY_SIGNAL_MIN_PENALTY_CONFIDENCE = 0.7
+_MEMORY_SIGNAL_MAX_RANKING_PENALTY = 0.05
+_MEMORY_DRIFT_MIN_FAILURES = 3
+_MEMORY_DRIFT_MIN_FAILURE_RATE = 0.25
+_MEMORY_PROPERTY_CONFLICT_IGNORED_KEYS = frozenset(
+    {
+        "chunk_id",
+        "chunk_index",
+        "confidence",
+        "doc_id",
+        "edge_ids",
+        "is_openie",
+        "node_ids",
+        "page",
+        "page_number",
+        "scope_key",
+        "score",
+        "signal_kind",
+        "source",
+        "source_chunk_id",
+        "source_event_id",
+        "source_id",
+    }
+)
 
 
 class SynapticGraph:
@@ -105,6 +259,7 @@ class SynapticGraph:
         "_consolidation",
         "_corpus_size",
         "_embedder",
+        "_evidence_search_cache",
         "_hebbian",
         "_json_exporter",
         "_md_exporter",
@@ -128,7 +283,7 @@ class SynapticGraph:
         embedder: EmbeddingProvider | None = None,
         classifier: KindClassifier | None = None,
         relation_detector: RelationDetector | None = None,
-        phrase_extractor: PhraseExtractor | None = None,
+        phrase_extractor: EntityExtractor | None = None,
         chunk_entity_index: ChunkEntityIndex | None = None,
         query_decomposer: QueryDecomposer | None = None,
         reranker: object | None = None,
@@ -162,6 +317,7 @@ class SynapticGraph:
         # built-in defaults; set it (e.g. via the ``reranker_weights`` property
         # or a factory arg) to enable the usage/time memory axis.
         self._reranker_weights = reranker_weights
+        self._evidence_search_cache: dict[tuple[int, ...], object] = {}
         self._agent_search = AgentSearch(hybrid=self._search)
         self._corpus_size = 0
         # Tracks whether this graph has connected its backend, so
@@ -292,6 +448,14 @@ class SynapticGraph:
         embed_api_base: str = "",
         embed_model: str = "default",
         embed_api_key: str = "",
+        openie_enabled: bool = False,
+        openie_seed: int | None = 42,
+        openie_cache_path: str = "",
+        openie_alias_map: dict[str, str] | None = None,
+        openie_relation_whitelist: tuple[str, ...] = (),
+        openie_model_profile: str = "",
+        openie_max_output_tokens: int = 1024,
+        openie_max_triples_per_chunk: int = 24,
         cache_size: int = 512,
     ) -> SynapticGraph:
         """Full-featured setup — LLM classification, embedding, relation detection, ontology.
@@ -313,6 +477,7 @@ class SynapticGraph:
         classifier: KindClassifier
         relation_detector: RelationDetector
         embedder: EmbeddingProvider | None = None
+        phrase_extractor: EntityExtractor = PhraseExtractor()
 
         if llm is not None:
             from synaptic.extensions.classifier_hybrid import HybridClassifier
@@ -322,8 +487,8 @@ class SynapticGraph:
             )
 
             classifier = HybridClassifier(
-                llm=LLMClassifier(llm, fallback=RuleBasedClassifier()),
-                rule=RuleBasedClassifier(),
+                RuleBasedClassifier(),
+                LLMClassifier(llm, fallback=RuleBasedClassifier()),
             )
             relation_detector = LLMRelationDetector(llm, fallback=RuleBasedRelationDetector())
         else:
@@ -339,13 +504,40 @@ class SynapticGraph:
                 api_key=embed_api_key,
             )
 
+        if openie_enabled and llm is not None:
+            from pathlib import Path
+
+            from synaptic.extensions.entity_extractor_openie import (
+                ChainedEntityExtractor,
+                LLMOpenIEExtractor,
+            )
+
+            model_profile = openie_model_profile or _infer_openie_model_profile(
+                str(getattr(llm, "_model", "") or getattr(llm, "model", "") or "")
+            )
+            phrase_extractor = ChainedEntityExtractor(
+                phrase_extractor,
+                LLMOpenIEExtractor(
+                    llm,
+                    seed=openie_seed,
+                    alias_map=openie_alias_map,
+                    relation_whitelist=openie_relation_whitelist,
+                    max_output_tokens=_openie_output_tokens_for_profile(
+                        model_profile,
+                        openie_max_output_tokens,
+                    ),
+                    max_triples_per_chunk=openie_max_triples_per_chunk,
+                    cache_path=Path(openie_cache_path) if openie_cache_path else None,
+                ),
+            )
+
         return cls(
             backend,
             classifier=classifier,
             relation_detector=relation_detector,
             embedder=embedder,
             ontology=build_agent_ontology(),
-            phrase_extractor=PhraseExtractor(),
+            phrase_extractor=phrase_extractor,
             cache_size=cache_size,
         )
 
@@ -382,10 +574,19 @@ class SynapticGraph:
             texts = [f"{n.title}\n{(n.content or '')[:300]}" for n in batch]
             try:
                 vecs = await embedder.embed_batch(texts)  # type: ignore[attr-defined]
+                changed = []
                 for n, v in zip(batch, vecs):
                     if v:
                         n.embedding = v
-                        await backend.save_node(n)
+                        changed.append(n)
+                if not changed:
+                    continue
+                save_batch = getattr(backend, "save_nodes_batch", None)
+                if callable(save_batch):
+                    await save_batch(changed)
+                else:
+                    for node in changed:
+                        await backend.save_node(node)
             except Exception:
                 logger.warning("embedding pass failed for a batch", exc_info=True)
 
@@ -524,6 +725,8 @@ class SynapticGraph:
         db: str = "synaptic.db",
         backend: StorageBackend | None = None,
         profile: object | None = None,
+        openie_extractor: EntityExtractor | None = None,
+        openie_enabled: bool = False,
         embed_url: str | None = None,
         embed_model: str = "qwen3-embedding:4b",
         rerank_url: str | None = None,
@@ -581,6 +784,10 @@ class SynapticGraph:
                 (multi-hop ontology) the profile must declare
                 ``reference_key_property``; the auto-generated one never
                 does. See ``docs/PLAN-v0.24-relation-enrichment.md``.
+            openie_extractor: Optional opt-in OpenIE extractor. The
+                extractor runs only when the profile has
+                ``openie_enabled=True`` or this factory's
+                ``openie_enabled`` flag is set.
             embed_url: OpenAI-compatible ``/v1`` base URL for the
                 embedder. When set, nodes are embedded at ingest time
                 and the embedder is wired into the returned graph for
@@ -701,6 +908,8 @@ class SynapticGraph:
                 samples=samples,
                 categories=categories if categories else None,
             )
+        if openie_enabled and profile is not None:
+            profile.openie_enabled = True  # type: ignore[attr-defined]
 
         # Ingest each file
         for f in files:
@@ -729,7 +938,11 @@ class SynapticGraph:
                     str(f),
                     str(chunks_path) if chunks_path.exists() and chunks_path != f else None,
                 )
-                doc_ingester = DocumentIngester(profile=profile, backend=backend)
+                doc_ingester = DocumentIngester(
+                    profile=profile,
+                    backend=backend,
+                    openie_extractor=openie_extractor,
+                )
                 await doc_ingester.ingest(source)
             elif f.suffix.lower() in _DOC_EXTS:
                 # PDF/DOCX/PPTX/XLSX/HWP/… → chunk records (xgen-doc2chunk
@@ -757,7 +970,11 @@ class SynapticGraph:
                         tmp.write(_json.dumps(doc, ensure_ascii=False) + "\n")
                     tmp.close()
                     source = JsonlDocumentSource(tmp.name, None)
-                    doc_ingester = DocumentIngester(profile=profile, backend=backend)
+                    doc_ingester = DocumentIngester(
+                        profile=profile,
+                        backend=backend,
+                        openie_extractor=openie_extractor,
+                    )
                     await doc_ingester.ingest(source)
                 finally:
                     Path(tmp.name).unlink(missing_ok=True)
@@ -780,6 +997,8 @@ class SynapticGraph:
         db: str = "synaptic.db",
         backend: StorageBackend | None = None,
         profile: object | None = None,
+        openie_extractor: EntityExtractor | None = None,
+        openie_enabled: bool = False,
         embed_url: str | None = None,
         embed_model: str = "qwen3-embedding:4b",
         rerank_url: str | None = None,
@@ -815,6 +1034,9 @@ class SynapticGraph:
                 is auto-generated from the first 20 chunks.
             backend: Optional pre-built :class:`StorageBackend` (see
                 :meth:`from_data`). Defaults to SQLite at ``db``.
+            openie_extractor: Optional opt-in OpenIE extractor. Runs
+                only when ``openie_enabled=True`` or the supplied profile
+                has ``openie_enabled=True``.
             embed_url: OpenAI-compatible endpoint to embed nodes after
                 ingest. When set, the embedder is also wired into the
                 returned graph for query-time vector search.
@@ -858,6 +1080,8 @@ class SynapticGraph:
                 samples=samples,
                 categories=list(dict.fromkeys(categories)) if categories else None,
             )
+        if openie_enabled and profile is not None:
+            profile.openie_enabled = True  # type: ignore[attr-defined]
 
         # Materialise chunks into a temp JSONL so they flow through
         # the same DocumentIngester path that JSONL files use — keeps
@@ -865,31 +1089,60 @@ class SynapticGraph:
         # consistent regardless of input shape.
         import json as _json
         import tempfile
-        import uuid as _uuid
 
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, encoding="utf-8")
         try:
+            records_by_doc: dict[str, dict[str, object]] = {}
             for i, c in enumerate(chunks):
                 content = str(c.get("content") or "").strip()
                 if not content:
                     continue
-                doc_id = c.get("doc_id") or f"chunk_{_uuid.uuid4().hex[:12]}"
-                title = c.get("title") or content.split("\n", 1)[0][:80] or doc_id
-                record = {
+                title_hint = str(c.get("title") or content.split("\n", 1)[0][:80])
+                doc_id = str(
+                    c.get("doc_id")
+                    or _stable_auto_chunk_doc_id(
+                        c,
+                        ordinal=i,
+                        title=title_hint,
+                        content=content,
+                    )
+                )
+                title = str(c.get("title") or title_hint or doc_id)
+                record = records_by_doc.get(doc_id)
+                if record is None:
+                    record = {
+                        "doc_id": doc_id,
+                        "title": title,
+                        "content": "",
+                        "category": c.get("category", ""),
+                        "source": c.get("source", ""),
+                        "chunks": [],
+                    }
+                    records_by_doc[doc_id] = record
+                record_chunks_obj = record["chunks"]
+                if not isinstance(record_chunks_obj, list):
+                    continue
+                record_chunks = record_chunks_obj
+                chunk_index = int(c.get("chunk_index", len(record_chunks)) or 0)
+                chunk_record = {
+                    "chunk_id": str(c.get("chunk_id") or f"{doc_id}:{chunk_index:05d}"),
                     "doc_id": doc_id,
-                    "title": title,
-                    "content": content,
-                    "category": c.get("category", ""),
-                    "source": c.get("source", ""),
-                    "chunk_index": c.get("chunk_index", i),
+                    "text": content,
+                    "index": chunk_index,
                 }
                 if c.get("page") is not None:
-                    record["page"] = c["page"]
+                    chunk_record["page_number"] = c["page"]
+                record_chunks.append(chunk_record)
+            for record in records_by_doc.values():
                 tmp.write(_json.dumps(record, ensure_ascii=False) + "\n")
             tmp.close()
 
             source = JsonlDocumentSource(tmp.name, None)
-            doc_ingester = DocumentIngester(profile=profile, backend=backend)
+            doc_ingester = DocumentIngester(
+                profile=profile,
+                backend=backend,
+                openie_extractor=openie_extractor,
+            )
             await doc_ingester.ingest(source)
         finally:
             _Path(tmp.name).unlink(missing_ok=True)
@@ -1219,6 +1472,7 @@ class SynapticGraph:
     @reranker_weights.setter
     def reranker_weights(self, weights: object | None) -> None:
         self._reranker_weights = weights
+        self._evidence_search_cache.clear()
 
     async def _get_corpus_size(self) -> int:
         """Get corpus size for adaptive search weighting (cached)."""
@@ -1342,6 +1596,17 @@ class SynapticGraph:
                 content,
             )
 
+        await self._save_memory_event(
+            MemoryEvent(
+                kind=MemoryEventKind.INGEST,
+                source=node.source or "graph",
+                source_id=node.id,
+                content_hash=_node_content_hash(node),
+                node_ids=[node.id],
+                edge_ids=await self._touching_edge_ids(node.id),
+                properties={"operation": "SynapticGraph.add", "kind": str(node.kind)},
+            )
+        )
         return node
 
     async def add_document(
@@ -1541,7 +1806,23 @@ class SynapticGraph:
                 if errors:
                     msg = f"Ontology validation failed: {'; '.join(errors)}"
                     raise ValueError(msg)
-        return await self._store.add_edge(source_id, target_id, kind=kind, weight=weight)
+        edge = await self._store.add_edge(source_id, target_id, kind=kind, weight=weight)
+        await self._save_memory_event(
+            MemoryEvent(
+                kind=MemoryEventKind.INGEST,
+                source="graph",
+                source_id=edge.id,
+                content_hash=_edge_content_hash(edge),
+                node_ids=[source_id, target_id],
+                edge_ids=[edge.id],
+                properties={
+                    "operation": "SynapticGraph.link",
+                    "edge_kind": str(edge.kind),
+                    "weight": str(edge.weight),
+                },
+            )
+        )
+        return edge
 
     async def unlink(
         self,
@@ -1558,14 +1839,34 @@ class SynapticGraph:
         """
         kind_str = str(kind) if kind is not None else None
         edges = await self._backend.get_edges(source_id, direction="outgoing")
+        removed_edges: list[Edge] = []
         removed = 0
         for edge in edges:
             if edge.target_id != target_id:
                 continue
             if kind_str is not None and str(edge.kind) != kind_str:
                 continue
+            removed_edges.append(edge)
             await self._backend.delete_edge(edge.id)
             removed += 1
+        if removed_edges:
+            await self._save_memory_event(
+                MemoryEvent(
+                    kind=MemoryEventKind.DELETE,
+                    source="graph",
+                    source_id=",".join(edge.id for edge in removed_edges),
+                    content_hash=hashlib.sha256(
+                        "|".join(_edge_content_hash(edge) for edge in removed_edges).encode()
+                    ).hexdigest(),
+                    node_ids=list(dict.fromkeys([source_id, target_id])),
+                    edge_ids=[edge.id for edge in removed_edges],
+                    properties={
+                        "operation": "SynapticGraph.unlink",
+                        "edge_count": str(len(removed_edges)),
+                        "edge_kinds": ",".join(sorted({str(edge.kind) for edge in removed_edges})),
+                    },
+                )
+            )
         return removed
 
     async def update_edge(
@@ -1608,17 +1909,45 @@ class SynapticGraph:
                         raise ValueError(msg)
         edges = await self._backend.get_edges(source_id, direction="outgoing")
         updated = 0
+        updated_edges: list[Edge] = []
+        previous_hashes: dict[str, str] = {}
         for edge in edges:
             if edge.target_id != target_id:
                 continue
             if filter_kind is not None and str(edge.kind) != filter_kind:
                 continue
+            previous_hashes[edge.id] = _edge_content_hash(edge)
             if resolved_new_kind is not None:
                 edge.kind = resolved_new_kind
             if new_weight is not None:
                 edge.weight = new_weight
             await self._backend.update_edge(edge)
+            updated_edges.append(edge)
             updated += 1
+        if updated_edges:
+            await self._save_memory_event(
+                MemoryEvent(
+                    kind=MemoryEventKind.UPDATE,
+                    source="graph",
+                    source_id=",".join(edge.id for edge in updated_edges),
+                    content_hash=hashlib.sha256(
+                        "|".join(_edge_content_hash(edge) for edge in updated_edges).encode()
+                    ).hexdigest(),
+                    node_ids=list(dict.fromkeys([source_id, target_id])),
+                    edge_ids=[edge.id for edge in updated_edges],
+                    properties={
+                        "operation": "SynapticGraph.update_edge",
+                        "edge_count": str(len(updated_edges)),
+                        "previous_edge_hashes": json.dumps(
+                            previous_hashes,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                        "new_kind": str(new_kind) if new_kind is not None else "",
+                        "new_weight": str(new_weight) if new_weight is not None else "",
+                    },
+                )
+            )
         return updated
 
     async def merge_nodes(
@@ -2023,6 +2352,8 @@ class SynapticGraph:
         rerank: bool | None = None,
         fts_seed_limit: int | None = None,
         per_document_cap: int | None = None,
+        record: bool = False,
+        scope: MemoryScope | None = None,
     ) -> SearchResult:
         """Hybrid search across the graph.
 
@@ -2041,6 +2372,12 @@ class SynapticGraph:
             per_document_cap: Per-call cap on evidence items from any
                 single document — lower = more source diversity.
                 ``None`` uses the pipeline default (2).
+            record: When true, persist a retrieval ledger event and
+                attach its id to ``SearchResult.event_id``. Default is
+                false so normal search remains side-effect free.
+            scope: Optional workspace/user/session scope used for
+                side-effectful retrieval logging and bounded ranking
+                boosts/penalties from prior feedback and memory signals.
 
         Returns:
             ``SearchResult`` — the evidence pipeline (BM25 + HNSW + PPR +
@@ -2055,9 +2392,12 @@ class SynapticGraph:
         return await self._search_via_evidence(
             query,
             limit=limit,
+            embedding=embedding,
             rerank=rerank,
             fts_seed_limit=fts_seed_limit,
             per_document_cap=per_document_cap,
+            record=record,
+            scope=scope,
         )
 
     async def _search_via_evidence(
@@ -2065,9 +2405,12 @@ class SynapticGraph:
         query: str,
         *,
         limit: int,
+        embedding: list[float] | None = None,
         rerank: bool | None = None,
         fts_seed_limit: int | None = None,
         per_document_cap: int | None = None,
+        record: bool = False,
+        scope: MemoryScope | None = None,
     ) -> SearchResult:
         """Run the evidence pipeline and adapt its result to the
         ``SearchResult`` shape used across the codebase.
@@ -2076,18 +2419,9 @@ class SynapticGraph:
         on first search. The adapter mirrors the legacy ``SearchResult``
         fields so all existing callers keep working.
         """
-        from synaptic.extensions.evidence_search import EvidenceSearch
-
         # rerank=False disables the cross-encoder for this query only.
         active_reranker = None if rerank is False else self._reranker
-        searcher = EvidenceSearch(
-            backend=self._backend,
-            embedder=self._embedder,
-            phrase_extractor=self._phrase_extractor,
-            reranker=active_reranker,
-            reranker_weights=self._reranker_weights,
-            decomposer=self._query_decomposer,
-        )
+        searcher = self._get_evidence_search(active_reranker)
         search_kwargs: dict[str, object] = {
             "k": limit,
             # Match the over-fetch heuristic agent_search_tool uses so
@@ -2096,6 +2430,8 @@ class SynapticGraph:
         }
         if per_document_cap is not None:
             search_kwargs["per_document_cap"] = per_document_cap
+        if embedding is not None:
+            search_kwargs["query_embedding"] = embedding
         ev_result = await searcher.search(query, **search_kwargs)
 
         # Adapter: Evidence (node + score + reason) → ActivatedNode
@@ -2122,13 +2458,916 @@ class SynapticGraph:
         if self._embedder is not None:
             stages.append("vector")
 
-        return SearchResult(
+        result = SearchResult(
             query=ev_result.query,
             nodes=nodes,
             total_candidates=len(ev_result.scored),
             search_time_ms=ev_result.elapsed_ms,
+            timings_ms=dict(ev_result.timings_ms),
             stages_used=stages,
         )
+        if scope is not None:
+            await self._apply_scope_boost(result, scope)
+            await self._apply_memory_signal_penalties(result, scope=scope)
+        if record:
+            event = await self._record_retrieval_event(result, scope=scope)
+            if event is not None:
+                result.event_id = event.id
+        return result
+
+    async def _record_retrieval_event(
+        self,
+        result: SearchResult,
+        *,
+        scope: MemoryScope | None,
+    ) -> RetrievalEvent | None:
+        save = getattr(self._backend, "save_retrieval_event", None)
+        if not callable(save):
+            return None
+        event = RetrievalEvent(
+            query=result.query,
+            scope=scope or MemoryScope(),
+            returned_node_ids=[item.node.id for item in result.nodes],
+            signal=FeedbackSignal.SELECTED,
+            success=None,
+            confidence=1.0,
+        )
+        await save(event)
+        await self._save_memory_event(
+            MemoryEvent(
+                kind=MemoryEventKind.RETRIEVAL,
+                scope=event.scope,
+                source="search",
+                source_id=event.id,
+                node_ids=list(event.returned_node_ids),
+                confidence=event.confidence,
+                properties={"query": event.query},
+                created_at=event.created_at,
+            )
+        )
+        return event
+
+    def _get_evidence_search(self, active_reranker: object | None) -> object:
+        """Return a reusable EvidenceSearch for the graph's current runtime wiring."""
+        from synaptic.extensions.evidence_search import EvidenceSearch
+
+        key = (
+            id(self._backend),
+            id(self._embedder),
+            id(self._phrase_extractor),
+            id(active_reranker),
+            id(self._reranker_weights),
+            id(self._query_decomposer),
+        )
+        searcher = self._evidence_search_cache.get(key)
+        if searcher is None:
+            if len(self._evidence_search_cache) > 8:
+                self._evidence_search_cache.clear()
+            searcher = EvidenceSearch(
+                backend=self._backend,
+                embedder=self._embedder,
+                phrase_extractor=self._phrase_extractor,
+                reranker=active_reranker,
+                reranker_weights=self._reranker_weights,
+                decomposer=self._query_decomposer,
+            )
+            self._evidence_search_cache[key] = searcher
+        return searcher
+
+    async def record_feedback(
+        self,
+        event_id: str = "",
+        *,
+        success: bool | None = None,
+        node_ids: list[str] | None = None,
+        signal: FeedbackSignal | str = FeedbackSignal.EXPLICIT_POSITIVE,
+        confidence: float = 1.0,
+        scope: MemoryScope | None = None,
+    ) -> RetrievalEvent:
+        """Record observed retrieval outcome and update scoped reinforcement.
+
+        The method intentionally treats implicit signals as weak evidence.
+        Scoped negative feedback stays scope-local by default so one user or
+        workspace cannot globally suppress a memory. Positive task/test
+        outcomes can promote globally; callers can also explicitly promote a
+        scope when they know the feedback should apply across scopes.
+        """
+        signal = FeedbackSignal(signal)
+        confidence = max(0.0, min(1.0, float(confidence)))
+        parent = await self._get_retrieval_event(event_id) if event_id else None
+        effective_scope = scope or (parent.scope if parent is not None else MemoryScope())
+        inferred_success = self._infer_feedback_success(signal, success)
+        target_node_ids = list(node_ids or [])
+        if not target_node_ids and parent is not None:
+            target_node_ids = list(parent.selected_node_ids or parent.returned_node_ids)
+
+        event = RetrievalEvent(
+            query=parent.query if parent is not None else "",
+            scope=effective_scope,
+            returned_node_ids=list(parent.returned_node_ids) if parent is not None else [],
+            selected_node_ids=target_node_ids,
+            success=inferred_success,
+            signal=signal,
+            confidence=confidence,
+            properties={"parent_event_id": event_id} if event_id else {},
+        )
+        save = getattr(self._backend, "save_retrieval_event", None)
+        if callable(save):
+            await save(event)
+        await self._save_memory_event(
+            MemoryEvent(
+                kind=MemoryEventKind.FEEDBACK,
+                scope=effective_scope,
+                source="retrieval_feedback",
+                source_id=event.id,
+                node_ids=target_node_ids,
+                confidence=confidence,
+                properties={
+                    "parent_event_id": event_id,
+                    "signal": str(signal),
+                    "success": "" if inferred_success is None else str(inferred_success).lower(),
+                },
+                created_at=event.created_at,
+            )
+        )
+
+        await self._update_scope_scores(
+            effective_scope,
+            target_node_ids,
+            signal=signal,
+            success=inferred_success,
+            confidence=confidence,
+        )
+        promote_globally = self._should_promote_feedback_globally(effective_scope, signal)
+        has_distinct_global_scope = (
+            promote_globally and memory_scope_key(effective_scope) != "global"
+        )
+        if has_distinct_global_scope:
+            await self._update_scope_scores(
+                MemoryScope(promote_to_global=True),
+                target_node_ids,
+                signal=signal,
+                success=inferred_success,
+                confidence=confidence,
+                global_scope=True,
+            )
+        if promote_globally and inferred_success is not None and target_node_ids:
+            await self._hebbian.reinforce(
+                self._backend,
+                target_node_ids,
+                success=inferred_success,
+            )
+            for node_id in target_node_ids:
+                self._cache.invalidate(node_id)
+        if inferred_success is not None and target_node_ids:
+            await self._update_edge_scope_scores(
+                effective_scope,
+                target_node_ids,
+                signal=signal,
+                success=inferred_success,
+                confidence=confidence,
+            )
+            if has_distinct_global_scope:
+                await self._update_edge_scope_scores(
+                    MemoryScope(promote_to_global=True),
+                    target_node_ids,
+                    signal=signal,
+                    success=inferred_success,
+                    confidence=confidence,
+                    global_scope=True,
+                )
+        return event
+
+    async def _get_retrieval_event(self, event_id: str) -> RetrievalEvent | None:
+        getter = getattr(self._backend, "get_retrieval_event", None)
+        if callable(getter):
+            return await getter(event_id)
+        lister = getattr(self._backend, "list_retrieval_events", None)
+        if not callable(lister):
+            return None
+        for event in await lister(limit=1000):
+            if event.id == event_id:
+                return event
+        return None
+
+    async def _save_memory_event(self, event: MemoryEvent) -> None:
+        save = getattr(self._backend, "save_memory_event", None)
+        if callable(save):
+            await save(event)
+
+    async def _touching_edge_ids(self, node_id: str) -> list[str]:
+        try:
+            edges = await self._backend.get_edges(node_id, direction="both")
+        except Exception:
+            logger.debug("failed to collect edge ids for memory event", exc_info=True)
+            return []
+        return sorted({edge.id for edge in edges})
+
+    @staticmethod
+    def _infer_feedback_success(
+        signal: FeedbackSignal,
+        success: bool | None,
+    ) -> bool | None:
+        if success is not None:
+            return success
+        if signal in (
+            FeedbackSignal.EXPLICIT_POSITIVE,
+            FeedbackSignal.TASK_SUCCESS,
+            FeedbackSignal.TEST_PASS,
+        ):
+            return True
+        if signal in (
+            FeedbackSignal.EXPLICIT_NEGATIVE,
+            FeedbackSignal.TASK_FAILURE,
+            FeedbackSignal.TEST_FAIL,
+        ):
+            return False
+        return None
+
+    @staticmethod
+    def _should_promote_feedback_globally(scope: MemoryScope, signal: FeedbackSignal) -> bool:
+        if scope.promote_to_global or memory_scope_key(scope) == "global":
+            return True
+        return signal in (
+            FeedbackSignal.TASK_SUCCESS,
+            FeedbackSignal.TEST_PASS,
+        )
+
+    async def _update_scope_scores(
+        self,
+        scope: MemoryScope,
+        node_ids: list[str],
+        *,
+        signal: FeedbackSignal,
+        success: bool | None,
+        confidence: float,
+        global_scope: bool = False,
+    ) -> None:
+        if not node_ids:
+            return
+        get_score = getattr(self._backend, "get_memory_score", None)
+        save_score = getattr(self._backend, "save_memory_score", None)
+        if not callable(get_score) or not callable(save_score):
+            return
+        scope_key = memory_scope_key(scope, global_scope=global_scope)
+        score_delta = _feedback_score_delta(signal, success, confidence)
+        for node_id in dict.fromkeys(node_ids):
+            score = await get_score(scope_key, node_id=node_id)
+            if score is None:
+                score = MemoryScore(scope_key=scope_key, node_id=node_id)
+            score.access_count += 1
+            if success is True:
+                score.success_count += 1
+            elif success is False:
+                score.failure_count += 1
+            score.score = max(-1.0, min(1.0, score.score + score_delta))
+            score.updated_at = time()
+            await save_score(score)
+
+    async def _update_edge_scope_scores(
+        self,
+        scope: MemoryScope,
+        node_ids: list[str],
+        *,
+        signal: FeedbackSignal,
+        success: bool,
+        confidence: float,
+        global_scope: bool = False,
+    ) -> None:
+        unique_node_ids = list(dict.fromkeys(node_ids))
+        if len(unique_node_ids) < 2:
+            return
+        get_score = getattr(self._backend, "get_memory_score", None)
+        save_score = getattr(self._backend, "save_memory_score", None)
+        if not callable(get_score) or not callable(save_score):
+            return
+        edge_ids = await self._coactivated_edge_ids(unique_node_ids)
+        if not edge_ids:
+            return
+        scope_key = memory_scope_key(scope, global_scope=global_scope)
+        score_delta = _feedback_score_delta(signal, success, confidence)
+        for edge_id in edge_ids:
+            score = await get_score(scope_key, edge_id=edge_id)
+            if score is None:
+                score = MemoryScore(scope_key=scope_key, edge_id=edge_id)
+            score.access_count += 1
+            if success is True:
+                score.success_count += 1
+            else:
+                score.failure_count += 1
+            score.score = max(-1.0, min(1.0, score.score + score_delta))
+            score.updated_at = time()
+            await save_score(score)
+
+    async def _coactivated_edge_ids(self, node_ids: list[str]) -> list[str]:
+        wanted = set(node_ids)
+        seen: set[str] = set()
+        for node_id in node_ids:
+            for edge in await self._backend.get_edges(node_id, direction="both"):
+                if edge.id in seen:
+                    continue
+                if edge.source_id in wanted and edge.target_id in wanted:
+                    seen.add(edge.id)
+        return sorted(seen)
+
+    async def _apply_scope_boost(self, result: SearchResult, scope: MemoryScope) -> None:
+        if not result.nodes:
+            return
+        lister = getattr(self._backend, "list_memory_scores", None)
+        if not callable(lister):
+            return
+        node_ids = [item.node.id for item in result.nodes]
+        scope_key = memory_scope_key(scope)
+        local_scores = await lister(scope_key=scope_key, node_ids=node_ids, limit=len(node_ids))
+        global_scores: list[MemoryScore] = []
+        if scope_key != "global":
+            global_scores = await lister(
+                scope_key="global",
+                node_ids=node_ids,
+                limit=len(node_ids),
+            )
+        local_by_node = {score.node_id: score.score for score in local_scores}
+        global_by_node = {score.node_id: score.score for score in global_scores}
+        if not local_by_node and not global_by_node:
+            return
+        previous_resonance: float | None = None
+        for item in result.nodes:
+            raw = local_by_node.get(item.node.id, 0.0) + (
+                0.5 * global_by_node.get(item.node.id, 0.0)
+            )
+            raw = max(-1.0, min(1.0, raw))
+            boost = max(-0.10, min(0.10, raw * 0.10))
+            item.activation = max(0.0, item.activation * (1.0 + boost))
+            item.resonance = max(0.0, item.resonance * (1.0 + boost))
+            if previous_resonance is not None and item.resonance > previous_resonance:
+                item.resonance = previous_resonance
+                item.activation = min(item.activation, previous_resonance)
+            previous_resonance = item.resonance
+
+    async def _apply_memory_signal_penalties(
+        self,
+        result: SearchResult,
+        *,
+        scope: MemoryScope | None,
+    ) -> None:
+        if not result.nodes:
+            return
+        node_ids = {item.node.id for item in result.nodes}
+        if not node_ids:
+            return
+        current_scope_key = memory_scope_key(scope or MemoryScope())
+        signal_nodes = await self._backend.list_nodes(kind=NodeKind.OBSERVATION, limit=100_000)
+        penalties: dict[str, float] = {}
+        for signal_node in signal_nodes:
+            tags = set(signal_node.tags or [])
+            if "_memory_signal" not in tags or "_memory_suspect" not in tags:
+                continue
+            props = signal_node.properties or {}
+            signal_scope = props.get("scope_key", "")
+            if signal_scope not in {"", "global", current_scope_key}:
+                continue
+            confidence = _prop_float(props, "confidence", 0.0)
+            if confidence < _MEMORY_SIGNAL_MIN_PENALTY_CONFIDENCE:
+                continue
+            penalty = min(
+                _MEMORY_SIGNAL_MAX_RANKING_PENALTY,
+                max(0.0, confidence * _MEMORY_SIGNAL_MAX_RANKING_PENALTY),
+            )
+            for node_id in props.get("node_ids", "").split(","):
+                node_id = node_id.strip()
+                if node_id in node_ids:
+                    penalties[node_id] = max(penalties.get(node_id, 0.0), penalty)
+        if not penalties:
+            return
+        for item in result.nodes:
+            penalty = penalties.get(item.node.id, 0.0)
+            if penalty <= 0.0:
+                continue
+            factor = 1.0 - penalty
+            item.activation = max(0.0, item.activation * factor)
+            item.resonance = max(0.0, item.resonance * factor)
+        result.nodes.sort(key=lambda item: item.resonance, reverse=True)
+
+    async def scan_memory_signals(
+        self,
+        *,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+    ) -> list[MemorySignal]:
+        """Scan for suspicious or noteworthy memory signals.
+
+        Signals are persisted as observation nodes, never used for automatic
+        deletion. Repeated scans upsert the same deterministic signal nodes.
+        """
+        effective_scope = scope or MemoryScope()
+        nodes = await self._backend.list_nodes(limit=100_000)
+        nodes_by_id = {node.id: node for node in nodes}
+        edges = await self._all_edges(nodes)
+        signals: list[MemorySignal] = []
+        stale_before = time() - 365 * 24 * 3600
+        repeated_failure_targets: set[str] = set()
+        entity_property_groups: dict[tuple[str, str], dict[str, list[Node]]] = {}
+
+        for node in nodes:
+            if (
+                node.failure_count >= 3
+                and node.failure_count > node.success_count
+                and "_memory_signal" not in (node.tags or [])
+            ):
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.REPEATED_FAILURE,
+                        effective_scope,
+                        node_ids=[node.id],
+                        confidence=0.8,
+                        reason="node has repeated failure feedback",
+                    )
+                )
+                repeated_failure_targets.add(node.id)
+            if (
+                node.updated_at < stale_before
+                and node.access_count == 0
+                and "_memory_signal" not in (node.tags or [])
+            ):
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.STALE_MEMORY,
+                        effective_scope,
+                        node_ids=[node.id],
+                        confidence=0.6,
+                        reason="node has not been accessed for more than one year",
+                    )
+                )
+            if since is not None and node.created_at >= since and node.kind == NodeKind.ENTITY:
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.NEW_ENTITY,
+                        effective_scope,
+                        node_ids=[node.id],
+                        confidence=0.7,
+                        reason="new entity appeared in recent memory events",
+                    )
+                )
+            if node.kind == NodeKind.ENTITY and "_memory_signal" not in (node.tags or []):
+                entity_key = node.title.strip().casefold()
+                if entity_key:
+                    for prop_key, prop_value in (node.properties or {}).items():
+                        prop_key = str(prop_key)
+                        if (
+                            not prop_key
+                            or prop_key.startswith("_")
+                            or prop_key in _MEMORY_PROPERTY_CONFLICT_IGNORED_KEYS
+                        ):
+                            continue
+                        prop_value = str(prop_value).strip()
+                        if not prop_value:
+                            continue
+                        bucket = entity_property_groups.setdefault((entity_key, prop_key), {})
+                        bucket.setdefault(prop_value, []).append(node)
+
+        for (entity_key, prop_key), by_value in entity_property_groups.items():
+            if len(by_value) < 2:
+                continue
+            source_labels = {
+                _node_source_label(node)
+                for nodes_for_value in by_value.values()
+                for node in nodes_for_value
+            }
+            if len(source_labels) < 2:
+                continue
+            conflicting_nodes = [
+                node for nodes_for_value in by_value.values() for node in nodes_for_value
+            ]
+            node_ids = [node.id for node in conflicting_nodes]
+            values = sorted(by_value)
+            signals.append(
+                self._make_signal(
+                    MemorySignalKind.POSSIBLE_CONFLICT,
+                    effective_scope,
+                    node_ids=node_ids,
+                    confidence=0.7,
+                    reason=(
+                        "entity property has conflicting source values "
+                        f"entity={entity_key} property={prop_key}"
+                    ),
+                    properties={
+                        "conflict_type": "entity_property_value",
+                        "entity_key": entity_key,
+                        "property_key": prop_key,
+                        "property_values": "|".join(values[:8]),
+                        "source_labels": "|".join(sorted(source_labels)[:8]),
+                    },
+                )
+            )
+
+        for edge in edges:
+            if edge.kind == EdgeKind.CONTRADICTS:
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.POSSIBLE_CONFLICT,
+                        effective_scope,
+                        edge_ids=[edge.id],
+                        node_ids=[edge.source_id, edge.target_id],
+                        confidence=0.8,
+                        reason="contradiction edge is present",
+                    )
+                )
+            if edge.kind == EdgeKind.SUPERSEDES:
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.POSSIBLE_SUPERSESSION,
+                        effective_scope,
+                        edge_ids=[edge.id],
+                        node_ids=[edge.source_id, edge.target_id],
+                        confidence=0.7,
+                        reason="supersession edge is present",
+                    )
+                )
+                superseding = nodes_by_id.get(edge.source_id)
+                superseded = nodes_by_id.get(edge.target_id)
+                if (
+                    superseded is not None
+                    and "_memory_signal" not in (superseded.tags or [])
+                    and (
+                        edge.created_at >= superseded.updated_at
+                        or (
+                            superseding is not None
+                            and superseding.updated_at >= superseded.updated_at
+                        )
+                    )
+                ):
+                    signals.append(
+                        self._make_signal(
+                            MemorySignalKind.STALE_MEMORY,
+                            effective_scope,
+                            edge_ids=[edge.id],
+                            node_ids=[edge.target_id],
+                            confidence=0.75,
+                            reason="memory is superseded by newer evidence",
+                            properties={
+                                "stale_reason": "superseded",
+                                "superseding_node_id": edge.source_id,
+                                "superseded_node_id": edge.target_id,
+                                "supersession_edge_id": edge.id,
+                            },
+                        )
+                    )
+            if (
+                _prop_bool(edge.properties, "is_openie")
+                and _prop_float(edge.properties, "confidence", 1.0) < 0.6
+            ):
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.LOW_CONFIDENCE_RELATION,
+                        effective_scope,
+                        edge_ids=[edge.id],
+                        node_ids=[edge.source_id, edge.target_id],
+                        confidence=0.7,
+                        reason="low-confidence OpenIE relation is present",
+                    )
+                )
+            if _prop_int(edge.properties, "support_count", 0) >= 2 or edge.weight > 1.5:
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.RELATION_REINFORCED,
+                        effective_scope,
+                        edge_ids=[edge.id],
+                        node_ids=[edge.source_id, edge.target_id],
+                        confidence=0.6,
+                        reason="relation has repeated support or high weight",
+                    )
+                )
+            if since is not None and edge.created_at >= since:
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.NEW_RELATION,
+                        effective_scope,
+                        edge_ids=[edge.id],
+                        node_ids=[edge.source_id, edge.target_id],
+                        confidence=0.6,
+                        reason="new relation appeared in recent memory events",
+                    )
+                )
+
+        scope_key = memory_scope_key(effective_scope)
+        score_scopes: list[tuple[str, MemoryScope]] = [(scope_key, effective_scope)]
+        if scope_key != "global":
+            score_scopes.append(("global", MemoryScope()))
+        for score_scope_key, signal_scope in score_scopes:
+            for score in await self._list_memory_scores(scope_key=score_scope_key, limit=100_000):
+                if since is not None and score.updated_at < since:
+                    continue
+                target = score.node_id or score.edge_id
+                if not target or target in repeated_failure_targets:
+                    continue
+                if score.failure_count < 3 or score.failure_count <= score.success_count:
+                    continue
+                node_ids = [score.node_id] if score.node_id else []
+                edge_ids = [score.edge_id] if score.edge_id else []
+                signals.append(
+                    self._make_signal(
+                        MemorySignalKind.REPEATED_FAILURE,
+                        signal_scope,
+                        node_ids=node_ids,
+                        edge_ids=edge_ids,
+                        confidence=0.75,
+                        reason="scope score has repeated negative retrieval feedback",
+                        properties={
+                            "score_scope_key": score.scope_key,
+                            "score_failure_count": str(score.failure_count),
+                            "score_success_count": str(score.success_count),
+                            "score": f"{score.score:.6f}",
+                        },
+                    )
+                )
+                repeated_failure_targets.add(target)
+
+        signals.extend(await self._semantic_extract_drift_signals(effective_scope, since=since))
+        for signal in signals:
+            await self._persist_memory_signal(signal)
+        return signals
+
+    async def memory_health(
+        self,
+        *,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+    ) -> MemoryHealthReport:
+        """Return a compact operational report for the memory layer."""
+        effective_scope = scope or MemoryScope()
+        signals = await self.scan_memory_signals(scope=effective_scope, since=since)
+        nodes = await self._backend.list_nodes(limit=100_000)
+        edges = await self._all_edges(nodes)
+        memory_events = await self._list_memory_events(scope=scope, since=since, limit=100_000)
+        retrieval_events = await self._list_retrieval_events(
+            scope=scope, since=since, limit=100_000
+        )
+        scores = await self._list_memory_scores(
+            scope_key=memory_scope_key(effective_scope),
+            limit=10,
+        )
+
+        semantic_events = [
+            event for event in memory_events if str(event.kind) == MemoryEventKind.SEMANTIC_EXTRACT
+        ]
+        failures = sum(
+            _prop_int(event.properties, "extraction_failures", 0) for event in semantic_events
+        )
+        selected = sum(
+            _prop_int(event.properties, "chunks_selected", 0) for event in semantic_events
+        )
+        signal_kinds = [MemorySignalKind(str(signal.kind)) for signal in signals]
+        suspect_kinds = {
+            MemorySignalKind.POSSIBLE_CONFLICT,
+            MemorySignalKind.POSSIBLE_SUPERSESSION,
+            MemorySignalKind.STALE_MEMORY,
+            MemorySignalKind.LOW_CONFIDENCE_RELATION,
+            MemorySignalKind.REPEATED_FAILURE,
+            MemorySignalKind.DRIFT_SPIKE,
+        }
+        openie_nodes = sum(
+            1
+            for node in nodes
+            if "_openie" in (node.tags or []) or "_openie_entity" in (node.tags or [])
+        )
+        openie_edges = sum(1 for edge in edges if edge.id.startswith("openie_"))
+
+        return MemoryHealthReport(
+            scope_key=memory_scope_key(effective_scope),
+            total_nodes=len(nodes),
+            total_edges=len(edges),
+            memory_events=len(memory_events),
+            retrieval_events=len(retrieval_events),
+            signal_count=len(signals),
+            new_entity_count=signal_kinds.count(MemorySignalKind.NEW_ENTITY),
+            new_relation_count=signal_kinds.count(MemorySignalKind.NEW_RELATION),
+            relation_reinforced_count=signal_kinds.count(MemorySignalKind.RELATION_REINFORCED),
+            suspect_count=sum(1 for kind in signal_kinds if kind in suspect_kinds),
+            conflict_signal_count=signal_kinds.count(MemorySignalKind.POSSIBLE_CONFLICT),
+            stale_signal_count=signal_kinds.count(MemorySignalKind.STALE_MEMORY),
+            repeated_failure_count=signal_kinds.count(MemorySignalKind.REPEATED_FAILURE),
+            low_confidence_relation_count=signal_kinds.count(
+                MemorySignalKind.LOW_CONFIDENCE_RELATION
+            ),
+            drift_spike_count=signal_kinds.count(MemorySignalKind.DRIFT_SPIKE),
+            openie_artifact_count=openie_nodes + openie_edges,
+            openie_failure_rate=(failures / selected) if selected else 0.0,
+            top_reinforced_node_ids=[score.node_id for score in scores if score.node_id],
+        )
+
+    async def _semantic_extract_drift_signals(
+        self,
+        scope: MemoryScope,
+        *,
+        since: float | None,
+    ) -> list[MemorySignal]:
+        events = await self._list_memory_events(scope=scope, since=since, limit=100_000)
+        buckets: dict[tuple[str, str, str, str], dict[str, object]] = {}
+        for event in events:
+            if str(event.kind) != MemoryEventKind.SEMANTIC_EXTRACT:
+                continue
+            failures = _prop_int(event.properties, "extraction_failures", 0)
+            if failures <= 0:
+                continue
+            selected = max(0, _prop_int(event.properties, "chunks_selected", 0))
+            source = event.source or "unknown"
+            extractor = event.properties.get("extractor", "") or event.source_id or "unknown"
+            model = event.properties.get("model", "")
+            prompt_version = event.properties.get("prompt_version", "")
+            key = (source, extractor, model, prompt_version)
+            bucket = buckets.setdefault(
+                key,
+                {
+                    "failures": 0,
+                    "selected": 0,
+                    "events": 0,
+                    "node_ids": [],
+                    "edge_ids": [],
+                },
+            )
+            bucket["failures"] = int(bucket["failures"]) + failures
+            bucket["selected"] = int(bucket["selected"]) + selected
+            bucket["events"] = int(bucket["events"]) + 1
+            cast_node_ids = cast(list[str], bucket["node_ids"])
+            cast_edge_ids = cast(list[str], bucket["edge_ids"])
+            cast_node_ids.extend(event.node_ids)
+            cast_edge_ids.extend(event.edge_ids)
+
+        signals: list[MemorySignal] = []
+        for (source, extractor, model, prompt_version), bucket in buckets.items():
+            failures = int(bucket["failures"])
+            selected = int(bucket["selected"])
+            attempts = max(selected, failures)
+            failure_rate = failures / attempts if attempts else 0.0
+            if (
+                failures < _MEMORY_DRIFT_MIN_FAILURES
+                or attempts < _MEMORY_DRIFT_MIN_FAILURES
+                or failure_rate < _MEMORY_DRIFT_MIN_FAILURE_RATE
+            ):
+                continue
+            confidence = min(0.95, max(0.7, 0.55 + failure_rate * 0.4))
+            node_ids = cast(list[str], bucket["node_ids"])
+            edge_ids = cast(list[str], bucket["edge_ids"])
+            signals.append(
+                self._make_signal(
+                    MemorySignalKind.DRIFT_SPIKE,
+                    scope,
+                    node_ids=[str(node_id) for node_id in node_ids],
+                    edge_ids=[str(edge_id) for edge_id in edge_ids],
+                    confidence=confidence,
+                    reason=(
+                        "semantic extraction failure spike "
+                        f"source={source} extractor={extractor} "
+                        f"model={model or 'unknown'} "
+                        f"prompt_version={prompt_version or 'unknown'} "
+                        f"failures={failures}/{attempts}"
+                    ),
+                    properties={
+                        "source": source,
+                        "extractor": extractor,
+                        "model": model,
+                        "prompt_version": prompt_version,
+                        "failure_count": str(failures),
+                        "attempt_count": str(attempts),
+                        "failure_rate": f"{failure_rate:.6f}",
+                        "event_count": str(bucket["events"]),
+                    },
+                )
+            )
+        return signals
+
+    async def _all_edges(self, nodes: list[Node]) -> list[Edge]:
+        seen: set[str] = set()
+        edges: list[Edge] = []
+        for node in nodes:
+            for edge in await self._backend.get_edges(node.id):
+                if edge.id in seen:
+                    continue
+                seen.add(edge.id)
+                edges.append(edge)
+        return edges
+
+    def _make_signal(
+        self,
+        kind: MemorySignalKind,
+        scope: MemoryScope,
+        *,
+        node_ids: list[str] | None = None,
+        edge_ids: list[str] | None = None,
+        confidence: float,
+        reason: str,
+        properties: dict[str, str] | None = None,
+    ) -> MemorySignal:
+        node_ids = list(dict.fromkeys(node_ids or []))
+        edge_ids = list(dict.fromkeys(edge_ids or []))
+        properties = dict(properties or {})
+        payload = json.dumps(
+            {
+                "kind": str(kind),
+                "scope": memory_scope_key(scope),
+                "node_ids": node_ids,
+                "edge_ids": edge_ids,
+                "reason": reason,
+                "properties": properties,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        signal_id = f"memsig_{hashlib.sha256(payload.encode()).hexdigest()[:16]}"
+        return MemorySignal(
+            id=signal_id,
+            kind=kind,
+            scope=scope,
+            node_ids=node_ids,
+            edge_ids=edge_ids,
+            confidence=confidence,
+            reason=reason,
+            properties=properties,
+        )
+
+    async def _persist_memory_signal(self, signal: MemorySignal) -> None:
+        existing = await self._backend.get_node(signal.id)
+        suspect = MemorySignalKind(str(signal.kind)) in {
+            MemorySignalKind.POSSIBLE_CONFLICT,
+            MemorySignalKind.POSSIBLE_SUPERSESSION,
+            MemorySignalKind.STALE_MEMORY,
+            MemorySignalKind.LOW_CONFIDENCE_RELATION,
+            MemorySignalKind.REPEATED_FAILURE,
+            MemorySignalKind.DRIFT_SPIKE,
+        }
+        tags = ["_memory_signal"]
+        if suspect:
+            tags.append("_memory_suspect")
+        properties = {
+            "signal_kind": str(signal.kind),
+            "scope_key": memory_scope_key(signal.scope),
+            "node_ids": ",".join(signal.node_ids),
+            "edge_ids": ",".join(signal.edge_ids),
+            "confidence": str(signal.confidence),
+        }
+        properties.update(signal.properties)
+        node = Node(
+            id=signal.id,
+            kind=NodeKind.OBSERVATION,
+            title=f"Memory signal: {signal.kind}",
+            content=signal.reason,
+            tags=tags,
+            properties=properties,
+            source="memory_monitor",
+            created_at=signal.created_at,
+            updated_at=time(),
+        )
+        await self._backend.save_node(node)
+        if existing is None:
+            await self._save_memory_event(
+                MemoryEvent(
+                    id=f"evt_{signal.id}",
+                    kind=MemoryEventKind.SIGNAL,
+                    scope=signal.scope,
+                    source="memory_monitor",
+                    source_id=signal.id,
+                    node_ids=signal.node_ids + [signal.id],
+                    edge_ids=signal.edge_ids,
+                    confidence=signal.confidence,
+                    properties={"signal_kind": str(signal.kind), "reason": signal.reason},
+                    created_at=signal.created_at,
+                )
+            )
+
+    async def _list_memory_events(
+        self,
+        *,
+        scope: MemoryScope | None,
+        since: float | None,
+        limit: int,
+    ) -> list[MemoryEvent]:
+        lister = getattr(self._backend, "list_memory_events", None)
+        if not callable(lister):
+            return []
+        return await lister(scope=scope, since=since, limit=limit)
+
+    async def _list_retrieval_events(
+        self,
+        *,
+        scope: MemoryScope | None,
+        since: float | None,
+        limit: int,
+    ) -> list[RetrievalEvent]:
+        lister = getattr(self._backend, "list_retrieval_events", None)
+        if not callable(lister):
+            return []
+        return await lister(scope=scope, since=since, limit=limit)
+
+    async def _list_memory_scores(
+        self,
+        *,
+        scope_key: str,
+        limit: int,
+    ) -> list[MemoryScore]:
+        lister = getattr(self._backend, "list_memory_scores", None)
+        if not callable(lister):
+            return []
+        return await lister(scope_key=scope_key, limit=limit)
 
     async def agent_search(
         self,
@@ -2229,6 +3468,7 @@ class SynapticGraph:
         node = await self._backend.get_node(node_id)
         if node is None:
             return None
+        previous_hash = _node_content_hash(node)
         text_changed = title is not None or content is not None or properties is not None
         if title is not None:
             node.title = title
@@ -2246,29 +3486,68 @@ class SynapticGraph:
             embed_text = self._compose_embed_text(node.title, node.content, node.properties)
             if embed_text:
                 node.embedding = await self._embedder.embed(embed_text)
+        changed_fields = [
+            name
+            for name, value in (
+                ("title", title),
+                ("content", content),
+                ("kind", kind),
+                ("tags", tags),
+                ("properties", properties),
+                ("embedding", embedding),
+            )
+            if value is not None
+        ]
         node.updated_at = time()
         await self._backend.update_node(node)
         self._cache.invalidate(node_id)
         self._cache.put(node)
+        await self._save_memory_event(
+            MemoryEvent(
+                kind=MemoryEventKind.UPDATE,
+                source=node.source or "graph",
+                source_id=node.id,
+                content_hash=_node_content_hash(node),
+                node_ids=[node.id],
+                edge_ids=await self._touching_edge_ids(node.id),
+                properties={
+                    "operation": "SynapticGraph.update",
+                    "changed_fields": ",".join(changed_fields),
+                    "previous_content_hash": previous_hash,
+                    "kind": str(node.kind),
+                },
+            )
+        )
         return node
 
     async def remove(self, node_id: str) -> bool:
         node = await self._backend.get_node(node_id)
         if node is None:
             return False
+        edge_ids = await self._touching_edge_ids(node_id)
+        content_hash = _node_content_hash(node)
         # Remove from relation detector index
         if self._relation_detector is not None:
             self._relation_detector.index.remove(node_id)
         await self._store.delete_node(node_id)
         self._cache.invalidate(node_id)
         self._corpus_size = max(0, self._corpus_size - 1)
+        await self._save_memory_event(
+            MemoryEvent(
+                kind=MemoryEventKind.DELETE,
+                source=node.source or "graph",
+                source_id=node.id,
+                content_hash=content_hash,
+                node_ids=[node.id],
+                edge_ids=edge_ids,
+                properties={"operation": "SynapticGraph.remove", "kind": str(node.kind)},
+            )
+        )
         return True
 
     async def reinforce(self, node_ids: list[str], *, success: bool = True) -> None:
-        await self._hebbian.reinforce(self._backend, node_ids, success=success)
-        # Invalidate cached nodes (counts changed)
-        for nid in node_ids:
-            self._cache.invalidate(nid)
+        signal = FeedbackSignal.TASK_SUCCESS if success else FeedbackSignal.TASK_FAILURE
+        await self.record_feedback(node_ids=node_ids, signal=signal)
 
     async def consolidate(
         self,

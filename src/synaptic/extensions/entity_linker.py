@@ -36,13 +36,13 @@ Example::
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
+from synaptic.extensions.entity_ids import deterministic_entity_id, deterministic_mention_edge_id
 from synaptic.models import ConsolidationLevel, Edge, EdgeKind, Node, NodeKind
 
 logger = logging.getLogger("entity-linker")
@@ -188,6 +188,19 @@ class EntityLinker:
         for phrase, sources in kept.items():
             hub_id = _phrase_hub_id(phrase)
             phrase_to_hub_id[phrase] = hub_id
+            existing = await backend.get_node(hub_id)
+            if existing is not None:
+                tags = list(existing.tags or [])
+                if "_phrase" not in tags:
+                    tags.append("_phrase")
+                existing.tags = tags
+                existing.properties = dict(existing.properties or {})
+                existing.properties["df"] = str(len(sources))
+                if not existing.title:
+                    existing.title = phrase
+                existing.updated_at = now
+                await backend.update_node(existing)
+                continue
             new_nodes.append(
                 Node(
                     id=hub_id,
@@ -229,7 +242,10 @@ class EntityLinker:
                             new_nodes[i + j].embedding = list(v)
 
         await backend.save_nodes_batch(new_nodes)
-        stats.phrase_nodes_created = len(new_nodes)
+        # Historical meaning: number of retained phrase hubs materialized
+        # by this run. Existing hubs may have been updated rather than
+        # inserted, but callers use this as a run count, not a DB insert count.
+        stats.phrase_nodes_created = len(kept)
         if embedder is not None:
             stats.phrase_nodes_embedded = sum(1 for n in new_nodes if n.embedding)
 
@@ -266,19 +282,16 @@ class EntityLinker:
 
 
 def _phrase_hub_id(phrase: str) -> str:
-    """Deterministic 16-char id for a phrase hub node.
+    """Shared deterministic id for a phrase/entity hub node.
 
     Stable across runs so re-linking the same corpus is idempotent —
     backends that upsert on primary key will simply overwrite the same
-    hub rather than duplicating. The ``phrase:`` prefix makes these ids
-    greppable in diagnostic dumps.
+    hub rather than duplicating. The ``ent_`` namespace is shared with
+    spaCy and OpenIE extractors so identical canonical entities collapse.
     """
-    h = hashlib.md5(phrase.encode("utf-8")).hexdigest()[:16]
-    return f"phrase_{h}"
+    return deterministic_entity_id(phrase)
 
 
 def _mention_edge_id(source_id: str, hub_id: str) -> str:
     """Deterministic edge id so repeated ``link()`` runs are idempotent."""
-    combined = f"{source_id}->{hub_id}"
-    h = hashlib.md5(combined.encode("utf-8")).hexdigest()[:16]
-    return f"mentions_{h}"
+    return deterministic_mention_edge_id(source_id, hub_id)

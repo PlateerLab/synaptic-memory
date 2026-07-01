@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -74,6 +75,86 @@ class TestSQLiteEdges:
 
         both = await sqlite.get_edges(n1.id, direction="both")
         assert len(both) == 1
+
+    async def test_batch_upsert_converges_on_source_target_kind(
+        self, sqlite: SQLiteBackend
+    ) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        await sqlite.save_node(n1)
+        await sqlite.save_node(n2)
+
+        await sqlite.save_edges_batch(
+            [Edge(id="openie_a", source_id=n1.id, target_id=n2.id, kind=EdgeKind.RELATED)]
+        )
+        await sqlite.save_edges_batch(
+            [
+                Edge(
+                    id="structural_b",
+                    source_id=n1.id,
+                    target_id=n2.id,
+                    kind=EdgeKind.RELATED,
+                    weight=0.9,
+                )
+            ]
+        )
+
+        edges = await sqlite.get_edges(n1.id, direction="outgoing")
+        assert len(edges) == 1
+        assert edges[0].id == "structural_b"
+        assert edges[0].weight == 0.9
+
+    async def test_legacy_edges_load_with_empty_properties(self, tmp_path) -> None:
+        db_path = tmp_path / "legacy.db"
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE syn_nodes (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL DEFAULT 'concept',
+                    title TEXT NOT NULL DEFAULT '',
+                    content TEXT NOT NULL DEFAULT '',
+                    tags_json TEXT NOT NULL DEFAULT '[]',
+                    level TEXT NOT NULL DEFAULT 'L0',
+                    vitality REAL NOT NULL DEFAULT 1.0,
+                    access_count INTEGER NOT NULL DEFAULT 0,
+                    success_count INTEGER NOT NULL DEFAULT 0,
+                    failure_count INTEGER NOT NULL DEFAULT 0,
+                    source TEXT NOT NULL DEFAULT '',
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+                CREATE TABLE syn_edges (
+                    id TEXT PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'related',
+                    weight REAL NOT NULL DEFAULT 1.0,
+                    created_at REAL NOT NULL,
+                    UNIQUE(source_id, target_id, kind)
+                );
+                INSERT INTO syn_nodes
+                    (id, kind, title, content, tags_json, level, created_at, updated_at)
+                VALUES
+                    ('legacy_a', 'concept', 'A', '', '[]', 'L0', 1.0, 1.0),
+                    ('legacy_b', 'concept', 'B', '', '[]', 'L0', 1.0, 1.0);
+                INSERT INTO syn_edges (id, source_id, target_id, kind, weight, created_at)
+                VALUES ('legacy_edge', 'legacy_a', 'legacy_b', 'related', 1.0, 1.0);
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        backend = SQLiteBackend(db_path)
+        await backend.connect()
+        try:
+            edges = await backend.get_edges("legacy_a", direction="outgoing")
+            assert edges[0].id == "legacy_edge"
+            assert edges[0].properties == {}
+        finally:
+            await backend.close()
 
 
 class TestSQLiteSearch:

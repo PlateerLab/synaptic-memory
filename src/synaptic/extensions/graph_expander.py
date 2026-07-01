@@ -30,6 +30,8 @@ Expansion paths the expander considers:
 5. **MENTIONS** (optional): entity → sources that mention it. Only
    triggered when the corpus has ``NodeKind.ENTITY`` hubs (built by
    ``EntityLinker`` post-processing).
+6. **Semantic entity relations**: from an OpenIE entity hub to the typed
+   entity it depends on, supersedes, contradicts, etc.
 
 Budget discipline — expansion is **capped** at every step so a popular
 category with 10,000 documents can't poison the candidate set. The
@@ -69,6 +71,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("graph-expander")
 
+_OPENIE_ENTITY_RELATION_KINDS = {
+    EdgeKind.RELATED,
+    EdgeKind.IS_A,
+    EdgeKind.PART_OF,
+    EdgeKind.DEPENDS_ON,
+    EdgeKind.CAUSED,
+    EdgeKind.PRODUCED,
+    EdgeKind.CONTRADICTS,
+    EdgeKind.SUPERSEDES,
+}
+
 
 @dataclass(slots=True)
 class ExpandedNode:
@@ -88,12 +101,17 @@ class ExpandedNode:
         anchor_hit: Which anchor ID pulled this node in. Useful for
             diagnostics and for score fusion that cares about the
             strength of the anchor (category > entity > keyword).
+        edge_kind: Relation kind of the edge used for the expansion.
+        edge_confidence: Extractor confidence carried by provenance metadata
+            when available. Defaults to 1.0 for deterministic structural edges.
     """
 
     node: Node
     reason: str
     hops: int = 0
     anchor_hit: str | None = None
+    edge_kind: str = ""
+    edge_confidence: float = 1.0
 
 
 @dataclass(slots=True)
@@ -197,10 +215,13 @@ class GraphExpander:
         # ENTITY hub nodes (post-processed by EntityLinker).
         await self._expand_entity_mentions(seed_nodes, state)
 
-        # Step 7 — RELATED edges (FK relationships for structured data).
+        # Step 7 — RELATED edges (FK relationships for structured data) and
+        # opt-in OpenIE semantic relation edges.
         # For ENTITY nodes from TableIngester/DbIngester, RELATED edges
         # represent foreign-key relationships (e.g., product→sales,
-        # product→reviews). These are valuable for cross-table discovery.
+        # product→reviews). For OpenIE entity hubs, typed relation edges
+        # represent memory facts (e.g., concept→depends_on→policy). These are
+        # valuable for relation-only discovery that lexical RAG cannot see.
         await self._expand_related(seed_nodes, state)
 
         return state.results()
@@ -377,12 +398,13 @@ class GraphExpander:
         seed_nodes: list[Node],
         state: _ExpansionState,
     ) -> None:
-        """Walk RELATED edges from seed ENTITY nodes (structured data FK).
+        """Walk relation edges from seed ENTITY nodes.
 
         For structured data ingested via TableIngester/DbIngester, RELATED
         edges connect FK-linked rows (e.g., product → sales, product →
-        reviews). This step surfaces cross-table neighbours that lexical
-        search alone cannot find.
+        reviews). For OpenIE, typed relation edges connect extracted entity
+        hubs. This step surfaces neighbours that lexical search alone cannot
+        find.
 
         Only expands from ENTITY nodes to keep document graphs unaffected.
         Capped at ``max_per_anchor`` per seed to prevent fan-out explosion
@@ -405,7 +427,12 @@ class GraphExpander:
             for edge in edges:
                 if state.is_full() or added >= state.budget.max_per_anchor:
                     break
-                if edge.kind != EdgeKind.RELATED:
+                is_related = edge.kind == EdgeKind.RELATED
+                is_openie_relation = (
+                    edge.kind in _OPENIE_ENTITY_RELATION_KINDS
+                    and (edge.properties or {}).get("is_openie") == "true"
+                )
+                if not (is_related or is_openie_relation):
                     continue
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
                 if state.contains(other_id):
@@ -416,9 +443,11 @@ class GraphExpander:
                 state.add(
                     ExpandedNode(
                         node=other,
-                        reason="related",
+                        reason="related" if is_related else "semantic_relation",
                         hops=1,
                         anchor_hit=seed.id,
+                        edge_kind=str(edge.kind.value),
+                        edge_confidence=_edge_confidence(edge),
                     )
                 )
                 added += 1
@@ -480,6 +509,15 @@ def _relevance(node: Node, q_terms: frozenset[str]) -> int:
     title = (node.title or "").lower()
     content = (node.content or "").lower()
     return sum((2 if t in title else 0) + (1 if t in content else 0) for t in q_terms)
+
+
+def _edge_confidence(edge: object) -> float:
+    props = getattr(edge, "properties", {}) or {}
+    raw = props.get("confidence", getattr(edge, "weight", 1.0))
+    try:
+        return max(0.0, min(1.0, float(raw)))
+    except (TypeError, ValueError):
+        return 1.0
 
 
 @dataclass(slots=True)

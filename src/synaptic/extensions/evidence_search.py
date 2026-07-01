@@ -107,6 +107,7 @@ class EvidenceSearchResult:
     scored: list[ScoredCandidate] = field(default_factory=list)
     evidence: list[Evidence] = field(default_factory=list)
     elapsed_ms: float = 0.0
+    timings_ms: dict[str, float] = field(default_factory=dict)
     sub_queries: list[str] = field(default_factory=list)
 
 
@@ -389,11 +390,13 @@ class EvidenceSearch:
                 lexical + graph + structural only.
         """
         t0 = time()
+        timings_ms: dict[str, float] = {}
 
         # Step 0 — embed the query if an embedder is wired up.
         # The caller can also pass query_embedding directly; the
         # embedder is a convenience so callers don't have to embed
         # on their own every time.
+        stage_t0 = time()
         if query_embedding is None and self._embedder is not None:
             try:
                 query_embedding = await self._embedder.embed(query)
@@ -401,11 +404,15 @@ class EvidenceSearch:
                     query_embedding = None
             except Exception:
                 query_embedding = None
+        timings_ms["embed"] = (time() - stage_t0) * 1000
 
         # Step 1 — extract anchors
+        stage_t0 = time()
         anchors = await self._anchor_extractor.extract(query)
+        timings_ms["anchor"] = (time() - stage_t0) * 1000
 
         # Step 2a — FTS seeds (lexical).
+        stage_t0 = time()
         fts_scores: dict[str, float] = {}
         # Fetch real scores when L01 is on OR adaptive mode may need them.
         want_scores = self._backend_scored and (self._real_scores_enabled or self._adaptive)
@@ -435,6 +442,7 @@ class EvidenceSearch:
         else:
             for rank, node in enumerate(fts_nodes):
                 fts_scores[node.id] = max(0.10, 0.95 - rank * 0.03)
+        timings_ms["fts"] = (time() - stage_t0) * 1000
 
         # Step 2b — Vector seeds (semantic). Supplements FTS with
         # results that share meaning but not surface words. This is
@@ -444,6 +452,7 @@ class EvidenceSearch:
         fts_ids = {n.id for n in fts_nodes}
         vec_seeds: list = []
         vec_nodes: list = []
+        stage_t0 = time()
         if query_embedding:
             try:
                 vec_nodes = await self._backend.search_vector(query_embedding, limit=fts_seed_limit)
@@ -513,12 +522,13 @@ class EvidenceSearch:
                 except Exception:
                     pass
 
-        # Step 2c++ — query→phrase dense seed (v0.27).
+        # Step 2c++ — query→entity-hub dense seed (v0.27/v0.30).
         # Bridge the lexical/dense gap on multi-hop and paraphrased entity
-        # mentions: embed the query, match against the embedded phrase hub
-        # nodes built by EntityLinker / PhraseExtractor (kind=ENTITY,
-        # tag=_phrase), and use the chunks linked to the top-matched
-        # phrases as seeds. Phrase nodes themselves are NOT seeds — they
+        # mentions: embed the query, match against embedded entity hub
+        # nodes built by EntityLinker / PhraseExtractor / OpenIE
+        # (kind=ENTITY, tag=_phrase or _openie_entity), and use the
+        # chunks linked to the top-matched hubs as seeds. Hub nodes
+        # themselves are NOT seeds — they
         # are bridges from "what the query is about" to "which chunks
         # mention that thing", which is the mechanism HippoRAG2's
         # query→triple linking exploits (+12.5pp R@5 on MuSiQue in their
@@ -540,6 +550,7 @@ class EvidenceSearch:
                 logger.debug("phrase-bridge seeding failed: %s", exc)
 
         all_seeds = list(fts_nodes) + vec_seeds + prf_seeds + phrase_bridge_seeds
+        timings_ms["vector"] = (time() - stage_t0) * 1000
 
         # Step 2c+ — table hint seed augmentation (v0.17.1).
         # If ``DomainProfile.table_query_hints`` was wired and any hint
@@ -559,6 +570,7 @@ class EvidenceSearch:
         # and dilutes the gold rank, which the earlier "bulk boost to
         # 0.99" implementation demonstrated with a −5%-point X2BEE
         # Hard regression.
+        stage_t0 = time()
         preferred_tables = anchors.preferred_tables
         if preferred_tables:
             existing_ids = {n.id for n in all_seeds}
@@ -634,8 +646,10 @@ class EvidenceSearch:
                 for node_id, score in rrf.items():
                     normalised = 0.10 + 0.85 * (score / rrf_max)
                     fts_scores[node_id] = max(fts_scores.get(node_id, 0.0), normalised)
+        timings_ms["seed_extra"] = (time() - stage_t0) * 1000
 
         # Step 3 — shallow graph expansion
+        stage_t0 = time()
         if self._graph_expansion:
             q_terms = (
                 frozenset(t for t in query.lower().split() if len(t) > 1)
@@ -689,8 +703,10 @@ class EvidenceSearch:
                             fts_scores[node_id] = ppr_score * 0.5
             except Exception:
                 pass  # PPR failure is non-fatal
+        timings_ms["expand"] = (time() - stage_t0) * 1000
 
         # Step 4 — hybrid reranking
+        stage_t0 = time()
         anchor_category_set = set(anchors.categories)
         tilt = (
             self._tilt_weights(anchors, fts_nodes)
@@ -800,14 +816,17 @@ class EvidenceSearch:
                         scored.sort(key=lambda s: s.total, reverse=True)
                 except Exception as exc:
                     logger.warning("cross-encoder rerank failed: %s", exc)
+        timings_ms["rerank"] = (time() - stage_t0) * 1000
 
         # Step 5 — evidence aggregation with diversity
+        stage_t0 = time()
         evidence = self._aggregator.aggregate(
             scored=scored,
             k=k,
             per_document_cap=per_document_cap,
             anchor_categories=anchor_category_set,
         )
+        timings_ms["aggregate"] = (time() - stage_t0) * 1000
 
         elapsed_ms = (time() - t0) * 1000
         logger.debug(
@@ -828,6 +847,7 @@ class EvidenceSearch:
             scored=scored,
             evidence=evidence,
             elapsed_ms=elapsed_ms,
+            timings_ms=timings_ms,
             sub_queries=sub_queries,
         )
 
@@ -839,32 +859,33 @@ class EvidenceSearch:
         seen_ids: set[str],
         max_chunks_per_phrase: int = 4,
     ) -> list:
-        """Dense-match the query against phrase hub nodes and return
+        """Dense-match the query against entity hub nodes and return
         chunks linked to the top matches.
 
-        The phrase hub (NodeKind.ENTITY, tagged ``_phrase``) layer is
-        built at ingest by EntityLinker / PhraseExtractor and is shared
-        across documents — the same phrase mentioned in two unrelated
-        chunks creates a bridge between them via CONTAINS / MENTIONS
-        edges. Lexical FTS misses paraphrased entity mentions in the
-        query; dense matching at the phrase level recovers them.
+        The hub layer is made of ``NodeKind.ENTITY`` nodes tagged either
+        ``_phrase`` (built at ingest by EntityLinker / PhraseExtractor)
+        or ``_openie_entity`` (built by the LLM OpenIE pass). Hubs are
+        shared across documents — the same entity mentioned in two
+        unrelated chunks creates a bridge between them via CONTAINS /
+        MENTIONS edges. Lexical FTS misses paraphrased entity mentions
+        in the query; dense matching at the hub level recovers them.
 
         Args:
             query_embedding: Pre-computed query vector.
-            top_k_phrases: How many phrase hubs to walk from.
+            top_k_phrases: How many entity hubs to walk from.
             seen_ids: Node IDs already in the seed set — skip when
                 discovering chunks to avoid double-counting.
             max_chunks_per_phrase: Cap on the chunks pulled from each
-                matched phrase. A very high-DF phrase ("therefore") that
+                matched hub. A very high-DF phrase ("therefore") that
                 slipped past min/max-DF filtering could otherwise flood
                 the seed pool.
 
         Returns:
             A list of chunk-level :class:`Node` objects suitable for
-            inclusion in the seed pool. Phrase hub nodes themselves are
+            inclusion in the seed pool. Entity hub nodes themselves are
             *not* returned — they are bridges, not evidence.
         """
-        # 1) Pull phrase hubs with non-empty embeddings — cached.
+        # 1) Pull phrase/OpenIE hubs with non-empty embeddings — cached.
         # The cache stores (nodes, matrix, l2_norms) so per-query work
         # is a single numpy matmul + argpartition. Pure-Python cosine
         # over 10k phrases × 2560-dim was ~10 s/query on MuSiQue,
@@ -884,7 +905,8 @@ class EvidenceSearch:
             for n in phrase_nodes_raw:
                 if not n.embedding:
                     continue
-                if "_phrase" not in (n.tags or []):
+                tags = set(n.tags or [])
+                if "_phrase" not in tags and "_openie_entity" not in tags:
                     continue
                 nodes.append(n)
                 matrix_rows.append(n.embedding)

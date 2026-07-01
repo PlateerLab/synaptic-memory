@@ -13,6 +13,7 @@ import pytest
 
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.evidence_search import EvidenceSearch
+from synaptic.extensions.graph_expander import ExpansionBudget
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
@@ -225,6 +226,8 @@ class TestPipelineShape:
         searcher = EvidenceSearch(backend=backend)
         result = await searcher.search("규정")
         assert result.elapsed_ms > 0
+        assert result.timings_ms
+        assert {"anchor", "fts", "expand", "rerank", "aggregate"}.issubset(set(result.timings_ms))
 
     async def test_expanded_larger_than_seeds(self):
         backend = MemoryBackend()
@@ -253,6 +256,68 @@ class TestPipelineShape:
         searcher = EvidenceSearch(backend=backend)
         result = await searcher.search("", k=4)
         assert result.evidence == []
+
+    async def test_openie_semantic_relation_surfaces_relation_only_target(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await backend.save_node(
+            Node(
+                id="ent_acme",
+                kind=NodeKind.ENTITY,
+                title="Acme",
+                content="Acme depends on an external plan.",
+                tags=["_openie", "_openie_entity"],
+            )
+        )
+        await backend.save_node(
+            Node(
+                id="ent_roadmap",
+                kind=NodeKind.ENTITY,
+                title="Roadmap",
+                content="Release calendar and milestones.",
+                tags=["_openie", "_openie_entity"],
+            )
+        )
+        for idx in range(4):
+            await backend.save_node(
+                Node(
+                    id=f"chunk_distractor_{idx}",
+                    kind=NodeKind.CHUNK,
+                    title=f"Acme depends distractor {idx}",
+                    content="Acme depends appears here lexically, but no relation target lives here.",
+                    tags=["chunk"],
+                )
+            )
+        await backend.save_edge(
+            Edge(
+                id="openie_acme_depends_roadmap",
+                source_id="ent_acme",
+                target_id="ent_roadmap",
+                kind=EdgeKind.DEPENDS_ON,
+                weight=0.9,
+                properties={"is_openie": "true", "relation": "depends_on", "confidence": "0.9"},
+            )
+        )
+
+        no_graph = await EvidenceSearch(backend=backend, graph_expansion=False).search(
+            "Acme depends",
+            k=3,
+        )
+        assert "ent_roadmap" not in {item.node.id for item in no_graph.expanded}
+
+        with_graph = await EvidenceSearch(
+            backend=backend,
+            expansion_budget=ExpansionBudget(max_total_expanded=10),
+        ).search("Acme depends", k=3)
+
+        expanded_reasons = {item.node.id: item.reason for item in with_graph.expanded}
+        assert expanded_reasons["ent_roadmap"] == "semantic_relation"
+        relation_expansion = next(
+            item for item in with_graph.expanded if item.node.id == "ent_roadmap"
+        )
+        assert relation_expansion.edge_kind == "depends_on"
+        assert relation_expansion.edge_confidence == pytest.approx(0.9)
+        assert "ent_roadmap" in {item.node.id for item in with_graph.evidence}
 
 
 # --- Per-document cap end-to-end ---

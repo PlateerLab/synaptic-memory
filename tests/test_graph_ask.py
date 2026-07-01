@@ -26,6 +26,15 @@ from synaptic.models import ConsolidationLevel, Node, NodeKind
 
 # --- fake client (test_agent_token_usage stub shape + dispatch) -------
 
+_OPEN_GRAPHS: list[SynapticGraph] = []
+
+
+@pytest.fixture(autouse=True)
+async def _close_graphs():
+    yield
+    while _OPEN_GRAPHS:
+        await _OPEN_GRAPHS.pop().close()
+
 
 class _Func:
     def __init__(self, name, args):
@@ -73,19 +82,25 @@ class _ScriptedClient:
         self.judge_calls = 0
         self.agent_calls = 0
         self.judge_temps: list = []
+        self.synth_messages: list = []
+        self.judge_messages: list = []
+        self.agent_messages: list = []
         self.chat = self
         self.completions = self
 
     async def create(self, *, model, messages, tools=None, max_tokens=None, temperature=None):
         if tools is not None:
             self.agent_calls += 1
+            self.agent_messages.append(messages)
             return self._agent.pop(0)
         system = str(messages[0].get("content", "")) if messages else ""
         if "evidence auditor" in system:
             self.judge_calls += 1
             self.judge_temps.append(temperature)
+            self.judge_messages.append(messages)
             return self._judge
         self.synth_calls += 1
+        self.synth_messages.append(messages)
         return self._synth
 
 
@@ -96,6 +111,7 @@ async def _make_graph(*, with_table=False) -> SynapticGraph:
     backend = SqliteGraphBackend(":memory:")
     g = SynapticGraph(backend)
     await g.connect()
+    _OPEN_GRAPHS.append(g)
     await backend.save_node(
         Node(
             id="d1",
@@ -137,6 +153,35 @@ async def test_mode_search_forces_cheap_and_never_escalates():
     assert client.agent_calls == 0
     assert res.prompt_tokens == 100
     assert res.completion_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_cheap_prompt_does_not_include_raw_openie_provenance():
+    g = await _make_graph()
+    await g.update(
+        "d1",
+        properties={
+            "source": "manual.pdf",
+            "page": "7",
+            "source_event_id": "evt_raw_should_not_enter_prompt",
+            "source_chunk_id": "chunk_raw_should_not_enter_prompt",
+            "prompt_version": "openie-v1",
+            "extractor": "LLMOpenIEExtractor",
+            "model": "deepseek-v4-flash",
+            "is_openie": "true",
+        },
+    )
+    client = _ScriptedClient(synth=_Resp(_Msg(content="rag answer"), _Usage(100, 10)))
+
+    res = await g.ask("topic", llm_client=client, mode="search")
+
+    assert res.answer == "rag answer"
+    prompt = json.dumps(client.synth_messages, ensure_ascii=False)
+    assert "evidence about the topic" in prompt
+    assert "source_event_id" not in prompt
+    assert "source_chunk_id" not in prompt
+    assert "prompt_version" not in prompt
+    assert "deepseek-v4-flash" not in prompt
 
 
 @pytest.mark.asyncio

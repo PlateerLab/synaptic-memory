@@ -59,17 +59,39 @@ from synaptic.models import (
     ConsolidationLevel,
     Edge,
     EdgeKind,
+    MemoryEvent,
+    MemoryEventKind,
     Node,
     NodeKind,
 )
 
 if TYPE_CHECKING:
     from synaptic.extensions.domain_profile import DomainProfile
-    from synaptic.protocols import StorageBackend
+    from synaptic.protocols import EntityExtractor, StorageBackend
 
 
 def _nfc(s: str) -> str:
     return unicodedata.normalize("NFC", s) if s else s
+
+
+def _document_content_hash(doc: DocumentRecord) -> str:
+    payload = {
+        "doc_id": doc.doc_id,
+        "title": doc.title,
+        "content": doc.content,
+        "category": doc.category,
+        "chunks": [
+            {
+                "chunk_id": chunk.chunk_id,
+                "index": chunk.index,
+                "text": chunk.text,
+                "page_number": chunk.page_number,
+            }
+            for chunk in sorted(doc.chunks, key=lambda c: c.index)
+        ],
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 # --- Record types ---
@@ -250,6 +272,12 @@ class IngestStats:
     chunks_created: int = 0
     categories_created: int = 0
     edges_created: int = 0
+    openie_gated: bool = True
+    openie_gate_reason: str = "profile openie_enabled=false"
+    openie_chunks_scanned: int = 0
+    openie_chunks_selected: int = 0
+    openie_entity_nodes_touched: int = 0
+    openie_extraction_failures: int = 0
     elapsed_seconds: float = 0.0
 
 
@@ -284,7 +312,7 @@ class DocumentIngester:
           pass — that separation keeps extraction reruns cheap.
     """
 
-    __slots__ = ("_backend", "_merge_strategy", "_profile")
+    __slots__ = ("_backend", "_merge_strategy", "_openie_extractor", "_profile")
 
     def __init__(
         self,
@@ -292,6 +320,7 @@ class DocumentIngester:
         profile: DomainProfile,
         backend: StorageBackend,
         merge_strategy: MergeStrategy = "skip",
+        openie_extractor: EntityExtractor | None = None,
     ) -> None:
         if merge_strategy not in ("skip", "replace"):
             msg = f"Unknown merge_strategy: {merge_strategy}"
@@ -299,6 +328,7 @@ class DocumentIngester:
         self._profile = profile
         self._backend = backend
         self._merge_strategy = merge_strategy
+        self._openie_extractor = openie_extractor
 
     async def ingest(self, source: CorpusSource) -> IngestStats:
         """Walk the corpus and materialize category / document / chunk nodes."""
@@ -306,6 +336,7 @@ class DocumentIngester:
         t0 = time.time()
 
         category_ids: dict[str, str] = {}
+        pending_memory_events: list[MemoryEvent] = []
 
         for doc in source.documents():
             doc_node_id = _doc_node_id(doc.doc_id)
@@ -313,11 +344,30 @@ class DocumentIngester:
             doc_title = _nfc(doc.title)
 
             existing = await self._backend.get_node(doc_node_id)
+            replacing = False
             if existing is not None:
                 if self._merge_strategy == "skip":
                     stats.documents_skipped += 1
                     continue
                 # replace
+                replacing = True
+                deleted_node_ids, deleted_edge_ids = await self._document_cascade_artifacts(
+                    doc_node_id
+                )
+                await self._save_memory_event(
+                    MemoryEvent(
+                        kind=MemoryEventKind.DELETE,
+                        source=existing.source or doc.source,
+                        source_id=doc.doc_id,
+                        node_ids=deleted_node_ids,
+                        edge_ids=deleted_edge_ids,
+                        properties={
+                            "merge_strategy": "replace",
+                            "replacement_content_hash": _document_content_hash(doc),
+                            "previous_title": existing.title,
+                        },
+                    )
+                )
                 await self._delete_document_cascade(doc_node_id)
 
             # Ensure category node
@@ -363,7 +413,9 @@ class DocumentIngester:
             else:
                 doc_content = doc_title
 
-            await self._backend.save_node(
+            doc_node_ids = [doc_node_id]
+            doc_edge_ids: list[str] = []
+            nodes_to_save: list[Node] = [
                 Node(
                     id=doc_node_id,
                     kind=doc_kind,
@@ -374,25 +426,29 @@ class DocumentIngester:
                     properties=doc_props,
                     level=ConsolidationLevel.L0_RAW,
                 )
-            )
+            ]
+            edges_to_save: list[Edge] = []
             stats.documents_ingested += 1
 
             if category_id is not None:
-                await self._backend.save_edge(
+                edge_id = _edge_id("part_of", doc_node_id, category_id)
+                edges_to_save.append(
                     Edge(
-                        id=_edge_id("part_of", doc_node_id, category_id),
+                        id=edge_id,
                         source_id=doc_node_id,
                         target_id=category_id,
                         kind=EdgeKind.PART_OF,
                         weight=1.0,
                     )
                 )
+                doc_edge_ids.append(edge_id)
                 stats.edges_created += 1
 
             # Chunks
             prev_chunk_node_id: str | None = None
             for chunk in sorted(doc.chunks, key=lambda c: c.index):
                 chunk_node_id = _chunk_node_id(chunk.chunk_id)
+                doc_node_ids.append(chunk_node_id)
 
                 chunk_props = dict(chunk.properties)
                 chunk_props["doc_id"] = doc.doc_id
@@ -400,7 +456,7 @@ class DocumentIngester:
                 if chunk.page_number is not None:
                     chunk_props["page_number"] = str(chunk.page_number)
 
-                await self._backend.save_node(
+                nodes_to_save.append(
                     Node(
                         id=chunk_node_id,
                         kind=NodeKind.CHUNK,
@@ -414,30 +470,54 @@ class DocumentIngester:
                 )
                 stats.chunks_created += 1
 
-                await self._backend.save_edge(
+                contains_edge_id = _edge_id("contains", doc_node_id, chunk_node_id)
+                edges_to_save.append(
                     Edge(
-                        id=_edge_id("contains", doc_node_id, chunk_node_id),
+                        id=contains_edge_id,
                         source_id=doc_node_id,
                         target_id=chunk_node_id,
                         kind=EdgeKind.CONTAINS,
                         weight=1.0,
                     )
                 )
+                doc_edge_ids.append(contains_edge_id)
                 stats.edges_created += 1
 
                 if prev_chunk_node_id is not None:
-                    await self._backend.save_edge(
+                    next_edge_id = _edge_id("next", prev_chunk_node_id, chunk_node_id)
+                    edges_to_save.append(
                         Edge(
-                            id=_edge_id("next", prev_chunk_node_id, chunk_node_id),
+                            id=next_edge_id,
                             source_id=prev_chunk_node_id,
                             target_id=chunk_node_id,
                             kind=EdgeKind.NEXT_CHUNK,
                             weight=0.9,
                         )
                     )
+                    doc_edge_ids.append(next_edge_id)
                     stats.edges_created += 1
 
                 prev_chunk_node_id = chunk_node_id
+
+            await self._save_nodes(nodes_to_save)
+            await self._save_edges(edges_to_save)
+            pending_memory_events.append(
+                MemoryEvent(
+                    kind=MemoryEventKind.UPDATE if replacing else MemoryEventKind.INGEST,
+                    source=doc.source,
+                    source_id=doc.doc_id,
+                    content_hash=_document_content_hash(doc),
+                    node_ids=doc_node_ids,
+                    edge_ids=doc_edge_ids,
+                    properties={
+                        "category": doc_category,
+                        "chunks": str(len(doc.chunks)),
+                        "merge_strategy": self._merge_strategy,
+                    },
+                )
+            )
+
+        await self._save_memory_events(pending_memory_events)
 
         # Structural reference linking — when the profile declares a clean
         # target inventory (``reference_key_property``), turn explicit
@@ -453,6 +533,24 @@ class DocumentIngester:
         ref_stats = await StructuralReferenceLinker(self._profile).link(self._backend)
         if not ref_stats.gated:
             stats.edges_created += ref_stats.edges_created
+
+        if self._profile.openie_enabled:
+            if self._openie_extractor is None:
+                stats.openie_gated = True
+                stats.openie_gate_reason = "profile openie_enabled=true but no openie_extractor"
+            else:
+                from synaptic.extensions.entity_extractor_openie import OpenIELinker
+
+                openie_stats = await OpenIELinker(
+                    self._openie_extractor,
+                    profile=self._profile,
+                ).link(self._backend)
+                stats.openie_gated = openie_stats.gated
+                stats.openie_gate_reason = openie_stats.gate_reason
+                stats.openie_chunks_scanned = openie_stats.chunks_scanned
+                stats.openie_chunks_selected = openie_stats.chunks_selected
+                stats.openie_entity_nodes_touched = openie_stats.entity_nodes_touched
+                stats.openie_extraction_failures = openie_stats.extraction_failures
 
         stats.elapsed_seconds = time.time() - t0
         return stats
@@ -500,6 +598,56 @@ class DocumentIngester:
             if edge.kind == EdgeKind.CONTAINS:
                 await self._backend.delete_node(edge.target_id)
         await self._backend.delete_node(doc_node_id)
+
+    async def _document_cascade_artifacts(self, doc_node_id: str) -> tuple[list[str], list[str]]:
+        """Return the doc/chunk node ids and edge ids that replace-mode deletion touches."""
+        node_ids = [doc_node_id]
+        edge_ids: set[str] = set()
+        outgoing = await self._backend.get_edges(doc_node_id, direction="outgoing")
+        incoming = await self._backend.get_edges(doc_node_id, direction="incoming")
+        for edge in [*outgoing, *incoming]:
+            edge_ids.add(edge.id)
+            if edge.kind == EdgeKind.CONTAINS and edge.target_id not in node_ids:
+                node_ids.append(edge.target_id)
+        for node_id in list(node_ids):
+            for edge in await self._backend.get_edges(node_id, direction="both"):
+                edge_ids.add(edge.id)
+        return node_ids, sorted(edge_ids)
+
+    async def _save_memory_event(self, event: MemoryEvent) -> None:
+        save = getattr(self._backend, "save_memory_event", None)
+        if callable(save):
+            await save(event)
+
+    async def _save_memory_events(self, events: list[MemoryEvent]) -> None:
+        if not events:
+            return
+        save_batch = getattr(self._backend, "save_memory_events_batch", None)
+        if callable(save_batch):
+            await save_batch(events)
+            return
+        for event in events:
+            await self._save_memory_event(event)
+
+    async def _save_nodes(self, nodes: list[Node]) -> None:
+        if not nodes:
+            return
+        save_batch = getattr(self._backend, "save_nodes_batch", None)
+        if callable(save_batch):
+            await save_batch(nodes)
+            return
+        for node in nodes:
+            await self._backend.save_node(node)
+
+    async def _save_edges(self, edges: list[Edge]) -> None:
+        if not edges:
+            return
+        save_batch = getattr(self._backend, "save_edges_batch", None)
+        if callable(save_batch):
+            await save_batch(edges)
+            return
+        for edge in edges:
+            await self._backend.save_edge(edge)
 
 
 # --- Content enrichment ---

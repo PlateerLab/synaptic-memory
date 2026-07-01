@@ -137,6 +137,27 @@ class TestKuzuEdges:
         assert out_edges[0].target_id == "t1"
         assert out_edges[0].weight == pytest.approx(0.75)
 
+    async def test_edge_properties_roundtrip(self, kuzu: KuzuBackend) -> None:
+        await kuzu.save_node(Node(id="prop_src", title="Source"))
+        await kuzu.save_node(Node(id="prop_tgt", title="Target"))
+        await kuzu.save_edge(
+            Edge(
+                id="prop_edge",
+                source_id="prop_src",
+                target_id="prop_tgt",
+                kind=EdgeKind.RELATED,
+                properties={
+                    "source_event_id": "evt_1",
+                    "model": "deterministic",
+                    "confidence": "0.91",
+                },
+            )
+        )
+
+        out_edges = await kuzu.get_edges("prop_src", direction="outgoing")
+        assert out_edges[0].properties["source_event_id"] == "evt_1"
+        assert out_edges[0].properties["model"] == "deterministic"
+
     async def test_edge_directions(self, kuzu: KuzuBackend) -> None:
         await kuzu.save_node(Node(id="a"))
         await kuzu.save_node(Node(id="b"))
@@ -312,3 +333,24 @@ class TestKuzuBatch:
         await kuzu.save_edges_batch(edges)
         out = await kuzu.get_edges("eb_src")
         assert len(out) == 3
+        by_id = {edge.id: edge for edge in out}
+        assert by_id["eb_1"].properties == {}
+
+    async def test_save_edges_batch_preserves_properties(self, kuzu: KuzuBackend) -> None:
+        await kuzu.save_node(Node(id="ebp_src"))
+        await kuzu.save_node(Node(id="ebp_tgt"))
+        await kuzu.save_edges_batch(
+            [
+                Edge(
+                    id="ebp_1",
+                    source_id="ebp_src",
+                    target_id="ebp_tgt",
+                    kind=EdgeKind.RELATED,
+                    properties={"source_event_id": "evt_batch", "is_openie": "true"},
+                )
+            ]
+        )
+
+        out = await kuzu.get_edges("ebp_src", direction="outgoing")
+        assert out[0].properties["source_event_id"] == "evt_batch"
+        assert out[0].properties["is_openie"] == "true"

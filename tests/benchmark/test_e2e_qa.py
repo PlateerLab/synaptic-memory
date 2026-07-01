@@ -26,6 +26,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import time
+from urllib.parse import urlparse
 
 import pytest
 
@@ -46,6 +47,47 @@ def _load_hotpotqa() -> dict | None:
             with open(path) as f:
                 return json.load(f)
     return None
+
+
+def _is_local_url(url: str) -> bool:
+    hostname = urlparse(url).hostname
+    return hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+async def _skip_if_llm_unavailable(
+    *,
+    model: str,
+    base_url: str,
+    api_key: str,
+) -> None:
+    """Skip optional E2E generation when the configured LLM is not ready."""
+    if api_key != "ollama":
+        if not api_key or api_key == "ollama":
+            pytest.skip(f"API key required for E2E model {model!r}")
+        return
+
+    try:
+        import aiohttp
+    except ImportError:
+        pytest.skip("aiohttp 필요: uv pip install aiohttp")
+
+    if not _is_local_url(base_url):
+        return
+
+    health_url = f"{base_url.rstrip('/')}/api/tags"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    pytest.skip(
+                        f"LLM endpoint unavailable: GET {health_url} -> {resp.status} {text[:120]}"
+                    )
+    except (TimeoutError, aiohttp.ClientError) as exc:
+        pytest.skip(f"LLM endpoint unavailable: {base_url} ({exc})")
 
 
 # ── LLM 호출 ────────────────────────────────────────────
@@ -317,6 +359,17 @@ class TestE2EHotPotQA:
         if len(query_ids) > 24:
             query_ids = random.sample(query_ids, 24)
 
+        # LLM 설정
+        model = os.environ.get("E2E_MODEL", "qwen3.5:4b")
+        base_url = os.environ.get("E2E_BASE_URL", "http://localhost:11434")
+        api_key = os.environ.get("OPENAI_API_KEY", "ollama")
+
+        if "gpt" in model or "claude" in model:
+            base_url = "https://api.openai.com"
+
+        print(f"  LLM: {model} @ {base_url}")
+        await _skip_if_llm_unavailable(model=model, base_url=base_url, api_key=api_key)
+
         # 1. 그래프 구축 (Auto-Ontology + PhraseExtractor)
         print("\n[Phase 1] 그래프 구축 (PhraseExtractor 활성화)...")
         from synaptic.extensions.classifier_rules import RuleBasedClassifier
@@ -344,16 +397,6 @@ class TestE2EHotPotQA:
         # 엣지 수 확인
         edge_count = len(backend._edges) if hasattr(backend, "_edges") else 0
         print(f"  노드: {len(id_map)}, 엣지: {edge_count}")
-
-        # LLM 설정
-        model = os.environ.get("E2E_MODEL", "qwen3.5:4b")
-        base_url = os.environ.get("E2E_BASE_URL", "http://localhost:11434")
-        api_key = os.environ.get("OPENAI_API_KEY", "ollama")
-
-        if "gpt" in model or "claude" in model:
-            base_url = "https://api.openai.com"
-
-        print(f"  LLM: {model} @ {base_url}")
 
         # 2. Retrieval + Generation
         print(f"\n[Phase 2] Retrieval + Generation ({len(query_ids)}문항)...")
@@ -440,9 +483,13 @@ class TestE2EHotPotQA:
     @pytest.mark.asyncio
     async def test_hotpotqa_e2e_claude(self) -> None:
         """Claude API로 답변 생성 — Cognee 공정 비교 (그래프는 RuleBased)."""
-        from dotenv import dotenv_values
+        try:
+            from dotenv import dotenv_values
+        except ImportError:
+            env = {}
+        else:
+            env = dotenv_values()
 
-        env = dotenv_values()
         api_key = os.environ.get("ANTHROPIC_API_KEY", "") or env.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             pytest.skip("ANTHROPIC_API_KEY 없음. .env에 설정 필요")

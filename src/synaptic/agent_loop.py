@@ -743,6 +743,24 @@ responses overhead.
 """
 
 
+_RAW_PROVENANCE_PROPERTY_KEYS = frozenset(
+    {
+        "edge_ids",
+        "extractor",
+        "is_openie",
+        "last_seen_at",
+        "model",
+        "node_ids",
+        "prompt_version",
+        "scope_key",
+        "signal_kind",
+        "source_chunk_id",
+        "source_event_id",
+        "support_count",
+    }
+)
+
+
 def _truncate(s: str, cap: int) -> str:
     return s if len(s) <= cap else s[: cap - 1] + "…"
 
@@ -756,6 +774,8 @@ def _compact_properties(props: dict, *, max_entries: int = 8, max_value_chars: i
     if not isinstance(props, dict):
         return out
     for k, v in props.items():
+        if str(k) in _RAW_PROVENANCE_PROPERTY_KEYS:
+            continue
         if len(out) >= max_entries:
             break
         if isinstance(v, str | int | float | bool):

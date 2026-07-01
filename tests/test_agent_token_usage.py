@@ -18,6 +18,15 @@ from synaptic.models import ConsolidationLevel, Node, NodeKind
 
 # --- fake client (test_agent_efficiency stub shape + usage) -----------
 
+_OPEN_BACKENDS: list[SqliteGraphBackend] = []
+
+
+@pytest.fixture(autouse=True)
+async def _close_backends():
+    yield
+    while _OPEN_BACKENDS:
+        await _OPEN_BACKENDS.pop().close()
+
 
 class _Func:
     def __init__(self, name, args):
@@ -73,6 +82,7 @@ class _FakeClient:
 async def _backend_with_doc():
     b = SqliteGraphBackend(":memory:")
     await b.connect()
+    _OPEN_BACKENDS.append(b)
     await b.save_node(
         Node(
             id="d1",

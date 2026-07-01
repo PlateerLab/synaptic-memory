@@ -9,19 +9,27 @@ from difflib import SequenceMatcher
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
+    MemoryEvent,
+    MemoryScope,
+    MemoryScore,
     Node,
     NodeKind,
+    RetrievalEvent,
+    memory_scope_key,
 )
 
 
 class MemoryBackend:
     """Dict-based in-memory backend. No external dependencies."""
 
-    __slots__ = ("_edges", "_nodes")
+    __slots__ = ("_edges", "_memory_events", "_memory_scores", "_nodes", "_retrieval_events")
 
     def __init__(self) -> None:
         self._nodes: dict[str, Node] = {}
         self._edges: dict[str, Edge] = {}
+        self._memory_events: dict[str, MemoryEvent] = {}
+        self._retrieval_events: dict[str, RetrievalEvent] = {}
+        self._memory_scores: dict[tuple[str, str, str], MemoryScore] = {}
 
     async def connect(self) -> None:
         pass
@@ -29,6 +37,9 @@ class MemoryBackend:
     async def close(self) -> None:
         self._nodes.clear()
         self._edges.clear()
+        self._memory_events.clear()
+        self._retrieval_events.clear()
+        self._memory_scores.clear()
 
     # --- Node CRUD ---
 
@@ -113,6 +124,100 @@ class MemoryBackend:
 
     async def delete_edge(self, edge_id: str) -> None:
         self._edges.pop(edge_id, None)
+
+    # --- Memory operating layer ---
+
+    async def save_memory_event(self, event: MemoryEvent) -> None:
+        self._memory_events[event.id] = event
+
+    async def save_memory_events_batch(self, events: Sequence[MemoryEvent]) -> None:
+        for event in events:
+            self._memory_events[event.id] = event
+
+    async def list_memory_events(
+        self,
+        *,
+        kind: str | None = None,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[MemoryEvent]:
+        scope_key = memory_scope_key(scope) if scope is not None else None
+        out: list[MemoryEvent] = []
+        for event in sorted(self._memory_events.values(), key=lambda e: e.created_at, reverse=True):
+            if kind is not None and str(event.kind) != str(kind):
+                continue
+            if scope_key is not None and memory_scope_key(event.scope) != scope_key:
+                continue
+            if since is not None and event.created_at < since:
+                continue
+            out.append(event)
+            if len(out) >= limit:
+                break
+        return out
+
+    async def save_retrieval_event(self, event: RetrievalEvent) -> None:
+        self._retrieval_events[event.id] = event
+
+    async def get_retrieval_event(self, event_id: str) -> RetrievalEvent | None:
+        return self._retrieval_events.get(event_id)
+
+    async def list_retrieval_events(
+        self,
+        *,
+        scope: MemoryScope | None = None,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[RetrievalEvent]:
+        scope_key = memory_scope_key(scope) if scope is not None else None
+        out: list[RetrievalEvent] = []
+        for event in sorted(
+            self._retrieval_events.values(), key=lambda e: e.created_at, reverse=True
+        ):
+            if scope_key is not None and memory_scope_key(event.scope) != scope_key:
+                continue
+            if since is not None and event.created_at < since:
+                continue
+            out.append(event)
+            if len(out) >= limit:
+                break
+        return out
+
+    async def save_memory_score(self, score: MemoryScore) -> None:
+        self._memory_scores[(score.scope_key, score.node_id, score.edge_id)] = score
+
+    async def get_memory_score(
+        self,
+        scope_key: str,
+        *,
+        node_id: str = "",
+        edge_id: str = "",
+    ) -> MemoryScore | None:
+        return self._memory_scores.get((scope_key, node_id, edge_id))
+
+    async def list_memory_scores(
+        self,
+        *,
+        scope_key: str | None = None,
+        node_ids: list[str] | None = None,
+        edge_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[MemoryScore]:
+        node_filter = set(node_ids or [])
+        edge_filter = set(edge_ids or [])
+        out: list[MemoryScore] = []
+        scores = sorted(self._memory_scores.values(), key=lambda s: s.score, reverse=True)
+        for score in scores:
+            if scope_key is not None and score.scope_key != scope_key:
+                continue
+            if node_filter and score.node_id not in node_filter:
+                continue
+            if edge_filter and score.edge_id not in edge_filter:
+                continue
+            out.append(score)
+            if len(out) >= limit:
+                break
+        return out
 
     # --- Search ---
 

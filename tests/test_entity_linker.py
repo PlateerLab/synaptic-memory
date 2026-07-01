@@ -6,6 +6,7 @@ import pytest
 
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.domain_profile import DomainProfile
+from synaptic.extensions.entity_ids import deterministic_entity_id
 from synaptic.extensions.entity_linker import (
     EntityLinker,
     _mention_edge_id,
@@ -38,10 +39,13 @@ async def _seed_korean_chunks(backend: MemoryBackend, texts: list[str]) -> list[
 class TestDeterministicIds:
     def test_phrase_hub_id_stable(self):
         assert _phrase_hub_id("이사회") == _phrase_hub_id("이사회")
-        assert _phrase_hub_id("이사회").startswith("phrase_")
+        assert _phrase_hub_id("이사회").startswith("ent_")
 
     def test_different_phrases_different_ids(self):
         assert _phrase_hub_id("이사회") != _phrase_hub_id("위원회")
+
+    def test_phrase_hub_id_uses_shared_entity_namespace(self):
+        assert _phrase_hub_id("이사회") == deterministic_entity_id("이사회")
 
     def test_mention_edge_id_stable(self):
         eid1 = _mention_edge_id("chunk_001", "phrase_abc")

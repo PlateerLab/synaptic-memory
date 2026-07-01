@@ -51,6 +51,166 @@ uv run python eval/scripts/ingest_krra.py
 uv run python eval/scripts/score_krra.py
 ```
 
+### OpenIE PoC on local 마사회 chunks
+
+`eval/scripts/openie_mz_poc.py` is the v0.30 hybrid-graph smoke harness.
+It rebuilds a chunk-preserving graph from `~/synaptic-eval/mz_chunks.jsonl`,
+scores the baseline, applies the opt-in OpenIE layer to a copied DB, and
+embeds any new OpenIE entity hubs before scoring again. The existing
+`mz_full.db` is not modified.
+
+```bash
+# Verify the memory operating layer without an LLM or embedding server. This
+# exercises retrieval/feedback ledgers, scoped reinforcement, Hebbian feedback
+# edges, relation/edge scores, feedback-fed consolidation, edge provenance,
+# pollution/growth signals, and the compact health report.
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_poc_results.json
+```
+
+The memory-operating smoke is deterministic and exits non-zero when any gate
+fails. The result JSON records the individual gates and a compact
+`summary.health` payload. Current gates cover:
+
+- retrieval and feedback ledger roundtrips;
+- implicit feedback staying weak and scope-local;
+- task/test-style success promoting node and relation scores without double
+  counting global scope;
+- public `graph.reinforce()` flowing through the same feedback ledger path;
+- Hebbian edge creation plus local/global edge `MemoryScore` updates;
+- feedback counts feeding consolidation;
+- source/model/prompt provenance staying on edge/event metadata;
+- repeated failure, property conflict, supersession, drift-spike, and
+  low-confidence relation signals;
+- new-entity, new-relation, and relation-reinforced lifecycle signals in
+  `memory_health(since=...)`;
+- suspicious memory being flagged and optionally penalized, not deleted.
+
+```bash
+# Verify ingest/scoring without an LLM server
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py --skip-openie
+
+# Run OpenIE when a local OpenAI-compatible Qwen server is available
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --llm-base-url http://localhost:8000/v1 \
+  --llm-model /home/son/xgen-models/huggingface/Qwen3.6-27B \
+  --openie-max-concurrency 4
+
+# Re-score a bounded OpenIE smoke from cache only. This never calls an LLM:
+# only chunks already covered by the cache are eligible for OpenIE replay.
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --max-input-chunks 200 \
+  --openie-source-limit 200 \
+  --openie-max-chunks 5 \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --openie-cache-only \
+  --openie-cache-missing-output ~/synaptic-eval/openie_cache_missing_200.jsonl \
+  --llm-model Qwen3.6-27B \
+  --relation-probe-limit 50 \
+  --min-relation-expanded-lift 1 \
+  --min-relation-evidence-lift 1 \
+  --min-strong-relation-evidence-rate 0.5 \
+  --min-openie-cache-coverage 0.02
+
+# Audit a cache file before/after warming. This never calls an LLM.
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --openie-cache-audit \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --openie-cache-audit-bad-output ~/synaptic-eval/openie_cache_bad_rows_200.jsonl \
+  --openie-cache-compact-output ~/synaptic-eval/openie_cache_mz_200_qwen.compact.jsonl \
+  --results ~/synaptic-eval/openie_cache_audit_200_results.json
+
+# Warm only the missing OpenIE cache rows exported above. This does not build
+# DBs or run retrieval; it appends successful extractions to --openie-cache.
+# Add --openie-cache-warm-dry-run first to count pending uncached rows without
+# calling an LLM.
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --openie-cache-warm-input ~/synaptic-eval/openie_cache_missing_200.jsonl \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --llm-base-url https://api.deepseek.com/v1 \
+  --llm-model deepseek-v4-flash \
+  --llm-api-key-env DEEPSEEK_API_KEY \
+  --openie-model-profile deepseek_v4_flash \
+  --openie-cache-warm-limit 50 \
+  --openie-cache-warm-total-chunks 200 \
+  --openie-cache-warm-target-coverage 0.5 \
+  --openie-cache-warm-pending-output ~/synaptic-eval/openie_cache_pending_200_50.jsonl \
+  --openie-cache-warm-failure-output ~/synaptic-eval/openie_cache_failures_200_50.jsonl \
+  --results ~/synaptic-eval/openie_cache_warm_200_results.json
+
+# Scale OpenIE with DeepSeek Flash. Keep the API key only in the process
+# environment; do not put it in code, cache files, docs, or DB metadata.
+export DEEPSEEK_API_KEY=...
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --max-input-chunks 200 \
+  --openie-max-chunks 50 \
+  --llm-base-url https://api.deepseek.com/v1 \
+  --llm-model deepseek-v4-flash \
+  --llm-api-key-env DEEPSEEK_API_KEY \
+  --openie-model-profile deepseek_v4_flash \
+  --openie-max-concurrency 8 \
+  --relation-probe-limit 100 \
+  --min-relation-expanded-lift 10 \
+  --min-relation-evidence-lift 5 \
+  --min-strong-relation-evidence-rate 0.5
+```
+
+For a dependency-light ingest/search smoke without HTTP embedding, add
+`--embed-base-url ''`.
+
+The script writes `~/synaptic-eval/mz_openie_poc_results.json` and exits
+non-zero when the default gates fail:
+
+- OpenIE R@5 must not regress against the baseline DB.
+- At least one query must be scoreable in both baseline and OpenIE DBs.
+- In non-skipped OpenIE mode, at least one chunk must be selected, at
+  least one non-MENTIONS OpenIE relation edge must be created, and
+  extraction failures must be zero.
+- OpenIE LLM extraction is bounded by `--openie-max-concurrency`; graph
+  writes are applied in deterministic chunk order.
+- Reasoning-heavy OpenAI-compatible models may need
+  `--openie-max-output-tokens 4096` so final JSON is not truncated after
+  internal reasoning tokens.
+- `purge_openie_artifacts()` must logically restore the baseline graph
+  fingerprint (`--verify-revertibility`, on by default).
+- `--min-delta-r5` can raise the improvement gate above the default `0.0`.
+- `relation_probe` compares graph expansion on/off for OpenIE relation
+  targets. It records relation-level and strong/weak group breakdowns.
+- `--min-relation-expanded-lift`, `--min-relation-evidence-lift`, and
+  `--min-strong-relation-evidence-rate` turn relation-probe numbers into
+  optional gates. Defaults are zero so existing no-regress checks still run.
+- `--openie-cache-only` is the safe scale-smoke mode for cached extractions:
+  it preserves model/provenance labels, never calls a remote LLM, and filters
+  OpenIE replay to cache-covered chunks. The result JSON records
+  `cache_checked_chunks`, `cache_eligible_chunks`, `cache_skipped_chunks`, and
+  `cache_coverage_rate` so cache coverage problems are separate from extraction
+  quality problems. Use `--openie-cache-missing-output` to export the skipped
+  chunk rows as JSONL input for the next cache-warming run.
+- `--min-openie-cache-coverage` turns cache coverage into an optional gate for
+  scale smokes. Keep it low for early cache-only checks, then raise it after
+  cache warming.
+- `--openie-cache-audit` reads an OpenIE cache JSONL without calling an LLM and
+  reports invalid JSON lines, invalid record shapes, duplicate keys, parse
+  failures, empty extractions, and total extracted entity/triple counts. Use
+  `--openie-cache-audit-bad-output` to export rows that need cleanup or retry.
+  Use `--openie-cache-compact-output` to write a clean cache containing only
+  parseable records, deduplicated by the latest value for each key.
+- `--openie-cache-warm-input` consumes those missing rows, calls the configured
+  OpenAI-compatible LLM, appends successful extractions to `--openie-cache`, and
+  writes an `openie_cache_warm` summary to `--results`. Re-running the same
+  input is idempotent: rows already present in the cache are counted under
+  `rows_skipped_cached` and do not call the LLM again. Use
+  `--openie-cache-warm-dry-run` to count `rows_pending` before spending tokens.
+  `--openie-cache-warm-limit` caps pending uncached rows for the current batch;
+  uncached rows beyond that batch are reported as `rows_deferred_limit`. Use
+  `--openie-cache-warm-total-chunks` with a missing export to project coverage
+  after the current batch succeeds. Add `--openie-cache-warm-target-coverage`
+  to report the rows and batches still needed to reach a target cache coverage.
+  Use
+  `--openie-cache-warm-pending-output` to write the exact pending batch rows to
+  JSONL for inspection. Use `--openie-cache-warm-failure-output` to write only
+  failed rows as retry input.
+
 ### Graph structure (current — Day 1, structural only)
 
 - **Category** (10, `CONCEPT`) — directory name

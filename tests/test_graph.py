@@ -6,11 +6,137 @@ import pytest
 
 from synaptic.agent_search import SearchIntent, suggest_intent
 from synaptic.backends.memory import MemoryBackend
+from synaptic.extensions.entity_extractor_openie import ChainedEntityExtractor, LLMOpenIEExtractor
 from synaptic.graph import SynapticGraph
-from synaptic.models import DigestResult, EdgeKind, MaintenanceResult, NodeKind
+from synaptic.models import DigestResult, EdgeKind, MaintenanceResult, Node, NodeKind
 from synaptic.ontology import (
     build_agent_ontology,
 )
+
+
+class _FakeLLM:
+    async def generate(self, **kwargs):
+        return '{"entities": [], "triples": []}'
+
+
+class _NamedFakeLLM:
+    def __init__(self, model: str) -> None:
+        self._model = model
+
+    async def generate(self, **kwargs):
+        return '{"entities": [], "triples": []}'
+
+
+class _FakeEmbedder:
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [[float(i), 1.0] for i, _ in enumerate(texts)]
+
+
+class _FailingEmbedder:
+    async def embed(self, text: str) -> list[float]:
+        raise AssertionError(f"embedder should not be called for {text}")
+
+
+class _CountingBatchBackend(MemoryBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.batch_save_sizes: list[int] = []
+
+    async def save_nodes_batch(self, nodes):
+        self.batch_save_sizes.append(len(nodes))
+        await super().save_nodes_batch(nodes)
+
+
+class TestGraphFullOpenIE:
+    def test_full_keeps_openie_off_by_default_even_with_llm(self) -> None:
+        graph = SynapticGraph.full(MemoryBackend(), llm=_FakeLLM())
+        assert not isinstance(graph._phrase_extractor, ChainedEntityExtractor)
+
+    def test_full_composes_openie_only_when_enabled_with_llm(self) -> None:
+        graph = SynapticGraph.full(MemoryBackend(), llm=_FakeLLM(), openie_enabled=True)
+        assert isinstance(graph._phrase_extractor, ChainedEntityExtractor)
+
+    def test_full_openie_enabled_without_llm_keeps_default_extractor(self) -> None:
+        graph = SynapticGraph.full(MemoryBackend(), openie_enabled=True)
+        assert not isinstance(graph._phrase_extractor, ChainedEntityExtractor)
+
+    def test_full_infers_deepseek_profile_output_budget(self) -> None:
+        graph = SynapticGraph.full(
+            MemoryBackend(),
+            llm=_NamedFakeLLM("deepseek-v4-flash"),
+            openie_enabled=True,
+        )
+
+        assert isinstance(graph._phrase_extractor, ChainedEntityExtractor)
+        extractor = graph._phrase_extractor._extractors[1]
+        assert isinstance(extractor, LLMOpenIEExtractor)
+        assert extractor._max_output_tokens == 4096
+
+    def test_full_explicit_output_budget_overrides_inferred_deepseek_profile(self) -> None:
+        graph = SynapticGraph.full(
+            MemoryBackend(),
+            llm=_NamedFakeLLM("deepseek-v4-flash"),
+            openie_enabled=True,
+            openie_max_output_tokens=2048,
+        )
+
+        assert isinstance(graph._phrase_extractor, ChainedEntityExtractor)
+        extractor = graph._phrase_extractor._extractors[1]
+        assert isinstance(extractor, LLMOpenIEExtractor)
+        assert extractor._max_output_tokens == 2048
+
+    def test_full_infers_qwen36_profile_without_deepseek_budget_bump(self) -> None:
+        graph = SynapticGraph.full(
+            MemoryBackend(),
+            llm=_NamedFakeLLM("Qwen3.6-27B"),
+            openie_enabled=True,
+        )
+
+        assert isinstance(graph._phrase_extractor, ChainedEntityExtractor)
+        extractor = graph._phrase_extractor._extractors[1]
+        assert isinstance(extractor, LLMOpenIEExtractor)
+        assert extractor._max_output_tokens == 1024
+
+
+class TestGraphEmbedding:
+    async def test_embed_all_nodes_saves_embeddings_in_batches(self) -> None:
+        backend = _CountingBatchBackend()
+        await backend.save_nodes_batch(
+            [
+                Node(
+                    id=f"n{i}",
+                    title=f"Node {i}",
+                    content=f"Content {i}",
+                    kind=NodeKind.CONCEPT,
+                )
+                for i in range(40)
+            ]
+        )
+        backend.batch_save_sizes.clear()
+
+        await SynapticGraph._embed_all_nodes(backend, _FakeEmbedder())
+
+        assert backend.batch_save_sizes == [32, 8]
+        embedded = await backend.list_nodes(limit=100)
+        assert all(node.embedding for node in embedded)
+
+    async def test_search_uses_precomputed_embedding_without_calling_embedder(self) -> None:
+        backend = MemoryBackend()
+        await backend.save_node(
+            Node(
+                id="alpha",
+                title="Alpha",
+                content="Alpha content",
+                kind=NodeKind.CONCEPT,
+                embedding=[1.0, 0.0],
+            )
+        )
+        graph = SynapticGraph(backend, embedder=_FailingEmbedder())
+
+        result = await graph.search("Alpha", limit=1, embedding=[1.0, 0.0], rerank=False)
+
+        assert result.nodes
+        assert result.nodes[0].node.id == "alpha"
 
 
 class TestGraphCRUD:
@@ -438,3 +564,25 @@ class TestSearchRuntimeOptions:
         g = await self._graph(_SpyReranker())
         result = await g.search("retrieval topic", limit=3, fts_seed_limit=40, per_document_cap=1)
         assert result is not None
+
+    async def test_reuses_evidence_search_for_same_runtime_options(self) -> None:
+        g = await self._graph(_SpyReranker())
+
+        await g.search("retrieval topic", limit=3, rerank=False)
+        first_searcher = next(iter(g._evidence_search_cache.values()))
+        await g.search("retrieval topic", limit=3, rerank=False)
+
+        assert len(g._evidence_search_cache) == 1
+        assert next(iter(g._evidence_search_cache.values())) is first_searcher
+
+        await g.search("retrieval topic", limit=3)
+        assert len(g._evidence_search_cache) == 2
+
+    async def test_reranker_weight_change_clears_evidence_search_cache(self) -> None:
+        g = await self._graph(_SpyReranker())
+        await g.search("retrieval topic", limit=3, rerank=False)
+        assert g._evidence_search_cache
+
+        g.reranker_weights = object()
+
+        assert g._evidence_search_cache == {}
