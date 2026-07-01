@@ -903,6 +903,42 @@ Memory health snapshot:
 - full replay는 revertibility gate에서 `2,403`개 OpenIE artifact 제거 후 baseline
   fingerprint가 복원됨을 확인했다.
 
+### Post-merge performance reruns
+
+100% cache-only gate를 같은 입력과 cache로 재실행해 OpenIE replay/revertibility
+비용을 확인했다.
+
+| 상태 | 결과 파일 | OpenIE elapsed | wall time | gate |
+|---|---|---:|---:|---|
+| fixed 100% gate | `mz_openie_cache_deepseek_to100_fixed_results.json` | `2131.8s` | - | PASS |
+| PR #14 bulk purge | `mz_openie_cache_deepseek_to100_bulk_results.json` | `1508.6s` | `26:46.58` | PASS |
+| PR #15 batch edge replay | `mz_openie_cache_deepseek_to100_batch_results.json` | `955.4s` | `18:25.66` | PASS |
+
+품질/게이트 지표는 세 run에서 동일하게 유지됐다:
+
+| 항목 | 값 |
+|---|---:|
+| baseline R@5 | `100.0%` |
+| OpenIE R@5 | `100.0%` |
+| delta R@5 | `+0.0%` |
+| cache coverage | `100.0%` |
+| cache hits/misses | `200/0` |
+| OpenIE artifacts | `2,403` |
+| relation edges | `627` |
+| relation expanded lift | `+88` |
+| relation evidence lift | `+35` |
+| memory health signals | `939` |
+| suspect memories | `40` |
+
+성능 변화:
+
+- PR #14 이후 OpenIE elapsed는 `2131.8s -> 1508.6s`로 `29.2%` 감소했다.
+- PR #15 이후 OpenIE elapsed는 `2131.8s -> 955.4s`로 `55.2%` 감소했다.
+- PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
+  `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
+- 남은 큰 비용은 OpenIE entity/node ensure/update 및 relation probe/search의
+  다수 DB roundtrip이다.
+
 ---
 
 ## Current Interpretation
@@ -923,5 +959,4 @@ Memory health snapshot:
 - 더 큰 query/evidence benchmark에서 100% coverage의 R@1/R@5와 relation lift가
   유지되는지 확인.
 - full long-running pytest/QA suite를 빠른 CI와 nightly eval로 분리.
-- OpenIE purge/revertibility 검증을 batch delete로 최적화해 long eval wall time을
-  줄인다.
+- OpenIE entity/node replay와 relation probe/search DB roundtrip을 추가로 줄인다.
