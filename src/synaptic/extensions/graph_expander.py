@@ -302,26 +302,49 @@ class GraphExpander:
         Doc A are probably all relevant too. We fetch them via the
         shared CONTAINS / PART_OF edges.
         """
+        groups: list[tuple[str, list[str]]] = []
+        node_ids: list[str] = []
+        seen: set[str] = set()
+        offer_limit = state.remaining_capacity()
         for seed in seed_nodes:
-            if state.is_full():
-                return
+            if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
+                break
             try:
                 edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("edge fetch failed for %s: %s", seed.id, exc)
                 continue
 
-            added = 0
+            candidate_ids: list[str] = []
             for edge in edges:
-                if state.is_full() or added >= state.budget.max_per_anchor:
+                if (
+                    state.is_full()
+                    or len(candidate_ids) >= state.budget.max_per_anchor
+                    or (offer_limit is not None and len(node_ids) >= offer_limit)
+                ):
                     break
                 # Only follow the structural edges — skip RELATED / MENTIONS
                 if edge.kind not in (EdgeKind.CONTAINS, EdgeKind.PART_OF):
                     continue
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
+                if state.contains(other_id) or other_id in candidate_ids:
+                    continue
+                candidate_ids.append(other_id)
+                if other_id not in seen:
+                    node_ids.append(other_id)
+                    seen.add(other_id)
+            if candidate_ids:
+                groups.append((seed.id, candidate_ids))
+
+        nodes = await reads.get_nodes(node_ids)
+        for seed_id, candidate_ids in groups:
+            added = 0
+            for other_id in candidate_ids:
+                if state.is_full() or added >= state.budget.max_per_anchor:
+                    break
                 if state.contains(other_id):
                     continue
-                other = await reads.get_node(other_id)
+                other = nodes.get(other_id)
                 if other is None:
                     continue
                 state.add(
@@ -329,7 +352,7 @@ class GraphExpander:
                         node=other,
                         reason="document_chunk",
                         hops=1,
-                        anchor_hit=seed.id,
+                        anchor_hit=seed_id,
                     )
                 )
                 added += 1
@@ -345,24 +368,43 @@ class GraphExpander:
         if not chunks:
             return
 
+        groups: list[tuple[str, list[str]]] = []
+        node_ids: list[str] = []
+        seen: set[str] = set()
+        offer_limit = state.remaining_capacity()
         for seed in chunks:
-            if state.is_full():
-                return
+            if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
+                break
             try:
                 edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("chunk-next fetch failed for %s: %s", seed.id, exc)
                 continue
 
+            candidate_ids: list[str] = []
             for edge in edges:
-                if state.is_full():
+                if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
                     break
                 if edge.kind != EdgeKind.NEXT_CHUNK:
                     continue
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
+                if state.contains(other_id) or other_id in candidate_ids:
+                    continue
+                candidate_ids.append(other_id)
+                if other_id not in seen:
+                    node_ids.append(other_id)
+                    seen.add(other_id)
+            if candidate_ids:
+                groups.append((seed.id, candidate_ids))
+
+        nodes = await reads.get_nodes(node_ids)
+        for seed_id, candidate_ids in groups:
+            for other_id in candidate_ids:
+                if state.is_full():
+                    break
                 if state.contains(other_id):
                     continue
-                other = await reads.get_node(other_id)
+                other = nodes.get(other_id)
                 if other is None:
                     continue
                 state.add(
@@ -370,7 +412,7 @@ class GraphExpander:
                         node=other,
                         reason="chunk_next",
                         hops=1,
-                        anchor_hit=seed.id,
+                        anchor_hit=seed_id,
                     )
                 )
 
@@ -390,25 +432,48 @@ class GraphExpander:
         if not entities:
             return
 
+        groups: list[tuple[str, list[str]]] = []
+        node_ids: list[str] = []
+        seen: set[str] = set()
+        offer_limit = state.remaining_capacity()
         for seed in entities:
-            if state.is_full():
-                return
+            if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
+                break
             try:
                 edges = await reads.get_edges(seed.id, direction="incoming")
             except Exception as exc:
                 logger.debug("entity expansion failed for %s: %s", seed.id, exc)
                 continue
 
-            added = 0
+            candidate_ids: list[str] = []
             for edge in edges:
-                if state.is_full() or added >= state.budget.max_per_anchor:
+                if (
+                    state.is_full()
+                    or len(candidate_ids) >= state.budget.max_per_anchor
+                    or (offer_limit is not None and len(node_ids) >= offer_limit)
+                ):
                     break
                 if edge.kind != EdgeKind.MENTIONS:
                     continue
                 src_id = edge.source_id
+                if state.contains(src_id) or src_id in candidate_ids:
+                    continue
+                candidate_ids.append(src_id)
+                if src_id not in seen:
+                    node_ids.append(src_id)
+                    seen.add(src_id)
+            if candidate_ids:
+                groups.append((seed.id, candidate_ids))
+
+        nodes = await reads.get_nodes(node_ids)
+        for seed_id, candidate_ids in groups:
+            added = 0
+            for src_id in candidate_ids:
+                if state.is_full() or added >= state.budget.max_per_anchor:
+                    break
                 if state.contains(src_id):
                     continue
-                src = await reads.get_node(src_id)
+                src = nodes.get(src_id)
                 if src is None:
                     continue
                 state.add(
@@ -416,7 +481,7 @@ class GraphExpander:
                         node=src,
                         reason="entity_mention",
                         hops=1,
-                        anchor_hit=seed.id,
+                        anchor_hit=seed_id,
                     )
                 )
                 added += 1
@@ -443,18 +508,27 @@ class GraphExpander:
         if not entities:
             return
 
+        groups: list[tuple[str, list[tuple[str, EdgeKind, float]]]] = []
+        node_ids: list[str] = []
+        seen: set[str] = set()
+        offer_limit = state.remaining_capacity()
         for seed in entities:
-            if state.is_full():
-                return
+            if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
+                break
             try:
                 edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("related expansion failed for %s: %s", seed.id, exc)
                 continue
 
-            added = 0
+            candidates: list[tuple[str, EdgeKind, float]] = []
+            seed_seen: set[str] = set()
             for edge in edges:
-                if state.is_full() or added >= state.budget.max_per_anchor:
+                if (
+                    state.is_full()
+                    or len(candidates) >= state.budget.max_per_anchor
+                    or (offer_limit is not None and len(node_ids) >= offer_limit)
+                ):
                     break
                 is_related = edge.kind == EdgeKind.RELATED
                 is_openie_relation = (
@@ -464,19 +538,35 @@ class GraphExpander:
                 if not (is_related or is_openie_relation):
                     continue
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
+                if state.contains(other_id) or other_id in seed_seen:
+                    continue
+                candidates.append((other_id, edge.kind, _edge_confidence(edge)))
+                seed_seen.add(other_id)
+                if other_id not in seen:
+                    node_ids.append(other_id)
+                    seen.add(other_id)
+            if candidates:
+                groups.append((seed.id, candidates))
+
+        nodes = await reads.get_nodes(node_ids)
+        for seed_id, candidates in groups:
+            added = 0
+            for other_id, edge_kind, edge_confidence in candidates:
+                if state.is_full() or added >= state.budget.max_per_anchor:
+                    break
                 if state.contains(other_id):
                     continue
-                other = await reads.get_node(other_id)
+                other = nodes.get(other_id)
                 if other is None:
                     continue
                 state.add(
                     ExpandedNode(
                         node=other,
-                        reason="related" if is_related else "semantic_relation",
+                        reason="related" if edge_kind == EdgeKind.RELATED else "semantic_relation",
                         hops=1,
-                        anchor_hit=seed.id,
-                        edge_kind=str(edge.kind.value),
-                        edge_confidence=_edge_confidence(edge),
+                        anchor_hit=seed_id,
+                        edge_kind=str(edge_kind.value),
+                        edge_confidence=edge_confidence,
                     )
                 )
                 added += 1
@@ -498,25 +588,48 @@ class GraphExpander:
 
         No-op on corpora without REFERENCES edges. Capped per seed.
         """
+        groups: list[tuple[str, list[str]]] = []
+        node_ids: list[str] = []
+        seen: set[str] = set()
+        offer_limit = state.remaining_capacity()
         for seed in seed_nodes:
-            if state.is_full():
-                return
+            if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
+                break
             try:
                 edges = await reads.get_edges(seed.id, direction="both")
             except Exception as exc:
                 logger.debug("reference expansion failed for %s: %s", seed.id, exc)
                 continue
 
-            added = 0
+            candidate_ids: list[str] = []
             for edge in edges:
-                if state.is_full() or added >= state.budget.max_per_anchor:
+                if (
+                    state.is_full()
+                    or len(candidate_ids) >= state.budget.max_per_anchor
+                    or (offer_limit is not None and len(node_ids) >= offer_limit)
+                ):
                     break
                 if edge.kind != EdgeKind.REFERENCES:
                     continue
                 other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
+                if state.contains(other_id) or other_id in candidate_ids:
+                    continue
+                candidate_ids.append(other_id)
+                if other_id not in seen:
+                    node_ids.append(other_id)
+                    seen.add(other_id)
+            if candidate_ids:
+                groups.append((seed.id, candidate_ids))
+
+        nodes = await reads.get_nodes(node_ids)
+        for seed_id, candidate_ids in groups:
+            added = 0
+            for other_id in candidate_ids:
+                if state.is_full() or added >= state.budget.max_per_anchor:
+                    break
                 if state.contains(other_id):
                     continue
-                other = await reads.get_node(other_id)
+                other = nodes.get(other_id)
                 if other is None:
                     continue
                 state.add(
@@ -524,7 +637,7 @@ class GraphExpander:
                         node=other,
                         reason="references",
                         hops=1,
-                        anchor_hit=seed.id,
+                        anchor_hit=seed_id,
                     )
                 )
                 added += 1
@@ -622,6 +735,12 @@ class _ExpansionState:
         if self.q_terms:
             return False
         return len(self._by_id) >= self.budget.max_total_expanded
+
+    def remaining_capacity(self) -> int | None:
+        """Return first-come free slots, or None when relevance mode may evict."""
+        if self.q_terms:
+            return None
+        return max(0, self.budget.max_total_expanded - len(self._by_id))
 
     def results(self) -> list[ExpandedNode]:
         return [self._by_id[nid] for nid in self._order]
