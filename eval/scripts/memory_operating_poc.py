@@ -684,6 +684,11 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and health.semantic_extract_attempt_counts.get(drift_profile_key, 0) == 3
                 and _round(health.semantic_extract_failure_rates.get(drift_profile_key, 0.0)) == 1.0
             ),
+            "health_reports_semantic_failure_totals": (
+                health.semantic_extract_failure_count == 3
+                and health.semantic_extract_attempt_count == 4
+                and _round(health.openie_failure_rate) == 0.75
+            ),
             "scope_score_repeated_failure_signal_created": (scope_score_failure_signal is not None),
             "strong_negative_scope_score_signal_created": (
                 strong_negative_signal is not None

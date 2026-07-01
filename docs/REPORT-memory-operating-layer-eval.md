@@ -1781,6 +1781,12 @@ per-chunk fallback을 유지한다.
   `semantic_extract_failure_counts={"source=openie;extractor=fixture;model=drift-fixture;prompt_version=poc-drift-v1": 3}`,
   `semantic_extract_attempt_counts={"source=openie;extractor=fixture;model=drift-fixture;prompt_version=poc-drift-v1": 3}`,
   `semantic_extract_failure_rates={"source=openie;extractor=fixture;model=drift-fixture;prompt_version=poc-drift-v1": 1.0}`였다.
+- Memory health semantic failure totals는 전체 semantic extraction 실패 수와 attempt 수를
+  scalar로 노출하고, `openie_failure_rate`를 `max(chunks_selected, extraction_failures)` 기반
+  attempt denominator로 계산한다. 따라서 실패가 `chunks_selected=0`으로 기록돼도 failure rate가
+  0으로 묻히지 않는다. POC gate는 `health_reports_semantic_failure_totals`를 추가해
+  `46/46` PASS했다. 대표 결과는 `semantic_extract_failure_count=3`,
+  `semantic_extract_attempt_count=4`, `openie_failure_rate=0.75`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

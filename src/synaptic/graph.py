@@ -3322,8 +3322,12 @@ class SynapticGraph:
         failures = sum(
             _prop_int(event.properties, "extraction_failures", 0) for event in semantic_events
         )
-        selected = sum(
-            _prop_int(event.properties, "chunks_selected", 0) for event in semantic_events
+        semantic_attempt_count = sum(
+            max(
+                _prop_int(event.properties, "chunks_selected", 0),
+                _prop_int(event.properties, "extraction_failures", 0),
+            )
+            for event in semantic_events
         )
         semantic_failure_counts: Counter[str] = Counter()
         semantic_attempt_counts: Counter[str] = Counter()
@@ -3481,7 +3485,11 @@ class SynapticGraph:
             feedback_neutral_count=feedback_neutral_count,
             feedback_signal_counts=dict(feedback_signal_counts),
             openie_artifact_count=openie_nodes + openie_edges,
-            openie_failure_rate=(failures / selected) if selected else 0.0,
+            semantic_extract_failure_count=failures,
+            semantic_extract_attempt_count=semantic_attempt_count,
+            openie_failure_rate=(failures / semantic_attempt_count)
+            if semantic_attempt_count
+            else 0.0,
             semantic_extract_failure_counts={
                 profile_key: semantic_failure_counts[profile_key]
                 for profile_key in top_semantic_failure_keys
