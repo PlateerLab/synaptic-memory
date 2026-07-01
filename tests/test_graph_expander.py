@@ -628,6 +628,79 @@ async def test_entity_mentions_expand_phrase_hub_sources():
 
 
 @pytest.mark.asyncio
+async def test_related_expansion_skips_document_entity_seed():
+    """Document ENTITY nodes should not pay the structured relation path."""
+
+    class CountingMemoryBackend(MemoryBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.edge_selective_batch_calls: list[
+                tuple[tuple[str, ...], str, tuple[str, ...], tuple[str, ...]]
+            ] = []
+
+        async def get_edges_batch_filtered_selective_light(
+            self,
+            node_ids: list[str],
+            *,
+            direction: str = "both",
+            light_kinds: list[str | EdgeKind],
+            full_kinds: list[str | EdgeKind],
+        ) -> dict[str, list[Edge]]:
+            light_values = tuple(sorted(str(kind) for kind in light_kinds))
+            full_values = tuple(sorted(str(kind) for kind in full_kinds))
+            self.edge_selective_batch_calls.append(
+                (tuple(node_ids), direction, light_values, full_values)
+            )
+            return await MemoryBackend.get_edges_batch_filtered_selective_light(
+                self,
+                node_ids,
+                direction=direction,
+                light_kinds=light_kinds,
+                full_kinds=full_kinds,
+            )
+
+    backend = CountingMemoryBackend()
+    await backend.connect()
+    doc = Node(
+        id="doc",
+        kind=NodeKind.ENTITY,
+        title="Document",
+        content="document",
+        tags=["document"],
+    )
+    related = Node(id="related", kind=NodeKind.ENTITY, title="Related", content="related")
+    await backend.save_node(doc)
+    await backend.save_node(related)
+    await backend.save_edge(Edge(source_id=doc.id, target_id=related.id, kind=EdgeKind.RELATED))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[doc])
+
+    assert [r.node.id for r in results] == ["doc"]
+    assert backend.edge_selective_batch_calls == []
+
+
+@pytest.mark.asyncio
+async def test_related_expansion_keeps_non_document_entity_seed():
+    """Filtering document ENTITY seeds must not skip structured row/entity seeds."""
+
+    backend = MemoryBackend()
+    await backend.connect()
+    seed = Node(id="row", kind=NodeKind.ENTITY, title="Row", content="row")
+    related = Node(id="related", kind=NodeKind.ENTITY, title="Related", content="related")
+    await backend.save_node(seed)
+    await backend.save_node(related)
+    await backend.save_edge(Edge(source_id=seed.id, target_id=related.id, kind=EdgeKind.RELATED))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[seed])
+
+    by_id = {r.node.id: r for r in results}
+    assert by_id["related"].reason == "related"
+    assert by_id["related"].anchor_hit == "row"
+
+
+@pytest.mark.asyncio
 async def test_seed_edges_are_cached_across_expansion_paths():
     """A seed can be inspected by REFERENCES, document-scope, and RELATED
     paths. The per-search cache should make that one backend edge read."""

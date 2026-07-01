@@ -953,8 +953,9 @@ Memory health snapshot:
 | GraphExpander category light edge reads | `mz_openie_category_light_edges_rerun_results.json` | `2.7s` | `0:18.44` | PASS |
 | GraphExpander selective relation light reads | `mz_openie_selective_related_light_results.json` | `0.8s` | `0:10.96` | PASS |
 | GraphExpander entity hub mention filter | `mz_openie_entity_hub_mentions_rerun_results.json` | `0.7s` | `0:05.59` | PASS |
+| GraphExpander document related skip | `mz_openie_skip_document_related_results.json` | `1.0s` | `0:10.70` | PASS |
 
-핵심 검색/게이트 지표는 최신 GraphExpander entity hub mention filter rerun에서도 유지됐다:
+핵심 검색/게이트 지표는 GraphExpander document related skip run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -972,22 +973,22 @@ Memory health snapshot:
 | aggregate pool limit | `30 avg/query` |
 | FTS seed count | `1,128 total / 25.6 avg` |
 | scored candidates | baseline `1,266 / 28.8 avg`, OpenIE `1,508 / 34.3 avg` |
-| baseline aggregate stage | `43.3ms total / 1.0ms avg` |
-| OpenIE aggregate stage | `40.7ms total / 0.9ms avg` |
-| baseline FTS stage | `46.2ms total / 1.1ms avg` |
-| OpenIE FTS stage | `50.8ms total / 1.2ms avg` |
-| baseline expand stage | `27.2ms total / 0.6ms avg` |
-| baseline expand_graph / expand_ppr | `26.1ms / 1.0ms` |
-| baseline graph references / document | `3.7ms / 12.8ms` |
-| baseline graph entity | `0.18ms total / 0.004ms avg` |
+| baseline aggregate stage | `51.2ms total / 1.2ms avg` |
+| OpenIE aggregate stage | `40.1ms total / 0.9ms avg` |
+| baseline FTS stage | `47.9ms total / 1.1ms avg` |
+| OpenIE FTS stage | `48.9ms total / 1.1ms avg` |
+| baseline expand stage | `24.0ms total / 0.5ms avg` |
+| baseline expand_graph / expand_ppr | `23.0ms / 0.9ms` |
+| baseline graph references / document | `4.0ms / 13.6ms` |
+| baseline graph related / entity | `0.14ms / 0.22ms` |
 | baseline graph category | `0.07ms total / 0.002ms avg` |
 | baseline PPR bfs / iterate | `0.6ms / 0.1ms` |
 | baseline PPR added candidates | `0 total / 0.0 avg` |
 | baseline PPR seed count | `1,128 total / 25.6 avg` |
-| OpenIE expand stage | `42.2ms total / 1.0ms avg` |
-| OpenIE expand_graph / expand_ppr | `39.8ms / 2.2ms` |
-| OpenIE graph references / document | `3.8ms / 12.1ms` |
-| OpenIE graph related / entity | `10.4ms / 8.4ms` |
+| OpenIE expand stage | `38.8ms total / 0.9ms avg` |
+| OpenIE expand_graph / expand_ppr | `36.6ms / 2.2ms` |
+| OpenIE graph references / document | `3.6ms / 11.7ms` |
+| OpenIE graph related / entity | `8.3ms / 7.9ms` |
 | OpenIE graph category | `0.06ms total / 0.001ms avg` |
 | OpenIE PPR bfs / iterate | `0.8ms / 0.3ms` |
 | OpenIE PPR skipped saturated | `37/44 queries` |
@@ -1304,6 +1305,16 @@ per-chunk fallback을 유지한다.
   relation expanded/evidence `93/93`, `47/93`, scored candidates baseline/OpenIE
   `1,266/1,508`을 유지하면서 baseline entity mention path를 `3.3ms -> 0.18ms`,
   OpenIE entity mention path를 `8.6ms -> 8.4ms`로 유지했다.
+- GraphExpander document related skip은 `tags=["document"]`인 ENTITY seed를
+  structured/OpenIE relation expansion seed에서 제외한다. `DocumentIngester`는 문서를
+  `NodeKind.ENTITY`로 저장하므로 기존 "ENTITY만 related path를 탄다" 조건은 문서 graph를
+  제외하지 못했고, document seed의 category `PART_OF` 같은 edge를 relation 후보로 읽은 뒤
+  버릴 수 있었다. Non-document ENTITY(row, phrase, SpaCy/LLM/OpenIE hub)는 기존 relation
+  path를 유지한다. 200-chunk cache-only gate는 두 번 모두 PASS했고, relation
+  expanded/evidence `93/93`, `47/93`, scored candidates baseline/OpenIE
+  `1,266/1,508`을 유지했다. 대표 run 기준 related path는 baseline `4.7ms -> 0.14ms`,
+  OpenIE `10.4ms -> 8.3ms`로 줄었다. rerun에서도 related path는 baseline `0.15ms`,
+  OpenIE `9.3ms`로 유지됐고, full total은 FTS/SQLite noise가 섞였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

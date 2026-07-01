@@ -563,11 +563,11 @@ class GraphExpander:
         hubs. This step surfaces neighbours that lexical search alone cannot
         find.
 
-        Only expands from ENTITY nodes to keep document graphs unaffected.
-        Capped at ``max_per_anchor`` per seed to prevent fan-out explosion
-        on heavily-linked rows.
+        Only expands from non-document ENTITY nodes to keep document graphs
+        unaffected. Capped at ``max_per_anchor`` per seed to prevent fan-out
+        explosion on heavily-linked rows.
         """
-        entities = [n for n in seed_nodes if n.kind == NodeKind.ENTITY]
+        entities = [n for n in seed_nodes if _is_relation_seed(n)]
         if not entities:
             return
 
@@ -763,6 +763,13 @@ def _is_entity_mention_seed(node: Node) -> bool:
         return False
     tags = set(node.tags or [])
     return bool(tags & _ENTITY_MENTION_TAGS)
+
+
+def _is_relation_seed(node: Node) -> bool:
+    if node.kind != NodeKind.ENTITY:
+        return False
+    tags = set(node.tags or [])
+    return "document" not in tags
 
 
 def _record_timing(timings_ms: dict[str, float] | None, key: str, started_at: float) -> None:
