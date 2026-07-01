@@ -489,6 +489,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         )
         await graph._record_retrieval_event(edge_boost_result, scope=scope)
         await graph._record_retrieval_event(edge_only_penalty_result, scope=scope)
+        for i in range(12):
+            await backend.save_memory_score(
+                MemoryScore(
+                    scope_key=scope.key,
+                    node_id=f"poc_top_node_score_{i}",
+                    score=1.0,
+                )
+            )
         ranking_health = await graph.memory_health(scope=scope)
 
         selected_before_success = (
@@ -600,6 +608,10 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ),
             "health_reports_top_reinforced_edges": (
                 "poc_edge_score_boost_relation" in ranking_health.top_reinforced_edge_ids
+            ),
+            "health_top_edges_not_starved_by_node_scores": (
+                "poc_edge_score_boost_relation" in ranking_health.top_reinforced_edge_ids
+                and len(ranking_health.top_reinforced_node_ids) == 10
             ),
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id
