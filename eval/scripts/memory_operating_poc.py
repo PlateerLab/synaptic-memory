@@ -679,6 +679,10 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and health.memory_event_kind_counts.get(str(MemoryEventKind.FEEDBACK), 0) >= 7
                 and health.memory_event_kind_counts.get(str(MemoryEventKind.SIGNAL), 0) >= 1
             ),
+            "health_reports_event_scope_counts": (
+                health.memory_event_scope_counts.get(scope.key, 0) == health.memory_events
+                and health.retrieval_event_scope_counts.get(scope.key, 0) == health.retrieval_events
+            ),
             "health_reports_semantic_failure_buckets": (
                 health.semantic_extract_failure_counts.get(drift_profile_key, 0) == 3
                 and health.semantic_extract_attempt_counts.get(drift_profile_key, 0) == 3

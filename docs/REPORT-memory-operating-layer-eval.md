@@ -1787,6 +1787,12 @@ per-chunk fallback을 유지한다.
   0으로 묻히지 않는다. POC gate는 `health_reports_semantic_failure_totals`를 추가해
   `46/46` PASS했다. 대표 결과는 `semantic_extract_failure_count=3`,
   `semantic_extract_attempt_count=4`, `openie_failure_rate=0.75`였다.
+- Memory health event scope counts는 memory/retrieval event ledger가 어느 scope에서 온 것인지
+  count map으로 노출한다. 기존 `scope=None` health snapshot처럼 여러 scope를 볼 수 있는 경로도
+  실제 혼합 여부를 report 안에서 확인할 수 있다. POC gate는 `health_reports_event_scope_counts`를
+  추가해 `47/47` PASS했다. 대표 결과는
+  `memory_event_scope_counts={"user:eval-user": 22}`,
+  `retrieval_event_scope_counts={"user:eval-user": 8}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
