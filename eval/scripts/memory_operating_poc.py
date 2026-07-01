@@ -753,6 +753,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 str(MemorySignalKind.LOW_CONFIDENCE_RELATION),
                 str(MemorySignalKind.REPEATED_FAILURE),
             }.issubset(set(signal_kinds)),
+            "health_reports_top_suspect_targets": (
+                failed.id in health.top_suspect_node_ids
+                and openie_edge.id in health.top_suspect_edge_ids
+                and conflict_edge.id in health.top_suspect_edge_ids
+                and health.top_suspect_node_counts.get(failed.id, 0) >= 1
+                and health.top_suspect_edge_counts.get(openie_edge.id, 0) >= 1
+                and health.top_suspect_edge_counts.get(conflict_edge.id, 0) >= 1
+            ),
             "drift_spike_signal_created": str(MemorySignalKind.DRIFT_SPIKE) in set(signal_kinds),
             "suspect_memory_not_deleted": failed_after_scan is not None,
             "high_confidence_signal_demoted_suspect": (

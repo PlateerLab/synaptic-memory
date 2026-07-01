@@ -1741,6 +1741,12 @@ per-chunk fallback을 유지한다.
   `top_penalty_signal_counts={"memsig_32d1378cc670e496": 1, "poc_edge_only_signal_node": 1}`,
   `top_penalized_node_counts={"poc_scope_clean_memory": 1, "poc_edge_only_signal_suspect": 1}`,
   `top_penalty_edge_counts={"poc_edge_score_demoted_relation": 1, "poc_edge_only_signal_relation": 1}`였다.
+- Memory health suspect target summary는 retrieval penalty로 이어지기 전의 pollution signal
+  자체가 가리키는 node/edge를 count map으로 노출한다. Health report는 이제 kind별 signal 수에
+  더해 어떤 기억/관계가 반복적으로 suspect signal에 걸렸는지를 바로 보여준다. POC gate는
+  `health_reports_top_suspect_targets`를 추가해 `40/40` PASS했다. 대표 결과는
+  `top_suspect_node_counts={"poc_superseded_policy": 3, "poc_failed_memory": 2, "af0f342c2fb14c5b": 2, "de3dd351983745c1": 2, "poc_entity_policy_new": 1, "poc_entity_policy_old": 1, "poc_superseding_policy": 1, "poc_scope_score_failed_memory": 1}`,
+  `top_suspect_edge_counts={"poc_supersedes_policy_edge": 2, "poc_conflict_alpha_beta": 1, "poc_alpha_beta_openie_relation": 1}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
