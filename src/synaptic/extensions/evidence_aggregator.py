@@ -279,6 +279,7 @@ class EvidenceAggregator:
         doc_counts: dict[str, int] = {}
         token_cache: dict[int, tuple[_ContentKey, set[str]]] = {}
         sim_cache: dict[int, tuple[int, float]] = {}
+        remaining_sorted_by_total = _is_sorted_by_total_desc(remaining)
 
         def cand_entry(cand: ScoredCandidate) -> tuple[_ContentKey, set[str]]:
             cache_key = id(cand)
@@ -337,6 +338,12 @@ class EvidenceAggregator:
             best_idx = -1
             best_adj = -math.inf
             for i, cand in enumerate(remaining):
+                if (
+                    remaining_sorted_by_total
+                    and best_idx >= 0
+                    and self._lambda * cand.total <= best_adj
+                ):
+                    break
                 # Document cap check can reject many same-source chunks before
                 # we pay the tokenisation/Jaccard cost.
                 doc_id = (cand.node.properties or {}).get("doc_id", "")
@@ -572,6 +579,10 @@ def _best_category_index(
         if node_cat and cat_lower in node_cat:
             return idx
     return None
+
+
+def _is_sorted_by_total_desc(scored: list[ScoredCandidate]) -> bool:
+    return all(scored[i].total >= scored[i + 1].total for i in range(len(scored) - 1))
 
 
 def _passes_token_similarity(
