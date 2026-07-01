@@ -542,3 +542,30 @@ class TestBoundedPassagePool:
         result = agg.aggregate(scored=[anchor, filler, companion], k=2)
 
         assert {e.node.id for e in result} == {"anchor", "cited"}
+
+    def test_call_level_pool_limit_overrides_instance_default(self):
+        agg = EvidenceAggregator(candidate_pool_limit=0)
+        same_doc = [
+            _scored(
+                f"a{i}",
+                total=1.0 - i * 0.01,
+                content=f"shared source section {i}",
+                doc_id="doc_A",
+            )
+            for i in range(8)
+        ]
+        outsider = _scored(
+            "outsider",
+            total=0.1,
+            content="separate source evidence",
+            doc_id="doc_B",
+        )
+
+        result = agg.aggregate(
+            scored=[*same_doc, outsider],
+            k=2,
+            per_document_cap=1,
+            candidate_pool_limit=3,
+        )
+
+        assert [e.node.id for e in result] == ["a0", "outsider"]

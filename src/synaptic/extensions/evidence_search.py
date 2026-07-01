@@ -82,6 +82,8 @@ _RRF_VEC_K = 90
 _PPR_SEED_MIN = 32
 _PPR_SEED_MULTIPLIER = 1
 _PPR_RESULT_MULTIPLIER = 2
+_AGGREGATE_POOL_MIN = 64
+_AGGREGATE_POOL_MULTIPLIER = 2
 
 # Anchor-coverage thresholds for the adaptive controller (SYNAPTIC_ADAPTIVE):
 # a query whose anchor terms overlap the retrieved docs >= HI is lexically
@@ -127,6 +129,10 @@ def _bounded_ppr_seed_scores(seed_scores: dict[str, float], k: int) -> dict[str,
     return dict(sorted(seed_scores.items(), key=lambda item: item[1], reverse=True)[:limit])
 
 
+def _aggregate_candidate_pool_limit(k: int) -> int:
+    return max(_AGGREGATE_POOL_MIN, max(0, k) * _AGGREGATE_POOL_MULTIPLIER)
+
+
 class EvidenceSearch:
     """One-call wrapper around the F4 modules.
 
@@ -140,10 +146,14 @@ class EvidenceSearch:
         mmr_lambda: Diversity/relevance balance for the aggregator.
             ``0.7`` (default) biases toward relevance.
         similarity_threshold: Hard cutoff for near-duplicate content.
+        aggregate_candidate_pool_limit: Passage candidate cap for the final
+            aggregation stage. ``None`` uses a dynamic cap based on ``k``;
+            ``0`` disables the cap.
     """
 
     __slots__ = (
         "_adaptive",
+        "_aggregate_candidate_pool_limit",
         "_aggregator",
         "_anchor_extractor",
         "_backend",
@@ -187,6 +197,7 @@ class EvidenceSearch:
         fusion_mode: str = "cascade",
         adaptive: bool = False,
         graph_expansion: bool = True,
+        aggregate_candidate_pool_limit: int | None = None,
     ) -> None:
         self._backend = backend
         self._embedder = embedder
@@ -225,6 +236,18 @@ class EvidenceSearch:
             except ValueError:
                 pass
         self._query_phrase_seed_k = query_phrase_seed_k
+        # Bound the final MMR/diversity stage by default. Graph expansion can
+        # now surface 100+ candidates per query; aggregating all of them spends
+        # time tokenising and pairwise-checking passages that cannot plausibly
+        # enter a small evidence set. The aggregator's protected pool keeps
+        # category, document-diversity, and REFERENCES companion candidates.
+        env_pool = _os.environ.get("SYNAPTIC_AGGREGATE_CANDIDATE_POOL_LIMIT")
+        if env_pool is not None:
+            try:
+                aggregate_candidate_pool_limit = int(env_pool)
+            except ValueError:
+                pass
+        self._aggregate_candidate_pool_limit = aggregate_candidate_pool_limit
         # v0.28 — per-query reranker-score deadzone (opt-in, default 0.0
         # → never triggers, behaviour identical to the v0.17.1 std/3 ramp).
         # When the cross-encoder's top-K logits have std below this floor
@@ -884,12 +907,19 @@ class EvidenceSearch:
 
         # Step 5 — evidence aggregation with diversity
         stage_t0 = time()
+        aggregate_pool_limit = (
+            _aggregate_candidate_pool_limit(k)
+            if self._aggregate_candidate_pool_limit is None
+            else max(0, self._aggregate_candidate_pool_limit)
+        )
         evidence = self._aggregator.aggregate(
             scored=scored,
             k=k,
             per_document_cap=per_document_cap,
             anchor_categories=anchor_category_set,
+            candidate_pool_limit=aggregate_pool_limit,
         )
+        diagnostics["aggregate_pool_limit"] = float(aggregate_pool_limit)
         diagnostics["evidence_count"] = float(len(evidence))
         timings_ms["aggregate"] = (time() - stage_t0) * 1000
 

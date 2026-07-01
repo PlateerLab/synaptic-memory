@@ -171,6 +171,7 @@ class EvidenceAggregator:
         k: int = 6,
         per_document_cap: int = 2,
         anchor_categories: set[str] | None = None,
+        candidate_pool_limit: int | None = None,
     ) -> list[Evidence]:
         """Pick the top ``k`` evidence items under diversity constraints.
 
@@ -207,6 +208,10 @@ class EvidenceAggregator:
         if not scored or k <= 0:
             return []
 
+        pool_limit = (
+            self._pool_limit if candidate_pool_limit is None else max(0, candidate_pool_limit)
+        )
+
         # --- Kind split: structured rows → atoms, rest → passages ---
         #
         # OpenIE entity hubs are retrieval bridges, not source evidence, when
@@ -223,6 +228,7 @@ class EvidenceAggregator:
             k=k,
             per_document_cap=per_document_cap,
             anchor_categories=anchor_categories,
+            candidate_pool_limit=pool_limit,
         )
 
         structured_evidence: list[Evidence] = []
@@ -254,6 +260,7 @@ class EvidenceAggregator:
         k: int,
         per_document_cap: int,
         anchor_categories: set[str] | None,
+        candidate_pool_limit: int,
     ) -> list[Evidence]:
         """Legacy passage aggregator — MMR + per-doc cap + category coverage.
 
@@ -269,9 +276,9 @@ class EvidenceAggregator:
                 k=k,
                 per_document_cap=per_document_cap,
                 anchor_categories=anchor_categories,
-                limit=self._pool_limit,
+                limit=candidate_pool_limit,
             )
-            if self._pool_limit
+            if candidate_pool_limit
             else list(scored)
         )
         selected: list[Evidence] = []
