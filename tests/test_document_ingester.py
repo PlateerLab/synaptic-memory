@@ -157,6 +157,26 @@ class TestBasicIngest:
         assert backend.memory_event_batch_sizes == [1]
 
     @pytest.mark.asyncio
+    async def test_multiple_docs_are_saved_in_one_ingest_batch(self):
+        backend = _CountingBatchBackend()
+        profile = DomainProfile.generic_korean()
+        ingester = DocumentIngester(profile=profile, backend=backend)
+
+        docs = [
+            _sample_doc("d1", "Doc 1", chunks=[_chunk("d1", 0, "첫 번째 청크")]),
+            _sample_doc("d2", "Doc 2", chunks=[_chunk("d2", 0, "두 번째 청크")]),
+        ]
+
+        stats = await ingester.ingest(InMemoryDocumentSource(docs))
+
+        assert stats.documents_ingested == 2
+        assert stats.chunks_created == 2
+        assert stats.edges_created == 2
+        assert backend.node_batch_sizes == [4]
+        assert backend.edge_batch_sizes == [2]
+        assert backend.memory_event_batch_sizes == [2]
+
+    @pytest.mark.asyncio
     async def test_category_created_once_across_docs(self):
         backend = MemoryBackend()
         profile = DomainProfile.generic_korean()

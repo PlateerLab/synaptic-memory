@@ -916,8 +916,9 @@ Memory health snapshot:
 | PR #17 entity replay cache | `mz_openie_cache_deepseek_to100_entitycache_results.json` | `614.9s` | `11:41.07` | PASS |
 | PR #19 relation probe read cache | `mz_openie_cache_deepseek_to100_probecache_results.json` | `724.3s` | `15:15.56` | PASS |
 | batched node/event writes | `mz_openie_cache_deepseek_to100_batchnodes_results.json` | `126.0s` | `4:44.47` | PASS |
+| batched document ingest writes | `mz_openie_cache_deepseek_to100_ingestbatch_results.json` | `117.3s` | `2:23.41` | PASS |
 
-핵심 검색/게이트 지표는 최신 batched node/event write run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 batched document ingest run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -950,6 +951,11 @@ batched node/event write run은 OpenIE entity hub 보장을 chunk 안에서
 backend bulk update로 처리한다. 100% cache-only gate는 PASS했고, relation probe와
 memory health count는 PR #17/#19 계열과 같은 수준을 유지했다.
 
+batched document ingest run은 `DocumentIngester`가 source 안의 document/chunk
+node와 structural edge를 문서마다 flush하지 않고 ingest-run batch로 저장한다.
+같은 source 안에 같은 `doc_id`가 다시 나오면 pending writes를 먼저 flush해서
+기존 skip/replace 의미를 유지한다.
+
 성능 변화:
 
 - PR #14 이후 OpenIE elapsed는 `2131.8s -> 1508.6s`로 `29.2%` 감소했다.
@@ -957,6 +963,9 @@ memory health count는 PR #17/#19 계열과 같은 수준을 유지했다.
 - PR #17 이후 OpenIE elapsed는 `2131.8s -> 614.9s`로 `71.2%` 감소했다.
 - batched node/event write 이후 OpenIE elapsed는 `2131.8s -> 126.0s`로
   `94.1%` 감소했고, 이전 best인 PR #17 대비 `79.5%` 추가 감소했다.
+- batched document ingest write 이후 full wall time은 `35:31.83 -> 2:23.41`로
+  `93.3%` 감소했고, 이전 best인 batched node/event write run 대비 `49.6%`
+  추가 감소했다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
@@ -965,8 +974,11 @@ memory health count는 PR #17/#19 계열과 같은 수준을 유지했다.
   `9,576.92ms` 대비 batch node save `243.45ms`로 `39.34x` 빨랐다.
 - 30-edge event stamp micro-benchmark는 old fallback `1,739.87ms` 대비 bulk stamp
   `640.20ms`로 `2.72x` 빨랐다. 300-edge old fallback은 1분 이상 걸려 중단했다.
-- 남은 큰 비용은 full scoring/search roundtrip과 baseline DB build/copy 구간이다.
-  OpenIE replay write path는 200-chunk gate 기준으로 더 이상 지배 병목이 아니다.
+- 200-doc/200-chunk SQLite ingest micro-benchmark는 document-per-flush path
+  `92.006s` 대비 ingest-run batch `2.683s`로 `34.3x` 빨랐다.
+- 남은 큰 비용은 OpenIE replay 자체와 full scoring/probe/gate의 고정 비용이다.
+  Baseline document ingest write path와 OpenIE replay write path는 200-chunk gate
+  기준으로 더 이상 지배 병목이 아니다.
 
 ---
 
