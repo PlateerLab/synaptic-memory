@@ -1178,7 +1178,7 @@ class SQLiteBackend:
             LIMIT ?
         """
         try:
-            async with db.execute(fts_sql, (fts_query, limit * 2)) as cur:
+            async with db.execute(fts_sql, (fts_query, limit)) as cur:
                 rows = await cur.fetchall()
             for r in rows:
                 node = _row_to_node(r)
