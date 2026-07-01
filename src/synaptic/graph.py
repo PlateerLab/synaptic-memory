@@ -2793,6 +2793,7 @@ class SynapticGraph:
         if not callable(lister):
             return
         node_ids = [item.node.id for item in result.nodes]
+        node_id_set = set(node_ids)
         scope_key = memory_scope_key(scope)
         local_scores = await lister(scope_key=scope_key, node_ids=node_ids, limit=len(node_ids))
         global_scores: list[MemoryScore] = []
@@ -2804,12 +2805,37 @@ class SynapticGraph:
             )
         local_by_node = {score.node_id: score.score for score in local_scores}
         global_by_node = {score.node_id: score.score for score in global_scores}
-        if not local_by_node and not global_by_node:
+        edge_targets = await self._candidate_edge_targets(candidate_node_ids=node_id_set)
+        edge_ids = list(edge_targets)
+        local_edge_scores: list[MemoryScore] = []
+        global_edge_scores: list[MemoryScore] = []
+        if edge_ids:
+            local_edge_scores = await lister(
+                scope_key=scope_key,
+                edge_ids=edge_ids,
+                limit=len(edge_ids),
+            )
+            if scope_key != "global":
+                global_edge_scores = await lister(
+                    scope_key="global",
+                    edge_ids=edge_ids,
+                    limit=len(edge_ids),
+                )
+        edge_by_node: dict[str, float] = {}
+        for score in local_edge_scores:
+            for node_id in edge_targets.get(score.edge_id, set()):
+                edge_by_node[node_id] = edge_by_node.get(node_id, 0.0) + score.score
+        for score in global_edge_scores:
+            for node_id in edge_targets.get(score.edge_id, set()):
+                edge_by_node[node_id] = edge_by_node.get(node_id, 0.0) + 0.5 * score.score
+        if not local_by_node and not global_by_node and not edge_by_node:
             return
         previous_resonance: float | None = None
         for item in result.nodes:
-            raw = local_by_node.get(item.node.id, 0.0) + (
-                0.5 * global_by_node.get(item.node.id, 0.0)
+            raw = (
+                local_by_node.get(item.node.id, 0.0)
+                + (0.5 * global_by_node.get(item.node.id, 0.0))
+                + edge_by_node.get(item.node.id, 0.0)
             )
             raw = max(-1.0, min(1.0, raw))
             boost = max(-0.10, min(0.10, raw * 0.10))
@@ -2855,7 +2881,7 @@ class SynapticGraph:
             signal_edge_ids.update(_prop_csv_ids(props, "edge_ids"))
         if not relevant_signals:
             return
-        edge_targets = await self._signal_edge_targets(
+        edge_targets = await self._candidate_edge_targets(
             candidate_node_ids=node_ids,
             edge_ids=signal_edge_ids,
         )
@@ -2877,14 +2903,14 @@ class SynapticGraph:
             item.resonance = max(0.0, item.resonance * factor)
         result.nodes.sort(key=lambda item: item.resonance, reverse=True)
 
-    async def _signal_edge_targets(
+    async def _candidate_edge_targets(
         self,
         *,
         candidate_node_ids: set[str],
-        edge_ids: set[str],
+        edge_ids: set[str] | None = None,
     ) -> dict[str, set[str]]:
-        targets: dict[str, set[str]] = {edge_id: set() for edge_id in edge_ids}
-        if not candidate_node_ids or not edge_ids:
+        targets: dict[str, set[str]] = {edge_id: set() for edge_id in (edge_ids or set())}
+        if not candidate_node_ids:
             return targets
         batch_get_edges = getattr(self._backend, "get_edges_batch", None)
         edges_to_scan: list[Edge] = []
@@ -2896,12 +2922,15 @@ class SynapticGraph:
             for node_id in candidate_node_ids:
                 edges_to_scan.extend(await self._backend.get_edges(node_id, direction="both"))
         for edge in edges_to_scan:
-            if edge.id not in targets:
+            if edge_ids is not None and edge.id not in edge_ids:
                 continue
+            target_ids: set[str] = set()
             if edge.source_id in candidate_node_ids:
-                targets[edge.id].add(edge.source_id)
+                target_ids.add(edge.source_id)
             if edge.target_id in candidate_node_ids:
-                targets[edge.id].add(edge.target_id)
+                target_ids.add(edge.target_id)
+            if target_ids:
+                targets.setdefault(edge.id, set()).update(target_ids)
         return targets
 
     async def scan_memory_signals(
