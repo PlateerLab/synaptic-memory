@@ -283,6 +283,14 @@ class MemoryHealthReport:
     feedback_failure_count: int = 0
     feedback_neutral_count: int = 0
     feedback_signal_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_feedback_node_ids: list[str] = field(default_factory=_str_list)
+    top_feedback_success_node_ids: list[str] = field(default_factory=_str_list)
+    top_feedback_failure_node_ids: list[str] = field(default_factory=_str_list)
+    top_feedback_neutral_node_ids: list[str] = field(default_factory=_str_list)
+    top_feedback_node_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_feedback_success_node_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_feedback_failure_node_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_feedback_neutral_node_counts: dict[str, int] = field(default_factory=_int_dict)
     openie_artifact_count: int = 0
     semantic_extract_failure_count: int = 0
     semantic_extract_attempt_count: int = 0

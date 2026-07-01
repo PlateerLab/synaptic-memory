@@ -3399,6 +3399,10 @@ class SynapticGraph:
         feedback_failure_count = 0
         feedback_neutral_count = 0
         feedback_signal_counts: Counter[str] = Counter()
+        feedback_node_counts: Counter[str] = Counter()
+        feedback_success_node_counts: Counter[str] = Counter()
+        feedback_failure_node_counts: Counter[str] = Counter()
+        feedback_neutral_node_counts: Counter[str] = Counter()
         max_scope_boost = 0.0
         max_scope_demotion = 0.0
         max_scope_adjustment = 0.0
@@ -3418,12 +3422,17 @@ class SynapticGraph:
             if is_feedback_event:
                 feedback_event_count += 1
                 feedback_signal_counts[signal] += 1
+                feedback_target_ids = list(event.selected_node_ids or [])
+                feedback_node_counts.update(feedback_target_ids)
                 if event.success is True:
                     feedback_success_count += 1
+                    feedback_success_node_counts.update(feedback_target_ids)
                 elif event.success is False:
                     feedback_failure_count += 1
+                    feedback_failure_node_counts.update(feedback_target_ids)
                 else:
                     feedback_neutral_count += 1
+                    feedback_neutral_node_counts.update(feedback_target_ids)
             boosted_nodes = _prop_int(props, "memory_scope_boosted_nodes", 0)
             demoted_nodes = _prop_int(props, "memory_scope_demoted_nodes", 0)
             adjusted_nodes = _prop_int(
@@ -3509,6 +3518,28 @@ class SynapticGraph:
             feedback_failure_count=feedback_failure_count,
             feedback_neutral_count=feedback_neutral_count,
             feedback_signal_counts=dict(feedback_signal_counts),
+            top_feedback_node_ids=[node_id for node_id, _ in feedback_node_counts.most_common(10)],
+            top_feedback_success_node_ids=[
+                node_id for node_id, _ in feedback_success_node_counts.most_common(10)
+            ],
+            top_feedback_failure_node_ids=[
+                node_id for node_id, _ in feedback_failure_node_counts.most_common(10)
+            ],
+            top_feedback_neutral_node_ids=[
+                node_id for node_id, _ in feedback_neutral_node_counts.most_common(10)
+            ],
+            top_feedback_node_counts={
+                node_id: count for node_id, count in feedback_node_counts.most_common(10)
+            },
+            top_feedback_success_node_counts={
+                node_id: count for node_id, count in feedback_success_node_counts.most_common(10)
+            },
+            top_feedback_failure_node_counts={
+                node_id: count for node_id, count in feedback_failure_node_counts.most_common(10)
+            },
+            top_feedback_neutral_node_counts={
+                node_id: count for node_id, count in feedback_neutral_node_counts.most_common(10)
+            },
             openie_artifact_count=openie_nodes + openie_edges,
             semantic_extract_failure_count=failures,
             semantic_extract_attempt_count=semantic_attempt_count,
