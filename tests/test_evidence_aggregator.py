@@ -160,6 +160,18 @@ class TestBasicSelection:
         # Highest score first
         assert ids[0] == "a"
 
+    def test_unsorted_input_still_scans_for_best_candidate(self):
+        agg = EvidenceAggregator()
+        scored = [
+            _scored("low", total=0.1, content="low score content"),
+            _scored("high", total=0.95, content="high score content"),
+            _scored("mid", total=0.5, content="middle score content"),
+        ]
+
+        result = agg.aggregate(scored=scored, k=1)
+
+        assert result[0].node.id == "high"
+
 
 # --- MMR duplicate suppression ---
 
