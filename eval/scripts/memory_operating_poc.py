@@ -372,6 +372,48 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ],
         )
         await graph._apply_scope_boost(global_prior_result, scope)
+        edge_boosted = Node(
+            id="poc_edge_score_boosted_memory",
+            title="Edge score boosted memory",
+            content="This memory is boosted only through a reinforced relation score.",
+        )
+        edge_boost_linked = Node(
+            id="poc_edge_score_linked_memory",
+            title="Edge score linked memory",
+            content="This memory provides the reinforced relation endpoint.",
+        )
+        await backend.save_node(edge_boosted)
+        await backend.save_node(edge_boost_linked)
+        await backend.save_edge(
+            Edge(
+                id="poc_edge_score_boost_relation",
+                source_id=edge_boosted.id,
+                target_id=edge_boost_linked.id,
+                kind=EdgeKind.RELATED,
+            )
+        )
+        await backend.save_memory_score(
+            MemoryScore(
+                scope_key=scope.key,
+                edge_id="poc_edge_score_boost_relation",
+                score=1.0,
+            )
+        )
+        edge_boost_result = SearchResult(
+            query="edge score boost",
+            nodes=[
+                ActivatedNode(node=beta, activation=1.0, resonance=1.0),
+                ActivatedNode(node=edge_boosted, activation=0.96, resonance=0.96),
+            ],
+        )
+        await graph._apply_scope_boost(edge_boost_result, scope)
+        edge_boosted_item = next(
+            item for item in edge_boost_result.nodes if item.node.id == edge_boosted.id
+        )
+        edge_boosted_node_score = await backend.get_memory_score(
+            scope.key,
+            node_id=edge_boosted.id,
+        )
         failed_after_scan = await backend.get_node(failed.id)
         penalty_result = SearchResult(
             query="pollution penalty",
@@ -518,6 +560,12 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and global_prior_result.nodes[1].resonance >= 0.999
                 and global_prior_result.nodes[1].resonance <= global_prior_result.nodes[0].resonance
             ),
+            "edge_score_boosted_endpoint_without_node_score": (
+                edge_boosted_node_score is None
+                and [item.node.id for item in edge_boost_result.nodes] == [beta.id, edge_boosted.id]
+                and edge_boosted_item.resonance >= 0.999
+                and edge_boosted_item.resonance <= edge_boost_result.nodes[0].resonance
+            ),
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id
                 and roundtrip_openie.properties.get("model") == "deterministic"
@@ -595,6 +643,8 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 ),
                 "global_prior_order": [item.node.id for item in global_prior_result.nodes],
                 "global_prior_resonance": _round(global_prior_result.nodes[1].resonance),
+                "edge_score_boost_order": [item.node.id for item in edge_boost_result.nodes],
+                "edge_score_boosted_resonance": _round(edge_boosted_item.resonance),
                 "health": asdict(health),
                 "penalty_order": [item.node.id for item in penalty_result.nodes],
                 "penalized_failed_resonance": _round(penalized_failed.resonance),

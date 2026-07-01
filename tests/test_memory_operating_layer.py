@@ -840,6 +840,45 @@ async def test_scope_boost_is_capped_without_reversing_base_relevance():
 
 
 @pytest.mark.asyncio
+async def test_scope_boost_uses_edge_score_for_endpoint_without_node_score():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    high = Node(id="edge_high", title="High relevance")
+    boosted = Node(id="edge_boosted", title="Edge boosted memory")
+    linked = Node(id="edge_linked", title="Linked memory")
+    await backend.save_node(high)
+    await backend.save_node(boosted)
+    await backend.save_node(linked)
+    await backend.save_edge(
+        Edge(
+            id="edge_boost_relation",
+            source_id=boosted.id,
+            target_id=linked.id,
+            kind=EdgeKind.RELATED,
+        )
+    )
+    await backend.save_memory_score(
+        MemoryScore(scope_key=scope.key, edge_id="edge_boost_relation", score=1.0)
+    )
+    result = SearchResult(
+        query="policy",
+        nodes=[
+            ActivatedNode(node=high, activation=1.0, resonance=1.0),
+            ActivatedNode(node=boosted, activation=0.96, resonance=0.96),
+        ],
+    )
+
+    await graph._apply_scope_boost(result, scope)
+
+    assert await backend.get_memory_score(scope.key, node_id=boosted.id) is None
+    assert [item.node.id for item in result.nodes] == [high.id, boosted.id]
+    assert result.nodes[1].resonance == pytest.approx(1.0)
+    assert result.nodes[1].resonance <= result.nodes[0].resonance
+    assert result.nodes[1].resonance <= 0.96 * 1.10
+
+
+@pytest.mark.asyncio
 async def test_search_applies_scope_boost_cap_on_public_path(monkeypatch):
     backend = MemoryBackend()
     graph = SynapticGraph(backend)

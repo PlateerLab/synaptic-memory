@@ -146,6 +146,31 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - node-local signal, scope score repeated failure signal, stale/supersession signal의
   기존 동작은 유지된다.
 
+후속 edge score boost 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_edge_boost_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `23/23` |
+| memory events | `22` |
+| retrieval events | `8` |
+| signal events | `9` |
+| suspect count | `9` |
+
+추가로 검증된 동작:
+
+- node score가 없는 후보도 scope-local edge score가 있으면 해당 edge endpoint로
+  해석되어 bounded boost를 받는다.
+- edge score boost는 기존 relevance order를 뒤집지 않고 cap 안에서만 작동한다.
+- edge-only suspect signal penalty gate도 함께 유지된다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
