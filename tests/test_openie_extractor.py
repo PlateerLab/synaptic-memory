@@ -82,8 +82,30 @@ class _BrokenLLM:
 class _CountingSQLiteBackend(SQLiteBackend):
     def __init__(self, path):
         super().__init__(path)
+        self.node_get_count = 0
+        self.node_save_count = 0
+        self.node_update_count = 0
         self.openie_batch_calls = 0
         self.openie_batch_edge_count = 0
+
+    def reset_counts(self):
+        self.node_get_count = 0
+        self.node_save_count = 0
+        self.node_update_count = 0
+        self.openie_batch_calls = 0
+        self.openie_batch_edge_count = 0
+
+    async def get_node(self, node_id: str):
+        self.node_get_count += 1
+        return await super().get_node(node_id)
+
+    async def save_node(self, node):
+        self.node_save_count += 1
+        return await super().save_node(node)
+
+    async def update_node(self, node):
+        self.node_update_count += 1
+        return await super().update_node(node)
 
     async def save_openie_edges_batch(self, edges):
         self.openie_batch_calls += 1
@@ -553,6 +575,78 @@ async def test_openie_sqlite_link_result_uses_batch_edge_save(tmp_path):
             edge for edge in mentions if edge.target_id == deterministic_entity_id("Acme")
         ]
         assert acme_mentions[0].properties["support_count"] == "2"
+    finally:
+        await backend.close()
+
+
+@pytest.mark.asyncio
+async def test_openie_does_not_update_complete_existing_entity(tmp_path):
+    backend = _CountingSQLiteBackend(tmp_path / "openie_entity_noop.db")
+    await backend.connect()
+    try:
+        graph = SynapticGraph(backend)
+        await backend.save_node(
+            Node(id="chunk_sqlite", kind=NodeKind.CHUNK, title="Chunk", content="Acme Roadmap")
+        )
+        acme_id = deterministic_entity_id("Acme")
+        await backend.save_node(
+            Node(
+                id=acme_id,
+                kind=NodeKind.ENTITY,
+                title="Acme",
+                tags=["_openie", "_openie_entity", "_type:entity"],
+                properties={"openie_type": "entity"},
+            )
+        )
+        backend.reset_counts()
+
+        llm = _FakeLLM(
+            {
+                "entities": [{"canonical": "Acme"}],
+                "triples": [{"subject": "Acme", "predicate": "depends_on", "object": "Roadmap"}],
+            }
+        )
+
+        await LLMOpenIEExtractor(llm).extract_and_link(
+            graph,
+            "chunk_sqlite",
+            "Chunk",
+            "Acme depends on Roadmap",
+        )
+
+        assert backend.node_update_count == 0
+        assert backend.node_save_count == 1
+        assert await backend.get_node(acme_id) is not None
+        assert await backend.get_node(deterministic_entity_id("Roadmap")) is not None
+    finally:
+        await backend.close()
+
+
+@pytest.mark.asyncio
+async def test_openie_linker_caches_entity_nodes_within_post_pass(tmp_path):
+    backend = _CountingSQLiteBackend(tmp_path / "openie_entity_cache.db")
+    await backend.connect()
+    try:
+        await backend.save_node(
+            Node(id="chunk_a", kind=NodeKind.CHUNK, title="Chunk A", content="Acme appears")
+        )
+        await backend.save_node(
+            Node(id="chunk_b", kind=NodeKind.CHUNK, title="Chunk B", content="Acme appears again")
+        )
+        backend.reset_counts()
+        llm = _FakeLLM({"entities": [{"canonical": "Acme"}], "triples": []})
+
+        stats = await OpenIELinker(
+            LLMOpenIEExtractor(llm),
+            selection_policy=OpenIESelectionPolicy(min_candidate_entities=0, max_chunks=2),
+        ).link(backend, source_limit=2)
+
+        assert stats.chunks_selected == 2
+        assert stats.entity_nodes_touched == 1
+        assert backend.node_get_count == 1
+        assert backend.node_save_count == 1
+        assert backend.node_update_count == 0
+        assert backend.openie_batch_calls == 2
     finally:
         await backend.close()
 

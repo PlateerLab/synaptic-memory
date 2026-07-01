@@ -220,6 +220,34 @@ class _BackendGraphAdapter:
         self.backend = backend
 
 
+class _CachedNodeBackend:
+    """Run-local node cache for OpenIE post-pass entity replay."""
+
+    __slots__ = ("_backend", "_nodes")
+
+    def __init__(self, backend: StorageBackend) -> None:
+        self._backend = backend
+        self._nodes: dict[str, Node | None] = {}
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._backend, name)
+
+    async def get_node(self, node_id: str) -> Node | None:
+        if node_id in self._nodes:
+            return self._nodes[node_id]
+        node = await self._backend.get_node(node_id)
+        self._nodes[node_id] = node
+        return node
+
+    async def save_node(self, node: Node) -> None:
+        await self._backend.save_node(node)
+        self._nodes[node.id] = node
+
+    async def update_node(self, node: Node) -> None:
+        await self._backend.update_node(node)
+        self._nodes[node.id] = node
+
+
 class ChainedEntityExtractor:
     """Run multiple entity extractors against the same source node.
 
@@ -315,7 +343,7 @@ class OpenIELinker:
             stats.elapsed_seconds = time() - t0
             return stats
 
-        graph = _BackendGraphAdapter(backend)
+        graph = _BackendGraphAdapter(_CachedNodeBackend(backend))
         if self._max_concurrency > 1 and self._supports_staged_extraction():
             touched = await self._link_with_staged_concurrency(graph, selected, stats)
         else:
@@ -715,15 +743,26 @@ class LLMOpenIEExtractor:
                 return hub_id
             tags = list(existing.tags or [])
             type_tag = f"_type:{entity_type}"
+            changed = False
             if type_tag not in tags:
                 tags.append(type_tag)
-            existing.tags = tags
-            existing.properties = dict(existing.properties or {})
-            existing.properties.setdefault("openie_type", entity_type)
+                changed = True
+            if existing.tags != tags:
+                existing.tags = tags
+                changed = True
+            properties = dict(existing.properties or {})
+            if "openie_type" not in properties:
+                properties["openie_type"] = entity_type
+                changed = True
+            if existing.properties != properties:
+                existing.properties = properties
+                changed = True
             if not existing.title:
                 existing.title = canonical
-            existing.updated_at = time()
-            await graph.backend.update_node(existing)
+                changed = True
+            if changed:
+                existing.updated_at = time()
+                await graph.backend.update_node(existing)
             return hub_id
 
         await graph.backend.save_node(
