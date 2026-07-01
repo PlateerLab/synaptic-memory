@@ -1793,6 +1793,11 @@ per-chunk fallback을 유지한다.
   추가해 `47/47` PASS했다. 대표 결과는
   `memory_event_scope_counts={"user:eval-user": 22}`,
   `retrieval_event_scope_counts={"user:eval-user": 8}`였다.
+- Memory health score scope counts는 reinforcement score ledger가 어느 scope에 쌓였는지
+  count map으로 노출한다. Local/user score와 global score가 같은 report에서 분리되어 보이므로,
+  개인/프로젝트 편향이 global memory를 지배하는지 운영자가 바로 확인할 수 있다. POC gate는
+  `health_reports_score_scope_counts`를 추가해 `48/48` PASS했다. 대표 결과는
+  `memory_score_scope_counts={"global": 6, "user:eval-user": 22}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
