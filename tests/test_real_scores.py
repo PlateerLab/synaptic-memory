@@ -63,6 +63,30 @@ async def test_sqlite_search_fts_with_scores_contract():
 
 
 @pytest.mark.asyncio
+async def test_sqlite_search_fts_respects_requested_limit():
+    b = SqliteGraphBackend(":memory:")
+    await b.connect()
+    try:
+        for i in range(12):
+            await b.save_node(
+                _chunk(
+                    f"d{i:02d}",
+                    f"alpha beta document {i:02d}",
+                    f"alpha beta shared content {i:02d}",
+                )
+            )
+
+        plain = await b.search_fts("alpha beta", limit=5)
+        scored = await b.search_fts("alpha beta", limit=5, with_scores=True)
+
+        assert len(plain) == 5
+        assert len(scored) == 5
+        assert [node.id for node in plain] == [node.id for node, _score in scored]
+    finally:
+        await b.close()
+
+
+@pytest.mark.asyncio
 async def test_evidence_real_scores_flag_engages_on_sqlite(monkeypatch):
     b = SqliteGraphBackend(":memory:")
     await b.connect()
