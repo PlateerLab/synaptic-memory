@@ -222,6 +222,32 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - `memory_` prefix ranking diagnostics는 검색 event ledger에 같이 저장되어
   SearchResult가 없어도 나중에 ranking 개입 이력을 추적할 수 있다.
 
+후속 memory health ranking summary 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_health_ranking_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `26/26` |
+| boosted retrievals | `1` |
+| penalized retrievals | `1` |
+| boosted nodes | `1` |
+| penalized nodes | `1` |
+| max scope boost | `0.10` |
+| max signal penalty | `0.05` |
+
+추가로 검증된 동작:
+
+- `memory_health()`가 retrieval ledger의 `memory_` ranking diagnostics를 집계한다.
+- 운영자는 health report만 봐도 최근 검색에서 memory boost/penalty가 몇 번, 얼마나
+  개입했는지 확인할 수 있다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash

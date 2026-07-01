@@ -487,6 +487,9 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         edge_only_penalized = next(
             item for item in edge_only_penalty_result.nodes if item.node.id == edge_only_suspect.id
         )
+        await graph._record_retrieval_event(edge_boost_result, scope=scope)
+        await graph._record_retrieval_event(edge_only_penalty_result, scope=scope)
+        ranking_health = await graph.memory_health(scope=scope)
 
         selected_before_success = (
             selected_before_feedback.success_count if selected_before_feedback else -1
@@ -587,6 +590,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and penalty_result.diagnostics.get("memory_signal_max_penalty", 0.0) > 0.0
                 and edge_only_penalty_result.diagnostics.get("memory_signal_penalized_nodes") == 1.0
             ),
+            "health_summarizes_memory_ranking_diagnostics": (
+                ranking_health.memory_boosted_retrieval_count >= 1
+                and ranking_health.memory_penalized_retrieval_count >= 1
+                and ranking_health.memory_boosted_node_count >= 1
+                and ranking_health.memory_penalized_node_count >= 1
+                and ranking_health.max_memory_scope_boost > 0.0
+                and ranking_health.max_memory_signal_penalty > 0.0
+            ),
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id
                 and roundtrip_openie.properties.get("model") == "deterministic"
@@ -671,6 +682,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 "edge_score_boosted_resonance": _round(edge_boosted_item.resonance),
                 "edge_score_boost_diagnostics": dict(edge_boost_result.diagnostics),
                 "health": asdict(health),
+                "ranking_health": asdict(ranking_health),
                 "penalty_order": [item.node.id for item in penalty_result.nodes],
                 "penalized_failed_resonance": _round(penalized_failed.resonance),
                 "penalty_diagnostics": dict(penalty_result.diagnostics),
