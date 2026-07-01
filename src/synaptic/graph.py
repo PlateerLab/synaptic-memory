@@ -2998,6 +2998,7 @@ class SynapticGraph:
         nodes = await self._backend.list_nodes(limit=100_000)
         nodes_by_id = {node.id: node for node in nodes}
         edges = await self._all_edges(nodes)
+        edges_by_id = {edge.id: edge for edge in edges}
         signals: list[MemorySignal] = []
         stale_before = time() - 365 * 24 * 3600
         repeated_failure_targets: set[str] = set()
@@ -3201,8 +3202,12 @@ class SynapticGraph:
                 strong_negative = score.score <= _MEMORY_STRONG_NEGATIVE_SCORE_SIGNAL_THRESHOLD
                 if not repeated_failure and not strong_negative:
                     continue
-                node_ids = [score.node_id] if score.node_id else []
                 edge_ids = [score.edge_id] if score.edge_id else []
+                if score.node_id:
+                    node_ids = [score.node_id]
+                else:
+                    edge = edges_by_id.get(score.edge_id)
+                    node_ids = [edge.source_id, edge.target_id] if edge is not None else []
                 signal_type = (
                     "repeated_negative_feedback"
                     if repeated_failure

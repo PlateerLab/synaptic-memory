@@ -547,6 +547,26 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ),
             None,
         )
+        strong_negative_edge_signal = next(
+            (
+                node
+                for node in ranking_signal_nodes
+                if node.properties.get("score_signal_type") == "strong_negative_scope_score"
+                and "poc_edge_score_demoted_relation" in node.properties.get("edge_ids", "")
+            ),
+            None,
+        )
+        edge_score_signal_penalty_result = SearchResult(
+            query="edge score signal penalty",
+            nodes=[
+                ActivatedNode(node=scope_clean, activation=1.0, resonance=1.0),
+                ActivatedNode(node=edge_only_clean, activation=0.98, resonance=0.98),
+            ],
+        )
+        await graph._apply_memory_signal_penalties(
+            edge_score_signal_penalty_result,
+            scope=scope,
+        )
 
         selected_before_success = (
             selected_before_feedback.success_count if selected_before_feedback else -1
@@ -624,6 +644,11 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             "strong_negative_scope_score_signal_created": (
                 strong_negative_signal is not None
                 and "_memory_suspect" in (strong_negative_signal.tags or [])
+            ),
+            "strong_negative_edge_score_signal_records_endpoints": (
+                strong_negative_edge_signal is not None
+                and scope_demoted.id in strong_negative_edge_signal.properties.get("node_ids", "")
+                and scope_clean.id in strong_negative_edge_signal.properties.get("node_ids", "")
             ),
             "entity_property_conflict_signal_created": (property_conflict_signal is not None),
             "superseded_target_stale_signal_created": (superseded_stale_signal is not None),
@@ -713,6 +738,11 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and edge_only_penalized.resonance < 0.98
                 and edge_only_penalized.resonance >= 0.95
             ),
+            "strong_negative_edge_score_signal_demoted_endpoint": (
+                edge_score_signal_penalty_result.nodes[0].node.id == edge_only_clean.id
+                and edge_score_signal_penalty_result.nodes[1].node.id == scope_clean.id
+                and edge_score_signal_penalty_result.nodes[1].resonance < 0.96
+            ),
             "health_report_populated": (
                 health.memory_events >= 4
                 and health.retrieval_events >= 3
@@ -772,6 +802,15 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                     if strong_negative_signal
                     else {}
                 ),
+                "strong_negative_edge_score_signal": (
+                    {
+                        "id": strong_negative_edge_signal.id,
+                        "tags": list(strong_negative_edge_signal.tags or []),
+                        "properties": dict(strong_negative_edge_signal.properties or {}),
+                    }
+                    if strong_negative_edge_signal
+                    else {}
+                ),
                 "property_conflict_signal": (
                     asdict(property_conflict_signal) if property_conflict_signal else {}
                 ),
@@ -798,6 +837,12 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 ],
                 "edge_only_penalized_resonance": _round(edge_only_penalized.resonance),
                 "edge_only_penalty_diagnostics": dict(edge_only_penalty_result.diagnostics),
+                "edge_score_signal_penalty_order": [
+                    item.node.id for item in edge_score_signal_penalty_result.nodes
+                ],
+                "edge_score_signal_penalty_diagnostics": dict(
+                    edge_score_signal_penalty_result.diagnostics
+                ),
                 "search_time_ms": _round(result.search_time_ms),
                 "timings_ms": {key: _round(value) for key, value in result.timings_ms.items()},
             },

@@ -1551,6 +1551,63 @@ async def test_memory_monitor_flags_strong_negative_scope_score_as_suspect():
 
 
 @pytest.mark.asyncio
+async def test_memory_monitor_carries_edge_score_signal_endpoints_into_penalty():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    suspect = Node(id="edge_score_suspect", title="Edge score suspect")
+    linked = Node(id="edge_score_linked", title="Edge score linked")
+    clean = Node(id="edge_score_clean", title="Edge score clean")
+    await backend.save_node(suspect)
+    await backend.save_node(linked)
+    await backend.save_node(clean)
+    await backend.save_edge(
+        Edge(
+            id="edge_score_negative_relation",
+            source_id=suspect.id,
+            target_id=linked.id,
+            kind=EdgeKind.RELATED,
+        )
+    )
+    await backend.save_memory_score(
+        MemoryScore(
+            scope_key=scope.key,
+            edge_id="edge_score_negative_relation",
+            score=-0.8,
+        )
+    )
+
+    signals = await graph.scan_memory_signals(scope=scope)
+    edge_signal = next(
+        signal
+        for signal in signals
+        if MemorySignalKind(str(signal.kind)) == MemorySignalKind.REPEATED_FAILURE
+        and signal.edge_ids == ["edge_score_negative_relation"]
+    )
+
+    assert set(edge_signal.node_ids) == {suspect.id, linked.id}
+    assert edge_signal.properties["score_signal_type"] == "strong_negative_scope_score"
+    signal_node = await backend.get_node(edge_signal.id)
+    assert signal_node is not None
+    assert signal_node.properties["node_ids"] == f"{suspect.id},{linked.id}"
+
+    result = SearchResult(
+        query="edge score penalty",
+        nodes=[
+            ActivatedNode(node=suspect, activation=1.0, resonance=1.0),
+            ActivatedNode(node=clean, activation=0.98, resonance=0.98),
+        ],
+    )
+    await graph._apply_memory_signal_penalties(result, scope=scope)
+
+    assert result.diagnostics["memory_signal_penalized_nodes"] == 1.0
+    assert [item.node.id for item in result.nodes] == [clean.id, suspect.id]
+    penalized = next(item for item in result.nodes if item.node.id == suspect.id)
+    assert result.diagnostics["memory_signal_max_penalty"] == pytest.approx(0.0415)
+    assert penalized.resonance == pytest.approx(0.9585)
+
+
+@pytest.mark.asyncio
 async def test_memory_monitor_flags_entity_property_conflicts_by_source():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)
