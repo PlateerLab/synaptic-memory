@@ -3597,7 +3597,7 @@ class SynapticGraph:
                     node_ids=signal.node_ids + [signal.id],
                     edge_ids=signal.edge_ids,
                     confidence=signal.confidence,
-                    properties={"signal_kind": str(signal.kind), "reason": signal.reason},
+                    properties={**properties, "reason": signal.reason},
                     created_at=signal.created_at,
                 )
             )

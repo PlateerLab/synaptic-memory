@@ -1458,6 +1458,10 @@ async def test_memory_monitor_records_signal_events_idempotently():
     assert failed.id in event.node_ids
     assert repeated[0].id in event.node_ids
     assert event.properties["signal_kind"] == str(MemorySignalKind.REPEATED_FAILURE)
+    assert event.properties["scope_key"] == scope.key
+    assert event.properties["node_ids"] == failed.id
+    assert event.properties["confidence"] == str(repeated[0].confidence)
+    assert event.properties["reason"] == repeated[0].reason
     signal_nodes = await backend.list_nodes(kind=NodeKind.OBSERVATION, limit=10)
     stored_signal = next(node for node in signal_nodes if node.id == repeated[0].id)
     assert "_memory_signal" in stored_signal.tags
@@ -1544,6 +1548,17 @@ async def test_memory_monitor_flags_strong_negative_scope_score_as_suspect():
         if signal_node.properties.get("score_signal_type") == "strong_negative_scope_score"
     )
     assert "_memory_suspect" in signal_node.tags
+    signal_events = await backend.list_memory_events(
+        kind=MemoryEventKind.SIGNAL,
+        scope=scope,
+        limit=10,
+    )
+    event = next(event for event in signal_events if event.source_id == repeated[0].id)
+    assert event.properties["score_signal_type"] == "strong_negative_scope_score"
+    assert event.properties["score_scope_key"] == scope.key
+    assert event.properties["score"] == "-0.750000"
+    assert event.properties["node_ids"] == node.id
+    assert event.properties["reason"] == repeated[0].reason
 
     health = await graph.memory_health(scope=scope)
     assert node.id in health.top_demoted_node_ids

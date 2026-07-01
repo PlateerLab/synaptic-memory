@@ -556,6 +556,20 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ),
             None,
         )
+        ranking_signal_events = await backend.list_memory_events(
+            kind=MemoryEventKind.SIGNAL,
+            scope=scope,
+            limit=1000,
+        )
+        strong_negative_signal_event = next(
+            (
+                event
+                for event in ranking_signal_events
+                if strong_negative_signal is not None
+                and event.source_id == strong_negative_signal.id
+            ),
+            None,
+        )
         edge_score_signal_penalty_result = SearchResult(
             query="edge score signal penalty",
             nodes=[
@@ -644,6 +658,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             "strong_negative_scope_score_signal_created": (
                 strong_negative_signal is not None
                 and "_memory_suspect" in (strong_negative_signal.tags or [])
+            ),
+            "strong_negative_signal_event_records_provenance": (
+                strong_negative_signal_event is not None
+                and strong_negative_signal_event.properties.get("score_signal_type")
+                == "strong_negative_scope_score"
+                and strong_negative_signal_event.properties.get("score_scope_key") == scope.key
+                and strong_negative_signal_event.properties.get("score") == "-1.000000"
+                and strong_negative_signal_event.properties.get("node_ids") == scope_demoted.id
             ),
             "strong_negative_edge_score_signal_records_endpoints": (
                 strong_negative_edge_signal is not None
@@ -801,6 +823,9 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                     }
                     if strong_negative_signal
                     else {}
+                ),
+                "strong_negative_scope_score_signal_event": (
+                    asdict(strong_negative_signal_event) if strong_negative_signal_event else {}
                 ),
                 "strong_negative_edge_score_signal": (
                     {
