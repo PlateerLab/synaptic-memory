@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import unicodedata
+from time import time
 
 logger = logging.getLogger("sqlite-backend")
 from collections.abc import Sequence
@@ -562,6 +563,104 @@ class SQLiteBackend:
         db = self._db()
         await db.execute("DELETE FROM syn_edges WHERE id = ?", (edge_id,))
         await db.commit()
+
+    async def save_openie_edges_batch(self, edges: Sequence[Edge]) -> int:
+        """Batch upsert OpenIE edges without overwriting structural edges."""
+        if not edges:
+            return 0
+        merged: dict[tuple[str, str, str], Edge] = {}
+        for edge in edges:
+            key = (edge.source_id, edge.target_id, str(edge.kind))
+            current = merged.get(key)
+            if current is None:
+                merged[key] = Edge(
+                    id=edge.id,
+                    source_id=edge.source_id,
+                    target_id=edge.target_id,
+                    kind=edge.kind,
+                    weight=edge.weight,
+                    properties=dict(edge.properties or {}),
+                    created_at=edge.created_at,
+                )
+                continue
+            current.weight = max(current.weight, edge.weight)
+            support_count = _prop_int(current.properties or {}, "support_count", 1) + _prop_int(
+                edge.properties or {}, "support_count", 1
+            )
+            props = dict(current.properties or {})
+            props.update({k: v for k, v in (edge.properties or {}).items() if v != ""})
+            props["support_count"] = str(support_count)
+            props["last_seen_at"] = str(time())
+            current.properties = props
+
+        db = self._db()
+        source_ids = sorted({edge.source_id for edge in merged.values()})
+        existing: dict[tuple[str, str, str], Edge] = {}
+        for offset in range(0, len(source_ids), 500):
+            source_chunk = source_ids[offset : offset + 500]
+            placeholders = ",".join("?" for _ in source_chunk)
+            async with db.execute(
+                f"SELECT * FROM syn_edges WHERE source_id IN ({placeholders})",
+                source_chunk,
+            ) as cur:
+                rows = await cur.fetchall()
+            for row in rows:
+                edge = _row_to_edge(row)
+                existing[(edge.source_id, edge.target_id, str(edge.kind))] = edge
+
+        inserts: list[tuple[str, str, str, str, float, str, float]] = []
+        updates: list[tuple[float, str, str]] = []
+        saved = 0
+        for key, edge in merged.items():
+            current = existing.get(key)
+            if current is not None and not current.id.startswith("openie_"):
+                continue
+            if current is not None:
+                props = dict(current.properties or {})
+                props.update({k: v for k, v in (edge.properties or {}).items() if v != ""})
+                props["support_count"] = str(
+                    _prop_int(current.properties or {}, "support_count", 1)
+                    + _prop_int(edge.properties or {}, "support_count", 1)
+                )
+                props["last_seen_at"] = str(time())
+                updates.append((max(current.weight, edge.weight), json.dumps(props), current.id))
+            else:
+                inserts.append(
+                    (
+                        edge.id,
+                        edge.source_id,
+                        edge.target_id,
+                        str(edge.kind),
+                        edge.weight,
+                        json.dumps(edge.properties),
+                        edge.created_at,
+                    )
+                )
+            saved += 1
+        if not inserts and not updates:
+            return 0
+        try:
+            if inserts:
+                await db.executemany(
+                    """INSERT INTO syn_edges
+                    (id, source_id, target_id, kind, weight, properties_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(source_id, target_id, kind) DO UPDATE SET
+                        id=excluded.id,
+                        weight=excluded.weight,
+                        properties_json=excluded.properties_json""",
+                    inserts,
+                )
+            if updates:
+                await db.executemany(
+                    "UPDATE syn_edges SET weight=?, properties_json=? WHERE id=?",
+                    updates,
+                )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+        return saved
 
     async def purge_openie_artifacts(self, *, node_limit: int = 1_000_000) -> int:
         """Bulk-delete the reversible OpenIE layer in one transaction.
@@ -1515,6 +1614,13 @@ def _json_str_dict(raw: str | None) -> dict[str, str]:
     if not isinstance(data, dict):
         return {}
     return {str(k): str(v) for k, v in data.items()}
+
+
+def _prop_int(props: dict[str, str], key: str, default: int) -> int:
+    try:
+        return int(float(props.get(key, default)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _row_to_memory_event(row: aiosqlite.Row) -> MemoryEvent:

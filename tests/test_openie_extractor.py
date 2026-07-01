@@ -79,6 +79,18 @@ class _BrokenLLM:
         raise RuntimeError("llm down")
 
 
+class _CountingSQLiteBackend(SQLiteBackend):
+    def __init__(self, path):
+        super().__init__(path)
+        self.openie_batch_calls = 0
+        self.openie_batch_edge_count = 0
+
+    async def save_openie_edges_batch(self, edges):
+        self.openie_batch_calls += 1
+        self.openie_batch_edge_count += len(edges)
+        return await super().save_openie_edges_batch(edges)
+
+
 async def _graph_with_chunk() -> SynapticGraph:
     backend = MemoryBackend()
     graph = SynapticGraph(backend)
@@ -421,6 +433,126 @@ async def test_openie_bulk_purge_sqlite_removes_nodes_edges_and_fts_rows(tmp_pat
         ) as cur:
             row = await cur.fetchone()
         assert row[0] == 0
+    finally:
+        await backend.close()
+
+
+@pytest.mark.asyncio
+async def test_openie_sqlite_batch_edge_save_preserves_structural_edges(tmp_path):
+    backend = SQLiteBackend(tmp_path / "openie_edges.db")
+    await backend.connect()
+    try:
+        for node in [
+            Node(id="chunk_sqlite", kind=NodeKind.CHUNK, title="Chunk"),
+            Node(id="openie_acme", kind=NodeKind.ENTITY, title="Acme", tags=["_openie"]),
+            Node(id="openie_roadmap", kind=NodeKind.ENTITY, title="Roadmap", tags=["_openie"]),
+        ]:
+            await backend.save_node(node)
+        await backend.save_edge(
+            Edge(
+                id="structural_related",
+                source_id="openie_acme",
+                target_id="openie_roadmap",
+                kind=EdgeKind.RELATED,
+                weight=1.0,
+            )
+        )
+
+        saved = await backend.save_openie_edges_batch(
+            [
+                Edge(
+                    id="openie_mentions_acme_1",
+                    source_id="chunk_sqlite",
+                    target_id="openie_acme",
+                    kind=EdgeKind.MENTIONS,
+                    weight=0.8,
+                    properties={"support_count": "1", "confidence": "0.8"},
+                ),
+                Edge(
+                    id="openie_mentions_acme_2",
+                    source_id="chunk_sqlite",
+                    target_id="openie_acme",
+                    kind=EdgeKind.MENTIONS,
+                    weight=0.7,
+                    properties={"support_count": "1", "confidence": "0.7"},
+                ),
+                Edge(
+                    id="openie_related_should_skip",
+                    source_id="openie_acme",
+                    target_id="openie_roadmap",
+                    kind=EdgeKind.RELATED,
+                    weight=0.9,
+                    properties={"support_count": "1", "confidence": "0.9"},
+                ),
+            ]
+        )
+
+        assert saved == 1
+        mention_edges = await backend.get_edges("chunk_sqlite", direction="outgoing")
+        assert len(mention_edges) == 1
+        assert mention_edges[0].id == "openie_mentions_acme_1"
+        assert mention_edges[0].weight == pytest.approx(0.8)
+        assert mention_edges[0].properties["support_count"] == "2"
+        assert mention_edges[0].properties["confidence"] == "0.7"
+        acme_edges = await backend.get_edges("openie_acme", direction="outgoing")
+        assert [edge.id for edge in acme_edges] == ["structural_related"]
+
+        saved = await backend.save_openie_edges_batch(
+            [
+                Edge(
+                    id="openie_mentions_acme_3",
+                    source_id="chunk_sqlite",
+                    target_id="openie_acme",
+                    kind=EdgeKind.MENTIONS,
+                    weight=0.9,
+                    properties={"support_count": "1", "confidence": "0.9"},
+                )
+            ]
+        )
+
+        assert saved == 1
+        mention_edges = await backend.get_edges("chunk_sqlite", direction="outgoing")
+        assert len(mention_edges) == 1
+        assert mention_edges[0].id == "openie_mentions_acme_1"
+        assert mention_edges[0].weight == pytest.approx(0.9)
+        assert mention_edges[0].properties["support_count"] == "3"
+        assert mention_edges[0].properties["confidence"] == "0.9"
+    finally:
+        await backend.close()
+
+
+@pytest.mark.asyncio
+async def test_openie_sqlite_link_result_uses_batch_edge_save(tmp_path):
+    backend = _CountingSQLiteBackend(tmp_path / "openie_link_batch.db")
+    await backend.connect()
+    try:
+        graph = SynapticGraph(backend)
+        await backend.save_node(
+            Node(id="chunk_sqlite", kind=NodeKind.CHUNK, title="Chunk", content="Acme Roadmap")
+        )
+        llm = _FakeLLM(
+            {
+                "entities": [{"canonical": "Acme"}, {"canonical": "Roadmap"}],
+                "triples": [{"subject": "Acme", "predicate": "depends_on", "object": "Roadmap"}],
+            }
+        )
+
+        await LLMOpenIEExtractor(llm).extract_and_link(
+            graph,
+            "chunk_sqlite",
+            "Chunk",
+            "Acme depends on Roadmap",
+        )
+
+        assert backend.openie_batch_calls == 1
+        assert backend.openie_batch_edge_count == 5
+        acme_edges = await backend.get_edges(deterministic_entity_id("Acme"), direction="outgoing")
+        assert any(edge.kind == EdgeKind.DEPENDS_ON for edge in acme_edges)
+        mentions = await backend.get_edges("chunk_sqlite", direction="outgoing")
+        acme_mentions = [
+            edge for edge in mentions if edge.target_id == deterministic_entity_id("Acme")
+        ]
+        assert acme_mentions[0].properties["support_count"] == "2"
     finally:
         await backend.close()
 

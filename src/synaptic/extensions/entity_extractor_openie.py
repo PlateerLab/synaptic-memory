@@ -562,6 +562,7 @@ class LLMOpenIEExtractor:
 
         hub_ids: list[str] = []
         touched: set[str] = set()
+        openie_edges: list[Edge] = []
 
         # Materialize entity declarations first.
         for ent in result.entities:
@@ -580,8 +581,7 @@ class LLMOpenIEExtractor:
             if hub_id not in touched:
                 touched.add(hub_id)
                 hub_ids.append(hub_id)
-            await _save_openie_edge(
-                graph.backend,
+            openie_edges.append(
                 Edge(
                     id=_openie_edge_id(node_id, hub_id, EdgeKind.MENTIONS),
                     source_id=node_id,
@@ -631,8 +631,7 @@ class LLMOpenIEExtractor:
                 if hub_id not in touched:
                     touched.add(hub_id)
                     hub_ids.append(hub_id)
-                await _save_openie_edge(
-                    graph.backend,
+                openie_edges.append(
                     Edge(
                         id=_openie_edge_id(node_id, hub_id, EdgeKind.MENTIONS),
                         source_id=node_id,
@@ -648,8 +647,7 @@ class LLMOpenIEExtractor:
                     ),
                 )
 
-            await _save_openie_edge(
-                graph.backend,
+            openie_edges.append(
                 Edge(
                     id=_openie_edge_id(subj_id, obj_id, f"{edge_kind}:{relation}"),
                     source_id=subj_id,
@@ -665,6 +663,7 @@ class LLMOpenIEExtractor:
                 ),
             )
 
+        await _save_openie_edges_batch(graph.backend, openie_edges)
         return hub_ids
 
     async def extract(self, text: str, *, title: str = "") -> OpenIEResult:
@@ -1058,6 +1057,20 @@ async def _save_openie_edge(backend: StorageBackend, edge: Edge) -> bool:
             break
     await backend.save_edge(edge)
     return True
+
+
+async def _save_openie_edges_batch(backend: StorageBackend, edges: list[Edge]) -> int:
+    """Save OpenIE edges, using backend set-wise upserts when available."""
+    if not edges:
+        return 0
+    bulk_save = getattr(backend, "save_openie_edges_batch", None)
+    if callable(bulk_save):
+        return int(await bulk_save(edges))
+    saved = 0
+    for edge in edges:
+        if await _save_openie_edge(backend, edge):
+            saved += 1
+    return saved
 
 
 def _prop_int(props: dict[str, str], key: str, default: int) -> int:
