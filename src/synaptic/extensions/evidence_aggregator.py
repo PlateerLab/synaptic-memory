@@ -26,8 +26,9 @@ Three mechanics do the work:
    both sides of the evidence.
 
 The aggregator is deterministic — same input, same output — and keeps only
-bounded token fingerprints as an internal speed cache. That matters for
-regression-style eval while avoiding repeated tokenisation across queries.
+bounded token/similarity fingerprints as an internal speed cache. That matters
+for regression-style eval while avoiding repeated tokenisation and pairwise
+Jaccard work across queries.
 
 Example::
 
@@ -48,6 +49,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass
+from hashlib import blake2b
 from typing import TYPE_CHECKING
 
 from synaptic.models import Node
@@ -73,6 +75,9 @@ _TOKEN = re.compile(r"[A-Za-z가-힣]{2,}")
 _MAX_COMPANIONS_PER_ANCHOR = 3
 
 _TOKEN_CACHE_MAX = 4096
+_SIMILARITY_CACHE_MAX = 32768
+
+_ContentKey = tuple[str, str]
 
 
 def _tokens(text: str) -> set[str]:
@@ -123,8 +128,8 @@ class Evidence:
 class EvidenceAggregator:
     """Select the final evidence set from a reranked candidate pool.
 
-    The aggregator is deterministic. It keeps a bounded per-instance token
-    cache, but every call's selection state is independent.
+    The aggregator is deterministic. It keeps bounded per-instance token and
+    pairwise-similarity caches, but every call's selection state is independent.
 
     Args:
         mmr_lambda: MMR blending parameter. ``1.0`` disables diversity
@@ -138,7 +143,13 @@ class EvidenceAggregator:
             they're still high-scoring.
     """
 
-    __slots__ = ("_lambda", "_pool_limit", "_sim_threshold", "_token_cache")
+    __slots__ = (
+        "_lambda",
+        "_pool_limit",
+        "_sim_threshold",
+        "_similarity_cache",
+        "_token_cache",
+    )
 
     def __init__(
         self,
@@ -150,7 +161,8 @@ class EvidenceAggregator:
         self._lambda = mmr_lambda
         self._sim_threshold = similarity_threshold
         self._pool_limit = max(0, candidate_pool_limit)
-        self._token_cache: dict[tuple[str, str], set[str]] = {}
+        self._token_cache: dict[_ContentKey, set[str]] = {}
+        self._similarity_cache: dict[tuple[_ContentKey, _ContentKey], float] = {}
 
     def aggregate(
         self,
@@ -263,30 +275,37 @@ class EvidenceAggregator:
             else list(scored)
         )
         selected: list[Evidence] = []
-        selected_tokens: list[set[str]] = []
+        selected_entries: list[tuple[_ContentKey, set[str]]] = []
         doc_counts: dict[str, int] = {}
-        token_cache: dict[int, set[str]] = {}
+        token_cache: dict[int, tuple[_ContentKey, set[str]]] = {}
         sim_cache: dict[int, tuple[int, float]] = {}
 
-        def cand_tokens(cand: ScoredCandidate) -> set[str]:
+        def cand_entry(cand: ScoredCandidate) -> tuple[_ContentKey, set[str]]:
             cache_key = id(cand)
             cached = token_cache.get(cache_key)
             if cached is None:
-                cached = self._tokens_for(cand.node)
+                key = self._content_key(cand.node)
+                cached = (key, self._tokens_for_key(cand.node, key))
                 token_cache[cache_key] = cached
             return cached
 
+        def cand_tokens(cand: ScoredCandidate) -> set[str]:
+            return cand_entry(cand)[1]
+
         def max_selected_similarity(cand: ScoredCandidate) -> float:
-            if not selected_tokens:
+            if not selected_entries:
                 return 0.0
             cache_key = id(cand)
             checked_count, sim_max = sim_cache.get(cache_key, (0, 0.0))
-            if checked_count >= len(selected_tokens):
+            if checked_count >= len(selected_entries):
                 return sim_max
-            tokens = cand_tokens(cand)
-            for selected in selected_tokens[checked_count:]:
-                sim_max = max(sim_max, _jaccard(tokens, selected))
-            sim_cache[cache_key] = (len(selected_tokens), sim_max)
+            key, tokens = cand_entry(cand)
+            for selected_key, selected_tokens in selected_entries[checked_count:]:
+                sim_max = max(
+                    sim_max,
+                    self._jaccard_for(key, tokens, selected_key, selected_tokens),
+                )
+            sim_cache[cache_key] = (len(selected_entries), sim_max)
             return sim_max
 
         # --- Pass 1: category coverage ---
@@ -298,10 +317,15 @@ class EvidenceAggregator:
                 if pick is None:
                     continue
                 evidence = _make_evidence(pick, reason="category_coverage")
-                pick_tokens = cand_tokens(pick)
-                if _passes_token_similarity(pick_tokens, selected_tokens, self._sim_threshold):
+                pick_key, pick_tokens = cand_entry(pick)
+                if self._passes_entry_similarity(
+                    pick_key,
+                    pick_tokens,
+                    selected_entries,
+                    self._sim_threshold,
+                ):
                     selected.append(evidence)
-                    selected_tokens.append(pick_tokens)
+                    selected_entries.append((pick_key, pick_tokens))
                     if evidence.document_id:
                         doc_counts[evidence.document_id] = (
                             doc_counts.get(evidence.document_id, 0) + 1
@@ -328,7 +352,7 @@ class EvidenceAggregator:
                 # as duplicates) but still compete on the normal MMR-
                 # adjusted score, so they cannot crowd out the seeds.
                 is_reference = cand.reason == "references"
-                if selected_tokens:
+                if selected_entries:
                     sim_max = max_selected_similarity(cand)
                 else:
                     sim_max = 0.0
@@ -346,7 +370,7 @@ class EvidenceAggregator:
             chosen = remaining.pop(best_idx)
             evidence = _make_evidence(chosen, reason="top_score")
             selected.append(evidence)
-            selected_tokens.append(cand_tokens(chosen))
+            selected_entries.append(cand_entry(chosen))
             if evidence.document_id:
                 doc_counts[evidence.document_id] = doc_counts.get(evidence.document_id, 0) + 1
 
@@ -363,7 +387,7 @@ class EvidenceAggregator:
                 remaining.remove(comp)
                 comp_ev = _make_evidence(comp, reason="reference_companion")
                 selected.append(comp_ev)
-                selected_tokens.append(cand_tokens(comp))
+                selected_entries.append(cand_entry(comp))
                 if comp_ev.document_id:
                     doc_counts[comp_ev.document_id] = doc_counts.get(comp_ev.document_id, 0) + 1
 
@@ -399,17 +423,63 @@ class EvidenceAggregator:
                 best = cand
         return best
 
-    def _tokens_for(self, node: Node) -> set[str]:
+    def _content_key(self, node: Node) -> _ContentKey:
         content = node.content or ""
-        key = (node.id, content)
+        digest = blake2b(content.encode("utf-8"), digest_size=12).hexdigest()
+        return (node.id, f"{len(content)}:{digest}")
+
+    def _tokens_for(self, node: Node) -> set[str]:
+        return self._tokens_for_key(node, self._content_key(node))
+
+    def _tokens_for_key(self, node: Node, key: _ContentKey) -> set[str]:
         cached = self._token_cache.get(key)
         if cached is not None:
             return cached
-        tokens = _tokens(content)
+        tokens = _tokens(node.content or "")
         if len(self._token_cache) >= _TOKEN_CACHE_MAX:
             self._token_cache.pop(next(iter(self._token_cache)))
         self._token_cache[key] = tokens
         return tokens
+
+    def _jaccard_for(
+        self,
+        left_key: _ContentKey,
+        left_tokens: set[str],
+        right_key: _ContentKey,
+        right_tokens: set[str],
+    ) -> float:
+        pair = (left_key, right_key) if left_key <= right_key else (right_key, left_key)
+        cached = self._similarity_cache.get(pair)
+        if cached is not None:
+            return cached
+        similarity = _jaccard(left_tokens, right_tokens)
+        if len(self._similarity_cache) >= _SIMILARITY_CACHE_MAX:
+            self._similarity_cache.pop(next(iter(self._similarity_cache)))
+        self._similarity_cache[pair] = similarity
+        return similarity
+
+    def _passes_entry_similarity(
+        self,
+        candidate_key: _ContentKey,
+        candidate_tokens: set[str],
+        existing_entries: list[tuple[_ContentKey, set[str]]],
+        threshold: float,
+    ) -> bool:
+        if not existing_entries:
+            return True
+        sim_max = max(
+            (
+                self._jaccard_for(
+                    candidate_key,
+                    candidate_tokens,
+                    existing_key,
+                    existing_tokens,
+                )
+                for existing_key, existing_tokens in existing_entries
+            ),
+            default=0.0,
+        )
+        return sim_max < threshold
 
     def _passes_similarity(
         self,

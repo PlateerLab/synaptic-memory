@@ -91,6 +91,41 @@ class TestHelpers:
         assert first == {"alpha", "beta"}
         assert second == {"gamma", "delta"}
 
+    def test_similarity_cache_is_symmetric_and_content_sensitive(self):
+        agg = EvidenceAggregator()
+        left = _node("left", content="alpha beta")
+        right = _node("right", content="alpha beta gamma")
+        left_key = agg._content_key(left)
+        right_key = agg._content_key(right)
+
+        first = agg._jaccard_for(
+            left_key,
+            agg._tokens_for(left),
+            right_key,
+            agg._tokens_for(right),
+        )
+        second = agg._jaccard_for(
+            right_key,
+            agg._tokens_for(right),
+            left_key,
+            agg._tokens_for(left),
+        )
+
+        assert first == second == 2 / 3
+        assert len(agg._similarity_cache) == 1
+
+        changed = _node("right", content="gamma delta")
+        changed_key = agg._content_key(changed)
+        agg._jaccard_for(
+            left_key,
+            agg._tokens_for(left),
+            changed_key,
+            agg._tokens_for(changed),
+        )
+
+        assert changed_key != right_key
+        assert len(agg._similarity_cache) == 2
+
 
 # --- Basic selection ---
 
