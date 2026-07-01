@@ -278,6 +278,10 @@ class MemoryHealthReport:
     low_confidence_relation_count: int = 0
     drift_spike_count: int = 0
     signal_kind_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_growth_node_ids: list[str] = field(default_factory=_str_list)
+    top_growth_edge_ids: list[str] = field(default_factory=_str_list)
+    top_growth_node_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_growth_edge_counts: dict[str, int] = field(default_factory=_int_dict)
     feedback_event_count: int = 0
     feedback_success_count: int = 0
     feedback_failure_count: int = 0

@@ -59,6 +59,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
     await backend.connect()
     try:
         graph = SynapticGraph(backend)
+        growth_since = time() - 10
         scope = MemoryScope(
             workspace_id=args.workspace_id,
             user_id=args.user_id,
@@ -309,10 +310,26 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         before_consolidation = await backend.get_node(consolidation_candidate.id)
         consolidation_result = await graph.consolidate()
         after_consolidation = await backend.get_node(consolidation_candidate.id)
+        growth_entity = Node(
+            id="poc_growth_entity",
+            kind=NodeKind.ENTITY,
+            title="Growth entity",
+            content="This entity appears in a recent growth signal.",
+        )
+        growth_edge = Edge(
+            id="poc_growth_reinforced_relation",
+            source_id=alpha.id,
+            target_id=growth_entity.id,
+            kind=EdgeKind.RELATED,
+            properties={"support_count": "2"},
+            created_at=time(),
+        )
+        await backend.save_node(growth_entity)
+        await backend.save_edge(growth_edge)
 
         roundtrip_edges = await backend.get_edges(alpha.id, direction="outgoing")
         roundtrip_openie = next(edge for edge in roundtrip_edges if edge.id == openie_edge.id)
-        signals = await graph.scan_memory_signals(scope=scope)
+        signals = await graph.scan_memory_signals(scope=scope, since=growth_since)
         signal_kinds = sorted({str(signal.kind) for signal in signals})
         scope_score_failure_signal = next(
             (
@@ -343,7 +360,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ),
             None,
         )
-        health = await graph.memory_health(scope=scope)
+        health = await graph.memory_health(scope=scope, since=growth_since)
         memory_events = await backend.list_memory_events(scope=scope, limit=1000)
         retrieval_events = await backend.list_retrieval_events(scope=scope, limit=1000)
         recorded_retrieval_event = next(
@@ -824,6 +841,12 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and health.signal_kind_counts.get(str(MemorySignalKind.LOW_CONFIDENCE_RELATION), 0)
                 >= 1
                 and health.signal_kind_counts.get(str(MemorySignalKind.REPEATED_FAILURE), 0) >= 1
+            ),
+            "health_reports_growth_targets": (
+                growth_entity.id in health.top_growth_node_ids
+                and growth_edge.id in health.top_growth_edge_ids
+                and health.top_growth_node_counts.get(growth_entity.id, 0) >= 3
+                and health.top_growth_edge_counts.get(growth_edge.id, 0) >= 2
             ),
             "health_reports_top_suspect_targets": (
                 failed.id in health.top_suspect_node_ids

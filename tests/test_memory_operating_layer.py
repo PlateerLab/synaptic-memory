@@ -1708,6 +1708,13 @@ async def test_memory_monitor_flags_recent_growth_and_reinforcement_signals_idem
     assert health.new_relation_count == 1
     assert health.relation_reinforced_count == 1
     assert health.suspect_count == 0
+    assert health.top_growth_node_ids == [new_entity.id, old_entity.id]
+    assert health.top_growth_edge_ids == ["recent_reinforced_relation"]
+    assert health.top_growth_node_counts == {
+        new_entity.id: 3,
+        old_entity.id: 2,
+    }
+    assert health.top_growth_edge_counts == {"recent_reinforced_relation": 2}
 
 
 @pytest.mark.asyncio
