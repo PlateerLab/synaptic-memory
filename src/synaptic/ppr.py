@@ -8,6 +8,7 @@ Where A_norm is a column-normalized adjacency matrix built from the graph edges.
 
 from __future__ import annotations
 
+from time import time
 from typing import TYPE_CHECKING
 
 from synaptic.extensions.graph_read_cache import GraphReadCache
@@ -48,6 +49,7 @@ async def personalized_pagerank(
     tol: float = 1e-6,
     top_k: int = 20,
     read_cache: GraphReadCache | None = None,
+    timings_ms: dict[str, float] | None = None,
 ) -> list[tuple[str, float]]:
     """Perform PPR and return top-k (node_id, score) pairs.
 
@@ -71,6 +73,7 @@ async def personalized_pagerank(
     reads = read_cache or GraphReadCache(backend)
 
     # --- 1. BFS to discover the reachable subgraph (depth 2 from seeds) ---
+    stage_t0 = time()
     # adjacency: source -> [(target, weight), ...]
     adj: dict[str, list[tuple[str, float]]] = {}
     visited: set[str] = set()
@@ -118,58 +121,39 @@ async def personalized_pagerank(
             adj[nid] = []
 
     all_nodes = set(adj.keys()) | set(seed_scores.keys())
+    _record_timing(timings_ms, "bfs", stage_t0)
 
     # No edges at all — return seed scores directly (sorted)
     if not any(adj.values()):
+        stage_t0 = time()
         sorted_seeds = sorted(seed_scores.items(), key=lambda x: x[1], reverse=True)
+        _record_timing(timings_ms, "sort", stage_t0)
         return sorted_seeds[:top_k]
 
-    # --- 2. Build column-normalized adjacency (as sparse dicts) ---
-    # out_weight[node] = sum of weights of outgoing edges
-    out_weight: dict[str, float] = {}
-    for src, neighbors in adj.items():
-        total = sum(w for _, w in neighbors)
-        out_weight[src] = total if total > 0 else 1.0
-
-    # --- 3. Normalize personalization vector ---
+    # --- 2. Normalize personalization vector ---
     total_seed = sum(seed_scores.values())
     if total_seed == 0:
         return []
     personalization: dict[str, float] = {nid: s / total_seed for nid, s in seed_scores.items()}
 
-    # --- 4. Power iteration ---
-    # Initialize rank vector = personalization
-    rank: dict[str, float] = {}
-    for nid in all_nodes:
-        rank[nid] = personalization.get(nid, 0.0)
+    rank = _power_iteration(
+        adj,
+        personalization,
+        all_nodes,
+        damping=damping,
+        max_iter=max_iter,
+        tol=tol,
+        timings_ms=timings_ms,
+    )
 
-    teleport_coeff = 1.0 - damping
-
-    for _ in range(max_iter):
-        new_rank: dict[str, float] = {}
-        # Initialize with teleport (personalization)
-        for nid in all_nodes:
-            new_rank[nid] = teleport_coeff * personalization.get(nid, 0.0)
-
-        # Distribute rank along edges
-        for src, neighbors in adj.items():
-            if not neighbors:
-                continue
-            src_rank = rank[src]
-            src_out = out_weight[src]
-            for tgt, w in neighbors:
-                # Column-normalized: edge_weight / total_out_weight * src_rank
-                contribution = damping * src_rank * w / src_out
-                new_rank[tgt] = new_rank.get(tgt, 0.0) + contribution
-
-        # Check convergence (L1 norm)
-        diff = sum(abs(new_rank.get(nid, 0.0) - rank.get(nid, 0.0)) for nid in all_nodes)
-        rank = new_rank
-        if diff < tol:
-            break
-
-    # --- 5. Return top-k ---
-    sorted_results = sorted(rank.items(), key=lambda x: x[1], reverse=True)
+    # --- 3. Return top-k ---
+    stage_t0 = time()
+    sorted_results = sorted(
+        ((nid, rank.get(nid, 0.0)) for nid in all_nodes),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    _record_timing(timings_ms, "sort", stage_t0)
     return sorted_results[:top_k]
 
 
@@ -185,6 +169,7 @@ async def personalized_pagerank_v2(
     edge_weight_floor: float = 0.15,
     passage_boost: float = 1.5,
     read_cache: GraphReadCache | None = None,
+    timings_ms: dict[str, float] | None = None,
 ) -> list[tuple[str, float]]:
     """HippoRAG2-inspired PPR v2 with noise reduction.
 
@@ -213,6 +198,7 @@ async def personalized_pagerank_v2(
     reads = read_cache or GraphReadCache(backend)
 
     # --- 1. BFS subgraph discovery (depth 2) ---
+    stage_t0 = time()
     adj: dict[str, list[tuple[str, float]]] = {}
     node_kinds: dict[str, str] = {}  # node_id → kind
     visited: set[str] = set()
@@ -281,18 +267,15 @@ async def personalized_pagerank_v2(
             adj[nid] = []
 
     all_nodes = set(adj.keys()) | set(seed_scores.keys())
+    _record_timing(timings_ms, "bfs", stage_t0)
 
     if not any(adj.values()):
+        stage_t0 = time()
         sorted_seeds = sorted(seed_scores.items(), key=lambda x: x[1], reverse=True)
+        _record_timing(timings_ms, "sort", stage_t0)
         return sorted_seeds[:top_k]
 
-    # --- 2. Column-normalized adjacency ---
-    out_weight: dict[str, float] = {}
-    for src, neighbors in adj.items():
-        total = sum(w for _, w in neighbors)
-        out_weight[src] = total if total > 0 else 1.0
-
-    # --- 3. Personalization with passage boost ---
+    # --- 2. Personalization with passage boost ---
     boosted_seeds: dict[str, float] = {}
     for nid, score in seed_scores.items():
         if node_kinds.get(nid) == NodeKind.CHUNK:
@@ -305,27 +288,92 @@ async def personalized_pagerank_v2(
         return []
     personalization = {nid: s / total_seed for nid, s in boosted_seeds.items()}
 
-    # --- 4. Power iteration ---
-    rank: dict[str, float] = {nid: personalization.get(nid, 0.0) for nid in all_nodes}
-    teleport_coeff = 1.0 - damping
+    rank = _power_iteration(
+        adj,
+        personalization,
+        all_nodes,
+        damping=damping,
+        max_iter=max_iter,
+        tol=tol,
+        timings_ms=timings_ms,
+    )
 
-    for _ in range(max_iter):
-        new_rank = {nid: teleport_coeff * personalization.get(nid, 0.0) for nid in all_nodes}
+    # --- 3. Return top-k ---
+    stage_t0 = time()
+    sorted_results = sorted(
+        ((nid, rank.get(nid, 0.0)) for nid in all_nodes),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    _record_timing(timings_ms, "sort", stage_t0)
+    return sorted_results[:top_k]
 
-        for src, neighbors in adj.items():
-            if not neighbors:
+
+def _power_iteration(
+    adj: dict[str, list[tuple[str, float]]],
+    personalization: dict[str, float],
+    all_nodes: set[str],
+    *,
+    damping: float,
+    max_iter: int,
+    tol: float,
+    timings_ms: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Run sparse PPR power iteration over a pre-discovered adjacency graph."""
+    stage_t0 = time()
+    node_ids = list(all_nodes)
+    node_index = {nid: i for i, nid in enumerate(node_ids)}
+    node_count = len(node_ids)
+    transitions: list[tuple[int, list[tuple[int, float]]]] = []
+    for src, neighbors in adj.items():
+        if not neighbors:
+            continue
+        src_idx = node_index.get(src)
+        if src_idx is None:
+            continue
+        total = sum(w for _, w in neighbors)
+        src_out = total if total > 0 else 1.0
+        indexed_neighbors: list[tuple[int, float]] = []
+        for tgt, weight in neighbors:
+            tgt_idx = node_index.get(tgt)
+            if tgt_idx is None:
                 continue
-            src_rank = rank[src]
-            src_out = out_weight[src]
-            for tgt, w in neighbors:
-                contribution = damping * src_rank * w / src_out
-                new_rank[tgt] = new_rank.get(tgt, 0.0) + contribution
+            indexed_neighbors.append((tgt_idx, damping * weight / src_out))
+        if indexed_neighbors:
+            transitions.append((src_idx, indexed_neighbors))
 
-        diff = sum(abs(new_rank.get(nid, 0.0) - rank.get(nid, 0.0)) for nid in all_nodes)
+    teleport_coeff = 1.0 - damping
+    teleport = [0.0] * node_count
+    rank = [0.0] * node_count
+    for nid, score in personalization.items():
+        idx = node_index.get(nid)
+        if idx is None:
+            continue
+        teleport[idx] = teleport_coeff * score
+        rank[idx] = score
+    _record_timing(timings_ms, "prepare", stage_t0)
+
+    stage_t0 = time()
+    for _ in range(max_iter):
+        new_rank = teleport.copy()
+
+        for src, neighbors in transitions:
+            src_rank = rank[src]
+            if src_rank == 0.0:
+                continue
+            for tgt_idx, coefficient in neighbors:
+                contribution = src_rank * coefficient
+                new_rank[tgt_idx] += contribution
+
+        diff = sum(abs(new_rank[i] - rank[i]) for i in range(node_count))
         rank = new_rank
         if diff < tol:
             break
+    _record_timing(timings_ms, "iterate", stage_t0)
+    return dict(zip(node_ids, rank, strict=True))
 
-    # --- 5. Return top-k ---
-    sorted_results = sorted(rank.items(), key=lambda x: x[1], reverse=True)
-    return sorted_results[:top_k]
+
+def _record_timing(timings_ms: dict[str, float] | None, key: str, started_at: float) -> None:
+    if timings_ms is None:
+        return
+    timings_ms[key] = timings_ms.get(key, 0.0) + (time() - started_at) * 1000

@@ -115,6 +115,17 @@ class TestPPRBasic:
         assert backend.edge_calls == []
         assert sum(1 for node_ids, _direction in backend.edge_batch_calls if a.id in node_ids) == 1
 
+    async def test_timings_are_recorded(self, graph: SynapticGraph) -> None:
+        """Callers can inspect PPR sub-stage cost without changing results."""
+        a = await graph.add("A", "Node A")
+        b = await graph.add("B", "Node B")
+        await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
+
+        timings: dict[str, float] = {}
+        await personalized_pagerank(graph.backend, {a.id: 1.0}, timings_ms=timings)
+
+        assert {"bfs", "prepare", "iterate", "sort"}.issubset(timings)
+
 
 class TestPPRDamping:
     """Tests for damping factor effects."""
