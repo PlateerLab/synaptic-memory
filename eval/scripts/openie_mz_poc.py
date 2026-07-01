@@ -1271,6 +1271,7 @@ async def relation_probe_for_db(
     *,
     limit: int = 20,
     search_k: int = 10,
+    max_per_source_relation: int = 3,
 ) -> RelationProbeSummary:
     """Measure whether graph expansion surfaces OpenIE relation targets.
 
@@ -1287,7 +1288,11 @@ async def relation_probe_for_db(
     backend = SqliteGraphBackend(str(db_path))
     await backend.connect()
     try:
-        probes = await _openie_relation_probes(backend, limit=limit)
+        probes = await _openie_relation_probes(
+            backend,
+            limit=limit,
+            max_per_source_relation=max_per_source_relation,
+        )
         no_graph = EvidenceSearch(backend=backend, graph_expansion=False)
         with_graph = EvidenceSearch(backend=backend)
         for source, target, edge in probes:
@@ -1348,11 +1353,13 @@ async def _openie_relation_probes(
     backend: SqliteGraphBackend,
     *,
     limit: int,
+    max_per_source_relation: int = 3,
 ) -> list[tuple[Node, Node, Edge]]:
     nodes = await backend.list_nodes(kind=NodeKind.ENTITY, limit=1_000_000)
     by_id = {node.id: node for node in nodes}
     out: list[tuple[Node, Node, Edge]] = []
     seen_edges: set[str] = set()
+    source_relation_counts: dict[tuple[str, str], int] = {}
     for source in nodes:
         if len(out) >= limit:
             break
@@ -1368,12 +1375,19 @@ async def _openie_relation_probes(
             props = edge.properties or {}
             if props.get("is_openie") != "true":
                 continue
+            relation_key = str(edge.kind.value if isinstance(edge.kind, EdgeKind) else edge.kind)
+            pair_key = (source.id, relation_key)
+            if max_per_source_relation > 0 and (
+                source_relation_counts.get(pair_key, 0) >= max_per_source_relation
+            ):
+                continue
             target = by_id.get(edge.target_id)
             if target is None:
                 target = await backend.get_node(edge.target_id)
             if target is None or not source.title or not target.title:
                 continue
             seen_edges.add(edge.id)
+            source_relation_counts[pair_key] = source_relation_counts.get(pair_key, 0) + 1
             out.append((source, target, edge))
     return out
 
@@ -1746,7 +1760,7 @@ async def memory_health_for_db(path: Path) -> dict[str, object]:
     await backend.connect()
     try:
         graph = SynapticGraph(backend)
-        return asdict(await graph.memory_health())
+        return asdict(await graph.memory_health(persist_signals=False))
     finally:
         await backend.close()
 
@@ -1802,6 +1816,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--search-limit", type=int, default=30)
     parser.add_argument("--relation-probe-limit", type=int, default=20)
+    parser.add_argument("--relation-probe-max-per-source-relation", type=int, default=3)
     parser.add_argument("--min-relation-expanded-lift", type=int, default=0)
     parser.add_argument("--min-relation-evidence-lift", type=int, default=0)
     parser.add_argument("--min-strong-relation-evidence-rate", type=float, default=0.0)
@@ -1900,6 +1915,7 @@ async def main() -> int:
         args.openie_db,
         limit=0 if args.skip_openie else args.relation_probe_limit,
         search_k=min(10, max(1, args.search_limit)),
+        max_per_source_relation=args.relation_probe_max_per_source_relation,
     )
     if relation_probe.n:
         print(

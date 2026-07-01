@@ -34,6 +34,7 @@ evaluate_gates = openie_mz_poc.evaluate_gates
 graph_fingerprint = openie_mz_poc.graph_fingerprint
 load_queries = openie_mz_poc.load_queries
 load_cache_warm_rows = openie_mz_poc.load_cache_warm_rows
+memory_health_for_db = openie_mz_poc.memory_health_for_db
 preflight_dependencies = openie_mz_poc.preflight_dependencies
 precompute_query_embeddings = openie_mz_poc.precompute_query_embeddings
 profile_from_args = openie_mz_poc.profile_from_args
@@ -706,6 +707,103 @@ async def test_relation_probe_records_graph_lift_for_openie_relation(tmp_path: P
     assert payload["relation_groups"]["weak"]["n"] == 0
     assert payload["probes"][0]["target_id"] == "ent_roadmap"
     assert payload["probes"][0]["confidence"] == pytest.approx(0.9)
+
+
+@pytest.mark.asyncio
+async def test_relation_probe_caps_repeated_source_relation_pairs(tmp_path: Path):
+    db_path = tmp_path / "probe_cap.db"
+    backend = openie_mz_poc.SqliteGraphBackend(str(db_path))
+    await backend.connect()
+    try:
+        await backend.save_node(
+            Node(
+                id="ent_hub",
+                kind=NodeKind.ENTITY,
+                title="Hub",
+                content="Hub produced several artifacts.",
+                tags=["_openie", "_openie_entity"],
+            )
+        )
+        for idx in range(5):
+            target_id = f"ent_target_{idx}"
+            await backend.save_node(
+                Node(
+                    id=target_id,
+                    kind=NodeKind.ENTITY,
+                    title=f"Target {idx}",
+                    content=f"Produced target {idx}.",
+                    tags=["_openie", "_openie_entity"],
+                )
+            )
+            await backend.save_edge(
+                Edge(
+                    id=f"openie_hub_produced_{idx}",
+                    source_id="ent_hub",
+                    target_id=target_id,
+                    kind=EdgeKind.PRODUCED,
+                    weight=0.9,
+                    properties={
+                        "is_openie": "true",
+                        "relation": "produced",
+                        "confidence": "0.9",
+                    },
+                )
+            )
+    finally:
+        await backend.close()
+
+    summary = await relation_probe_for_db(
+        db_path,
+        limit=10,
+        search_k=10,
+        max_per_source_relation=2,
+    )
+
+    payload = summary.to_dict()
+    assert payload["n"] == 2
+    assert payload["by_relation"]["produced"]["n"] == 2
+    assert len({probe["edge_id"] for probe in payload["probes"]}) == 2
+
+
+@pytest.mark.asyncio
+async def test_eval_memory_health_is_read_only(tmp_path: Path):
+    db_path = tmp_path / "health.db"
+    backend = openie_mz_poc.SqliteGraphBackend(str(db_path))
+    await backend.connect()
+    try:
+        for node_id in ("ent_source", "ent_target"):
+            await backend.save_node(
+                Node(
+                    id=node_id,
+                    kind=NodeKind.ENTITY,
+                    title=node_id,
+                    content=node_id,
+                    tags=["_openie", "_openie_entity"],
+                )
+            )
+        await backend.save_edge(
+            Edge(
+                id="openie_low_confidence",
+                source_id="ent_source",
+                target_id="ent_target",
+                kind=EdgeKind.RELATED,
+                weight=0.4,
+                properties={"is_openie": "true", "confidence": "0.4"},
+            )
+        )
+    finally:
+        await backend.close()
+
+    report = await memory_health_for_db(db_path)
+
+    backend = openie_mz_poc.SqliteGraphBackend(str(db_path))
+    await backend.connect()
+    try:
+        nodes = await backend.list_nodes(limit=100)
+    finally:
+        await backend.close()
+    assert report["signal_count"] >= 1
+    assert not any("_memory_signal" in (node.tags or []) for node in nodes)
 
 
 @pytest.mark.asyncio
