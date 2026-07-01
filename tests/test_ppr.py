@@ -5,8 +5,9 @@ from __future__ import annotations
 import pytest
 
 from synaptic.backends.memory import MemoryBackend
+from synaptic.extensions.graph_read_cache import GraphReadCache
 from synaptic.graph import SynapticGraph
-from synaptic.models import EdgeKind
+from synaptic.models import Edge, EdgeKind
 from synaptic.ppr import personalized_pagerank
 
 
@@ -78,6 +79,32 @@ class TestPPRBasic:
         result_dict = dict(result)
         # A should score higher than B due to heavier seed weight
         assert result_dict[a.id] > result_dict[b.id]
+
+    async def test_reuses_prewarmed_read_cache(self) -> None:
+        """PPR should not refetch edges already loaded by graph expansion."""
+
+        class CountingMemoryBackend(MemoryBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.edge_calls: list[tuple[str, str]] = []
+
+            async def get_edges(self, node_id: str, *, direction: str = "both") -> list[Edge]:
+                self.edge_calls.append((node_id, direction))
+                return await super().get_edges(node_id, direction=direction)
+
+        backend = CountingMemoryBackend()
+        await backend.connect()
+        graph = SynapticGraph(backend)
+        a = await graph.add("A", "Node A")
+        b = await graph.add("B", "Node B")
+        await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
+
+        backend.edge_calls.clear()
+        reads = GraphReadCache(backend)
+        await reads.get_edges(a.id, direction="both")
+        await personalized_pagerank(backend, {a.id: 1.0}, read_cache=reads)
+
+        assert backend.edge_calls.count((a.id, "both")) == 1
 
 
 class TestPPRDamping:

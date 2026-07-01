@@ -326,6 +326,38 @@ async def test_references_expansion_noop_without_edges():
     assert [r.reason for r in results] == ["seed"]
 
 
+@pytest.mark.asyncio
+async def test_seed_edges_are_cached_across_expansion_paths():
+    """A seed can be inspected by REFERENCES, document-scope, and RELATED
+    paths. The per-search cache should make that one backend edge read."""
+
+    class CountingMemoryBackend(MemoryBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.edge_calls: list[tuple[str, str]] = []
+
+        async def get_edges(self, node_id: str, *, direction: str = "both") -> list[Edge]:
+            self.edge_calls.append((node_id, direction))
+            return await super().get_edges(node_id, direction=direction)
+
+    backend = CountingMemoryBackend()
+    await backend.connect()
+    seed = Node(id="seed", kind=NodeKind.ENTITY, title="Seed", content="seed")
+    cited = Node(id="cited", kind=NodeKind.ENTITY, title="Cited", content="cited")
+    related = Node(id="related", kind=NodeKind.ENTITY, title="Related", content="related")
+    for node in (seed, cited, related):
+        await backend.save_node(node)
+    await backend.save_edge(Edge(source_id=seed.id, target_id=cited.id, kind=EdgeKind.REFERENCES))
+    await backend.save_edge(Edge(source_id=seed.id, target_id=related.id, kind=EdgeKind.RELATED))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[seed])
+
+    assert {"cited", "related"}.issubset({r.node.id for r in results})
+    assert backend.edge_calls.count(("seed", "both")) == 1
+    assert ("seed", "incoming") not in backend.edge_calls
+
+
 # --- relevance-aware budget (opt-in) -----------------------------------
 
 
