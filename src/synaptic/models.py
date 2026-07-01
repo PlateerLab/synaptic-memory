@@ -284,8 +284,12 @@ class MemoryHealthReport:
     max_memory_signal_penalty: float = 0.0
     top_reinforced_node_ids: list[str] = field(default_factory=_str_list)
     top_reinforced_edge_ids: list[str] = field(default_factory=_str_list)
+    top_reinforced_node_scores: dict[str, float] = field(default_factory=_float_dict)
+    top_reinforced_edge_scores: dict[str, float] = field(default_factory=_float_dict)
     top_demoted_node_ids: list[str] = field(default_factory=_str_list)
     top_demoted_edge_ids: list[str] = field(default_factory=_str_list)
+    top_demoted_node_scores: dict[str, float] = field(default_factory=_float_dict)
+    top_demoted_edge_scores: dict[str, float] = field(default_factory=_float_dict)
     top_suspect_node_ids: list[str] = field(default_factory=_str_list)
     top_suspect_edge_ids: list[str] = field(default_factory=_str_list)
     top_suspect_node_counts: dict[str, int] = field(default_factory=_int_dict)

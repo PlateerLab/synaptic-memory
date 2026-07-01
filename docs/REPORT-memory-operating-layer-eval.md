@@ -1753,6 +1753,13 @@ per-chunk fallback을 유지한다.
   분리해서 볼 수 있다. POC gate는 `health_reports_signal_kind_counts`를 추가해 `41/41`
   PASS했다. 대표 결과는
   `signal_kind_counts={"repeated_failure": 2, "stale_memory": 2, "possible_conflict": 2, "low_confidence_relation": 1, "possible_supersession": 1, "drift_spike": 1}`였다.
+- Memory health top score maps는 top reinforced/demoted node/edge ID 목록에 대응하는 실제
+  scope score 값을 함께 노출한다. 운영자는 이제 별도 DB 조회 없이 어떤 기억이 얼마나 강하게
+  강화되거나 감점됐는지 health report에서 바로 볼 수 있다. POC gate는
+  `health_reports_top_score_maps`를 추가해 `42/42` PASS했다. 대표 결과는
+  `top_reinforced_edge_scores={"poc_edge_score_boost_relation": 1.0, "c9d2dba80f0a4131": 0.2}`,
+  `top_demoted_node_scores={"poc_scope_demoted_memory": -1.0, "poc_scope_score_failed_memory": -0.75, "poc_scoped_negative_memory": -0.25}`,
+  `top_demoted_edge_scores={"poc_edge_score_demoted_relation": -1.0}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

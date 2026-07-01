@@ -742,6 +742,16 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 scope_demoted.id in ranking_health.top_demoted_node_ids
                 and "poc_edge_score_demoted_relation" in ranking_health.top_demoted_edge_ids
             ),
+            "health_reports_top_score_maps": (
+                ranking_health.top_reinforced_edge_scores.get("poc_edge_score_boost_relation", 0.0)
+                > 0.0
+                and ranking_health.top_demoted_node_scores.get(scope_demoted.id, 0.0) < 0.0
+                and ranking_health.top_demoted_edge_scores.get(
+                    "poc_edge_score_demoted_relation",
+                    0.0,
+                )
+                < 0.0
+            ),
             "health_counts_openie_edges_by_provenance": health.openie_artifact_count == 1,
             "edge_provenance_roundtrip": (
                 roundtrip_openie.properties.get("source_event_id") == semantic_event.id

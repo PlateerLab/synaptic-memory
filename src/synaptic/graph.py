@@ -3445,12 +3445,24 @@ class SynapticGraph:
             max_memory_signal_penalty=max_signal_penalty,
             top_reinforced_node_ids=[score.node_id for score in top_node_scores if score.node_id],
             top_reinforced_edge_ids=[score.edge_id for score in top_edge_scores if score.edge_id],
+            top_reinforced_node_scores={
+                score.node_id: score.score for score in top_node_scores if score.node_id
+            },
+            top_reinforced_edge_scores={
+                score.edge_id: score.score for score in top_edge_scores if score.edge_id
+            },
             top_demoted_node_ids=[
                 score.node_id for score in top_demoted_node_scores if score.node_id
             ],
             top_demoted_edge_ids=[
                 score.edge_id for score in top_demoted_edge_scores if score.edge_id
             ],
+            top_demoted_node_scores={
+                score.node_id: score.score for score in top_demoted_node_scores if score.node_id
+            },
+            top_demoted_edge_scores={
+                score.edge_id: score.score for score in top_demoted_edge_scores if score.edge_id
+            },
             top_suspect_node_ids=[node_id for node_id, _ in suspect_node_counts.most_common(10)],
             top_suspect_edge_ids=[edge_id for edge_id, _ in suspect_edge_counts.most_common(10)],
             top_suspect_node_counts={
