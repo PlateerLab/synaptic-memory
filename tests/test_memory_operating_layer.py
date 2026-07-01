@@ -1555,6 +1555,31 @@ async def test_memory_health_summarizes_event_scope_counts():
 
 
 @pytest.mark.asyncio
+async def test_memory_health_summarizes_score_scope_counts():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope_a = MemoryScope(workspace_id="ws", user_id="u1")
+    scope_b = MemoryScope(workspace_id="ws", user_id="u2")
+    await backend.save_memory_score(MemoryScore(scope_key=scope_a.key, node_id="a", score=0.8))
+    await backend.save_memory_score(MemoryScore(scope_key=scope_a.key, edge_id="edge_a", score=0.6))
+    await backend.save_memory_score(MemoryScore(scope_key=scope_b.key, node_id="b", score=-0.4))
+    await backend.save_memory_score(MemoryScore(scope_key="global", node_id="g", score=1.0))
+
+    scoped_health = await graph.memory_health(scope=scope_a, persist_signals=False)
+    global_health = await graph.memory_health(persist_signals=False)
+
+    assert scoped_health.memory_score_scope_counts == {
+        "global": 1,
+        scope_a.key: 2,
+        scope_b.key: 1,
+    }
+    assert scoped_health.top_reinforced_node_ids == ["a"]
+    assert scoped_health.top_reinforced_edge_ids == ["edge_a"]
+    assert global_health.memory_score_scope_counts == scoped_health.memory_score_scope_counts
+    assert global_health.top_reinforced_node_ids == ["g"]
+
+
+@pytest.mark.asyncio
 async def test_memory_health_counts_semantic_failures_without_selected_chunks():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)

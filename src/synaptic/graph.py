@@ -3294,6 +3294,10 @@ class SynapticGraph:
             scope=scope, since=since, limit=100_000
         )
         score_scope_key = memory_scope_key(effective_scope)
+        all_scores = await self._list_memory_scores(
+            scope_key=None,
+            limit=100_000,
+        )
         node_scores = await self._list_memory_scores(
             scope_key=score_scope_key,
             edge_ids=[""],
@@ -3322,6 +3326,7 @@ class SynapticGraph:
         retrieval_event_scope_counts = Counter(
             memory_scope_key(event.scope) for event in retrieval_events
         )
+        memory_score_scope_counts = Counter(score.scope_key for score in all_scores)
         semantic_events = [
             event for event in memory_events if str(event.kind) == MemoryEventKind.SEMANTIC_EXTRACT
         ]
@@ -3473,6 +3478,7 @@ class SynapticGraph:
             memory_event_scope_counts=dict(memory_event_scope_counts),
             retrieval_events=len(retrieval_events),
             retrieval_event_scope_counts=dict(retrieval_event_scope_counts),
+            memory_score_scope_counts=dict(memory_score_scope_counts),
             signal_count=len(signals),
             new_entity_count=signal_kinds.count(MemorySignalKind.NEW_ENTITY),
             new_relation_count=signal_kinds.count(MemorySignalKind.NEW_RELATION),
@@ -3778,7 +3784,7 @@ class SynapticGraph:
     async def _list_memory_scores(
         self,
         *,
-        scope_key: str,
+        scope_key: str | None,
         node_ids: list[str] | None = None,
         edge_ids: list[str] | None = None,
         limit: int,

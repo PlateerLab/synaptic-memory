@@ -259,6 +259,7 @@ class MemoryHealthReport:
     memory_event_scope_counts: dict[str, int] = field(default_factory=_int_dict)
     retrieval_events: int = 0
     retrieval_event_scope_counts: dict[str, int] = field(default_factory=_int_dict)
+    memory_score_scope_counts: dict[str, int] = field(default_factory=_int_dict)
     signal_count: int = 0
     new_entity_count: int = 0
     new_relation_count: int = 0
