@@ -12,7 +12,11 @@ from __future__ import annotations
 import pytest
 
 from synaptic.backends.memory import MemoryBackend
-from synaptic.extensions.evidence_search import EvidenceSearch, _bounded_ppr_seed_scores
+from synaptic.extensions.evidence_search import (
+    EvidenceSearch,
+    _aggregate_candidate_pool_limit,
+    _bounded_ppr_seed_scores,
+)
 from synaptic.extensions.graph_expander import ExpansionBudget
 from synaptic.models import (
     ConsolidationLevel,
@@ -267,6 +271,41 @@ class TestPipelineShape:
         assert "n79" in bounded
         assert "n48" in bounded
         assert "n47" not in bounded
+
+    async def test_aggregate_candidate_pool_limit_scales_with_k(self):
+        assert _aggregate_candidate_pool_limit(6) == 64
+        assert _aggregate_candidate_pool_limit(30) == 64
+        assert _aggregate_candidate_pool_limit(40) == 80
+
+    async def test_aggregate_candidate_pool_limit_is_recorded(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await _seed_graph(backend)
+
+        searcher = EvidenceSearch(backend=backend, aggregate_candidate_pool_limit=7)
+        result = await searcher.search("규정", k=2)
+
+        assert result.diagnostics["aggregate_pool_limit"] == 7.0
+
+    async def test_aggregate_candidate_pool_limit_default_is_recorded(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await _seed_graph(backend)
+
+        result = await EvidenceSearch(backend=backend).search("규정", k=40)
+
+        assert result.diagnostics["aggregate_pool_limit"] == 80.0
+
+    async def test_aggregate_candidate_pool_limit_env_wins(self, monkeypatch):
+        monkeypatch.setenv("SYNAPTIC_AGGREGATE_CANDIDATE_POOL_LIMIT", "13")
+        backend = MemoryBackend()
+        await backend.connect()
+        await _seed_graph(backend)
+
+        searcher = EvidenceSearch(backend=backend, aggregate_candidate_pool_limit=7)
+        result = await searcher.search("규정", k=40)
+
+        assert result.diagnostics["aggregate_pool_limit"] == 13.0
 
     async def test_expanded_larger_than_seeds(self):
         backend = MemoryBackend()
