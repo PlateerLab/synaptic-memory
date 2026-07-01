@@ -3262,6 +3262,30 @@ class SynapticGraph:
             if "_openie" in (node.tags or []) or "_openie_entity" in (node.tags or [])
         )
         openie_edges = sum(1 for edge in edges if edge.id.startswith("openie_"))
+        boosted_retrieval_count = 0
+        penalized_retrieval_count = 0
+        boosted_node_count = 0
+        penalized_node_count = 0
+        max_scope_boost = 0.0
+        max_signal_penalty = 0.0
+        for event in retrieval_events:
+            props = event.properties or {}
+            boosted_nodes = _prop_int(props, "memory_scope_boosted_nodes", 0)
+            penalized_nodes = _prop_int(props, "memory_signal_penalized_nodes", 0)
+            if boosted_nodes > 0:
+                boosted_retrieval_count += 1
+                boosted_node_count += boosted_nodes
+                max_scope_boost = max(
+                    max_scope_boost,
+                    _prop_float(props, "memory_scope_max_abs_boost", 0.0),
+                )
+            if penalized_nodes > 0:
+                penalized_retrieval_count += 1
+                penalized_node_count += penalized_nodes
+                max_signal_penalty = max(
+                    max_signal_penalty,
+                    _prop_float(props, "memory_signal_max_penalty", 0.0),
+                )
 
         return MemoryHealthReport(
             scope_key=memory_scope_key(effective_scope),
@@ -3283,6 +3307,12 @@ class SynapticGraph:
             drift_spike_count=signal_kinds.count(MemorySignalKind.DRIFT_SPIKE),
             openie_artifact_count=openie_nodes + openie_edges,
             openie_failure_rate=(failures / selected) if selected else 0.0,
+            memory_boosted_retrieval_count=boosted_retrieval_count,
+            memory_penalized_retrieval_count=penalized_retrieval_count,
+            memory_boosted_node_count=boosted_node_count,
+            memory_penalized_node_count=penalized_node_count,
+            max_memory_scope_boost=max_scope_boost,
+            max_memory_signal_penalty=max_signal_penalty,
             top_reinforced_node_ids=[score.node_id for score in scores if score.node_id],
         )
 

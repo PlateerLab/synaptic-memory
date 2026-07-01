@@ -1218,6 +1218,56 @@ async def test_memory_monitor_flags_suspect_memory_without_deleting_it():
 
 
 @pytest.mark.asyncio
+async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="ret_boost",
+            query="boost",
+            scope=scope,
+            properties={
+                "memory_scope_boosted_nodes": "2.000000",
+                "memory_scope_max_abs_boost": "0.100000",
+            },
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="ret_penalty",
+            query="penalty",
+            scope=scope,
+            properties={
+                "memory_signal_penalized_nodes": "1.000000",
+                "memory_signal_max_penalty": "0.050000",
+            },
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="ret_other_scope",
+            query="other",
+            scope=MemoryScope(user_id="u2"),
+            properties={
+                "memory_scope_boosted_nodes": "9.000000",
+                "memory_signal_penalized_nodes": "9.000000",
+            },
+        )
+    )
+
+    health = await graph.memory_health(scope=scope, persist_signals=False)
+
+    assert health.retrieval_events == 2
+    assert health.memory_boosted_retrieval_count == 1
+    assert health.memory_penalized_retrieval_count == 1
+    assert health.memory_boosted_node_count == 2
+    assert health.memory_penalized_node_count == 1
+    assert health.max_memory_scope_boost == pytest.approx(0.10)
+    assert health.max_memory_signal_penalty == pytest.approx(0.05)
+
+
+@pytest.mark.asyncio
 async def test_memory_monitor_flags_recent_growth_and_reinforcement_signals_idempotently():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)
