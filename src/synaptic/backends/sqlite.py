@@ -551,6 +551,47 @@ class SQLiteBackend:
             rows = await cur.fetchall()
         return [_row_to_edge(r) for r in rows]
 
+    async def get_edges_batch(
+        self, node_ids: list[str], *, direction: str = "both"
+    ) -> dict[str, list[Edge]]:
+        unique_ids = list(dict.fromkeys(node_ids))
+        result: dict[str, list[Edge]] = {nid: [] for nid in unique_ids}
+        if not unique_ids:
+            return result
+
+        db = self._db()
+        for offset in range(0, len(unique_ids), 500):
+            chunk = unique_ids[offset : offset + 500]
+            chunk_set = set(chunk)
+            placeholders = ",".join("?" for _ in chunk)
+            if direction == "outgoing":
+                sql = f"SELECT * FROM syn_edges WHERE source_id IN ({placeholders})"
+                params: list[str] = list(chunk)
+            elif direction == "incoming":
+                sql = f"SELECT * FROM syn_edges WHERE target_id IN ({placeholders})"
+                params = list(chunk)
+            else:
+                sql = (
+                    f"SELECT * FROM syn_edges WHERE source_id IN ({placeholders}) "
+                    f"OR target_id IN ({placeholders})"
+                )
+                params = list(chunk) + list(chunk)
+
+            async with db.execute(sql, params) as cur:
+                rows = await cur.fetchall()
+
+            for row in rows:
+                edge = _row_to_edge(row)
+                if direction in ("both", "outgoing") and edge.source_id in chunk_set:
+                    result[edge.source_id].append(edge)
+                if (
+                    direction in ("both", "incoming")
+                    and edge.target_id in chunk_set
+                    and not (direction == "both" and edge.target_id == edge.source_id)
+                ):
+                    result[edge.target_id].append(edge)
+        return result
+
     async def update_edge(self, edge: Edge) -> None:
         db = self._db()
         await db.execute(

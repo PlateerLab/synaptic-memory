@@ -76,6 +76,26 @@ class TestSQLiteEdges:
         both = await sqlite.get_edges(n1.id, direction="both")
         assert len(both) == 1
 
+    async def test_get_edges_batch_matches_direction_filters(self, sqlite: SQLiteBackend) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        n3 = Node(title="C")
+        await sqlite.save_node(n1)
+        await sqlite.save_node(n2)
+        await sqlite.save_node(n3)
+        await sqlite.save_edge(Edge(id="a_b", source_id=n1.id, target_id=n2.id))
+        await sqlite.save_edge(Edge(id="c_a", source_id=n3.id, target_id=n1.id))
+
+        both = await sqlite.get_edges_batch([n1.id, n2.id], direction="both")
+        assert {edge.id for edge in both[n1.id]} == {"a_b", "c_a"}
+        assert {edge.id for edge in both[n2.id]} == {"a_b"}
+
+        outgoing = await sqlite.get_edges_batch([n1.id, n2.id], direction="outgoing")
+        incoming = await sqlite.get_edges_batch([n1.id, n2.id], direction="incoming")
+        assert {edge.id for edge in outgoing[n1.id]} == {"a_b"}
+        assert incoming[n1.id][0].id == "c_a"
+        assert incoming[n2.id][0].id == "a_b"
+
     async def test_batch_upsert_converges_on_source_target_kind(
         self, sqlite: SQLiteBackend
     ) -> None:

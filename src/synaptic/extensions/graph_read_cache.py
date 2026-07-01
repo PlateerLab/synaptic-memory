@@ -58,6 +58,42 @@ class GraphReadCache:
         }
 
     async def get_edges(self, node_id: str, *, direction: Direction = "both") -> list[Edge]:
+        return (await self.get_edges_many([node_id], direction=direction)).get(node_id, [])
+
+    async def get_edges_many(
+        self, node_ids: list[str], *, direction: Direction = "both"
+    ) -> dict[str, list[Edge]]:
+        """Return edge lists for multiple nodes, using backend batch reads if available."""
+        unique_ids = list(dict.fromkeys(node_ids))
+        if not unique_ids:
+            return {}
+
+        result: dict[str, list[Edge]] = {}
+        missing: list[str] = []
+        for node_id in unique_ids:
+            cached = self._cached_edges(node_id, direction)
+            if cached is None:
+                missing.append(node_id)
+            else:
+                result[node_id] = cached
+
+        if missing:
+            get_batch = getattr(self._backend, "get_edges_batch", None)
+            if callable(get_batch):
+                fetched = await get_batch(missing, direction=direction)
+                for node_id in missing:
+                    edges = list(fetched.get(node_id, []))
+                    self._edge_cache[(node_id, direction)] = edges
+                    result[node_id] = edges
+            else:
+                for node_id in missing:
+                    edges = await self._backend.get_edges(node_id, direction=direction)
+                    self._edge_cache[(node_id, direction)] = edges
+                    result[node_id] = edges
+
+        return result
+
+    def _cached_edges(self, node_id: str, direction: Direction) -> list[Edge] | None:
         key = (node_id, direction)
         cached = self._edge_cache.get(key)
         if cached is None:
@@ -74,8 +110,6 @@ class GraphReadCache:
                     cached = _merge_edges(outgoing, incoming)
                     self._edge_cache[key] = cached
                     return cached
-            cached = await self._backend.get_edges(node_id, direction=direction)
-            self._edge_cache[key] = cached
         return cached
 
     async def get_neighbors(self, node_id: str, *, depth: int = 1) -> list[tuple[Node, Edge]]:
