@@ -496,6 +496,35 @@ class TestReferenceCompanionAttach:
         result = agg.aggregate(scored=[chosen, orphan], k=1)
         assert {e.node.id for e in result} == {"anchor"}
 
+    def test_companion_attach_is_capped_per_anchor(self):
+        agg = EvidenceAggregator()
+        chosen = ScoredCandidate(
+            node=_node("anchor", doc_id="anchor"),
+            total=0.9,
+            lexical=0.9,
+            semantic=0.0,
+            graph=0.5,
+            structural=0.0,
+            reason="seed",
+        )
+        companions = [
+            ScoredCandidate(
+                node=_node(f"cited_{i}", doc_id=f"cited_{i}"),
+                total=0.05 - i * 0.01,
+                lexical=0.0,
+                semantic=0.0,
+                graph=0.1,
+                structural=0.0,
+                reason="references",
+                anchor_id="anchor",
+            )
+            for i in range(5)
+        ]
+
+        result = agg.aggregate(scored=[chosen, *companions], k=4)
+
+        assert [e.node.id for e in result] == ["anchor", "cited_0", "cited_1", "cited_2"]
+
 
 class TestBoundedPassagePool:
     def test_document_diversity_candidate_survives_pool_bound(self):
