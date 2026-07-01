@@ -13,7 +13,15 @@ from typing import ClassVar
 import pytest
 
 from synaptic.backends.memory import MemoryBackend
-from synaptic.models import ConsolidationLevel, Edge, EdgeKind, Node, NodeKind
+from synaptic.models import (
+    ConsolidationLevel,
+    Edge,
+    EdgeKind,
+    MemoryScope,
+    Node,
+    NodeKind,
+    RetrievalEvent,
+)
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "eval" / "scripts" / "openie_mz_poc.py"
 _SPEC = importlib.util.spec_from_file_location("openie_mz_poc", _SCRIPT)
@@ -858,6 +866,19 @@ async def test_eval_memory_health_is_read_only(tmp_path: Path):
                 properties={"is_openie": "true", "confidence": "0.4"},
             )
         )
+        await backend.save_retrieval_event(
+            RetrievalEvent(
+                id="ret_memory_ranked",
+                query="ranked memory",
+                scope=MemoryScope(),
+                properties={
+                    "memory_scope_boosted_nodes": "2.000000",
+                    "memory_scope_max_abs_boost": "0.100000",
+                    "memory_signal_penalized_nodes": "1.000000",
+                    "memory_signal_max_penalty": "0.050000",
+                },
+            )
+        )
     finally:
         await backend.close()
 
@@ -870,6 +891,12 @@ async def test_eval_memory_health_is_read_only(tmp_path: Path):
     finally:
         await backend.close()
     assert report["signal_count"] >= 1
+    assert report["memory_boosted_retrieval_count"] == 1
+    assert report["memory_penalized_retrieval_count"] == 1
+    assert report["memory_boosted_node_count"] == 2
+    assert report["memory_penalized_node_count"] == 1
+    assert report["max_memory_scope_boost"] == pytest.approx(0.10)
+    assert report["max_memory_signal_penalty"] == pytest.approx(0.05)
     assert not any("_memory_signal" in (node.tags or []) for node in nodes)
 
 
