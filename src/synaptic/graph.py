@@ -3324,6 +3324,13 @@ class SynapticGraph:
             MemorySignalKind.REPEATED_FAILURE,
             MemorySignalKind.DRIFT_SPIKE,
         }
+        suspect_node_counts: Counter[str] = Counter()
+        suspect_edge_counts: Counter[str] = Counter()
+        for signal in signals:
+            if MemorySignalKind(str(signal.kind)) not in suspect_kinds:
+                continue
+            suspect_node_counts.update(signal.node_ids)
+            suspect_edge_counts.update(signal.edge_ids)
         openie_nodes = sum(
             1
             for node in nodes
@@ -3441,6 +3448,14 @@ class SynapticGraph:
             top_demoted_edge_ids=[
                 score.edge_id for score in top_demoted_edge_scores if score.edge_id
             ],
+            top_suspect_node_ids=[node_id for node_id, _ in suspect_node_counts.most_common(10)],
+            top_suspect_edge_ids=[edge_id for edge_id, _ in suspect_edge_counts.most_common(10)],
+            top_suspect_node_counts={
+                node_id: count for node_id, count in suspect_node_counts.most_common(10)
+            },
+            top_suspect_edge_counts={
+                edge_id: count for edge_id, count in suspect_edge_counts.most_common(10)
+            },
             top_penalty_signal_ids=[
                 signal_id for signal_id, _ in penalty_signal_counts.most_common(10)
             ],

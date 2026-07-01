@@ -1261,6 +1261,12 @@ async def test_memory_monitor_flags_suspect_memory_without_deleting_it():
     health = await graph.memory_health()
     assert health.suspect_count >= 3
     assert health.openie_artifact_count == 1
+    assert {"a", "b", "failed"}.issubset(set(health.top_suspect_node_ids))
+    assert "custom_openie_c1" in health.top_suspect_edge_ids
+    assert health.top_suspect_node_counts["a"] == 2
+    assert health.top_suspect_node_counts["b"] == 2
+    assert health.top_suspect_node_counts["failed"] == 1
+    assert health.top_suspect_edge_counts["custom_openie_c1"] == 2
 
 
 @pytest.mark.asyncio
