@@ -81,6 +81,7 @@ _RRF_K = 60
 _RRF_VEC_K = 90
 _PPR_SEED_MIN = 32
 _PPR_SEED_MULTIPLIER = 1
+_PPR_RESULT_MULTIPLIER = 2
 
 # Anchor-coverage thresholds for the adaptive controller (SYNAPTIC_ADAPTIVE):
 # a query whose anchor terms overlap the retrieved docs >= HI is lexically
@@ -728,7 +729,7 @@ class EvidenceSearch:
                     # every neighbour's own edge list.
                     bfs_depth=1,
                     light_edges=True,
-                    top_k=k * 3,
+                    top_k=k * _PPR_RESULT_MULTIPLIER,
                     read_cache=graph_reads,
                     timings_ms=ppr_timings,
                 )
