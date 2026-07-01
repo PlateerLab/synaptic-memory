@@ -1513,6 +1513,41 @@ async def test_memory_health_summarizes_memory_event_kinds():
 
 
 @pytest.mark.asyncio
+async def test_memory_health_counts_semantic_failures_without_selected_chunks():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    await backend.save_memory_event(
+        MemoryEvent(
+            id="semantic_zero_selected_failures",
+            kind=MemoryEventKind.SEMANTIC_EXTRACT,
+            scope=scope,
+            source="openie",
+            source_id="chunkless",
+            properties={
+                "chunks_selected": "0",
+                "extraction_failures": "2",
+                "extractor": "OpenIELinker",
+                "model": "unstable-model",
+                "prompt_version": "v-zero-selected",
+            },
+        )
+    )
+
+    health = await graph.memory_health(scope=scope, persist_signals=False)
+    profile_key = (
+        "source=openie;extractor=OpenIELinker;model=unstable-model;prompt_version=v-zero-selected"
+    )
+
+    assert health.semantic_extract_failure_count == 2
+    assert health.semantic_extract_attempt_count == 2
+    assert health.openie_failure_rate == pytest.approx(1.0)
+    assert health.semantic_extract_failure_counts[profile_key] == 2
+    assert health.semantic_extract_attempt_counts[profile_key] == 2
+    assert health.semantic_extract_failure_rates[profile_key] == pytest.approx(1.0)
+
+
+@pytest.mark.asyncio
 async def test_memory_monitor_flags_recent_growth_and_reinforcement_signals_idempotently():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)
