@@ -255,6 +255,7 @@ class MemoryHealthReport:
     total_nodes: int = 0
     total_edges: int = 0
     memory_events: int = 0
+    memory_event_kind_counts: dict[str, int] = field(default_factory=_int_dict)
     retrieval_events: int = 0
     signal_count: int = 0
     new_entity_count: int = 0

@@ -1468,6 +1468,51 @@ async def test_memory_health_summarizes_feedback_outcomes():
 
 
 @pytest.mark.asyncio
+async def test_memory_health_summarizes_memory_event_kinds():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    for kind in (
+        MemoryEventKind.INGEST,
+        MemoryEventKind.UPDATE,
+        MemoryEventKind.DELETE,
+        MemoryEventKind.SEMANTIC_EXTRACT,
+        MemoryEventKind.RETRIEVAL,
+        MemoryEventKind.FEEDBACK,
+        MemoryEventKind.SIGNAL,
+    ):
+        await backend.save_memory_event(
+            MemoryEvent(
+                id=f"event_{kind}",
+                kind=kind,
+                scope=scope,
+                source="unit",
+            )
+        )
+    await backend.save_memory_event(
+        MemoryEvent(
+            id="other_scope_ingest",
+            kind=MemoryEventKind.INGEST,
+            scope=MemoryScope(user_id="u2"),
+            source="unit",
+        )
+    )
+
+    health = await graph.memory_health(scope=scope, persist_signals=False)
+
+    assert health.memory_events == 7
+    assert health.memory_event_kind_counts == {
+        str(MemoryEventKind.INGEST): 1,
+        str(MemoryEventKind.UPDATE): 1,
+        str(MemoryEventKind.DELETE): 1,
+        str(MemoryEventKind.SEMANTIC_EXTRACT): 1,
+        str(MemoryEventKind.RETRIEVAL): 1,
+        str(MemoryEventKind.FEEDBACK): 1,
+        str(MemoryEventKind.SIGNAL): 1,
+    }
+
+
+@pytest.mark.asyncio
 async def test_memory_monitor_flags_recent_growth_and_reinforcement_signals_idempotently():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)

@@ -668,6 +668,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and health.feedback_signal_counts.get(str(FeedbackSignal.TASK_SUCCESS), 0) >= 5
                 and health.feedback_signal_counts.get(str(FeedbackSignal.TASK_FAILURE), 0) >= 1
             ),
+            "health_reports_memory_event_kind_counts": (
+                health.memory_event_kind_counts.get(str(MemoryEventKind.INGEST), 0) >= 1
+                and health.memory_event_kind_counts.get(str(MemoryEventKind.SEMANTIC_EXTRACT), 0)
+                >= 4
+                and health.memory_event_kind_counts.get(str(MemoryEventKind.RETRIEVAL), 0) >= 1
+                and health.memory_event_kind_counts.get(str(MemoryEventKind.FEEDBACK), 0) >= 7
+                and health.memory_event_kind_counts.get(str(MemoryEventKind.SIGNAL), 0) >= 1
+            ),
             "scope_score_repeated_failure_signal_created": (scope_score_failure_signal is not None),
             "strong_negative_scope_score_signal_created": (
                 strong_negative_signal is not None
