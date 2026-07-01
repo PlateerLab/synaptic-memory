@@ -957,6 +957,7 @@ Memory health snapshot:
 | GraphExpander document-scope PART_OF guard | `mz_openie_document_scope_partof_results.json` | `1.7s` | `0:09.18` | PASS |
 | SQLite FTS light LIKE fallback | `mz_openie_fts_like_light_results.json` | `2.5s` | `0:10.13` | PASS |
 | EvidenceAggregator reference companion skip | `mz_openie_agg_reference_skip_results.json` | `0.9s` | `0:06.77` | PASS |
+| EvidenceAggregator active remaining guard | `mz_openie_agg_active_remaining_results.json` | `1.0s` | `0:07.67` | PASS |
 
 핵심 검색/게이트 지표는 GraphExpander document related skip run에서도 유지됐다:
 
@@ -1344,6 +1345,13 @@ per-chunk fallback을 유지한다.
   baseline/OpenIE `1,266/1,508`을 유지했다. MZ run의 aggregate stage는 baseline
   `49.5ms -> 44.6ms`, OpenIE `40.2ms -> 42.7ms`로 run noise가 있어 broad latency claim보다
   companion-heavy path cleanup으로 해석한다.
+- EvidenceAggregator active remaining guard는 companion attach 이후 실제 active candidate set인
+  `remaining_ids`가 비었을 때 greedy MMR loop를 즉시 종료한다. 이미 dead path가 된 similarity
+  helper들도 제거했다. 결과 품질은 유지됐고, 200-chunk cache-only gate는 PASS, relation
+  expanded/evidence `93/93`, `47/93`, scored candidates baseline/OpenIE `1,266/1,508`을
+  유지했다. 이전 reference companion skip run 대비 aggregate stage는 baseline
+  `44.569ms -> 43.737ms`, OpenIE `42.748ms -> 40.529ms`였으며, 이는 품질 변화 없는
+  stale-scan cleanup으로 해석한다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

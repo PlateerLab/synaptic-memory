@@ -303,9 +303,6 @@ class EvidenceAggregator:
                 token_cache[cache_key] = cached
             return cached
 
-        def cand_tokens(cand: ScoredCandidate) -> set[str]:
-            return cand_entry(cand)[1]
-
         def max_selected_similarity(cand: ScoredCandidate) -> float:
             if not selected_entries:
                 return 0.0
@@ -349,7 +346,7 @@ class EvidenceAggregator:
         # --- Pass 2: greedy MMR fill ---
         references_by_anchor = _references_by_anchor(remaining)
         remaining_ids = {id(cand) for cand in remaining}
-        while len(selected) < k and remaining:
+        while len(selected) < k and remaining_ids:
             best_idx = -1
             best_adj = -math.inf
             for i, cand in enumerate(remaining):
@@ -512,18 +509,6 @@ class EvidenceAggregator:
         )
         return sim_max < threshold
 
-    def _passes_similarity(
-        self,
-        evidence: Evidence,
-        existing_tokens: list[set[str]],
-    ) -> bool:
-        """Drop the candidate if it's too similar to anything already picked."""
-        if not existing_tokens:
-            return True
-        cand_tokens = _tokens(evidence.node.content)
-        sim_max = max((_jaccard(cand_tokens, t) for t in existing_tokens), default=0.0)
-        return sim_max < self._sim_threshold
-
 
 def _bounded_passage_pool(
     scored: list[ScoredCandidate],
@@ -637,17 +622,6 @@ def _best_category_index(
 
 def _is_sorted_by_total_desc(scored: list[ScoredCandidate]) -> bool:
     return all(scored[i].total >= scored[i + 1].total for i in range(len(scored) - 1))
-
-
-def _passes_token_similarity(
-    candidate_tokens: set[str],
-    existing_tokens: list[set[str]],
-    threshold: float,
-) -> bool:
-    if not existing_tokens:
-        return True
-    sim_max = max((_jaccard(candidate_tokens, t) for t in existing_tokens), default=0.0)
-    return sim_max < threshold
 
 
 def _make_evidence(cand: ScoredCandidate, *, reason: str) -> Evidence:
