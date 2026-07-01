@@ -273,8 +273,8 @@ class TestPipelineShape:
         assert "n47" not in bounded
 
     async def test_aggregate_candidate_pool_limit_scales_with_k(self):
-        assert _aggregate_candidate_pool_limit(6) == 48
-        assert _aggregate_candidate_pool_limit(30) == 48
+        assert _aggregate_candidate_pool_limit(6) == 24
+        assert _aggregate_candidate_pool_limit(30) == 30
         assert _aggregate_candidate_pool_limit(60) == 60
 
     async def test_aggregate_candidate_pool_limit_is_recorded(self):
@@ -294,7 +294,7 @@ class TestPipelineShape:
 
         result = await EvidenceSearch(backend=backend).search("규정", k=40)
 
-        assert result.diagnostics["aggregate_pool_limit"] == 48.0
+        assert result.diagnostics["aggregate_pool_limit"] == 40.0
 
     async def test_aggregate_candidate_pool_limit_env_wins(self, monkeypatch):
         monkeypatch.setenv("SYNAPTIC_AGGREGATE_CANDIDATE_POOL_LIMIT", "13")
