@@ -1374,8 +1374,16 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
     assert health.max_memory_signal_penalty == pytest.approx(0.05)
     assert len(health.top_reinforced_node_ids) == 10
     assert health.top_reinforced_edge_ids == ["edge_top"]
+    assert len(health.top_reinforced_node_scores) == 10
+    assert health.top_reinforced_node_scores["node_top_0"] == pytest.approx(1.0)
+    assert health.top_reinforced_edge_scores == {"edge_top": 0.5}
     assert health.top_demoted_node_ids == ["node_demoted", "node_less_demoted"]
     assert health.top_demoted_edge_ids == ["edge_demoted"]
+    assert health.top_demoted_node_scores == {
+        "node_demoted": -0.9,
+        "node_less_demoted": -0.2,
+    }
+    assert health.top_demoted_edge_scores == {"edge_demoted": -0.7}
     assert health.top_penalty_signal_ids == ["sig_penalty_a", "sig_penalty_b"]
     assert health.top_penalized_node_ids == ["node_penalized_a", "node_penalized_b"]
     assert health.top_penalty_edge_ids == ["edge_penalty_a", "edge_penalty_b"]
