@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from synaptic.backends.memory import MemoryBackend
-from synaptic.extensions.evidence_search import EvidenceSearch
+from synaptic.extensions.evidence_search import EvidenceSearch, _bounded_ppr_seed_scores
 from synaptic.extensions.graph_expander import ExpansionBudget
 from synaptic.models import (
     ConsolidationLevel,
@@ -248,6 +248,8 @@ class TestPipelineShape:
         assert {
             "seed_count",
             "expanded_count_before_ppr",
+            "ppr_seed_cap",
+            "ppr_seed_count",
             "ppr_result_count",
             "ppr_missing_count",
             "ppr_added_count",
@@ -255,6 +257,16 @@ class TestPipelineShape:
             "scored_count",
             "evidence_count",
         }.issubset(set(result.diagnostics))
+
+    async def test_ppr_seed_scores_are_bounded_by_relevance(self):
+        scores = {f"n{i}": float(i) for i in range(80)}
+
+        bounded = _bounded_ppr_seed_scores(scores, k=6)
+
+        assert len(bounded) == 64
+        assert "n79" in bounded
+        assert "n16" in bounded
+        assert "n15" not in bounded
 
     async def test_expanded_larger_than_seeds(self):
         backend = MemoryBackend()

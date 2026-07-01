@@ -79,6 +79,8 @@ _RRF_K = 60
 # keeping synaptic's lexical-dominant identity while un-capping vector-only
 # seeds from the flat 0.08 cascade floor.
 _RRF_VEC_K = 90
+_PPR_SEED_MIN = 64
+_PPR_SEED_MULTIPLIER = 2
 
 # Anchor-coverage thresholds for the adaptive controller (SYNAPTIC_ADAPTIVE):
 # a query whose anchor terms overlap the retrieved docs >= HI is lexically
@@ -111,6 +113,17 @@ class EvidenceSearchResult:
     timings_ms: dict[str, float] = field(default_factory=dict)
     diagnostics: dict[str, float] = field(default_factory=dict)
     sub_queries: list[str] = field(default_factory=list)
+
+
+def _ppr_seed_limit(k: int) -> int:
+    return max(_PPR_SEED_MIN, k * _PPR_SEED_MULTIPLIER)
+
+
+def _bounded_ppr_seed_scores(seed_scores: dict[str, float], k: int) -> dict[str, float]:
+    limit = _ppr_seed_limit(k)
+    if len(seed_scores) <= limit:
+        return dict(seed_scores)
+    return dict(sorted(seed_scores.items(), key=lambda item: item[1], reverse=True)[:limit])
 
 
 class EvidenceSearch:
@@ -692,15 +705,18 @@ class EvidenceSearch:
         # neither FTS nor vector search found. Discovered nodes are
         # added to the expanded set with a graph-based score.
         ppr_stage_t0 = time()
+        ppr_seed_scores = _bounded_ppr_seed_scores(fts_scores, k)
+        diagnostics["ppr_seed_cap"] = float(_ppr_seed_limit(k))
+        diagnostics["ppr_seed_count"] = float(len(ppr_seed_scores))
         diagnostics["ppr_result_count"] = 0.0
         diagnostics["ppr_missing_count"] = 0.0
         diagnostics["ppr_added_count"] = 0.0
-        if fts_scores and self._graph_expansion:
+        if ppr_seed_scores and self._graph_expansion:
             try:
                 ppr_timings: dict[str, float] = {}
                 ppr_results = await personalized_pagerank(
                     self._backend,
-                    {nid: score for nid, score in fts_scores.items()},
+                    ppr_seed_scores,
                     damping=0.85,
                     # Candidate discovery only needs stable top neighbours,
                     # not high-precision stationary probabilities.

@@ -928,8 +928,9 @@ Memory health snapshot:
 | evidence aggregate MMR bound | `mz_openie_cache_deepseek_to100_mmrbounds_results.json` | `2.7s` | `0:16.19` | PASS |
 | GraphExpander sub-stage timing | `mz_openie_graph_timing_results.json` | `6.0s` | `0:22.80` | PASS |
 | PPR yield diagnostics | `mz_openie_pprdiag_results.json` | `4.9s` | `0:26.23` | PASS |
+| EvidenceSearch PPR seed cap | `mz_openie_pprseedcap_results.json` | `4.1s` | `0:15.35` | PASS |
 
-핵심 검색/게이트 지표는 최신 PPR yield diagnostics run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 EvidenceSearch PPR seed cap run에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -944,20 +945,22 @@ Memory health snapshot:
 | relation evidence lift | `+31` |
 | memory health signals | `930` |
 | suspect memories | `31` |
-| baseline aggregate stage | `230.8ms total / 5.2ms avg` |
-| OpenIE aggregate stage | `196.1ms total / 4.5ms avg` |
-| baseline FTS stage | `140.1ms total / 3.2ms avg` |
-| OpenIE FTS stage | `145.7ms total / 3.3ms avg` |
-| baseline expand stage | `65.9ms total / 1.5ms avg` |
-| baseline expand_graph / expand_ppr | `45.6ms / 20.2ms` |
-| baseline graph seed_prefetch / document | `18.6ms / 18.7ms` |
-| baseline PPR bfs / iterate | `3.1ms / 11.0ms` |
-| baseline PPR added candidates | `4 total / 0.1 avg` |
-| OpenIE expand stage | `182.6ms total / 4.2ms avg` |
-| OpenIE expand_graph / expand_ppr | `107.6ms / 74.9ms` |
-| OpenIE graph seed_prefetch / document | `62.9ms / 30.1ms` |
-| OpenIE PPR bfs / iterate | `6.7ms / 34.1ms` |
-| OpenIE PPR added candidates | `944 total / 21.5 avg` |
+| baseline aggregate stage | `212.7ms total / 4.8ms avg` |
+| OpenIE aggregate stage | `185.3ms total / 4.2ms avg` |
+| baseline FTS stage | `133.9ms total / 3.0ms avg` |
+| OpenIE FTS stage | `132.1ms total / 3.0ms avg` |
+| baseline expand stage | `65.1ms total / 1.5ms avg` |
+| baseline expand_graph / expand_ppr | `45.8ms / 17.1ms` |
+| baseline graph seed_prefetch / document | `17.7ms / 20.2ms` |
+| baseline PPR bfs / iterate | `2.9ms / 8.4ms` |
+| baseline PPR added candidates | `90 total / 2.0 avg` |
+| baseline PPR seed count | `2,386 total / 54.2 avg` |
+| OpenIE expand stage | `169.4ms total / 3.9ms avg` |
+| OpenIE expand_graph / expand_ppr | `98.6ms / 52.5ms` |
+| OpenIE graph seed_prefetch / document | `57.4ms / 27.3ms` |
+| OpenIE PPR bfs / iterate | `6.2ms / 23.1ms` |
+| OpenIE PPR added candidates | `1,111 total / 25.3 avg` |
+| OpenIE PPR seed count | `2,386 total / 54.2 avg` |
 
 주의: PR #17은 OpenIE entity node의 불필요한 `updated_at` 갱신을 줄이므로,
 relation probe와 health signal의 세부 카운트는 이전 run과 소폭 달라졌다. 다만
@@ -1060,6 +1063,12 @@ per-chunk fallback을 유지한다.
   실제 expanded set에 추가했다. 따라서 PPR을 전역 skip하는 최적화는 위험하다. 다음
   후보는 PPR을 끄는 것이 아니라, OpenIE에서 유용한 추가 후보를 유지하면서 PPR
   seed/fan-out/iteration 비용을 줄이는 방향이어야 한다.
+- EvidenceSearch PPR seed cap은 discovery PPR에 넘기는 personalization seed를 점수
+  상위 `max(64, k*2)`개로 제한한다. 200-chunk cache-only gate는 PASS했고, OpenIE
+  PPR stage는 `74.9ms -> 52.5ms`, PPR iterate는 `34.1ms -> 23.1ms`로 감소했다.
+  OpenIE PPR added candidates는 `944 -> 1,111`로 유지/증가했고, relation expanded
+  `93/93`, evidence `31/93`, revertibility gate도 PASS를 유지했다. 이 변화는 PPR을
+  끄지 않고 useful-candidate cost를 낮추는 첫 번째 bounded policy다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
