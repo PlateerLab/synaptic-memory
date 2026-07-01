@@ -537,6 +537,16 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 )
             )
         ranking_health = await graph.memory_health(scope=scope)
+        ranking_signal_nodes = await backend.list_nodes(kind=NodeKind.OBSERVATION, limit=1000)
+        strong_negative_signal = next(
+            (
+                node
+                for node in ranking_signal_nodes
+                if node.properties.get("score_signal_type") == "strong_negative_scope_score"
+                and scope_demoted.id in node.properties.get("node_ids", "")
+            ),
+            None,
+        )
 
         selected_before_success = (
             selected_before_feedback.success_count if selected_before_feedback else -1
@@ -611,6 +621,10 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and consolidation_candidate.id in consolidation_result.nodes_updated
             ),
             "scope_score_repeated_failure_signal_created": (scope_score_failure_signal is not None),
+            "strong_negative_scope_score_signal_created": (
+                strong_negative_signal is not None
+                and "_memory_suspect" in (strong_negative_signal.tags or [])
+            ),
             "entity_property_conflict_signal_created": (property_conflict_signal is not None),
             "superseded_target_stale_signal_created": (superseded_stale_signal is not None),
             "signal_events_recorded_idempotently": (
@@ -748,6 +762,15 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 ),
                 "scope_score_failure_signal": (
                     asdict(scope_score_failure_signal) if scope_score_failure_signal else {}
+                ),
+                "strong_negative_scope_score_signal": (
+                    {
+                        "id": strong_negative_signal.id,
+                        "tags": list(strong_negative_signal.tags or []),
+                        "properties": dict(strong_negative_signal.properties or {}),
+                    }
+                    if strong_negative_signal
+                    else {}
                 ),
                 "property_conflict_signal": (
                     asdict(property_conflict_signal) if property_conflict_signal else {}

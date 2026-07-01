@@ -1508,6 +1508,49 @@ async def test_memory_monitor_flags_scope_score_repeated_failures_without_node_p
 
 
 @pytest.mark.asyncio
+async def test_memory_monitor_flags_strong_negative_scope_score_as_suspect():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    node = Node(id="strong_negative", title="Strong negative memory")
+    await backend.save_node(node)
+    await backend.save_memory_score(
+        MemoryScore(
+            scope_key=scope.key,
+            node_id=node.id,
+            access_count=1,
+            success_count=0,
+            failure_count=0,
+            score=-0.75,
+        )
+    )
+
+    signals = await graph.scan_memory_signals(scope=scope)
+    repeated = [
+        signal
+        for signal in signals
+        if MemorySignalKind(str(signal.kind)) == MemorySignalKind.REPEATED_FAILURE
+        and node.id in signal.node_ids
+    ]
+
+    assert repeated
+    assert repeated[0].properties["score_signal_type"] == "strong_negative_scope_score"
+    assert repeated[0].properties["score_scope_key"] == scope.key
+    assert repeated[0].properties["score"] == "-0.750000"
+    signal_nodes = await backend.list_nodes(kind=NodeKind.OBSERVATION, limit=100)
+    signal_node = next(
+        signal_node
+        for signal_node in signal_nodes
+        if signal_node.properties.get("score_signal_type") == "strong_negative_scope_score"
+    )
+    assert "_memory_suspect" in signal_node.tags
+
+    health = await graph.memory_health(scope=scope)
+    assert node.id in health.top_demoted_node_ids
+    assert health.repeated_failure_count >= 1
+
+
+@pytest.mark.asyncio
 async def test_memory_monitor_flags_entity_property_conflicts_by_source():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)
