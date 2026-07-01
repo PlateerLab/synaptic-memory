@@ -13,7 +13,7 @@ import json
 import logging
 import re
 from collections import OrderedDict, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from time import time
 from typing import TYPE_CHECKING, Any
@@ -246,6 +246,11 @@ class _CachedNodeBackend:
     async def update_node(self, node: Node) -> None:
         await self._backend.update_node(node)
         self._nodes[node.id] = node
+
+    async def save_nodes_batch(self, nodes: Sequence[Node]) -> None:
+        await self._backend.save_nodes_batch(nodes)
+        for node in nodes:
+            self._nodes[node.id] = node
 
 
 class ChainedEntityExtractor:
@@ -588,11 +593,11 @@ class LLMOpenIEExtractor:
                 if alias_norm:
                     aliases[alias_norm.lower()] = canonical
 
-        hub_ids: list[str] = []
-        touched: set[str] = set()
-        openie_edges: list[Edge] = []
+        entity_requests: OrderedDict[str, str] = OrderedDict()
+        entity_mentions: list[tuple[str, float]] = []
+        triples_to_link: list[tuple[str, str, EdgeKind, str, float]] = []
 
-        # Materialize entity declarations first.
+        # Collect entity declarations first; materialization is batched below.
         for ent in result.entities:
             if ent.confidence < _CONFIDENCE_FLOOR:
                 continue
@@ -601,32 +606,14 @@ class LLMOpenIEExtractor:
             ) or self._canonical(ent.canonical)
             if not canonical:
                 continue
-            hub_id = await self._ensure_entity(
-                graph,
+            entity_requests.setdefault(
                 canonical,
-                entity_type=ent.entity_type or entity_types.get(canonical.lower(), "entity"),
+                ent.entity_type or entity_types.get(canonical.lower(), "entity"),
             )
-            if hub_id not in touched:
-                touched.add(hub_id)
-                hub_ids.append(hub_id)
-            openie_edges.append(
-                Edge(
-                    id=_openie_edge_id(node_id, hub_id, EdgeKind.MENTIONS),
-                    source_id=node_id,
-                    target_id=hub_id,
-                    kind=EdgeKind.MENTIONS,
-                    weight=0.8,
-                    properties=self._edge_properties(
-                        source_chunk_id=node_id,
-                        confidence=ent.confidence,
-                        relation="mentions",
-                    ),
-                    created_at=time(),
-                ),
-            )
+            entity_mentions.append((canonical, ent.confidence))
 
-        # Then materialize triples, ensuring endpoints exist even when
-        # the model omitted them from ``entities``.
+        # Then collect triples, ensuring endpoints exist even when the model
+        # omitted them from ``entities``.
         for triple in result.triples[: self._max_triples_per_chunk]:
             if triple.confidence < _CONFIDENCE_FLOOR:
                 continue
@@ -645,16 +632,39 @@ class LLMOpenIEExtractor:
             )
             if not subj or not obj or subj == obj:
                 continue
-            subj_id = await self._ensure_entity(
-                graph,
-                subj,
-                entity_type=entity_types.get(subj.lower(), "entity"),
+            entity_requests.setdefault(subj, entity_types.get(subj.lower(), "entity"))
+            entity_requests.setdefault(obj, entity_types.get(obj.lower(), "entity"))
+            triples_to_link.append((subj, obj, edge_kind, relation, triple.confidence))
+
+        hub_ids: list[str] = []
+        touched: set[str] = set()
+        openie_edges: list[Edge] = []
+        hub_id_by_canonical = await self._ensure_entities(graph, entity_requests)
+
+        for canonical, confidence in entity_mentions:
+            hub_id = hub_id_by_canonical[canonical]
+            if hub_id not in touched:
+                touched.add(hub_id)
+                hub_ids.append(hub_id)
+            openie_edges.append(
+                Edge(
+                    id=_openie_edge_id(node_id, hub_id, EdgeKind.MENTIONS),
+                    source_id=node_id,
+                    target_id=hub_id,
+                    kind=EdgeKind.MENTIONS,
+                    weight=0.8,
+                    properties=self._edge_properties(
+                        source_chunk_id=node_id,
+                        confidence=confidence,
+                        relation="mentions",
+                    ),
+                    created_at=time(),
+                ),
             )
-            obj_id = await self._ensure_entity(
-                graph,
-                obj,
-                entity_type=entity_types.get(obj.lower(), "entity"),
-            )
+
+        for subj, obj, edge_kind, relation, confidence in triples_to_link:
+            subj_id = hub_id_by_canonical[subj]
+            obj_id = hub_id_by_canonical[obj]
             for hub_id in (subj_id, obj_id):
                 if hub_id not in touched:
                     touched.add(hub_id)
@@ -668,7 +678,7 @@ class LLMOpenIEExtractor:
                         weight=0.8,
                         properties=self._edge_properties(
                             source_chunk_id=node_id,
-                            confidence=triple.confidence,
+                            confidence=confidence,
                             relation="mentions",
                         ),
                         created_at=time(),
@@ -681,10 +691,10 @@ class LLMOpenIEExtractor:
                     source_id=subj_id,
                     target_id=obj_id,
                     kind=edge_kind,
-                    weight=max(_CONFIDENCE_FLOOR, min(1.0, float(triple.confidence))),
+                    weight=max(_CONFIDENCE_FLOOR, min(1.0, float(confidence))),
                     properties=self._edge_properties(
                         source_chunk_id=node_id,
-                        confidence=triple.confidence,
+                        confidence=confidence,
                         relation=relation,
                     ),
                     created_at=time(),
@@ -736,47 +746,72 @@ class LLMOpenIEExtractor:
         entity_type: str = "entity",
     ) -> str:
         canonical = self._canonical(canonical)
-        hub_id = deterministic_entity_id(canonical)
-        existing = await graph.backend.get_node(hub_id)
-        if existing is not None:
-            if "_openie" not in (existing.tags or []):
-                return hub_id
-            tags = list(existing.tags or [])
-            type_tag = f"_type:{entity_type}"
-            changed = False
-            if type_tag not in tags:
-                tags.append(type_tag)
-                changed = True
-            if existing.tags != tags:
-                existing.tags = tags
-                changed = True
-            properties = dict(existing.properties or {})
-            if "openie_type" not in properties:
-                properties["openie_type"] = entity_type
-                changed = True
-            if existing.properties != properties:
-                existing.properties = properties
-                changed = True
-            if not existing.title:
-                existing.title = canonical
-                changed = True
-            if changed:
-                existing.updated_at = time()
-                await graph.backend.update_node(existing)
-            return hub_id
+        if not canonical:
+            return ""
+        return (await self._ensure_entities(graph, OrderedDict([(canonical, entity_type)])))[
+            canonical
+        ]
 
-        await graph.backend.save_node(
-            Node(
-                id=hub_id,
-                kind=NodeKind.ENTITY,
-                title=canonical,
-                content="",
-                tags=["_openie", "_openie_entity", f"_type:{entity_type}"],
-                level=ConsolidationLevel.L0_RAW,
-                properties={"openie_type": entity_type},
+    async def _ensure_entities(
+        self,
+        graph: SynapticGraph,
+        entities: OrderedDict[str, str],
+    ) -> dict[str, str]:
+        hub_ids: dict[str, str] = {}
+        nodes_to_save: list[Node] = []
+
+        if not entities:
+            return hub_ids
+
+        now = time()
+        for canonical, entity_type in entities.items():
+            canonical = self._canonical(canonical)
+            if not canonical:
+                continue
+            hub_id = deterministic_entity_id(canonical)
+            hub_ids[canonical] = hub_id
+            existing = await graph.backend.get_node(hub_id)
+            if existing is not None:
+                if "_openie" not in (existing.tags or []):
+                    continue
+                tags = list(existing.tags or [])
+                type_tag = f"_type:{entity_type}"
+                changed = False
+                if type_tag not in tags:
+                    tags.append(type_tag)
+                    changed = True
+                if existing.tags != tags:
+                    existing.tags = tags
+                    changed = True
+                properties = dict(existing.properties or {})
+                if "openie_type" not in properties:
+                    properties["openie_type"] = entity_type
+                    changed = True
+                if existing.properties != properties:
+                    existing.properties = properties
+                    changed = True
+                if not existing.title:
+                    existing.title = canonical
+                    changed = True
+                if changed:
+                    existing.updated_at = now
+                    nodes_to_save.append(existing)
+                continue
+
+            nodes_to_save.append(
+                Node(
+                    id=hub_id,
+                    kind=NodeKind.ENTITY,
+                    title=canonical,
+                    content="",
+                    tags=["_openie", "_openie_entity", f"_type:{entity_type}"],
+                    level=ConsolidationLevel.L0_RAW,
+                    properties={"openie_type": entity_type},
+                )
             )
-        )
-        return hub_id
+
+        await _save_openie_nodes_batch(graph.backend, nodes_to_save)
+        return hub_ids
 
     def _canonical(self, text: str) -> str:
         canonical = canonical_entity_text(text)
@@ -1063,6 +1098,10 @@ async def _stamp_openie_edges_with_event(
 ) -> None:
     if not edge_ids:
         return
+    bulk_stamp = getattr(backend, "stamp_openie_edges_event", None)
+    if callable(bulk_stamp):
+        await bulk_stamp(edge_ids, event_id)
+        return
     wanted = set(edge_ids)
     seen: set[str] = set()
     nodes = await backend.list_nodes(limit=1_000_000)
@@ -1096,6 +1135,18 @@ async def _save_openie_edge(backend: StorageBackend, edge: Edge) -> bool:
             break
     await backend.save_edge(edge)
     return True
+
+
+async def _save_openie_nodes_batch(backend: StorageBackend, nodes: list[Node]) -> None:
+    """Save OpenIE entity nodes, using backend batch writes when available."""
+    if not nodes:
+        return
+    bulk_save = getattr(backend, "save_nodes_batch", None)
+    if callable(bulk_save):
+        await bulk_save(nodes)
+        return
+    for node in nodes:
+        await backend.save_node(node)
 
 
 async def _save_openie_edges_batch(backend: StorageBackend, edges: list[Edge]) -> int:
