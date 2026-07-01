@@ -511,6 +511,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             item for item in edge_only_penalty_result.nodes if item.node.id == edge_only_suspect.id
         )
         await graph._record_retrieval_event(edge_boost_result, scope=scope)
+        await graph._record_retrieval_event(negative_scope_result, scope=scope)
         await graph._record_retrieval_event(edge_only_penalty_result, scope=scope)
         for i in range(12):
             await backend.save_memory_score(
@@ -632,11 +633,22 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ),
             "health_summarizes_memory_ranking_diagnostics": (
                 ranking_health.memory_boosted_retrieval_count >= 1
+                and ranking_health.memory_demoted_retrieval_count >= 1
+                and ranking_health.memory_adjusted_retrieval_count >= 2
                 and ranking_health.memory_penalized_retrieval_count >= 1
                 and ranking_health.memory_boosted_node_count >= 1
+                and ranking_health.memory_demoted_node_count >= 1
+                and ranking_health.memory_adjusted_node_count >= 2
                 and ranking_health.memory_penalized_node_count >= 1
                 and ranking_health.max_memory_scope_boost > 0.0
+                and ranking_health.max_memory_scope_demotion > 0.0
+                and ranking_health.max_memory_scope_adjustment > 0.0
                 and ranking_health.max_memory_signal_penalty > 0.0
+            ),
+            "health_summarizes_scope_demotions": (
+                ranking_health.memory_demoted_retrieval_count >= 1
+                and ranking_health.memory_demoted_node_count >= 1
+                and ranking_health.max_memory_scope_demotion > 0.0
             ),
             "health_reports_top_reinforced_edges": (
                 "poc_edge_score_boost_relation" in ranking_health.top_reinforced_edge_ids

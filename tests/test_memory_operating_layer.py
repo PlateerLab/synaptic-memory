@@ -1265,7 +1265,22 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
             scope=scope,
             properties={
                 "memory_scope_boosted_nodes": "2.000000",
+                "memory_scope_adjusted_nodes": "2.000000",
                 "memory_scope_max_abs_boost": "0.100000",
+                "memory_scope_max_positive_boost": "0.100000",
+            },
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="ret_demotion",
+            query="demotion",
+            scope=scope,
+            properties={
+                "memory_scope_demoted_nodes": "2.000000",
+                "memory_scope_adjusted_nodes": "2.000000",
+                "memory_scope_max_abs_boost": "0.080000",
+                "memory_scope_max_demotion": "0.080000",
             },
         )
     )
@@ -1299,12 +1314,18 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
 
     health = await graph.memory_health(scope=scope, persist_signals=False)
 
-    assert health.retrieval_events == 2
+    assert health.retrieval_events == 3
     assert health.memory_boosted_retrieval_count == 1
+    assert health.memory_demoted_retrieval_count == 1
+    assert health.memory_adjusted_retrieval_count == 2
     assert health.memory_penalized_retrieval_count == 1
     assert health.memory_boosted_node_count == 2
+    assert health.memory_demoted_node_count == 2
+    assert health.memory_adjusted_node_count == 4
     assert health.memory_penalized_node_count == 1
     assert health.max_memory_scope_boost == pytest.approx(0.10)
+    assert health.max_memory_scope_demotion == pytest.approx(0.08)
+    assert health.max_memory_scope_adjustment == pytest.approx(0.10)
     assert health.max_memory_signal_penalty == pytest.approx(0.05)
     assert len(health.top_reinforced_node_ids) == 10
     assert health.top_reinforced_edge_ids == ["edge_top"]

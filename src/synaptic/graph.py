@@ -2853,6 +2853,8 @@ class SynapticGraph:
         adjusted_nodes = 0
         clamped_nodes = 0
         max_abs_boost = 0.0
+        max_positive_boost = 0.0
+        max_demotion = 0.0
         for idx, item in enumerate(result.nodes):
             raw = (
                 local_by_node.get(item.node.id, 0.0)
@@ -2866,8 +2868,10 @@ class SynapticGraph:
                 max_abs_boost = max(max_abs_boost, abs(boost))
                 if boost > 0.0:
                     boosted_nodes += 1
+                    max_positive_boost = max(max_positive_boost, boost)
                 else:
                     demoted_nodes += 1
+                    max_demotion = max(max_demotion, abs(boost))
             item.activation = max(0.0, item.activation * (1.0 + boost))
             item.resonance = max(0.0, item.resonance * (1.0 + boost))
             if boost > 0.0 and idx > 0 and item.resonance > base_resonances[idx - 1]:
@@ -2883,6 +2887,8 @@ class SynapticGraph:
         )
         result.diagnostics["memory_scope_edge_score_hits"] = float(len(edge_by_node))
         result.diagnostics["memory_scope_max_abs_boost"] = max_abs_boost
+        result.diagnostics["memory_scope_max_positive_boost"] = max_positive_boost
+        result.diagnostics["memory_scope_max_demotion"] = max_demotion
         result.diagnostics["memory_scope_order_clamps"] = float(clamped_nodes)
 
     async def _apply_memory_signal_penalties(
@@ -3282,20 +3288,54 @@ class SynapticGraph:
             if edge.id.startswith("openie_") or _prop_bool(edge.properties, "is_openie")
         )
         boosted_retrieval_count = 0
+        demoted_retrieval_count = 0
+        adjusted_retrieval_count = 0
         penalized_retrieval_count = 0
         boosted_node_count = 0
+        demoted_node_count = 0
+        adjusted_node_count = 0
         penalized_node_count = 0
         max_scope_boost = 0.0
+        max_scope_demotion = 0.0
+        max_scope_adjustment = 0.0
         max_signal_penalty = 0.0
         for event in retrieval_events:
             props = event.properties or {}
             boosted_nodes = _prop_int(props, "memory_scope_boosted_nodes", 0)
+            demoted_nodes = _prop_int(props, "memory_scope_demoted_nodes", 0)
+            adjusted_nodes = _prop_int(
+                props,
+                "memory_scope_adjusted_nodes",
+                boosted_nodes + demoted_nodes,
+            )
             penalized_nodes = _prop_int(props, "memory_signal_penalized_nodes", 0)
             if boosted_nodes > 0:
                 boosted_retrieval_count += 1
                 boosted_node_count += boosted_nodes
                 max_scope_boost = max(
                     max_scope_boost,
+                    _prop_float(
+                        props,
+                        "memory_scope_max_positive_boost",
+                        _prop_float(props, "memory_scope_max_abs_boost", 0.0),
+                    ),
+                )
+            if demoted_nodes > 0:
+                demoted_retrieval_count += 1
+                demoted_node_count += demoted_nodes
+                max_scope_demotion = max(
+                    max_scope_demotion,
+                    _prop_float(
+                        props,
+                        "memory_scope_max_demotion",
+                        _prop_float(props, "memory_scope_max_abs_boost", 0.0),
+                    ),
+                )
+            if adjusted_nodes > 0:
+                adjusted_retrieval_count += 1
+                adjusted_node_count += adjusted_nodes
+                max_scope_adjustment = max(
+                    max_scope_adjustment,
                     _prop_float(props, "memory_scope_max_abs_boost", 0.0),
                 )
             if penalized_nodes > 0:
@@ -3327,10 +3367,16 @@ class SynapticGraph:
             openie_artifact_count=openie_nodes + openie_edges,
             openie_failure_rate=(failures / selected) if selected else 0.0,
             memory_boosted_retrieval_count=boosted_retrieval_count,
+            memory_demoted_retrieval_count=demoted_retrieval_count,
+            memory_adjusted_retrieval_count=adjusted_retrieval_count,
             memory_penalized_retrieval_count=penalized_retrieval_count,
             memory_boosted_node_count=boosted_node_count,
+            memory_demoted_node_count=demoted_node_count,
+            memory_adjusted_node_count=adjusted_node_count,
             memory_penalized_node_count=penalized_node_count,
             max_memory_scope_boost=max_scope_boost,
+            max_memory_scope_demotion=max_scope_demotion,
+            max_memory_scope_adjustment=max_scope_adjustment,
             max_memory_signal_penalty=max_signal_penalty,
             top_reinforced_node_ids=[score.node_id for score in top_node_scores if score.node_id],
             top_reinforced_edge_ids=[score.edge_id for score in top_edge_scores if score.edge_id],
