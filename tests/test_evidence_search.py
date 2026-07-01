@@ -263,10 +263,10 @@ class TestPipelineShape:
 
         bounded = _bounded_ppr_seed_scores(scores, k=6)
 
-        assert len(bounded) == 64
+        assert len(bounded) == 32
         assert "n79" in bounded
-        assert "n16" in bounded
-        assert "n15" not in bounded
+        assert "n48" in bounded
+        assert "n47" not in bounded
 
     async def test_expanded_larger_than_seeds(self):
         backend = MemoryBackend()

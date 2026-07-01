@@ -79,8 +79,8 @@ _RRF_K = 60
 # keeping synaptic's lexical-dominant identity while un-capping vector-only
 # seeds from the flat 0.08 cascade floor.
 _RRF_VEC_K = 90
-_PPR_SEED_MIN = 64
-_PPR_SEED_MULTIPLIER = 2
+_PPR_SEED_MIN = 32
+_PPR_SEED_MULTIPLIER = 1
 
 # Anchor-coverage thresholds for the adaptive controller (SYNAPTIC_ADAPTIVE):
 # a query whose anchor terms overlap the retrieved docs >= HI is lexically
