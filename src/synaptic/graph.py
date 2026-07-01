@@ -2464,6 +2464,7 @@ class SynapticGraph:
             total_candidates=len(ev_result.scored),
             search_time_ms=ev_result.elapsed_ms,
             timings_ms=dict(ev_result.timings_ms),
+            diagnostics=dict(getattr(ev_result, "diagnostics", {}) or {}),
             stages_used=stages,
         )
         if scope is not None:

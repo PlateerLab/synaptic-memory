@@ -315,6 +315,7 @@ class SearchResult:
     total_candidates: int = 0
     search_time_ms: float = 0.0
     timings_ms: dict[str, float] = field(default_factory=_float_dict)
+    diagnostics: dict[str, float] = field(default_factory=_float_dict)
     stages_used: list[str] = field(default_factory=_str_list)
     event_id: str = ""
 

@@ -564,6 +564,7 @@ class TestSearchRuntimeOptions:
         g = await self._graph(_SpyReranker())
         result = await g.search("retrieval topic", limit=3, fts_seed_limit=40, per_document_cap=1)
         assert result is not None
+        assert "ppr_added_count" in result.diagnostics
 
     async def test_reuses_evidence_search_for_same_runtime_options(self) -> None:
         g = await self._graph(_SpyReranker())
