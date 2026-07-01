@@ -2847,11 +2847,13 @@ class SynapticGraph:
                 edge_by_node[node_id] = edge_by_node.get(node_id, 0.0) + 0.5 * score.score
         if not local_by_node and not global_by_node and not edge_by_node:
             return
-        previous_resonance: float | None = None
+        base_resonances = [item.resonance for item in result.nodes]
         boosted_nodes = 0
+        demoted_nodes = 0
+        adjusted_nodes = 0
         clamped_nodes = 0
         max_abs_boost = 0.0
-        for item in result.nodes:
+        for idx, item in enumerate(result.nodes):
             raw = (
                 local_by_node.get(item.node.id, 0.0)
                 + (0.5 * global_by_node.get(item.node.id, 0.0))
@@ -2860,16 +2862,22 @@ class SynapticGraph:
             raw = max(-1.0, min(1.0, raw))
             boost = max(-0.10, min(0.10, raw * 0.10))
             if boost != 0.0:
-                boosted_nodes += 1
+                adjusted_nodes += 1
                 max_abs_boost = max(max_abs_boost, abs(boost))
+                if boost > 0.0:
+                    boosted_nodes += 1
+                else:
+                    demoted_nodes += 1
             item.activation = max(0.0, item.activation * (1.0 + boost))
             item.resonance = max(0.0, item.resonance * (1.0 + boost))
-            if previous_resonance is not None and item.resonance > previous_resonance:
-                item.resonance = previous_resonance
-                item.activation = min(item.activation, previous_resonance)
+            if boost > 0.0 and idx > 0 and item.resonance > base_resonances[idx - 1]:
+                item.resonance = base_resonances[idx - 1]
+                item.activation = min(item.activation, base_resonances[idx - 1])
                 clamped_nodes += 1
-            previous_resonance = item.resonance
+        result.nodes.sort(key=lambda item: item.resonance, reverse=True)
         result.diagnostics["memory_scope_boosted_nodes"] = float(boosted_nodes)
+        result.diagnostics["memory_scope_demoted_nodes"] = float(demoted_nodes)
+        result.diagnostics["memory_scope_adjusted_nodes"] = float(adjusted_nodes)
         result.diagnostics["memory_scope_node_score_hits"] = float(
             len(set(local_by_node) | set(global_by_node))
         )

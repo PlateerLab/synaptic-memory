@@ -376,6 +376,29 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             ],
         )
         await graph._apply_scope_boost(global_prior_result, scope)
+        scope_demoted = Node(
+            id="poc_scope_demoted_memory",
+            title="Scope demoted memory",
+            content="This high-relevance candidate should move down after scoped negative feedback.",
+        )
+        scope_clean = Node(
+            id="poc_scope_clean_memory",
+            title="Scope clean memory",
+            content="This lower baseline candidate has no negative scoped score.",
+        )
+        await backend.save_node(scope_demoted)
+        await backend.save_node(scope_clean)
+        await backend.save_memory_score(
+            MemoryScore(scope_key=scope.key, node_id=scope_demoted.id, score=-1.0)
+        )
+        negative_scope_result = SearchResult(
+            query="negative scope demotion",
+            nodes=[
+                ActivatedNode(node=scope_demoted, activation=1.0, resonance=1.0),
+                ActivatedNode(node=scope_clean, activation=0.96, resonance=0.96),
+            ],
+        )
+        await graph._apply_scope_boost(negative_scope_result, scope)
         edge_boosted = Node(
             id="poc_edge_score_boosted_memory",
             title="Edge score boosted memory",
@@ -584,6 +607,15 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and global_prior_result.nodes[1].resonance >= 0.999
                 and global_prior_result.nodes[1].resonance <= global_prior_result.nodes[0].resonance
             ),
+            "negative_scope_score_demoted_candidate": (
+                [item.node.id for item in negative_scope_result.nodes]
+                == [scope_clean.id, scope_demoted.id]
+                and _round(negative_scope_result.nodes[0].resonance) == 0.96
+                and _round(negative_scope_result.nodes[1].resonance) == 0.9
+                and negative_scope_result.diagnostics.get("memory_scope_boosted_nodes") == 0.0
+                and negative_scope_result.diagnostics.get("memory_scope_demoted_nodes") == 1.0
+                and negative_scope_result.diagnostics.get("memory_scope_order_clamps") == 0.0
+            ),
             "edge_score_boosted_endpoint_without_node_score": (
                 edge_boosted_node_score is None
                 and [item.node.id for item in edge_boost_result.nodes] == [beta.id, edge_boosted.id]
@@ -694,6 +726,11 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 ),
                 "global_prior_order": [item.node.id for item in global_prior_result.nodes],
                 "global_prior_resonance": _round(global_prior_result.nodes[1].resonance),
+                "negative_scope_order": [item.node.id for item in negative_scope_result.nodes],
+                "negative_scope_demoted_resonance": _round(
+                    negative_scope_result.nodes[1].resonance
+                ),
+                "negative_scope_diagnostics": dict(negative_scope_result.diagnostics),
                 "edge_score_boost_order": [item.node.id for item in edge_boost_result.nodes],
                 "edge_score_boosted_resonance": _round(edge_boosted_item.resonance),
                 "edge_score_boost_diagnostics": dict(edge_boost_result.diagnostics),
