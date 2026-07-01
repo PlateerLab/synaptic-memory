@@ -858,7 +858,7 @@ async def test_eval_memory_health_is_read_only(tmp_path: Path):
             )
         await backend.save_edge(
             Edge(
-                id="openie_low_confidence",
+                id="custom_low_confidence_relation",
                 source_id="ent_source",
                 target_id="ent_target",
                 kind=EdgeKind.RELATED,
@@ -897,6 +897,7 @@ async def test_eval_memory_health_is_read_only(tmp_path: Path):
     assert report["memory_penalized_node_count"] == 1
     assert report["max_memory_scope_boost"] == pytest.approx(0.10)
     assert report["max_memory_signal_penalty"] == pytest.approx(0.05)
+    assert report["openie_artifact_count"] == 3
     assert not any("_memory_signal" in (node.tags or []) for node in nodes)
 
 

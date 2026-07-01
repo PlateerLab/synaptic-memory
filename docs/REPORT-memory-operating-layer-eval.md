@@ -289,6 +289,27 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - node score가 health top score list를 채워도 edge/relation 강화 summary가 사라지지 않는다.
 - node와 edge top reinforced summary는 각각 독립적으로 최대 10개까지 유지된다.
 
+후속 OpenIE provenance artifact count guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_openie_provenance_count_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `29/29` |
+| health_counts_openie_edges_by_provenance | `true` |
+| openie_artifact_count | `1` |
+
+추가로 검증된 동작:
+
+- OpenIE relation edge id가 `openie_` prefix가 아니어도 `properties.is_openie=true` provenance metadata로 health artifact count에 포함된다.
+- health report의 OpenIE artifact 지표가 id naming convention에만 의존하지 않는다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
