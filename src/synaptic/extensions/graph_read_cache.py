@@ -8,9 +8,10 @@ changing backend semantics or persisting any cache state.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
-from synaptic.models import Edge, Node
+from synaptic.models import Edge, EdgeKind, Node
 
 if TYPE_CHECKING:
     from synaptic.protocols import StorageBackend
@@ -21,11 +22,20 @@ Direction = Literal["both", "incoming", "outgoing"]
 class GraphReadCache:
     """Small async read-through cache scoped to one graph traversal/search."""
 
-    __slots__ = ("_backend", "_edge_cache", "_neighbor_cache", "_node_cache")
+    __slots__ = (
+        "_backend",
+        "_edge_cache",
+        "_edge_kind_cache",
+        "_edge_light_cache",
+        "_neighbor_cache",
+        "_node_cache",
+    )
 
     def __init__(self, backend: StorageBackend) -> None:
         self._backend = backend
         self._edge_cache: dict[tuple[str, Direction], list[Edge]] = {}
+        self._edge_kind_cache: dict[tuple[str, Direction, tuple[str, ...]], list[Edge]] = {}
+        self._edge_light_cache: dict[tuple[str, Direction], list[Edge]] = {}
         self._neighbor_cache: dict[tuple[str, int], list[tuple[Node, Edge]]] = {}
         self._node_cache: dict[str, Node | None] = {}
 
@@ -93,6 +103,93 @@ class GraphReadCache:
 
         return result
 
+    async def get_edges_many_light(
+        self, node_ids: list[str], *, direction: Direction = "both"
+    ) -> dict[str, list[Edge]]:
+        """Return traversal-only edges, using lightweight backend reads when available.
+
+        PPR only needs source/target/kind/weight. SQLite can skip loading and
+        parsing provenance JSON for that path, while callers that need full
+        edge metadata continue to use ``get_edges_many``.
+        """
+        unique_ids = list(dict.fromkeys(node_ids))
+        if not unique_ids:
+            return {}
+
+        result: dict[str, list[Edge]] = {}
+        missing: list[str] = []
+        for node_id in unique_ids:
+            cached = self._cached_edges_light(node_id, direction)
+            if cached is None:
+                missing.append(node_id)
+            else:
+                result[node_id] = cached
+
+        if missing:
+            get_light = getattr(self._backend, "get_edges_batch_light", None)
+            if callable(get_light):
+                fetched = await get_light(missing, direction=direction)
+                for node_id in missing:
+                    edges = list(fetched.get(node_id, []))
+                    self._edge_light_cache[(node_id, direction)] = edges
+                    result[node_id] = edges
+            else:
+                fetched = await self.get_edges_many(missing, direction=direction)
+                for node_id in missing:
+                    edges = list(fetched.get(node_id, []))
+                    self._edge_light_cache[(node_id, direction)] = edges
+                    result[node_id] = edges
+
+        return result
+
+    async def get_edges_many_by_kind(
+        self,
+        node_ids: list[str],
+        *,
+        direction: Direction = "both",
+        kinds: Sequence[EdgeKind],
+    ) -> dict[str, list[Edge]]:
+        """Return edges for multiple nodes, limited to the requested kinds.
+
+        Backends that expose a filtered batch read avoid materializing noisy
+        edge kinds just so GraphExpander can discard them. Backends without the
+        optional method degrade to the normal full edge read plus in-memory
+        filtering, preserving semantics.
+        """
+        unique_ids = list(dict.fromkeys(node_ids))
+        if not unique_ids:
+            return {}
+
+        kind_key = _kind_key(kinds)
+        if not kind_key:
+            return {node_id: [] for node_id in unique_ids}
+
+        result: dict[str, list[Edge]] = {}
+        missing: list[str] = []
+        for node_id in unique_ids:
+            cached = self._cached_edges_by_kind(node_id, direction, kind_key)
+            if cached is None:
+                missing.append(node_id)
+            else:
+                result[node_id] = cached
+
+        if missing:
+            get_filtered = getattr(self._backend, "get_edges_batch_filtered", None)
+            if callable(get_filtered):
+                fetched = await get_filtered(missing, direction=direction, kinds=list(kind_key))
+                for node_id in missing:
+                    edges = _filter_edges_by_kind(fetched.get(node_id, []), kind_key)
+                    self._edge_kind_cache[(node_id, direction, kind_key)] = edges
+                    result[node_id] = edges
+            else:
+                fetched = await self.get_edges_many(missing, direction=direction)
+                for node_id in missing:
+                    edges = _filter_edges_by_kind(fetched.get(node_id, []), kind_key)
+                    self._edge_kind_cache[(node_id, direction, kind_key)] = edges
+                    result[node_id] = edges
+
+        return result
+
     def _cached_edges(self, node_id: str, direction: Direction) -> list[Edge] | None:
         key = (node_id, direction)
         cached = self._edge_cache.get(key)
@@ -111,6 +208,44 @@ class GraphReadCache:
                     self._edge_cache[key] = cached
                     return cached
         return cached
+
+    def _cached_edges_light(self, node_id: str, direction: Direction) -> list[Edge] | None:
+        full = self._cached_edges(node_id, direction)
+        if full is not None:
+            return full
+        cached = self._edge_light_cache.get((node_id, direction))
+        if cached is None:
+            if direction != "both":
+                both = self._edge_light_cache.get((node_id, "both"))
+                if both is not None:
+                    cached = _filter_edges(node_id, both, direction)
+                    self._edge_light_cache[(node_id, direction)] = cached
+                    return cached
+            else:
+                outgoing = self._edge_light_cache.get((node_id, "outgoing"))
+                incoming = self._edge_light_cache.get((node_id, "incoming"))
+                if outgoing is not None and incoming is not None:
+                    cached = _merge_edges(outgoing, incoming)
+                    self._edge_light_cache[(node_id, direction)] = cached
+                    return cached
+        return cached
+
+    def _cached_edges_by_kind(
+        self, node_id: str, direction: Direction, kind_key: tuple[str, ...]
+    ) -> list[Edge] | None:
+        full = self._cached_edges(node_id, direction)
+        if full is not None:
+            return _filter_edges_by_kind(full, kind_key)
+        cached = self._edge_kind_cache.get((node_id, direction, kind_key))
+        if cached is not None:
+            return cached
+        if direction != "both":
+            both = self._edge_kind_cache.get((node_id, "both", kind_key))
+            if both is not None:
+                cached = _filter_edges(node_id, both, direction)
+                self._edge_kind_cache[(node_id, direction, kind_key)] = cached
+                return cached
+        return None
 
     async def get_neighbors(self, node_id: str, *, depth: int = 1) -> list[tuple[Node, Edge]]:
         key = (node_id, depth)
@@ -140,3 +275,14 @@ def _merge_edges(first: list[Edge], second: list[Edge]) -> list[Edge]:
         seen.add(edge.id)
         merged.append(edge)
     return merged
+
+
+def _kind_key(kinds: Sequence[EdgeKind | str]) -> tuple[str, ...]:
+    return tuple(
+        sorted({kind.value if isinstance(kind, EdgeKind) else str(kind) for kind in kinds})
+    )
+
+
+def _filter_edges_by_kind(edges: Sequence[Edge], kind_key: tuple[str, ...]) -> list[Edge]:
+    kind_set = set(kind_key)
+    return [edge for edge in edges if edge.kind.value in kind_set]

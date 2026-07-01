@@ -115,6 +115,40 @@ class TestPPRBasic:
         assert backend.edge_calls == []
         assert sum(1 for node_ids, _direction in backend.edge_batch_calls if a.id in node_ids) == 1
 
+    async def test_light_edges_use_traversal_only_batch_read(self) -> None:
+        """Discovery PPR can skip loading edge metadata/provenance."""
+
+        class CountingMemoryBackend(MemoryBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.edge_batch_calls: list[tuple[tuple[str, ...], str]] = []
+                self.edge_light_batch_calls: list[tuple[tuple[str, ...], str]] = []
+
+            async def get_edges_batch(
+                self, node_ids: list[str], *, direction: str = "both"
+            ) -> dict[str, list[Edge]]:
+                self.edge_batch_calls.append((tuple(node_ids), direction))
+                return await super().get_edges_batch(node_ids, direction=direction)
+
+            async def get_edges_batch_light(
+                self, node_ids: list[str], *, direction: str = "both"
+            ) -> dict[str, list[Edge]]:
+                self.edge_light_batch_calls.append((tuple(node_ids), direction))
+                return await super().get_edges_batch_light(node_ids, direction=direction)
+
+        backend = CountingMemoryBackend()
+        await backend.connect()
+        graph = SynapticGraph(backend)
+        a = await graph.add("A", "Node A")
+        b = await graph.add("B", "Node B")
+        await graph.link(a.id, b.id, kind=EdgeKind.RELATED)
+
+        result = await personalized_pagerank(backend, {a.id: 1.0}, light_edges=True)
+
+        assert b.id in {node_id for node_id, _score in result}
+        assert backend.edge_batch_calls == []
+        assert any(a.id in node_ids for node_ids, _direction in backend.edge_light_batch_calls)
+
     async def test_timings_are_recorded(self, graph: SynapticGraph) -> None:
         """Callers can inspect PPR sub-stage cost without changing results."""
         a = await graph.add("A", "Node A")

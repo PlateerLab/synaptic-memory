@@ -361,6 +361,7 @@ async def test_seed_edges_are_cached_across_expansion_paths():
             super().__init__()
             self.edge_calls: list[tuple[str, str]] = []
             self.edge_batch_calls: list[tuple[tuple[str, ...], str]] = []
+            self.edge_filtered_batch_calls: list[tuple[tuple[str, ...], str, tuple[str, ...]]] = []
             self.node_calls: list[str] = []
             self.node_batch_calls: list[tuple[str, ...]] = []
 
@@ -382,6 +383,19 @@ async def test_seed_edges_are_cached_across_expansion_paths():
             self.edge_batch_calls.append((tuple(node_ids), direction))
             return await super().get_edges_batch(node_ids, direction=direction)
 
+        async def get_edges_batch_filtered(
+            self,
+            node_ids: list[str],
+            *,
+            direction: str = "both",
+            kinds: list[str | EdgeKind],
+        ) -> dict[str, list[Edge]]:
+            kind_values = tuple(sorted(str(kind) for kind in kinds))
+            self.edge_filtered_batch_calls.append((tuple(node_ids), direction, kind_values))
+            return await super().get_edges_batch_filtered(
+                node_ids, direction=direction, kinds=kinds
+            )
+
     backend = CountingMemoryBackend()
     await backend.connect()
     seed = Node(id="seed", kind=NodeKind.ENTITY, title="Seed", content="seed")
@@ -397,8 +411,15 @@ async def test_seed_edges_are_cached_across_expansion_paths():
 
     assert {"cited", "related"}.issubset({r.node.id for r in results})
     assert backend.edge_calls == []
-    assert backend.edge_batch_calls.count((("seed",), "both")) == 1
-    assert ("seed", "incoming") not in backend.edge_calls
+    assert backend.edge_batch_calls == []
+    assert any(
+        call == (("seed",), "both", (str(EdgeKind.REFERENCES),))
+        for call in backend.edge_filtered_batch_calls
+    )
+    assert any(
+        call[0] == ("seed",) and call[1] == "both" and str(EdgeKind.RELATED) in call[2]
+        for call in backend.edge_filtered_batch_calls
+    )
     assert backend.node_calls == []
     assert ("cited",) in backend.node_batch_calls
     assert ("related",) in backend.node_batch_calls

@@ -727,6 +727,7 @@ class EvidenceSearch:
                     # to rank those direct relation targets without reading
                     # every neighbour's own edge list.
                     bfs_depth=1,
+                    light_edges=True,
                     top_k=k * 3,
                     read_cache=graph_reads,
                     timings_ms=ppr_timings,

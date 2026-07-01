@@ -197,8 +197,6 @@ class GraphExpander:
         _record_timing(timings_ms, "expand_graph_seed", stage_t0)
 
         stage_t0 = time()
-        if seed_nodes and not state.is_full():
-            await reads.get_edges_many([node.id for node in seed_nodes], direction="both")
         _record_timing(timings_ms, "expand_graph_seed_prefetch", stage_t0)
 
         # Step 2 — REFERENCES edges (explicit document cross-references,
@@ -306,14 +304,19 @@ class GraphExpander:
         node_ids: list[str] = []
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
+        try:
+            edge_map = await reads.get_edges_many_by_kind(
+                [node.id for node in seed_nodes],
+                direction="both",
+                kinds=[EdgeKind.CONTAINS, EdgeKind.PART_OF],
+            )
+        except Exception as exc:
+            logger.debug("document-scope edge batch failed: %s", exc)
+            return
         for seed in seed_nodes:
             if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
                 break
-            try:
-                edges = await reads.get_edges(seed.id, direction="both")
-            except Exception as exc:
-                logger.debug("edge fetch failed for %s: %s", seed.id, exc)
-                continue
+            edges = edge_map.get(seed.id, [])
 
             candidate_ids: list[str] = []
             for edge in edges:
@@ -372,14 +375,19 @@ class GraphExpander:
         node_ids: list[str] = []
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
+        try:
+            edge_map = await reads.get_edges_many_by_kind(
+                [node.id for node in chunks],
+                direction="both",
+                kinds=[EdgeKind.NEXT_CHUNK],
+            )
+        except Exception as exc:
+            logger.debug("chunk-next edge batch failed: %s", exc)
+            return
         for seed in chunks:
             if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
                 break
-            try:
-                edges = await reads.get_edges(seed.id, direction="both")
-            except Exception as exc:
-                logger.debug("chunk-next fetch failed for %s: %s", seed.id, exc)
-                continue
+            edges = edge_map.get(seed.id, [])
 
             candidate_ids: list[str] = []
             for edge in edges:
@@ -436,14 +444,19 @@ class GraphExpander:
         node_ids: list[str] = []
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
+        try:
+            edge_map = await reads.get_edges_many_by_kind(
+                [node.id for node in entities],
+                direction="incoming",
+                kinds=[EdgeKind.MENTIONS],
+            )
+        except Exception as exc:
+            logger.debug("entity edge batch failed: %s", exc)
+            return
         for seed in entities:
             if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
                 break
-            try:
-                edges = await reads.get_edges(seed.id, direction="incoming")
-            except Exception as exc:
-                logger.debug("entity expansion failed for %s: %s", seed.id, exc)
-                continue
+            edges = edge_map.get(seed.id, [])
 
             candidate_ids: list[str] = []
             for edge in edges:
@@ -512,14 +525,19 @@ class GraphExpander:
         node_ids: list[str] = []
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
+        try:
+            edge_map = await reads.get_edges_many_by_kind(
+                [node.id for node in entities],
+                direction="both",
+                kinds=sorted(_OPENIE_ENTITY_RELATION_KINDS, key=lambda kind: kind.value),
+            )
+        except Exception as exc:
+            logger.debug("related edge batch failed for entity seeds: %s", exc)
+            return
         for seed in entities:
             if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
                 break
-            try:
-                edges = await reads.get_edges(seed.id, direction="both")
-            except Exception as exc:
-                logger.debug("related expansion failed for %s: %s", seed.id, exc)
-                continue
+            edges = edge_map.get(seed.id, [])
 
             candidates: list[tuple[str, EdgeKind, float]] = []
             seed_seen: set[str] = set()
@@ -592,14 +610,19 @@ class GraphExpander:
         node_ids: list[str] = []
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
+        try:
+            edge_map = await reads.get_edges_many_by_kind(
+                [node.id for node in seed_nodes],
+                direction="both",
+                kinds=[EdgeKind.REFERENCES],
+            )
+        except Exception as exc:
+            logger.debug("reference edge batch failed: %s", exc)
+            return
         for seed in seed_nodes:
             if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
                 break
-            try:
-                edges = await reads.get_edges(seed.id, direction="both")
-            except Exception as exc:
-                logger.debug("reference expansion failed for %s: %s", seed.id, exc)
-                continue
+            edges = edge_map.get(seed.id, [])
 
             candidate_ids: list[str] = []
             for edge in edges:
