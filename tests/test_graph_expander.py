@@ -462,6 +462,67 @@ async def test_document_scope_batches_candidate_node_fetches():
     assert ("chunk_a", "chunk_b") in backend.node_batch_calls
 
 
+@pytest.mark.asyncio
+async def test_openie_part_of_seed_is_not_document_scope():
+    backend = MemoryBackend()
+    await backend.connect()
+    source = Node(
+        id="ent_source",
+        kind=NodeKind.ENTITY,
+        title="Source",
+        content="source",
+        tags=["_openie", "_openie_entity"],
+    )
+    target = Node(
+        id="ent_target",
+        kind=NodeKind.ENTITY,
+        title="Target",
+        content="target",
+        tags=["_openie", "_openie_entity"],
+    )
+    await backend.save_node(source)
+    await backend.save_node(target)
+    await backend.save_edge(
+        Edge(
+            source_id=source.id,
+            target_id=target.id,
+            kind=EdgeKind.PART_OF,
+            properties={"is_openie": "true", "confidence": "0.8"},
+        )
+    )
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[source])
+
+    by_id = {r.node.id: r for r in results}
+    assert by_id["ent_target"].reason == "semantic_relation"
+    assert by_id["ent_target"].edge_kind == "part_of"
+    assert by_id["ent_target"].edge_confidence == pytest.approx(0.8)
+
+
+@pytest.mark.asyncio
+async def test_non_openie_entity_seed_can_still_use_document_scope():
+    backend = MemoryBackend()
+    await backend.connect()
+    phrase = Node(
+        id="phrase",
+        kind=NodeKind.ENTITY,
+        title="Phrase",
+        content="phrase",
+        tags=["phrase"],
+    )
+    chunk = Node(id="chunk", kind=NodeKind.CHUNK, title="Chunk", content="chunk", tags=["chunk"])
+    await backend.save_node(phrase)
+    await backend.save_node(chunk)
+    await backend.save_edge(Edge(source_id=chunk.id, target_id=phrase.id, kind=EdgeKind.CONTAINS))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[phrase])
+
+    by_id = {r.node.id: r for r in results}
+    assert by_id["chunk"].reason == "document_chunk"
+
+
 # --- relevance-aware budget (opt-in) -----------------------------------
 
 

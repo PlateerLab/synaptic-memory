@@ -300,20 +300,24 @@ class GraphExpander:
         Doc A are probably all relevant too. We fetch them via the
         shared CONTAINS / PART_OF edges.
         """
+        document_scope_seeds = [node for node in seed_nodes if _is_document_scope_seed(node)]
+        if not document_scope_seeds:
+            return
+
         groups: list[tuple[str, list[str]]] = []
         node_ids: list[str] = []
         seen: set[str] = set()
         offer_limit = state.remaining_capacity()
         try:
             edge_map = await reads.get_edges_many_by_kind(
-                [node.id for node in seed_nodes],
+                [node.id for node in document_scope_seeds],
                 direction="both",
                 kinds=[EdgeKind.CONTAINS, EdgeKind.PART_OF],
             )
         except Exception as exc:
             logger.debug("document-scope edge batch failed: %s", exc)
             return
-        for seed in seed_nodes:
+        for seed in document_scope_seeds:
             if state.is_full() or (offer_limit is not None and len(node_ids) >= offer_limit):
                 break
             edges = edge_map.get(seed.id, [])
@@ -684,6 +688,11 @@ def _edge_confidence(edge: object) -> float:
         return max(0.0, min(1.0, float(raw)))
     except (TypeError, ValueError):
         return 1.0
+
+
+def _is_document_scope_seed(node: Node) -> bool:
+    tags = node.tags or []
+    return "_openie_entity" not in tags
 
 
 def _record_timing(timings_ms: dict[str, float] | None, key: str, started_at: float) -> None:
