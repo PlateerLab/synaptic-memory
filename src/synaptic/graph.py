@@ -3306,6 +3306,7 @@ class SynapticGraph:
             key=lambda score: score.score,
         )[:10]
 
+        memory_event_kind_counts = Counter(str(event.kind) for event in memory_events)
         semantic_events = [
             event for event in memory_events if str(event.kind) == MemoryEventKind.SEMANTIC_EXTRACT
         ]
@@ -3435,6 +3436,7 @@ class SynapticGraph:
             total_nodes=len(nodes),
             total_edges=len(edges),
             memory_events=len(memory_events),
+            memory_event_kind_counts=dict(memory_event_kind_counts),
             retrieval_events=len(retrieval_events),
             signal_count=len(signals),
             new_entity_count=signal_kinds.count(MemorySignalKind.NEW_ENTITY),

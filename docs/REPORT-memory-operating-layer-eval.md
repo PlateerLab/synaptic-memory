@@ -1767,6 +1767,12 @@ per-chunk fallback을 유지한다.
   `43/43` PASS했다. 대표 결과는 `feedback_event_count=7`, `feedback_success_count=5`,
   `feedback_failure_count=1`, `feedback_neutral_count=1`,
   `feedback_signal_counts={"task_success": 5, "task_failure": 1, "selected": 1}`였다.
+- Memory health event kind counts는 memory event ledger의 전체 개수뿐 아니라
+  `ingest`, `semantic_extract`, `retrieval`, `feedback`, `signal` 분포를 health report에
+  노출한다. 증가 데이터가 어떤 event 경로로 쌓이는지 별도 ledger query 없이 볼 수 있다.
+  POC gate는 `health_reports_memory_event_kind_counts`를 추가해 `44/44` PASS했다. 대표
+  결과는 `memory_events=22`,
+  `memory_event_kind_counts={"signal": 9, "feedback": 7, "retrieval": 1, "semantic_extract": 4, "ingest": 1}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
