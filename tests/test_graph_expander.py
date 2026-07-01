@@ -361,6 +361,16 @@ async def test_seed_edges_are_cached_across_expansion_paths():
             super().__init__()
             self.edge_calls: list[tuple[str, str]] = []
             self.edge_batch_calls: list[tuple[tuple[str, ...], str]] = []
+            self.node_calls: list[str] = []
+            self.node_batch_calls: list[tuple[str, ...]] = []
+
+        async def get_node(self, node_id: str) -> Node | None:
+            self.node_calls.append(node_id)
+            return await super().get_node(node_id)
+
+        async def get_nodes_batch(self, node_ids: list[str]) -> list[Node]:
+            self.node_batch_calls.append(tuple(node_ids))
+            return await super().get_nodes_batch(node_ids)
 
         async def get_edges(self, node_id: str, *, direction: str = "both") -> list[Edge]:
             self.edge_calls.append((node_id, direction))
@@ -389,6 +399,46 @@ async def test_seed_edges_are_cached_across_expansion_paths():
     assert backend.edge_calls == []
     assert backend.edge_batch_calls.count((("seed",), "both")) == 1
     assert ("seed", "incoming") not in backend.edge_calls
+    assert backend.node_calls == []
+    assert ("cited",) in backend.node_batch_calls
+    assert ("related",) in backend.node_batch_calls
+
+
+@pytest.mark.asyncio
+async def test_document_scope_batches_candidate_node_fetches():
+    """Document-scope expansion should batch-load sibling nodes instead of
+    issuing one backend node read per edge."""
+
+    class CountingMemoryBackend(MemoryBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.node_calls: list[str] = []
+            self.node_batch_calls: list[tuple[str, ...]] = []
+
+        async def get_node(self, node_id: str) -> Node | None:
+            self.node_calls.append(node_id)
+            return await super().get_node(node_id)
+
+        async def get_nodes_batch(self, node_ids: list[str]) -> list[Node]:
+            self.node_batch_calls.append(tuple(node_ids))
+            return await super().get_nodes_batch(node_ids)
+
+    backend = CountingMemoryBackend()
+    await backend.connect()
+    doc = Node(id="doc", kind=NodeKind.ENTITY, title="Doc", content="doc", tags=["document"])
+    chunk_a = Node(id="chunk_a", kind=NodeKind.CHUNK, title="A", content="a", tags=["chunk"])
+    chunk_b = Node(id="chunk_b", kind=NodeKind.CHUNK, title="B", content="b", tags=["chunk"])
+    for node in (doc, chunk_a, chunk_b):
+        await backend.save_node(node)
+    await backend.save_edge(Edge(source_id=doc.id, target_id=chunk_a.id, kind=EdgeKind.CONTAINS))
+    await backend.save_edge(Edge(source_id=doc.id, target_id=chunk_b.id, kind=EdgeKind.CONTAINS))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[doc])
+
+    assert {"chunk_a", "chunk_b"}.issubset({r.node.id for r in results})
+    assert backend.node_calls == []
+    assert ("chunk_a", "chunk_b") in backend.node_batch_calls
 
 
 # --- relevance-aware budget (opt-in) -----------------------------------
