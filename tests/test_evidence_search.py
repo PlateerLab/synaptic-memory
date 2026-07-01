@@ -444,6 +444,38 @@ class TestPipelineShape:
         assert expanded_reasons["direct"] == "ppr_discovery"
         assert "indirect" not in expanded_reasons
 
+    async def test_ppr_result_count_is_bounded_to_k(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        seed = Node(
+            id="seed",
+            kind=NodeKind.CHUNK,
+            title="seedonly",
+            content="seedonly lexical anchor",
+        )
+        await backend.save_node(seed)
+        for idx in range(6):
+            node = Node(
+                id=f"direct_{idx}",
+                kind=NodeKind.CHUNK,
+                title=f"direct {idx}",
+                content=f"graph neighbour {idx}",
+            )
+            await backend.save_node(node)
+            await backend.save_edge(
+                Edge(
+                    id=f"seed_direct_{idx}",
+                    source_id=seed.id,
+                    target_id=node.id,
+                    kind=EdgeKind.RELATED,
+                )
+            )
+
+        result = await EvidenceSearch(backend=backend).search("seedonly", k=3)
+
+        assert result.diagnostics["ppr_result_count"] == 3.0
+        assert result.diagnostics["ppr_missing_count"] <= 3.0
+
     async def test_openie_entity_seed_does_not_crowd_source_evidence(self):
         backend = MemoryBackend()
         await backend.connect()
