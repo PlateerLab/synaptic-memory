@@ -26,6 +26,10 @@ def _float_dict() -> dict[str, float]:
     return {}
 
 
+def _int_dict() -> dict[str, int]:
+    return {}
+
+
 def _diagnostic_dict() -> dict[str, float | str]:
     return {}
 
@@ -283,6 +287,9 @@ class MemoryHealthReport:
     top_penalty_signal_ids: list[str] = field(default_factory=_str_list)
     top_penalized_node_ids: list[str] = field(default_factory=_str_list)
     top_penalty_edge_ids: list[str] = field(default_factory=_str_list)
+    top_penalty_signal_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_penalized_node_counts: dict[str, int] = field(default_factory=_int_dict)
+    top_penalty_edge_counts: dict[str, int] = field(default_factory=_int_dict)
     generated_at: float = field(default_factory=time)
 
 
