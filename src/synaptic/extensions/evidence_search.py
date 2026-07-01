@@ -157,6 +157,7 @@ class EvidenceSearch:
         "_aggregator",
         "_anchor_extractor",
         "_backend",
+        "_backend_fts_include_embedding",
         "_backend_scored",
         "_calibrated_blend",
         "_calibration_loaded",
@@ -280,11 +281,12 @@ class EvidenceSearch:
         try:
             import inspect as _inspect
 
-            self._backend_scored = (
-                "with_scores" in _inspect.signature(backend.search_fts).parameters
-            )
+            fts_params = _inspect.signature(backend.search_fts).parameters
+            self._backend_scored = "with_scores" in fts_params
+            self._backend_fts_include_embedding = "include_embedding" in fts_params
         except (ValueError, TypeError):
             self._backend_scored = False
+            self._backend_fts_include_embedding = False
         self._real_scores_enabled = (
             _os.environ.get("SYNAPTIC_REAL_SCORES") == "1" and self._backend_scored
         )
@@ -454,16 +456,32 @@ class EvidenceSearch:
         # Step 2a — FTS seeds (lexical).
         stage_t0 = time()
         fts_scores: dict[str, float] = {}
+        fts_include_embedding = query_embedding is not None
         # Fetch real scores when L01 is on OR adaptive mode may need them.
         want_scores = self._backend_scored and (self._real_scores_enabled or self._adaptive)
         if want_scores:
-            scored_fts = await self._backend.search_fts(
-                query, limit=fts_seed_limit, with_scores=True
-            )
+            if self._backend_fts_include_embedding:
+                scored_fts = await self._backend.search_fts(
+                    query,
+                    limit=fts_seed_limit,
+                    with_scores=True,
+                    include_embedding=fts_include_embedding,
+                )
+            else:
+                scored_fts = await self._backend.search_fts(
+                    query, limit=fts_seed_limit, with_scores=True
+                )
             fts_nodes = [n for n, _ in scored_fts]
         else:
             scored_fts = None
-            fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
+            if self._backend_fts_include_embedding:
+                fts_nodes = await self._backend.search_fts(
+                    query,
+                    limit=fts_seed_limit,
+                    include_embedding=fts_include_embedding,
+                )
+            else:
+                fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
 
         # Adaptive coverage signal — computed once, gates L01/L02/L05 below.
         coverage = self._anchor_coverage(anchors, fts_nodes) if self._adaptive else None
@@ -626,7 +644,14 @@ class EvidenceSearch:
                     continue  # table is well-represented; FTS is doing fine
 
                 try:
-                    aug_nodes = await self._backend.search_fts(f"{table_name} {query}", limit=5)
+                    if self._backend_fts_include_embedding:
+                        aug_nodes = await self._backend.search_fts(
+                            f"{table_name} {query}",
+                            limit=5,
+                            include_embedding=fts_include_embedding,
+                        )
+                    else:
+                        aug_nodes = await self._backend.search_fts(f"{table_name} {query}", limit=5)
                 except Exception as exc:
                     logger.warning("table-hint FTS failed (%r): %s", table_name, exc)
                     continue
@@ -664,7 +689,14 @@ class EvidenceSearch:
             ranked_lists: list[list] = [list(fts_nodes)]
             for sub in sub_queries:
                 try:
-                    sub_fts = await self._backend.search_fts(sub, limit=fts_seed_limit)
+                    if self._backend_fts_include_embedding:
+                        sub_fts = await self._backend.search_fts(
+                            sub,
+                            limit=fts_seed_limit,
+                            include_embedding=fts_include_embedding,
+                        )
+                    else:
+                        sub_fts = await self._backend.search_fts(sub, limit=fts_seed_limit)
                     ranked_lists.append(sub_fts)
                 except Exception as exc:
                     logger.warning("sub-query FTS failed (%r): %s", sub, exc)

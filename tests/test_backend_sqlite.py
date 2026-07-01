@@ -283,6 +283,22 @@ class TestSQLiteSearch:
         results = await sqlite.search_fts("배포")
         assert len(results) == 1
 
+    async def test_fts_can_skip_embedding_materialization(self, sqlite: SQLiteBackend) -> None:
+        await sqlite.save_node(
+            Node(
+                title="Vector document",
+                content="alpha beta content",
+                embedding=[0.1, 0.2, 0.3],
+            )
+        )
+
+        full = await sqlite.search_fts("alpha", limit=1)
+        light = await sqlite.search_fts("alpha", limit=1, include_embedding=False)
+
+        assert full[0].embedding == [0.1, 0.2, 0.3]
+        assert light[0].embedding == []
+        assert light[0].title == "Vector document"
+
     async def test_fuzzy_like(self, sqlite: SQLiteBackend) -> None:
         await sqlite.save_node(Node(title="Performance tuning", content="Optimize database"))
         results = await sqlite.search_fuzzy("Performance")

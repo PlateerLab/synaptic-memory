@@ -1206,7 +1206,12 @@ class SQLiteBackend:
     # --- Search ---
 
     async def search_fts(
-        self, query: str, *, limit: int = 20, with_scores: bool = False
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        with_scores: bool = False,
+        include_embedding: bool = True,
     ) -> list[Node] | list[tuple[Node, float]]:
         db = self._db()
         # Query-time normalisation is **more aggressive** than index-time:
@@ -1239,8 +1244,9 @@ class SQLiteBackend:
         # bm25(table, w0, w1, w2) — col0=node_id(0), col1=title(3.0), col2=content(1.0).
         # FTS5 bm25 returns negative values; more negative = better match.
         fts_query = " OR ".join(f'"{t}"' for t in terms)
-        fts_sql = """
-            SELECT n.*, bm25(syn_nodes_fts, 0, 3.0, 1.0) AS _bm25
+        node_columns = _node_select_columns("n", include_embedding=include_embedding)
+        fts_sql = f"""
+            SELECT {node_columns}, bm25(syn_nodes_fts, 0, 3.0, 1.0) AS _bm25
             FROM syn_nodes_fts
             JOIN syn_nodes n ON n.id = syn_nodes_fts.node_id
             WHERE syn_nodes_fts MATCH ?
@@ -1266,7 +1272,10 @@ class SQLiteBackend:
                 like = f"%{t}%"
                 params.extend([like, like])
             params.append(_like_fallback_limit(limit, len(scored_nodes)))
-            like_sql = f"SELECT * FROM syn_nodes WHERE {like_parts} LIMIT ?"
+            like_sql = (
+                f"SELECT {_node_select_columns(include_embedding=include_embedding)} "
+                f"FROM syn_nodes WHERE {like_parts} LIMIT ?"
+            )
             async with db.execute(like_sql, params) as cur:
                 rows2 = await cur.fetchall()
             for r in rows2:
@@ -1756,6 +1765,34 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
     if na == 0.0 or nb == 0.0:
         return 0.0
     return dot / (na * nb)
+
+
+_NODE_SELECT_COLUMNS = (
+    "id",
+    "kind",
+    "title",
+    "content",
+    "tags_json",
+    "level",
+    "vitality",
+    "access_count",
+    "success_count",
+    "failure_count",
+    "source",
+    "properties_json",
+    "embedding_json",
+    "created_at",
+    "updated_at",
+)
+
+
+def _node_select_columns(alias: str = "", *, include_embedding: bool = True) -> str:
+    prefix = f"{alias}." if alias else ""
+    return ", ".join(
+        f"{prefix}{col}"
+        for col in _NODE_SELECT_COLUMNS
+        if include_embedding or col != "embedding_json"
+    )
 
 
 def _row_to_node(row: aiosqlite.Row) -> Node:

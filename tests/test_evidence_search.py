@@ -263,6 +263,42 @@ class TestPipelineShape:
             "evidence_count",
         }.issubset(set(result.diagnostics))
 
+    async def test_fts_embedding_materialization_tracks_query_embedding_need(self):
+        class CountingBackend(MemoryBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.include_embedding_calls: list[bool] = []
+
+            async def search_fts(
+                self,
+                query: str,
+                *,
+                limit: int = 20,
+                include_embedding: bool = True,
+            ) -> list[Node]:
+                self.include_embedding_calls.append(include_embedding)
+                return await super().search_fts(query, limit=limit)
+
+        backend = CountingBackend()
+        await backend.connect()
+        await backend.save_node(
+            Node(
+                id="alpha",
+                kind=NodeKind.CHUNK,
+                title="alpha",
+                content="alpha content",
+                embedding=[0.1, 0.2],
+            )
+        )
+
+        searcher = EvidenceSearch(backend=backend)
+        await searcher.search("alpha", k=1)
+        assert backend.include_embedding_calls[0] is False
+
+        backend.include_embedding_calls.clear()
+        await searcher.search("alpha", k=1, query_embedding=[0.1, 0.2])
+        assert backend.include_embedding_calls[0] is True
+
     async def test_ppr_seed_scores_are_bounded_by_relevance(self):
         scores = {f"n{i}": float(i) for i in range(80)}
 
