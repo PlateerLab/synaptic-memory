@@ -336,12 +336,29 @@ class DocumentIngester:
         t0 = time.time()
 
         category_ids: dict[str, str] = {}
+        pending_nodes: list[Node] = []
+        pending_edges: list[Edge] = []
+        pending_doc_node_ids: set[str] = set()
         pending_memory_events: list[MemoryEvent] = []
+
+        async def flush_pending() -> None:
+            if not pending_nodes and not pending_edges and not pending_memory_events:
+                return
+            await self._save_nodes(pending_nodes)
+            await self._save_edges(pending_edges)
+            await self._save_memory_events(pending_memory_events)
+            pending_nodes.clear()
+            pending_edges.clear()
+            pending_doc_node_ids.clear()
+            pending_memory_events.clear()
 
         for doc in source.documents():
             doc_node_id = _doc_node_id(doc.doc_id)
             doc_category = _nfc(doc.category)
             doc_title = _nfc(doc.title)
+
+            if doc_node_id in pending_doc_node_ids:
+                await flush_pending()
 
             existing = await self._backend.get_node(doc_node_id)
             replacing = False
@@ -499,8 +516,9 @@ class DocumentIngester:
 
                 prev_chunk_node_id = chunk_node_id
 
-            await self._save_nodes(nodes_to_save)
-            await self._save_edges(edges_to_save)
+            pending_nodes.extend(nodes_to_save)
+            pending_edges.extend(edges_to_save)
+            pending_doc_node_ids.add(doc_node_id)
             pending_memory_events.append(
                 MemoryEvent(
                     kind=MemoryEventKind.UPDATE if replacing else MemoryEventKind.INGEST,
@@ -517,7 +535,7 @@ class DocumentIngester:
                 )
             )
 
-        await self._save_memory_events(pending_memory_events)
+        await flush_pending()
 
         # Structural reference linking — when the profile declares a clean
         # target inventory (``reference_key_property``), turn explicit
