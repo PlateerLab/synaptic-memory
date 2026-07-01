@@ -946,8 +946,9 @@ Memory health snapshot:
 | GraphExpander saturated path skip | `mz_openie_graphskip_saturated_results.json` | `0.7s` | `0:09.46` | PASS |
 | SQLite FTS LIKE deficit cap | `mz_openie_ftslike_deficit_results.json` | `1.5s` | `0:04.88` | PASS |
 | EvidenceAggregator terminal token skip | `mz_openie_agg_terminal_tokens_results.json` | `0.9s` | `0:09.15` | PASS |
+| GraphExpander empty REFERENCES skip | `mz_openie_graphrefs_partialindex_rerun_results.json` | `0.7s` | `0:11.23` | PASS |
 
-핵심 검색/게이트 지표는 최신 EvidenceAggregator terminal token skip run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 GraphExpander empty REFERENCES skip rerun에서도 유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -965,21 +966,21 @@ Memory health snapshot:
 | aggregate pool limit | `30 avg/query` |
 | FTS seed count | `1,128 total / 25.6 avg` |
 | scored candidates | baseline `1,266 / 28.8 avg`, OpenIE `1,508 / 34.3 avg` |
-| baseline aggregate stage | `43.2ms total / 1.0ms avg` |
-| OpenIE aggregate stage | `40.9ms total / 0.9ms avg` |
-| baseline FTS stage | `45.8ms total / 1.0ms avg` |
-| OpenIE FTS stage | `48.8ms total / 1.1ms avg` |
-| baseline expand stage | `30.8ms total / 0.7ms avg` |
-| baseline expand_graph / expand_ppr | `29.8ms / 0.9ms` |
-| baseline graph seed_prefetch / document | `0.0ms / 12.7ms` |
-| baseline PPR bfs / iterate | `0.6ms / 0.1ms` |
+| baseline aggregate stage | `43.3ms total / 1.0ms avg` |
+| OpenIE aggregate stage | `40.3ms total / 0.9ms avg` |
+| baseline FTS stage | `47.3ms total / 1.1ms avg` |
+| OpenIE FTS stage | `50.0ms total / 1.1ms avg` |
+| baseline expand stage | `30.0ms total / 0.7ms avg` |
+| baseline expand_graph / expand_ppr | `28.9ms / 1.1ms` |
+| baseline graph references / document | `3.7ms / 13.3ms` |
+| baseline PPR bfs / iterate | `0.7ms / 0.1ms` |
 | baseline PPR added candidates | `0 total / 0.0 avg` |
 | baseline PPR seed count | `1,128 total / 25.6 avg` |
-| OpenIE expand stage | `43.4ms total / 1.0ms avg` |
-| OpenIE expand_graph / expand_ppr | `41.2ms / 2.2ms` |
-| OpenIE graph seed_prefetch / document | `0.0ms / 11.7ms` |
-| OpenIE graph related / entity | `9.2ms / 9.5ms` |
-| OpenIE PPR bfs / iterate | `0.7ms / 0.3ms` |
+| OpenIE expand stage | `42.9ms total / 1.0ms avg` |
+| OpenIE expand_graph / expand_ppr | `40.6ms / 2.2ms` |
+| OpenIE graph references / document | `3.8ms / 12.2ms` |
+| OpenIE graph related / entity | `9.5ms / 9.8ms` |
+| OpenIE PPR bfs / iterate | `0.8ms / 0.3ms` |
 | OpenIE PPR skipped saturated | `37/44 queries` |
 | OpenIE PPR result count | `68 total / 1.5 avg` |
 | OpenIE PPR added candidates | `50 total / 1.1 avg` |
@@ -1218,6 +1219,16 @@ per-chunk fallback을 유지한다.
   no-regress, relation expanded/evidence `93/93`, `47/93`, scored candidates
   baseline/OpenIE `1,266/1,508`을 유지했다. Aggregate stage는 baseline
   `44.7ms -> 43.2ms`, OpenIE `42.3ms -> 40.9ms`로 줄었다.
+- GraphExpander empty REFERENCES skip은 backend가 `REFERENCES` edge kind 부재를
+  확인할 수 있을 때 seed별 REFERENCES filtered edge batch를 건너뛴다. SQLite에는
+  일반 filtered edge planner를 해치지 않도록 `kind = 'references'` partial index를
+  추가했고, Memory backend에는 같은 optional existence check를 추가했다. optional
+  method가 없는 backend는 기존 path를 그대로 사용한다. 200-chunk cache-only gate는
+  PASS했고, R@5 no-regress, relation expanded/evidence `93/93`, `47/93`,
+  scored candidates baseline/OpenIE `1,266/1,508`을 유지했다. 직접 수정한
+  REFERENCES stage는 baseline `5.7ms -> 3.7ms`, OpenIE `6.0ms -> 3.8ms`로
+  감소했다. Full search total은 FTS/SQLite run noise가 섞이므로 이 변화는
+  REFERENCES path의 불필요 read 제거로 해석한다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

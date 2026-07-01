@@ -616,6 +616,10 @@ class GraphExpander:
 
         No-op on corpora without REFERENCES edges. Capped per seed.
         """
+        has_references = await _has_edges_of_kind(self._backend, EdgeKind.REFERENCES)
+        if has_references is False:
+            return
+
         groups: list[tuple[str, list[str]]] = []
         node_ids: list[str] = []
         seen: set[str] = set()
@@ -694,6 +698,17 @@ def _edge_confidence(edge: object) -> float:
         return max(0.0, min(1.0, float(raw)))
     except (TypeError, ValueError):
         return 1.0
+
+
+async def _has_edges_of_kind(backend: object, kind: EdgeKind) -> bool | None:
+    has_kind = getattr(backend, "has_edges_of_kind", None)
+    if not callable(has_kind):
+        return None
+    try:
+        return bool(await has_kind(kind))
+    except Exception as exc:
+        logger.debug("edge-kind existence check failed for %s: %s", kind, exc)
+        return None
 
 
 def _is_document_scope_seed(node: Node) -> bool:

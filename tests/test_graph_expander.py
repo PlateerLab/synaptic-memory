@@ -407,6 +407,46 @@ async def test_references_expansion_noop_without_edges():
 
 
 @pytest.mark.asyncio
+async def test_references_expansion_skips_edge_reads_when_kind_absent():
+    """If the backend knows REFERENCES is absent, skip the seed edge batch."""
+
+    class CountingMemoryBackend(MemoryBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.has_kind_calls: list[str] = []
+            self.edge_filtered_batch_calls: list[tuple[tuple[str, ...], str, tuple[str, ...]]] = []
+
+        async def has_edges_of_kind(self, kind: str | EdgeKind) -> bool:
+            self.has_kind_calls.append(str(kind))
+            return await super().has_edges_of_kind(kind)
+
+        async def get_edges_batch_filtered(
+            self,
+            node_ids: list[str],
+            *,
+            direction: str = "both",
+            kinds: list[str | EdgeKind],
+        ) -> dict[str, list[Edge]]:
+            kind_values = tuple(sorted(str(kind) for kind in kinds))
+            self.edge_filtered_batch_calls.append((tuple(node_ids), direction, kind_values))
+            return await super().get_edges_batch_filtered(
+                node_ids, direction=direction, kinds=kinds
+            )
+
+    backend = CountingMemoryBackend()
+    await backend.connect()
+    seed = Node(id="solo", kind=NodeKind.ENTITY, title="Solo", content="x")
+    await backend.save_node(seed)
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[seed])
+
+    assert [r.reason for r in results] == ["seed"]
+    assert backend.has_kind_calls == [str(EdgeKind.REFERENCES)]
+    assert (("solo",), "both", (str(EdgeKind.REFERENCES),)) not in backend.edge_filtered_batch_calls
+
+
+@pytest.mark.asyncio
 async def test_seed_edges_are_cached_across_expansion_paths():
     """A seed can be inspected by REFERENCES, document-scope, and RELATED
     paths. The per-search cache should make that one backend edge read."""
