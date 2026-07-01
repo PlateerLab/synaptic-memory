@@ -219,9 +219,15 @@ class EvidenceAggregator:
         # crowd out the source document with a model-created artifact that only
         # repeats the query phrase. Relation-expanded OpenIE targets are kept:
         # those are the graph-only facts this layer is meant to surface.
-        visible_scored = [s for s in scored if not _is_openie_bridge_only_candidate(s)]
-        structured = [s for s in visible_scored if (s.node.properties or {}).get("_table_name")]
-        passage = [s for s in visible_scored if not (s.node.properties or {}).get("_table_name")]
+        structured: list[ScoredCandidate] = []
+        passage: list[ScoredCandidate] = []
+        for cand in scored:
+            if _is_openie_bridge_only_candidate(cand):
+                continue
+            if (cand.node.properties or {}).get("_table_name"):
+                structured.append(cand)
+            else:
+                passage.append(cand)
 
         passage_evidence = self._aggregate_passages(
             passage,
@@ -341,6 +347,8 @@ class EvidenceAggregator:
                     remaining.remove(pick)
 
         # --- Pass 2: greedy MMR fill ---
+        references_by_anchor = _references_by_anchor(remaining)
+        remaining_ids = {id(cand) for cand in remaining}
         while len(selected) < k and remaining:
             best_idx = -1
             best_adj = -math.inf
@@ -382,6 +390,7 @@ class EvidenceAggregator:
                 break
 
             chosen = remaining.pop(best_idx)
+            remaining_ids.discard(id(chosen))
             evidence = _make_evidence(chosen, reason="top_score")
             selected.append(evidence)
             if evidence.document_id:
@@ -395,11 +404,16 @@ class EvidenceAggregator:
             # query vocabulary with the query, so it can only enter as a
             # companion of the document that cites it. Bypasses MMR /
             # per-doc cap; capped per anchor to bound fan-out.
-            companions = [
-                c for c in remaining if c.reason == "references" and c.anchor_id == chosen.node.id
-            ]
-            for comp in companions[:_MAX_COMPANIONS_PER_ANCHOR]:
-                remaining.remove(comp)
+            companions = _available_reference_companions(
+                references_by_anchor,
+                remaining_ids,
+                chosen.node.id,
+            )
+            if companions:
+                companion_ids = {id(comp) for comp in companions}
+                remaining_ids.difference_update(companion_ids)
+                remaining = [cand for cand in remaining if id(cand) not in companion_ids]
+            for comp in companions:
                 comp_ev = _make_evidence(comp, reason="reference_companion")
                 selected.append(comp_ev)
                 if comp_ev.document_id:
@@ -528,7 +542,11 @@ def _bounded_passage_pool(
     if limit <= 0 or len(scored) <= limit:
         return list(scored)
 
-    ranked = sorted(enumerate(scored), key=lambda item: item[1].total, reverse=True)
+    ranked = (
+        list(enumerate(scored))
+        if _is_sorted_by_total_desc(scored)
+        else sorted(enumerate(scored), key=lambda item: item[1].total, reverse=True)
+    )
     keep: set[int] = {idx for idx, _cand in ranked[:limit]}
 
     # Category coverage may intentionally pick a lower-scored representative.
@@ -575,6 +593,32 @@ def _bounded_passage_pool(
         refs_by_anchor[cand.anchor_id] = count + 1
 
     return [cand for idx, cand in enumerate(scored) if idx in keep]
+
+
+def _references_by_anchor(scored: list[ScoredCandidate]) -> dict[str, list[ScoredCandidate]]:
+    refs: dict[str, list[ScoredCandidate]] = {}
+    for cand in scored:
+        if cand.reason != "references" or not cand.anchor_id:
+            continue
+        refs.setdefault(cand.anchor_id, []).append(cand)
+    return refs
+
+
+def _available_reference_companions(
+    refs_by_anchor: dict[str, list[ScoredCandidate]],
+    remaining_ids: set[int],
+    anchor_id: str,
+) -> list[ScoredCandidate]:
+    if not refs_by_anchor:
+        return []
+    companions: list[ScoredCandidate] = []
+    for cand in refs_by_anchor.get(anchor_id, []):
+        if id(cand) not in remaining_ids:
+            continue
+        companions.append(cand)
+        if len(companions) >= _MAX_COMPANIONS_PER_ANCHOR:
+            break
+    return companions
 
 
 def _best_category_index(
