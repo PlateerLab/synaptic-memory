@@ -336,6 +336,31 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - ranking diagnostics는 positive boost와 negative demotion을 분리해서 기록한다.
 - 최종 result order는 조정된 resonance 기준으로 정렬된다.
 
+후속 health demotion summary guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_health_demotion_summary_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `31/31` |
+| health_summarizes_scope_demotions | `true` |
+| memory_demoted_retrieval_count | `1` |
+| memory_demoted_node_count | `1` |
+| max_memory_scope_demotion | `0.1` |
+| memory_adjusted_retrieval_count | `2` |
+| memory_adjusted_node_count | `2` |
+
+추가로 검증된 동작:
+
+- retrieval ledger에 기록된 scope demotion diagnostics가 `memory_health()` summary로 집계된다.
+- positive boost, negative demotion, 전체 adjustment count를 health report에서 분리해서 볼 수 있다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash

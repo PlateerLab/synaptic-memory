@@ -261,10 +261,16 @@ class MemoryHealthReport:
     openie_artifact_count: int = 0
     openie_failure_rate: float = 0.0
     memory_boosted_retrieval_count: int = 0
+    memory_demoted_retrieval_count: int = 0
+    memory_adjusted_retrieval_count: int = 0
     memory_penalized_retrieval_count: int = 0
     memory_boosted_node_count: int = 0
+    memory_demoted_node_count: int = 0
+    memory_adjusted_node_count: int = 0
     memory_penalized_node_count: int = 0
     max_memory_scope_boost: float = 0.0
+    max_memory_scope_demotion: float = 0.0
+    max_memory_scope_adjustment: float = 0.0
     max_memory_signal_penalty: float = 0.0
     top_reinforced_node_ids: list[str] = field(default_factory=_str_list)
     top_reinforced_edge_ids: list[str] = field(default_factory=_str_list)
