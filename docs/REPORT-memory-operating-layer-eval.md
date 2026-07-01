@@ -954,6 +954,7 @@ Memory health snapshot:
 | GraphExpander selective relation light reads | `mz_openie_selective_related_light_results.json` | `0.8s` | `0:10.96` | PASS |
 | GraphExpander entity hub mention filter | `mz_openie_entity_hub_mentions_rerun_results.json` | `0.7s` | `0:05.59` | PASS |
 | GraphExpander document related skip | `mz_openie_skip_document_related_results.json` | `1.0s` | `0:10.70` | PASS |
+| GraphExpander document-scope PART_OF guard | `mz_openie_document_scope_partof_results.json` | `1.7s` | `0:09.18` | PASS |
 
 핵심 검색/게이트 지표는 GraphExpander document related skip run에서도 유지됐다:
 
@@ -1315,6 +1316,15 @@ per-chunk fallback을 유지한다.
   `1,266/1,508`을 유지했다. 대표 run 기준 related path는 baseline `4.7ms -> 0.14ms`,
   OpenIE `10.4ms -> 8.3ms`로 줄었다. rerun에서도 related path는 baseline `0.15ms`,
   OpenIE `9.3ms`로 유지됐고, full total은 FTS/SQLite noise가 섞였다.
+- GraphExpander document-scope PART_OF guard는 document-scope expansion에서
+  `CONTAINS`와 chunk-oriented `PART_OF`는 유지하되, document seed의 outgoing
+  `PART_OF` category edge를 same-document neighbourhood로 취급하지 않는다. 이전에는
+  `doc -> category PART_OF`가 `document_chunk` reason으로 확장될 수 있었다. Unit test는
+  category가 document-scope 결과에서 빠지고, legacy chunk `PART_OF` parent expansion은
+  유지되는지 고정한다. 200-chunk cache-only gate는 PASS했고, R@5 no-regress, relation
+  expanded/evidence `93/93`, `47/93`, scored candidates baseline/OpenIE `1,266/1,508`을
+  유지했다. 이 run에서는 candidate count 변화가 없어 performance claim보다 graph path
+  semantics cleanup으로 해석한다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,

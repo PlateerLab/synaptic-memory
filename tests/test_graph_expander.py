@@ -873,6 +873,49 @@ async def test_document_scope_batches_candidate_node_fetches():
 
 
 @pytest.mark.asyncio
+async def test_document_scope_skips_document_category_part_of():
+    backend = MemoryBackend()
+    await backend.connect()
+    doc = Node(id="doc", kind=NodeKind.ENTITY, title="Doc", content="doc", tags=["document"])
+    category = Node(
+        id="category",
+        kind=NodeKind.CONCEPT,
+        title="Category",
+        content="category",
+        tags=["category"],
+    )
+    chunk = Node(id="chunk", kind=NodeKind.CHUNK, title="Chunk", content="chunk", tags=["chunk"])
+    for node in (doc, category, chunk):
+        await backend.save_node(node)
+    await backend.save_edge(Edge(source_id=doc.id, target_id=category.id, kind=EdgeKind.PART_OF))
+    await backend.save_edge(Edge(source_id=doc.id, target_id=chunk.id, kind=EdgeKind.CONTAINS))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[doc])
+
+    by_id = {r.node.id: r for r in results}
+    assert by_id["chunk"].reason == "document_chunk"
+    assert "category" not in by_id
+
+
+@pytest.mark.asyncio
+async def test_document_scope_keeps_chunk_part_of_parent():
+    backend = MemoryBackend()
+    await backend.connect()
+    parent = Node(id="parent", kind=NodeKind.CHUNK, title="Parent", content="parent")
+    child = Node(id="child", kind=NodeKind.CHUNK, title="Child", content="child")
+    await backend.save_node(parent)
+    await backend.save_node(child)
+    await backend.save_edge(Edge(source_id=child.id, target_id=parent.id, kind=EdgeKind.PART_OF))
+
+    expander = GraphExpander(backend=backend)
+    results = await expander.expand(anchors=QueryAnchors(query="q"), seed_nodes=[child])
+
+    by_id = {r.node.id: r for r in results}
+    assert by_id["parent"].reason == "document_chunk"
+
+
+@pytest.mark.asyncio
 async def test_openie_part_of_seed_is_not_document_scope():
     backend = MemoryBackend()
     await backend.connect()

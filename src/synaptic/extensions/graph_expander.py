@@ -376,10 +376,9 @@ class GraphExpander:
                     or (offer_limit is not None and len(node_ids) >= offer_limit)
                 ):
                     break
-                # Only follow the structural edges — skip RELATED / MENTIONS
-                if edge.kind not in (EdgeKind.CONTAINS, EdgeKind.PART_OF):
+                other_id = _document_scope_other_id(seed, edge)
+                if other_id is None:
                     continue
-                other_id = edge.target_id if edge.source_id == seed.id else edge.source_id
                 if state.contains(other_id) or other_id in candidate_ids:
                     continue
                 candidate_ids.append(other_id)
@@ -770,6 +769,25 @@ def _is_relation_seed(node: Node) -> bool:
         return False
     tags = set(node.tags or [])
     return "document" not in tags
+
+
+def _document_scope_other_id(seed: Node, edge: object) -> str | None:
+    kind = getattr(edge, "kind", None)
+    source_id = getattr(edge, "source_id", "")
+    target_id = getattr(edge, "target_id", "")
+    if kind == EdgeKind.CONTAINS:
+        return target_id if source_id == seed.id else source_id
+    if kind != EdgeKind.PART_OF:
+        return None
+
+    # Keep chunk-oriented PART_OF layouts (chunk -> parent chunk/doc and the
+    # inverse incoming edge to a parent doc), but do not treat document ->
+    # category PART_OF as same-document neighbourhood expansion.
+    if seed.kind == NodeKind.CHUNK:
+        return target_id if source_id == seed.id else source_id
+    if target_id == seed.id:
+        return source_id
+    return None
 
 
 def _record_timing(timings_ms: dict[str, float] | None, key: str, started_at: float) -> None:
