@@ -408,6 +408,31 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - top demoted memory가 health summary에만 머물지 않고 pollution monitor signal로 연결된다.
 - signal provenance에는 `score_scope_key`, feedback count, score가 metadata로 남는다.
 
+후속 edge score signal endpoint/penalty guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_edge_score_signal_endpoint_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `35/35` |
+| strong_negative_edge_score_signal_records_endpoints | `true` |
+| strong_negative_edge_score_signal_demoted_endpoint | `true` |
+| signal edge_ids | `poc_edge_score_demoted_relation` |
+| signal node_ids | `poc_scope_demoted_memory`, `poc_scope_clean_memory` |
+| memory_signal_penalized_nodes | `1.0` |
+
+추가로 검증된 동작:
+
+- edge-level negative scope score signal이 relation id뿐 아니라 affected endpoint node ids도 보존한다.
+- persisted signal metadata만으로 어떤 relation과 endpoint가 suspect인지 추적할 수 있다.
+- 해당 signal은 search-time memory signal penalty 흐름으로 연결된다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
