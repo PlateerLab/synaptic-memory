@@ -1513,6 +1513,48 @@ async def test_memory_health_summarizes_memory_event_kinds():
 
 
 @pytest.mark.asyncio
+async def test_memory_health_summarizes_event_scope_counts():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope_a = MemoryScope(workspace_id="ws", user_id="u1")
+    scope_b = MemoryScope(workspace_id="ws", user_id="u2")
+    await backend.save_memory_event(
+        MemoryEvent(id="mem_a1", kind=MemoryEventKind.INGEST, scope=scope_a)
+    )
+    await backend.save_memory_event(
+        MemoryEvent(id="mem_a2", kind=MemoryEventKind.FEEDBACK, scope=scope_a)
+    )
+    await backend.save_memory_event(
+        MemoryEvent(id="mem_b1", kind=MemoryEventKind.INGEST, scope=scope_b)
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(id="ret_a1", query="a", scope=scope_a, returned_node_ids=["a"])
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="ret_a2",
+            query="a",
+            scope=scope_a,
+            selected_node_ids=["a"],
+            signal=FeedbackSignal.TASK_SUCCESS,
+            success=True,
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(id="ret_b1", query="b", scope=scope_b, returned_node_ids=["b"])
+    )
+
+    global_health = await graph.memory_health(persist_signals=False)
+    scoped_health = await graph.memory_health(scope=scope_a, persist_signals=False)
+
+    assert global_health.memory_event_scope_counts == {scope_a.key: 2, scope_b.key: 1}
+    assert global_health.retrieval_event_scope_counts == {scope_a.key: 2, scope_b.key: 1}
+    assert scoped_health.memory_event_scope_counts == {scope_a.key: 2}
+    assert scoped_health.retrieval_event_scope_counts == {scope_a.key: 2}
+    assert scoped_health.feedback_event_count == 1
+
+
+@pytest.mark.asyncio
 async def test_memory_health_counts_semantic_failures_without_selected_chunks():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)
