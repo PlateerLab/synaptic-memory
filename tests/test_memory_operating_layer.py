@@ -1396,6 +1396,78 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
 
 
 @pytest.mark.asyncio
+async def test_memory_health_summarizes_feedback_outcomes():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="search_event",
+            query="alpha",
+            scope=scope,
+            returned_node_ids=["a", "b"],
+            signal=FeedbackSignal.SELECTED,
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="selected_feedback",
+            query="alpha",
+            scope=scope,
+            selected_node_ids=["a"],
+            signal=FeedbackSignal.SELECTED,
+            success=None,
+            properties={"parent_event_id": "search_event"},
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="success_feedback",
+            query="alpha",
+            scope=scope,
+            selected_node_ids=["a"],
+            signal=FeedbackSignal.TASK_SUCCESS,
+            success=True,
+            properties={"parent_event_id": "search_event"},
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="negative_feedback",
+            query="alpha",
+            scope=scope,
+            selected_node_ids=["b"],
+            signal=FeedbackSignal.EXPLICIT_NEGATIVE,
+            success=False,
+            properties={"parent_event_id": "search_event"},
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="other_scope_feedback",
+            query="alpha",
+            scope=MemoryScope(user_id="u2"),
+            selected_node_ids=["c"],
+            signal=FeedbackSignal.TASK_SUCCESS,
+            success=True,
+        )
+    )
+
+    health = await graph.memory_health(scope=scope, persist_signals=False)
+
+    assert health.retrieval_events == 4
+    assert health.feedback_event_count == 3
+    assert health.feedback_success_count == 1
+    assert health.feedback_failure_count == 1
+    assert health.feedback_neutral_count == 1
+    assert health.feedback_signal_counts == {
+        str(FeedbackSignal.SELECTED): 1,
+        str(FeedbackSignal.TASK_SUCCESS): 1,
+        str(FeedbackSignal.EXPLICIT_NEGATIVE): 1,
+    }
+
+
+@pytest.mark.asyncio
 async def test_memory_monitor_flags_recent_growth_and_reinforcement_signals_idempotently():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)

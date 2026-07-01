@@ -1760,6 +1760,13 @@ per-chunk fallback을 유지한다.
   `top_reinforced_edge_scores={"poc_edge_score_boost_relation": 1.0, "c9d2dba80f0a4131": 0.2}`,
   `top_demoted_node_scores={"poc_scope_demoted_memory": -1.0, "poc_scope_score_failed_memory": -0.75, "poc_scoped_negative_memory": -0.25}`,
   `top_demoted_edge_scores={"poc_edge_score_demoted_relation": -1.0}`였다.
+- Memory health feedback outcomes는 retrieval ledger 안의 검색 이벤트와 feedback 이벤트를
+  구분해 feedback 성공/실패/중립 수와 signal 분포를 health report에 노출한다. 따라서
+  "성공/실패를 어떻게 아는가"는 자동 진실판정이 아니라 `record_feedback()`으로 저장된
+  관찰 신호의 집계로 설명된다. POC gate는 `health_reports_feedback_outcomes`를 추가해
+  `43/43` PASS했다. 대표 결과는 `feedback_event_count=7`, `feedback_success_count=5`,
+  `feedback_failure_count=1`, `feedback_neutral_count=1`,
+  `feedback_signal_counts={"task_success": 5, "task_failure": 1, "selected": 1}`였다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
