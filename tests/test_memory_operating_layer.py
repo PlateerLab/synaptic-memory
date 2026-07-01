@@ -843,6 +843,8 @@ async def test_scope_boost_is_capped_without_reversing_base_relevance():
     assert result.nodes[1].resonance == pytest.approx(1.0)
     assert result.nodes[1].resonance <= 0.96 * 1.10
     assert result.diagnostics["memory_scope_boosted_nodes"] == 1.0
+    assert result.diagnostics["memory_scope_demoted_nodes"] == 0.0
+    assert result.diagnostics["memory_scope_adjusted_nodes"] == 1.0
     assert result.diagnostics["memory_scope_node_score_hits"] == 1.0
     assert result.diagnostics["memory_scope_edge_score_hits"] == 0.0
     assert result.diagnostics["memory_scope_max_abs_boost"] == pytest.approx(0.10)
@@ -887,10 +889,44 @@ async def test_scope_boost_uses_edge_score_for_endpoint_without_node_score():
     assert result.nodes[1].resonance <= result.nodes[0].resonance
     assert result.nodes[1].resonance <= 0.96 * 1.10
     assert result.diagnostics["memory_scope_boosted_nodes"] == 1.0
+    assert result.diagnostics["memory_scope_demoted_nodes"] == 0.0
+    assert result.diagnostics["memory_scope_adjusted_nodes"] == 1.0
     assert result.diagnostics["memory_scope_node_score_hits"] == 0.0
     assert result.diagnostics["memory_scope_edge_score_hits"] == 1.0
     assert result.diagnostics["memory_scope_max_abs_boost"] == pytest.approx(0.10)
     assert result.diagnostics["memory_scope_order_clamps"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_scope_negative_score_can_demote_higher_relevance_candidate():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+    scope = MemoryScope(user_id="u1")
+    demoted = Node(id="scope_demoted", title="Demoted memory")
+    clean = Node(id="scope_clean", title="Clean memory")
+    await backend.save_node(demoted)
+    await backend.save_node(clean)
+    await backend.save_memory_score(
+        MemoryScore(scope_key=scope.key, node_id=demoted.id, score=-1.0)
+    )
+    result = SearchResult(
+        query="policy",
+        nodes=[
+            ActivatedNode(node=demoted, activation=1.0, resonance=1.0),
+            ActivatedNode(node=clean, activation=0.96, resonance=0.96),
+        ],
+    )
+
+    await graph._apply_scope_boost(result, scope)
+
+    assert [item.node.id for item in result.nodes] == [clean.id, demoted.id]
+    assert result.nodes[0].resonance == pytest.approx(0.96)
+    assert result.nodes[1].resonance == pytest.approx(0.90)
+    assert result.diagnostics["memory_scope_boosted_nodes"] == 0.0
+    assert result.diagnostics["memory_scope_demoted_nodes"] == 1.0
+    assert result.diagnostics["memory_scope_adjusted_nodes"] == 1.0
+    assert result.diagnostics["memory_scope_max_abs_boost"] == pytest.approx(0.10)
+    assert result.diagnostics["memory_scope_order_clamps"] == 0.0
 
 
 @pytest.mark.asyncio

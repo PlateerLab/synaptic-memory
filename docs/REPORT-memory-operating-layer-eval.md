@@ -310,6 +310,32 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - OpenIE relation edge id가 `openie_` prefix가 아니어도 `properties.is_openie=true` provenance metadata로 health artifact count에 포함된다.
 - health report의 OpenIE artifact 지표가 id naming convention에만 의존하지 않는다.
 
+후속 negative scope demotion guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_negative_scope_demotion_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `30/30` |
+| negative_scope_score_demoted_candidate | `true` |
+| negative_scope_order | `poc_scope_clean_memory`, `poc_scope_demoted_memory` |
+| negative_scope_demoted_resonance | `0.9` |
+| memory_scope_boosted_nodes | `0.0` |
+| memory_scope_demoted_nodes | `1.0` |
+
+추가로 검증된 동작:
+
+- positive scope reinforcement는 base relevance를 뒤집지 않도록 계속 clamp된다.
+- negative scope score는 clamp에 막히지 않고 해당 후보를 실제로 demote할 수 있다.
+- ranking diagnostics는 positive boost와 negative demotion을 분리해서 기록한다.
+- 최종 result order는 조정된 resonance 기준으로 정렬된다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
