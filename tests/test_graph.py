@@ -7,7 +7,7 @@ import pytest
 from synaptic.agent_search import SearchIntent, suggest_intent
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.entity_extractor_openie import ChainedEntityExtractor, LLMOpenIEExtractor
-from synaptic.graph import SynapticGraph
+from synaptic.graph import SynapticGraph, _default_fts_seed_limit
 from synaptic.models import DigestResult, EdgeKind, MaintenanceResult, Node, NodeKind
 from synaptic.ontology import (
     build_agent_ontology,
@@ -565,6 +565,45 @@ class TestSearchRuntimeOptions:
         result = await g.search("retrieval topic", limit=3, fts_seed_limit=40, per_document_cap=1)
         assert result is not None
         assert "ppr_added_count" in result.diagnostics
+
+    async def test_default_fts_seed_limit_scales_at_2x(self) -> None:
+        assert _default_fts_seed_limit(3) == 20
+        assert _default_fts_seed_limit(30) == 60
+
+    async def test_search_uses_tighter_default_fts_seed_limit(self) -> None:
+        backend = MemoryBackend()
+        await backend.connect()
+        g = SynapticGraph(backend, reranker=_SpyReranker())
+        for i in range(50):
+            await g.add(
+                f"Doc {i}",
+                f"content about retrieval topic shared term {i}",
+                kind=NodeKind.CONCEPT,
+            )
+
+        result = await g.search("retrieval topic", limit=15, rerank=False)
+
+        assert result.diagnostics["fts_seed_count"] == 30.0
+
+    async def test_explicit_fts_seed_limit_still_wins(self) -> None:
+        backend = MemoryBackend()
+        await backend.connect()
+        g = SynapticGraph(backend, reranker=_SpyReranker())
+        for i in range(50):
+            await g.add(
+                f"Doc {i}",
+                f"content about retrieval topic shared term {i}",
+                kind=NodeKind.CONCEPT,
+            )
+
+        result = await g.search(
+            "retrieval topic",
+            limit=15,
+            fts_seed_limit=40,
+            rerank=False,
+        )
+
+        assert result.diagnostics["fts_seed_count"] == 40.0
 
     async def test_reuses_evidence_search_for_same_runtime_options(self) -> None:
         g = await self._graph(_SpyReranker())
