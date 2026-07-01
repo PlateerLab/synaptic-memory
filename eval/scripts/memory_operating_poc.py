@@ -606,6 +606,9 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         scoped_negative_after_failure = (
             scoped_negative_after.failure_count if scoped_negative_after else -1
         )
+        drift_profile_key = (
+            "source=openie;extractor=fixture;model=drift-fixture;prompt_version=poc-drift-v1"
+        )
 
         gates = {
             "retrieval_event_recorded": bool(result.event_id)
@@ -675,6 +678,11 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 and health.memory_event_kind_counts.get(str(MemoryEventKind.RETRIEVAL), 0) >= 1
                 and health.memory_event_kind_counts.get(str(MemoryEventKind.FEEDBACK), 0) >= 7
                 and health.memory_event_kind_counts.get(str(MemoryEventKind.SIGNAL), 0) >= 1
+            ),
+            "health_reports_semantic_failure_buckets": (
+                health.semantic_extract_failure_counts.get(drift_profile_key, 0) == 3
+                and health.semantic_extract_attempt_counts.get(drift_profile_key, 0) == 3
+                and _round(health.semantic_extract_failure_rates.get(drift_profile_key, 0.0)) == 1.0
             ),
             "scope_score_repeated_failure_signal_created": (scope_score_failure_signal is not None),
             "strong_negative_scope_score_signal_created": (
