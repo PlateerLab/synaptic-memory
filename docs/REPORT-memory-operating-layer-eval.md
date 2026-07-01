@@ -21,11 +21,13 @@ cache/replay harness가 들어갔다.
    - cache-only OpenIE smoke에서 relation target expansion이 `1/26 -> 26/26`,
      strong relation evidence가 `0/8 -> 8/8`로 증가했다.
 3. **DeepSeek Flash live extraction이 실제로 동작하는가?**
-   - 5-row live warm smoke에서 `5/5` extraction이 성공했고, cache-only 재측정에서
-     relation target expansion이 `2/47 -> 47/47`로 유지됐다.
+   - 5-row live warm smoke에서 `5/5` extraction이 성공했다.
+   - 이어서 50-row live warm batch도 `50/50` extraction이 성공했고, 30% coverage
+     cache-only 재측정에서 relation target expansion이 `7/145 -> 141/145`로
+     유지됐다.
 
 따라서 이 문서는 **foundation merge 직후의 deterministic 검증 + DeepSeek
-Flash live smoke + 다음 scale eval 계획**을 기록한다.
+Flash live warm 결과 + 다음 scale eval 계획**을 기록한다.
 
 ---
 
@@ -307,51 +309,12 @@ Relation probe after DeepSeek smoke:
 
 ---
 
-## DeepSeek Flash Scale Eval Readiness
+## DeepSeek Flash 50-Row Scale Eval
 
-같은 입력에서 cache warming dry-run을 실행해 다음 batch 크기와 coverage
-projection을 계산했다.
-
-```bash
-uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
-  --openie-cache-warm-input ~/synaptic-eval/openie_cache_missing_200.jsonl \
-  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
-  --llm-model deepseek-v4-flash \
-  --openie-model-profile deepseek_v4_flash \
-  --openie-cache-warm-dry-run \
-  --openie-cache-warm-limit 50 \
-  --openie-cache-warm-total-chunks 200 \
-  --openie-cache-warm-target-coverage 0.5 \
-  --openie-cache-warm-pending-output \
-    ~/synaptic-eval/openie_cache_pending_eval_next_50_target50.jsonl \
-  --results ~/synaptic-eval/openie_cache_warm_dry_run_eval_next_results.json
-```
-
-Dry-run result:
-
-| 항목 | 값 |
-|---|---:|
-| missing rows loaded | `195` |
-| pending batch rows | `50` |
-| deferred by limit | `145` |
-| existing covered chunks | `5/200` |
-| projected after one 50-row batch | `55/200` |
-| projected coverage | `27.5%` |
-| target coverage | `50.0%` |
-| rows needed for target | `95` |
-| batches needed at limit 50 | `2` |
-| target reachable | `true` |
-
-초기 cache 기준으로 DeepSeek Flash 50개 batch를 warm하면 coverage는
-`2.5% -> 27.5%`로 오르고, 50% coverage에는 총 95개 추가 row가 필요하다.
-5-row live smoke 이후에는 현재 coverage가 `5.0%`이므로, 다음 50-row batch는
-대략 `30.0%` coverage까지 올릴 수 있다.
-
-Live run command:
+5-row smoke 이후 같은 missing manifest에서 50-row live warm batch를 실행했다.
+이미 smoke에서 cache된 5개 row는 건너뛰고, 다음 50개 uncached row만 처리했다.
 
 ```bash
-export DEEPSEEK_API_KEY=...
-
 uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
   --openie-cache-warm-input ~/synaptic-eval/openie_cache_missing_200.jsonl \
   --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
@@ -363,30 +326,109 @@ uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
   --openie-cache-warm-total-chunks 200 \
   --openie-cache-warm-target-coverage 0.5 \
   --openie-cache-warm-pending-output \
-    ~/synaptic-eval/openie_cache_pending_eval_next_50_target50.jsonl \
+    ~/synaptic-eval/openie_cache_pending_deepseek_50.jsonl \
   --openie-cache-warm-failure-output \
-    ~/synaptic-eval/openie_cache_failures_eval_next_50.jsonl \
+    ~/synaptic-eval/openie_cache_failures_deepseek_50.jsonl \
   --results ~/synaptic-eval/openie_cache_warm_deepseek_50_results.json
 ```
 
-After warming, rerun cache-only scoring with a higher coverage gate:
+Warm result:
+
+| 항목 | 값 |
+|---|---:|
+| missing rows loaded | `195` |
+| skipped cached rows | `5` |
+| rows attempted | `50` |
+| rows succeeded | `50` |
+| extraction failures | `0` |
+| new entities | `228` |
+| new triples | `153` |
+| cache entries after warm | `64` |
+| projected after batch | `60/200` |
+| projected coverage | `30.0%` |
+| target coverage | `50.0%` |
+| rows needed for target | `90` |
+| batches needed at limit 50 | `2` |
+| target reachable | `true` |
+| elapsed | `859.2s` |
+
+Audit after 50-row warm:
+
+| 항목 | 값 |
+|---|---:|
+| cache lines | `64` |
+| unique keys | `64` |
+| parseable records | `64` |
+| invalid JSON | `0` |
+| invalid records | `0` |
+| empty records | `2` |
+| entities | `316` |
+| triples | `221` |
+| result | PASS |
+
+Cache-only scoring at 30% coverage:
 
 ```bash
 uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
   --max-input-chunks 200 \
   --openie-source-limit 200 \
-  --openie-max-chunks 50 \
+  --openie-max-chunks 60 \
   --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
   --openie-cache-only \
   --llm-model deepseek-v4-flash \
-  --relation-probe-limit 100 \
+  --relation-probe-limit 150 \
   --min-relation-expanded-lift 10 \
   --min-relation-evidence-lift 5 \
   --min-strong-relation-evidence-rate 0.5 \
-  --min-openie-cache-coverage 0.25 \
+  --min-openie-cache-coverage 0.30 \
   --embed-base-url "" \
   --results ~/synaptic-eval/mz_openie_cache_deepseek_50_results.json
 ```
+
+Scoring result:
+
+| 항목 | 값 |
+|---|---:|
+| cache eligible chunks | `60/200` |
+| cache coverage | `30.0%` |
+| relation edges created | `191` |
+| OpenIE artifacts | `724` |
+| extraction failures | `0` |
+| baseline R@1 | `93.2%` |
+| OpenIE R@1 | `90.9%` |
+| baseline R@5 | `100.0%` |
+| OpenIE R@5 | `100.0%` |
+| cache coverage gate | PASS |
+| relation probe gate | PASS |
+| revertibility gate | PASS |
+
+Relation probe at 30% coverage:
+
+| 지표 | graph expansion off | graph expansion on |
+|---|---:|---:|
+| relation target expanded | `7/145` | `141/145` |
+| relation evidence hit | `7/145` | `58/145` |
+| strong relation evidence | `1/40` | `35/40` |
+
+Relation lift:
+
+| 지표 | 값 |
+|---|---:|
+| expanded lift | `+134` |
+| evidence lift | `+51` |
+| strong expanded lift | `+39` |
+| strong evidence lift | `+34` |
+
+해석:
+
+- 5-row smoke 이후 50-row batch까지 DeepSeek Flash extraction failure는 `0`이다.
+- coverage가 `5.0% -> 30.0%`로 증가하면서 relation probe 대상은
+  `47 -> 145`개로 늘었다.
+- R@5는 여전히 작은 benchmark에서 천장이지만, relation evidence lift는
+  `+14 -> +51`로 커졌다.
+- strong relation evidence는 graph expansion off `1/40`에서 on `35/40`으로
+  증가했다. 기본 RAG 검색만으로는 거의 못 잡는 relation evidence를 OpenIE
+  graph expansion이 끌어오는 신호가 더 강해졌다.
 
 ---
 
@@ -404,7 +446,7 @@ uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
 
 아직 남은 증명:
 
-- DeepSeek Flash live extraction 50/100/200 chunk batch.
+- DeepSeek Flash live extraction 100/200 chunk batch.
 - Qwen3.6 small quality reference 재측정.
 - cache coverage가 올라간 상태에서 R@1/R@5와 relation evidence lift가 유지되는지
   확인.
