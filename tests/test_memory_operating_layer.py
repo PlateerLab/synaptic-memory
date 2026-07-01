@@ -684,6 +684,10 @@ async def test_search_record_true_writes_retrieval_and_memory_events():
     assert retrieval_events[0].query == "Alpha"
     assert retrieval_events[0].returned_node_ids == [item.node.id for item in result.nodes]
     assert node.id in retrieval_events[0].returned_node_ids
+    assert retrieval_events[0].properties["query"] == "Alpha"
+    assert retrieval_events[0].properties["returned_count"] == str(len(result.nodes))
+    assert retrieval_events[0].properties["total_candidates"] == str(result.total_candidates)
+    assert "search_time_ms" in retrieval_events[0].properties
     memory_events = await backend.list_memory_events(
         kind=MemoryEventKind.RETRIEVAL,
         scope=scope,
@@ -691,6 +695,7 @@ async def test_search_record_true_writes_retrieval_and_memory_events():
     )
     assert [event.source_id for event in memory_events] == [result.event_id]
     assert memory_events[0].node_ids == retrieval_events[0].returned_node_ids
+    assert memory_events[0].properties == retrieval_events[0].properties
 
 
 @pytest.mark.asyncio
@@ -928,6 +933,16 @@ async def test_search_applies_scope_boost_cap_on_public_path(monkeypatch):
     recorded = await backend.get_retrieval_event(result.event_id)
     assert recorded is not None
     assert recorded.returned_node_ids == [high.id, boosted.id]
+    assert recorded.properties["memory_scope_boosted_nodes"] == "1.000000"
+    assert recorded.properties["memory_scope_node_score_hits"] == "1.000000"
+    assert recorded.properties["memory_scope_max_abs_boost"] == "0.100000"
+    memory_events = await backend.list_memory_events(
+        kind=MemoryEventKind.RETRIEVAL,
+        scope=scope,
+        limit=10,
+    )
+    memory_event = next(event for event in memory_events if event.source_id == result.event_id)
+    assert memory_event.properties == recorded.properties
 
 
 @pytest.mark.asyncio

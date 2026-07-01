@@ -193,6 +193,21 @@ def _prop_csv_ids(props: dict[str, str], key: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _retrieval_event_properties(result: SearchResult) -> dict[str, str]:
+    properties = {
+        "query": result.query,
+        "returned_count": str(len(result.nodes)),
+        "total_candidates": str(int(result.total_candidates)),
+        "search_time_ms": f"{float(result.search_time_ms):.6f}",
+        "stages_used": ",".join(result.stages_used),
+    }
+    for key, value in sorted((result.diagnostics or {}).items()):
+        if not key.startswith("memory_"):
+            continue
+        properties[key] = f"{float(value):.6f}"
+    return properties
+
+
 def _node_source_label(node: Node) -> str:
     props = node.properties or {}
     return (
@@ -2500,6 +2515,7 @@ class SynapticGraph:
         save = getattr(self._backend, "save_retrieval_event", None)
         if not callable(save):
             return None
+        properties = _retrieval_event_properties(result)
         event = RetrievalEvent(
             query=result.query,
             scope=scope or MemoryScope(),
@@ -2507,6 +2523,7 @@ class SynapticGraph:
             signal=FeedbackSignal.SELECTED,
             success=None,
             confidence=1.0,
+            properties=properties,
         )
         await save(event)
         await self._save_memory_event(
@@ -2517,7 +2534,7 @@ class SynapticGraph:
                 source_id=event.id,
                 node_ids=list(event.returned_node_ids),
                 confidence=event.confidence,
-                properties={"query": event.query},
+                properties=properties,
                 created_at=event.created_at,
             )
         )

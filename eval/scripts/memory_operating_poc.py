@@ -346,6 +346,10 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         health = await graph.memory_health(scope=scope)
         memory_events = await backend.list_memory_events(scope=scope, limit=1000)
         retrieval_events = await backend.list_retrieval_events(scope=scope, limit=1000)
+        recorded_retrieval_event = next(
+            (event for event in retrieval_events if event.id == result.event_id),
+            None,
+        )
         signal_events = [
             event for event in memory_events if str(event.kind) == str(MemoryEventKind.SIGNAL)
         ]
@@ -507,6 +511,15 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
         gates = {
             "retrieval_event_recorded": bool(result.event_id)
             and any(event.id == result.event_id for event in retrieval_events),
+            "retrieval_event_properties_recorded": (
+                recorded_retrieval_event is not None
+                and recorded_retrieval_event.properties.get("query") == result.query
+                and recorded_retrieval_event.properties.get("returned_count")
+                == str(len(result.nodes))
+                and recorded_retrieval_event.properties.get("total_candidates")
+                == str(result.total_candidates)
+                and "search_time_ms" in recorded_retrieval_event.properties
+            ),
             "feedback_events_recorded": {selected_feedback.id, task_feedback.id}.issubset(
                 {event.id for event in retrieval_events}
             ),
@@ -614,6 +627,9 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 "alpha_node_id": alpha.id,
                 "beta_node_id": beta.id,
                 "retrieval_event_id": result.event_id,
+                "retrieval_event_properties": (
+                    dict(recorded_retrieval_event.properties) if recorded_retrieval_event else {}
+                ),
                 "selected_feedback_event_id": selected_feedback.id,
                 "task_feedback_event_id": task_feedback.id,
                 "scoped_failure_event_id": scoped_failure_feedback.id,

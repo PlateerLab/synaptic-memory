@@ -197,6 +197,31 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - 운영/평가 레이어가 memory layer의 ranking 개입 여부를 SearchResult만 보고도
   추적할 수 있다.
 
+후속 retrieval ledger diagnostics 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_retrieval_ledger_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `25/25` |
+| retrieval properties recorded | `true` |
+| recorded query | `Alpha retention` |
+| recorded returned count | `2` |
+| recorded total candidates | `2` |
+
+추가로 검증된 동작:
+
+- `record=True` 검색의 `RetrievalEvent.properties`와 mirror `MemoryEvent.properties`에
+  compact retrieval metadata가 남는다.
+- `memory_` prefix ranking diagnostics는 검색 event ledger에 같이 저장되어
+  SearchResult가 없어도 나중에 ranking 개입 이력을 추적할 수 있다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
