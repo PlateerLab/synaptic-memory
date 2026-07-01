@@ -480,6 +480,29 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - search-time penalty diagnostics가 penalized node id, source signal id, related edge id를 compact metadata로 남긴다.
 - `record=True` 또는 retrieval event 기록 시 숫자 diagnostics와 문자열 provenance diagnostics가 함께 저장된다.
 
+후속 health penalty provenance summary guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_health_penalty_provenance_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `38/38` |
+| health_reports_penalty_provenance | `true` |
+| top penalty signal ids | `memsig_32d1378cc670e496`, `poc_edge_only_signal_node` |
+| top penalized node ids | `poc_scope_clean_memory`, `poc_edge_only_signal_suspect` |
+| top penalty edge ids | `poc_edge_score_demoted_relation`, `poc_edge_only_signal_relation` |
+
+추가로 검증된 동작:
+
+- `memory_health()`가 retrieval ledger의 signal penalty provenance를 집계한다.
+- health report만 보고도 가장 자주 penalty를 만든 signal, node, edge 후보를 추적할 수 있다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash

@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import unicodedata
+from collections import Counter
 from difflib import SequenceMatcher
 from time import time
 from typing import TYPE_CHECKING, cast
@@ -3345,6 +3346,9 @@ class SynapticGraph:
         max_scope_demotion = 0.0
         max_scope_adjustment = 0.0
         max_signal_penalty = 0.0
+        penalty_signal_counts: Counter[str] = Counter()
+        penalized_node_counts: Counter[str] = Counter()
+        penalty_edge_counts: Counter[str] = Counter()
         for event in retrieval_events:
             props = event.properties or {}
             boosted_nodes = _prop_int(props, "memory_scope_boosted_nodes", 0)
@@ -3387,6 +3391,11 @@ class SynapticGraph:
             if penalized_nodes > 0:
                 penalized_retrieval_count += 1
                 penalized_node_count += penalized_nodes
+                penalty_signal_counts.update(_prop_csv_ids(props, "memory_signal_source_ids"))
+                penalized_node_counts.update(
+                    _prop_csv_ids(props, "memory_signal_penalized_node_ids")
+                )
+                penalty_edge_counts.update(_prop_csv_ids(props, "memory_signal_edge_ids"))
                 max_signal_penalty = max(
                     max_signal_penalty,
                     _prop_float(props, "memory_signal_max_penalty", 0.0),
@@ -3432,6 +3441,13 @@ class SynapticGraph:
             top_demoted_edge_ids=[
                 score.edge_id for score in top_demoted_edge_scores if score.edge_id
             ],
+            top_penalty_signal_ids=[
+                signal_id for signal_id, _ in penalty_signal_counts.most_common(10)
+            ],
+            top_penalized_node_ids=[
+                node_id for node_id, _ in penalized_node_counts.most_common(10)
+            ],
+            top_penalty_edge_ids=[edge_id for edge_id, _ in penalty_edge_counts.most_common(10)],
         )
 
     async def _semantic_extract_drift_signals(

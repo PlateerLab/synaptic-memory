@@ -585,6 +585,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
             edge_score_signal_penalty_result,
             scope=scope,
         )
+        penalty_provenance_health = await graph.memory_health(scope=scope)
 
         selected_before_success = (
             selected_before_feedback.success_count if selected_before_feedback else -1
@@ -781,6 +782,14 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 == scope_clean.id
             ),
+            "health_reports_penalty_provenance": (
+                strong_negative_edge_signal is not None
+                and strong_negative_edge_signal.id
+                in penalty_provenance_health.top_penalty_signal_ids
+                and "poc_edge_score_demoted_relation"
+                in penalty_provenance_health.top_penalty_edge_ids
+                and scope_clean.id in penalty_provenance_health.top_penalized_node_ids
+            ),
             "health_report_populated": (
                 health.memory_events >= 4
                 and health.retrieval_events >= 3
@@ -870,6 +879,7 @@ async def run_memory_operating_poc(args: argparse.Namespace) -> dict[str, Any]:
                 "edge_score_boost_diagnostics": dict(edge_boost_result.diagnostics),
                 "health": asdict(health),
                 "ranking_health": asdict(ranking_health),
+                "penalty_provenance_health": asdict(penalty_provenance_health),
                 "penalty_order": [item.node.id for item in penalty_result.nodes],
                 "penalized_failed_resonance": _round(penalized_failed.resonance),
                 "penalty_diagnostics": dict(penalty_result.diagnostics),
