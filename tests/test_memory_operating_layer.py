@@ -1302,6 +1302,23 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
             properties={
                 "memory_signal_penalized_nodes": "1.000000",
                 "memory_signal_max_penalty": "0.050000",
+                "memory_signal_penalized_node_ids": "node_penalized_a,node_penalized_b",
+                "memory_signal_source_ids": "sig_penalty_a",
+                "memory_signal_edge_ids": "edge_penalty_a",
+            },
+        )
+    )
+    await backend.save_retrieval_event(
+        RetrievalEvent(
+            id="ret_penalty_again",
+            query="penalty again",
+            scope=scope,
+            properties={
+                "memory_signal_penalized_nodes": "1.000000",
+                "memory_signal_max_penalty": "0.030000",
+                "memory_signal_penalized_node_ids": "node_penalized_a",
+                "memory_signal_source_ids": "sig_penalty_a,sig_penalty_b",
+                "memory_signal_edge_ids": "edge_penalty_a,edge_penalty_b",
             },
         )
     )
@@ -1336,15 +1353,15 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
 
     health = await graph.memory_health(scope=scope, persist_signals=False)
 
-    assert health.retrieval_events == 3
+    assert health.retrieval_events == 4
     assert health.memory_boosted_retrieval_count == 1
     assert health.memory_demoted_retrieval_count == 1
     assert health.memory_adjusted_retrieval_count == 2
-    assert health.memory_penalized_retrieval_count == 1
+    assert health.memory_penalized_retrieval_count == 2
     assert health.memory_boosted_node_count == 2
     assert health.memory_demoted_node_count == 2
     assert health.memory_adjusted_node_count == 4
-    assert health.memory_penalized_node_count == 1
+    assert health.memory_penalized_node_count == 2
     assert health.max_memory_scope_boost == pytest.approx(0.10)
     assert health.max_memory_scope_demotion == pytest.approx(0.08)
     assert health.max_memory_scope_adjustment == pytest.approx(0.10)
@@ -1353,6 +1370,9 @@ async def test_memory_health_summarizes_retrieval_ranking_diagnostics():
     assert health.top_reinforced_edge_ids == ["edge_top"]
     assert health.top_demoted_node_ids == ["node_demoted", "node_less_demoted"]
     assert health.top_demoted_edge_ids == ["edge_demoted"]
+    assert health.top_penalty_signal_ids == ["sig_penalty_a", "sig_penalty_b"]
+    assert health.top_penalized_node_ids == ["node_penalized_a", "node_penalized_b"]
+    assert health.top_penalty_edge_ids == ["edge_penalty_a", "edge_penalty_b"]
 
 
 @pytest.mark.asyncio

@@ -280,6 +280,9 @@ class MemoryHealthReport:
     top_reinforced_edge_ids: list[str] = field(default_factory=_str_list)
     top_demoted_node_ids: list[str] = field(default_factory=_str_list)
     top_demoted_edge_ids: list[str] = field(default_factory=_str_list)
+    top_penalty_signal_ids: list[str] = field(default_factory=_str_list)
+    top_penalized_node_ids: list[str] = field(default_factory=_str_list)
+    top_penalty_edge_ids: list[str] = field(default_factory=_str_list)
     generated_at: float = field(default_factory=time)
 
 
