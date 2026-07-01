@@ -179,6 +179,15 @@ class OpenIELinkStats:
 
 
 @dataclass(slots=True)
+class _OpenIELinkPlan:
+    """Prepared OpenIE writes for one chunk, before backend materialization."""
+
+    entity_requests: OrderedDict[str, str] = field(default_factory=OrderedDict)
+    hub_ids: list[str] = field(default_factory=list)
+    openie_edges: list[Edge] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class OpenIESelectionPolicy:
     """Deterministic prefilter for expensive OpenIE calls.
 
@@ -349,7 +358,7 @@ class OpenIELinker:
             return stats
 
         graph = _BackendGraphAdapter(_CachedNodeBackend(backend))
-        if self._max_concurrency > 1 and self._supports_staged_extraction():
+        if self._supports_staged_extraction():
             touched = await self._link_with_staged_concurrency(graph, selected, stats)
         else:
             touched = await self._link_serial(graph, selected, stats)
@@ -397,6 +406,7 @@ class OpenIELinker:
         """Run LLM extraction concurrently, then apply graph writes in input order."""
         extract_for_linking = self._extractor.extract_for_linking  # type: ignore[attr-defined]
         link_result = self._extractor.link_result  # type: ignore[attr-defined]
+        link_results = getattr(self._extractor, "link_results", None)
         semaphore = asyncio.Semaphore(self._max_concurrency)
 
         async def extract(chunk: Node) -> object:
@@ -408,6 +418,7 @@ class OpenIELinker:
 
         outcomes = await asyncio.gather(*(extract(chunk) for chunk in selected))
         touched: set[str] = set()
+        valid_results: list[tuple[str, object]] = []
         for chunk, outcome in zip(selected, outcomes, strict=True):
             if isinstance(outcome, Exception):
                 logger.warning(
@@ -417,14 +428,30 @@ class OpenIELinker:
                 )
                 stats.extraction_failures += 1
                 continue
+            valid_results.append((chunk.id, outcome))
+
+        if callable(link_results):
+            try:
+                ids = await link_results(
+                    graph,  # type: ignore[arg-type]
+                    valid_results,
+                )
+            except Exception:
+                logger.warning("OpenIE batch link failed", exc_info=True)
+                stats.extraction_failures += len(valid_results)
+                return touched
+            touched.update(ids)
+            return touched
+
+        for chunk_id, outcome in valid_results:
             try:
                 ids = await link_result(
                     graph,  # type: ignore[arg-type]
-                    chunk.id,
+                    chunk_id,
                     outcome,
                 )
             except Exception:
-                logger.warning("OpenIE post-pass failed for chunk %s", chunk.id, exc_info=True)
+                logger.warning("OpenIE post-pass failed for chunk %s", chunk_id, exc_info=True)
                 stats.extraction_failures += 1
                 continue
             touched.update(ids)
@@ -578,8 +605,44 @@ class LLMOpenIEExtractor:
         result: OpenIEResult,
     ) -> list[str]:
         """Materialize an extracted OpenIE result into the graph."""
-        if not result.entities and not result.triples:
+        plan = self._plan_link_result(node_id, result)
+        if not plan.hub_ids and not plan.openie_edges:
             return []
+        await self._ensure_entities(graph, plan.entity_requests)
+        await _save_openie_edges_batch(graph.backend, plan.openie_edges)
+        return plan.hub_ids
+
+    async def link_results(
+        self,
+        graph: SynapticGraph,
+        chunk_results: Sequence[tuple[str, OpenIEResult]],
+    ) -> list[str]:
+        """Materialize multiple extracted OpenIE results with run-level batch writes."""
+        plans = [self._plan_link_result(node_id, result) for node_id, result in chunk_results]
+        entity_requests: OrderedDict[str, list[str]] = OrderedDict()
+        openie_edges: list[Edge] = []
+        hub_ids: list[str] = []
+        touched: set[str] = set()
+
+        for plan in plans:
+            for canonical, entity_type in plan.entity_requests.items():
+                types = entity_requests.setdefault(canonical, [])
+                if entity_type not in types:
+                    types.append(entity_type)
+            openie_edges.extend(plan.openie_edges)
+            for hub_id in plan.hub_ids:
+                if hub_id not in touched:
+                    touched.add(hub_id)
+                    hub_ids.append(hub_id)
+
+        await self._ensure_entities_by_types(graph, entity_requests)
+        await _save_openie_edges_batch(graph.backend, openie_edges)
+        return hub_ids
+
+    def _plan_link_result(self, node_id: str, result: OpenIEResult) -> _OpenIELinkPlan:
+        """Build deterministic node/edge writes for a chunk without touching the backend."""
+        if not result.entities and not result.triples:
+            return _OpenIELinkPlan()
 
         entity_types: dict[str, str] = {}
         aliases: dict[str, str] = {}
@@ -639,7 +702,9 @@ class LLMOpenIEExtractor:
         hub_ids: list[str] = []
         touched: set[str] = set()
         openie_edges: list[Edge] = []
-        hub_id_by_canonical = await self._ensure_entities(graph, entity_requests)
+        hub_id_by_canonical = {
+            canonical: deterministic_entity_id(canonical) for canonical in entity_requests
+        }
 
         for canonical, confidence in entity_mentions:
             hub_id = hub_id_by_canonical[canonical]
@@ -701,8 +766,11 @@ class LLMOpenIEExtractor:
                 ),
             )
 
-        await _save_openie_edges_batch(graph.backend, openie_edges)
-        return hub_ids
+        return _OpenIELinkPlan(
+            entity_requests=entity_requests,
+            hub_ids=hub_ids,
+            openie_edges=openie_edges,
+        )
 
     async def extract(self, text: str, *, title: str = "") -> OpenIEResult:
         """Run the LLM and parse an OpenIE response."""
@@ -757,6 +825,16 @@ class LLMOpenIEExtractor:
         graph: SynapticGraph,
         entities: OrderedDict[str, str],
     ) -> dict[str, str]:
+        by_types: OrderedDict[str, list[str]] = OrderedDict()
+        for canonical, entity_type in entities.items():
+            by_types.setdefault(canonical, []).append(entity_type)
+        return await self._ensure_entities_by_types(graph, by_types)
+
+    async def _ensure_entities_by_types(
+        self,
+        graph: SynapticGraph,
+        entities: OrderedDict[str, list[str]],
+    ) -> dict[str, str]:
         hub_ids: dict[str, str] = {}
         nodes_to_save: list[Node] = []
 
@@ -764,10 +842,11 @@ class LLMOpenIEExtractor:
             return hub_ids
 
         now = time()
-        for canonical, entity_type in entities.items():
+        for canonical, entity_types in entities.items():
             canonical = self._canonical(canonical)
             if not canonical:
                 continue
+            entity_types = _unique_entity_types(entity_types)
             hub_id = deterministic_entity_id(canonical)
             hub_ids[canonical] = hub_id
             existing = await graph.backend.get_node(hub_id)
@@ -775,17 +854,18 @@ class LLMOpenIEExtractor:
                 if "_openie" not in (existing.tags or []):
                     continue
                 tags = list(existing.tags or [])
-                type_tag = f"_type:{entity_type}"
                 changed = False
-                if type_tag not in tags:
-                    tags.append(type_tag)
-                    changed = True
+                for entity_type in entity_types:
+                    type_tag = f"_type:{entity_type}"
+                    if type_tag not in tags:
+                        tags.append(type_tag)
+                        changed = True
                 if existing.tags != tags:
                     existing.tags = tags
                     changed = True
                 properties = dict(existing.properties or {})
                 if "openie_type" not in properties:
-                    properties["openie_type"] = entity_type
+                    properties["openie_type"] = entity_types[0]
                     changed = True
                 if existing.properties != properties:
                     existing.properties = properties
@@ -804,9 +884,13 @@ class LLMOpenIEExtractor:
                     kind=NodeKind.ENTITY,
                     title=canonical,
                     content="",
-                    tags=["_openie", "_openie_entity", f"_type:{entity_type}"],
+                    tags=[
+                        "_openie",
+                        "_openie_entity",
+                        *(f"_type:{entity_type}" for entity_type in entity_types),
+                    ],
                     level=ConsolidationLevel.L0_RAW,
-                    properties={"openie_type": entity_type},
+                    properties={"openie_type": entity_types[0]},
                 )
             )
 
@@ -1168,6 +1252,18 @@ def _prop_int(props: dict[str, str], key: str, default: int) -> int:
         return int(float(props.get(key, default)))
     except (TypeError, ValueError):
         return default
+
+
+def _unique_entity_types(entity_types: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in entity_types:
+        value = str(raw or "entity").strip() or "entity"
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out or ["entity"]
 
 
 def _chunk_text(title: str, content: str) -> str:

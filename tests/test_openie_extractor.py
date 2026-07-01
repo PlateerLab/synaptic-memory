@@ -668,7 +668,8 @@ async def test_openie_linker_caches_entity_nodes_within_post_pass(tmp_path):
         assert backend.node_batch_calls == 1
         assert backend.node_batch_count == 1
         assert backend.node_update_count == 0
-        assert backend.openie_batch_calls == 2
+        assert backend.openie_batch_calls == 1
+        assert backend.openie_batch_edge_count == 2
         assert backend.openie_stamp_calls == 1
         assert backend.openie_stamp_edge_count == len(stats.edge_ids)
         events = await backend.list_memory_events(kind=MemoryEventKind.SEMANTIC_EXTRACT)
@@ -676,6 +677,45 @@ async def test_openie_linker_caches_entity_nodes_within_post_pass(tmp_path):
         edges = await backend.get_edges(deterministic_entity_id("Acme"), direction="incoming")
         assert edges
         assert all(edge.properties["source_event_id"] == events[0].id for edge in edges)
+    finally:
+        await backend.close()
+
+
+@pytest.mark.asyncio
+async def test_openie_linker_batches_link_results_across_chunks(tmp_path):
+    backend = _CountingSQLiteBackend(tmp_path / "openie_link_results_batch.db")
+    await backend.connect()
+    try:
+        await backend.save_node(
+            Node(id="chunk_a", kind=NodeKind.CHUNK, title="Chunk A", content="Acme Roadmap")
+        )
+        await backend.save_node(
+            Node(id="chunk_b", kind=NodeKind.CHUNK, title="Chunk B", content="Acme Roadmap")
+        )
+        backend.reset_counts()
+        llm = _FakeLLM(
+            {
+                "entities": [{"canonical": "Acme"}, {"canonical": "Roadmap"}],
+                "triples": [{"subject": "Acme", "predicate": "depends_on", "object": "Roadmap"}],
+            }
+        )
+
+        stats = await OpenIELinker(
+            LLMOpenIEExtractor(llm),
+            selection_policy=OpenIESelectionPolicy(min_candidate_entities=0, max_chunks=2),
+        ).link(backend, source_limit=2)
+
+        assert stats.chunks_selected == 2
+        assert stats.entity_nodes_touched == 2
+        assert backend.node_batch_calls == 1
+        assert backend.node_batch_count == 2
+        assert backend.openie_batch_calls == 1
+        assert backend.openie_batch_edge_count == 10
+
+        acme_edges = await backend.get_edges(deterministic_entity_id("Acme"), direction="outgoing")
+        relation_edges = [edge for edge in acme_edges if edge.kind == EdgeKind.DEPENDS_ON]
+        assert len(relation_edges) == 1
+        assert relation_edges[0].properties["support_count"] == "2"
     finally:
         await backend.close()
 
