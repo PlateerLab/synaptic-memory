@@ -433,6 +433,29 @@ uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
 - persisted signal metadata만으로 어떤 relation과 endpoint가 suspect인지 추적할 수 있다.
 - 해당 signal은 search-time memory signal penalty 흐름으로 연결된다.
 
+후속 signal event provenance guard 검증:
+
+```bash
+uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+  --results ~/synaptic-eval/memory_operating_signal_event_provenance_results.json
+```
+
+결과:
+
+| 항목 | 값 |
+|---|---:|
+| result | PASS |
+| gates | `36/36` |
+| strong_negative_signal_event_records_provenance | `true` |
+| signal event score_signal_type | `strong_negative_scope_score` |
+| signal event score_scope_key | `user:eval-user` |
+| signal event score | `-1.000000` |
+
+추가로 검증된 동작:
+
+- signal observation node뿐 아니라 `MemoryEventKind.SIGNAL` ledger에도 signal provenance가 남는다.
+- signal event만 조회해도 scope, target ids, confidence, score, reason을 추적할 수 있다.
+
 ### 4. OpenIE off baseline smoke
 
 ```bash
