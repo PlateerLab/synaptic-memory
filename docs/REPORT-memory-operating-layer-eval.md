@@ -914,6 +914,7 @@ Memory health snapshot:
 | PR #14 bulk purge | `mz_openie_cache_deepseek_to100_bulk_results.json` | `1508.6s` | `26:46.58` | PASS |
 | PR #15 batch edge replay | `mz_openie_cache_deepseek_to100_batch_results.json` | `955.4s` | `18:25.66` | PASS |
 | PR #17 entity replay cache | `mz_openie_cache_deepseek_to100_entitycache_results.json` | `614.9s` | `11:41.07` | PASS |
+| PR #19 relation probe read cache | `mz_openie_cache_deepseek_to100_probecache_results.json` | `724.3s` | `15:15.56` | PASS |
 
 핵심 검색/게이트 지표는 PR #17 이후에도 유지됐다:
 
@@ -936,6 +937,13 @@ relation probe와 health signal의 세부 카운트는 이전 run과 소폭 달�
 R@5 no-regress, cache coverage, relation probe, strong evidence, revertibility gate는
 모두 PASS를 유지했다.
 
+PR #19는 relation probe의 no-graph/graph ablation 검색 사이에서 FTS/node/edge
+read-through cache를 공유한다. Unit test는 duplicate FTS 호출 제거를 확인했고,
+100% cache-only gate도 PASS했지만, 단일 full rerun에서는 PR #17보다 wall time이
+길었다. 특히 OpenIE replay elapsed가 `614.9s -> 724.3s`로 흔들렸으므로, PR #19는
+현재 "품질 유지 + read-path 중복 제거"로만 해석하고 full-eval 성능 개선으로
+계산하지 않는다.
+
 성능 변화:
 
 - PR #14 이후 OpenIE elapsed는 `2131.8s -> 1508.6s`로 `29.2%` 감소했다.
@@ -945,7 +953,9 @@ R@5 no-regress, cache coverage, relation probe, strong evidence, revertibility g
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
   `save_node()` `1`, `update_node()` `0`으로 같은 hub 반복 조회/갱신을 제거했다.
-- 남은 큰 비용은 relation probe/search의 다수 DB roundtrip이다.
+- 남은 큰 비용은 OpenIE replay의 node/edge write path와 full scoring/search
+  roundtrip이다. Relation probe의 중복 FTS 제거만으로는 full gate wall time을
+  지배하지 못했다.
 
 ---
 
