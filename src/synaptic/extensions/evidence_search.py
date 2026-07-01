@@ -82,8 +82,8 @@ _RRF_VEC_K = 90
 _PPR_SEED_MIN = 32
 _PPR_SEED_MULTIPLIER = 1
 _PPR_RESULT_MULTIPLIER = 2
-_AGGREGATE_POOL_MIN = 64
-_AGGREGATE_POOL_MULTIPLIER = 2
+_AGGREGATE_POOL_MIN = 48
+_AGGREGATE_POOL_MULTIPLIER = 1
 
 # Anchor-coverage thresholds for the adaptive controller (SYNAPTIC_ADAPTIVE):
 # a query whose anchor terms overlap the retrieved docs >= HI is lexically
