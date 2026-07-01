@@ -923,8 +923,10 @@ Memory health snapshot:
 | graph expand edge batch | `mz_openie_cache_deepseek_to100_edgebatch_results.json` | `1.1s` | `0:10.65` | PASS |
 | PPR iteration cache/bounds | `mz_openie_cache_deepseek_to100_pprbounded_results.json` | `2.4s` | `0:12.66` | PASS |
 | evidence aggregate token cache | `mz_openie_cache_deepseek_to100_aggtok_results.json` | `0.8s` | `0:07.93` | PASS |
+| EvidenceSearch PPR depth-1 discovery | `mz_openie_cache_deepseek_to100_pprdepth1_results.json` | `1.1s` | `0:13.75` | PASS |
 
-핵심 검색/게이트 지표는 최신 evidence aggregate token cache run에서도 유지됐다:
+핵심 검색/게이트 지표는 최신 EvidenceSearch PPR depth-1 discovery run에서도
+유지됐다:
 
 | 항목 | 값 |
 |---|---:|
@@ -939,13 +941,14 @@ Memory health snapshot:
 | relation evidence lift | `+31` |
 | memory health signals | `930` |
 | suspect memories | `31` |
-| baseline aggregate stage | `327.8ms total / 7.5ms avg` |
-| OpenIE aggregate stage | `359.2ms total / 8.2ms avg` |
-| baseline expand stage | `75.6ms total / 1.7ms avg` |
-| baseline expand_graph / expand_ppr | `47.7ms / 27.8ms` |
-| OpenIE expand stage | `481.3ms total / 10.9ms avg` |
-| OpenIE expand_graph / expand_ppr | `107.7ms / 373.5ms` |
-| OpenIE PPR bfs / iterate | `186.8ms / 110.6ms` |
+| baseline aggregate stage | `315.2ms total / 7.2ms avg` |
+| OpenIE aggregate stage | `279.4ms total / 6.3ms avg` |
+| baseline expand stage | `63.8ms total / 1.5ms avg` |
+| baseline expand_graph / expand_ppr | `44.9ms / 18.9ms` |
+| baseline PPR bfs / iterate | `2.8ms / 10.8ms` |
+| OpenIE expand stage | `160.6ms total / 3.7ms avg` |
+| OpenIE expand_graph / expand_ppr | `95.9ms / 64.7ms` |
+| OpenIE PPR bfs / iterate | `5.3ms / 32.1ms` |
 
 주의: PR #17은 OpenIE entity node의 불필요한 `updated_at` 갱신을 줄이므로,
 relation probe와 health signal의 세부 카운트는 이전 run과 소폭 달라졌다. 다만
@@ -1013,6 +1016,14 @@ per-chunk fallback을 유지한다.
   재사용한다. R@5/relation probe/revertibility gate는 PASS를 유지했다. 같은 run의
   OpenIE PPR/FTS stage는 실행 노이즈로 더 느리게 측정됐으므로, 이 변화는 직접
   수정한 aggregate stage timing으로 해석한다.
+- EvidenceSearch PPR depth-1 discovery 이후 OpenIE expand stage는
+  `481.3ms -> 160.6ms`, OpenIE PPR은 `373.5ms -> 64.7ms`, OpenIE PPR BFS/read는
+  `186.8ms -> 5.3ms`로 감소했다. 일반 PPR API의 기본 `bfs_depth=2`는 유지하고,
+  EvidenceSearch candidate discovery만 `bfs_depth=1`을 사용한다. GraphExpander가
+  이미 1-hop neighbours를 당겨오므로, discovery PPR은 direct relation targets를
+  랭킹하는 데 필요한 한 layer만 materialize한다. R@5/relation probe/revertibility
+  gate는 PASS를 유지했다. 해당 run의 full wall time은 이전 aggregate-token-cache
+  run보다 길었으므로, 이 변화는 search-stage timing으로 평가한다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
@@ -1025,9 +1036,10 @@ per-chunk fallback을 유지한다.
   `92.006s` 대비 ingest-run batch `2.683s`로 `34.3x` 빨랐다.
 - 50-chunk OpenIE link micro-benchmark는 run-level materialization에서
   `save_nodes_batch=1`, `save_openie_edges_batch=1`로 완료됐다.
-- 남은 큰 검색-stage 비용은 OpenIE PPR BFS/read다. Baseline document ingest write
-  path, OpenIE replay write path, GraphExpander path, aggregate tokenisation path는
-  200-chunk gate 기준으로 더 이상 지배 병목이 아니다.
+- 남은 큰 검색-stage 비용은 evidence aggregation과 OpenIE GraphExpander/PPR
+  iteration이다. PPR BFS/read, baseline document ingest write path, OpenIE replay
+  write path, aggregate tokenisation path는 200-chunk gate 기준으로 더 이상 지배
+  병목이 아니다.
 
 ---
 

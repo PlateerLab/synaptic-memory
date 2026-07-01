@@ -327,6 +327,53 @@ class TestPipelineShape:
         assert relation_expansion.edge_confidence == pytest.approx(0.9)
         assert "ent_roadmap" in {item.node.id for item in with_graph.evidence}
 
+    async def test_ppr_discovery_stays_one_hop_from_search_seed(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        seed = Node(
+            id="seed",
+            kind=NodeKind.CHUNK,
+            title="seedonly",
+            content="seedonly lexical anchor",
+        )
+        direct = Node(
+            id="direct",
+            kind=NodeKind.CHUNK,
+            title="direct",
+            content="direct graph neighbour",
+        )
+        indirect = Node(
+            id="indirect",
+            kind=NodeKind.CHUNK,
+            title="indirect",
+            content="indirect second layer",
+        )
+        await backend.save_node(seed)
+        await backend.save_node(direct)
+        await backend.save_node(indirect)
+        await backend.save_edge(
+            Edge(
+                id="seed_direct",
+                source_id=seed.id,
+                target_id=direct.id,
+                kind=EdgeKind.RELATED,
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="direct_indirect",
+                source_id=direct.id,
+                target_id=indirect.id,
+                kind=EdgeKind.RELATED,
+            )
+        )
+
+        result = await EvidenceSearch(backend=backend).search("seedonly", k=3)
+
+        expanded_reasons = {item.node.id: item.reason for item in result.expanded}
+        assert expanded_reasons["direct"] == "ppr_discovery"
+        assert "indirect" not in expanded_reasons
+
     async def test_openie_entity_seed_does_not_crowd_source_evidence(self):
         backend = MemoryBackend()
         await backend.connect()
