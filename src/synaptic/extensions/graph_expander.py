@@ -207,32 +207,37 @@ class GraphExpander:
         # multi-hop retrieval into a single structural hop.
         # No-op on corpora without REFERENCES edges.
         stage_t0 = time()
-        await self._expand_references(seed_nodes, state, reads)
+        if not state.is_full():
+            await self._expand_references(seed_nodes, state, reads)
         _record_timing(timings_ms, "expand_graph_references", stage_t0)
 
         # Step 3 — walk category siblings. Categories are a cheap way
         # to surface cross-document context that lexical FTS misses.
         stage_t0 = time()
-        await self._expand_category_siblings(anchors, state, reads)
+        if not state.is_full():
+            await self._expand_category_siblings(anchors, state, reads)
         _record_timing(timings_ms, "expand_graph_category", stage_t0)
 
         # Step 4 — for every seed document, pull its chunks; for every
         # seed chunk, pull its parent document (and its sibling chunks).
         # This is the "stay inside the same document" expansion.
         stage_t0 = time()
-        await self._expand_document_scope(seed_nodes, state, reads)
+        if not state.is_full():
+            await self._expand_document_scope(seed_nodes, state, reads)
         _record_timing(timings_ms, "expand_graph_document", stage_t0)
 
         # Step 5 — chunk-next sequence walk. Cheap and often useful for
         # narrative documents where the relevant answer spans neighbours.
         stage_t0 = time()
-        await self._expand_chunk_next(seed_nodes, state, reads)
+        if not state.is_full():
+            await self._expand_chunk_next(seed_nodes, state, reads)
         _record_timing(timings_ms, "expand_graph_chunk_next", stage_t0)
 
         # Step 6 — entity mentions. Only triggers if the corpus has
         # ENTITY hub nodes (post-processed by EntityLinker).
         stage_t0 = time()
-        await self._expand_entity_mentions(seed_nodes, state, reads)
+        if not state.is_full():
+            await self._expand_entity_mentions(seed_nodes, state, reads)
         _record_timing(timings_ms, "expand_graph_entity", stage_t0)
 
         # Step 7 — RELATED edges (FK relationships for structured data) and
@@ -243,7 +248,8 @@ class GraphExpander:
         # represent memory facts (e.g., concept→depends_on→policy). These are
         # valuable for relation-only discovery that lexical RAG cannot see.
         stage_t0 = time()
-        await self._expand_related(seed_nodes, state, reads)
+        if not state.is_full():
+            await self._expand_related(seed_nodes, state, reads)
         _record_timing(timings_ms, "expand_graph_related", stage_t0)
 
         return state.results()

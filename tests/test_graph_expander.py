@@ -268,6 +268,58 @@ class TestBudget:
         )
         assert len(results) == 2
 
+    async def test_full_seed_budget_skips_followup_graph_reads(self):
+        class CountingMemoryBackend(MemoryBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.neighbor_calls: list[str] = []
+                self.edge_filtered_batch_calls: list[
+                    tuple[tuple[str, ...], str, tuple[str, ...]]
+                ] = []
+
+            async def get_neighbors(
+                self,
+                node_id: str,
+                *,
+                depth: int = 1,
+            ) -> list[tuple[Node, Edge]]:
+                self.neighbor_calls.append(node_id)
+                return await super().get_neighbors(node_id, depth=depth)
+
+            async def get_edges_batch_filtered(
+                self,
+                node_ids: list[str],
+                *,
+                direction: str = "both",
+                kinds: list[str | EdgeKind],
+            ) -> dict[str, list[Edge]]:
+                kind_values = tuple(sorted(str(kind) for kind in kinds))
+                self.edge_filtered_batch_calls.append((tuple(node_ids), direction, kind_values))
+                return await super().get_edges_batch_filtered(
+                    node_ids,
+                    direction=direction,
+                    kinds=kinds,
+                )
+
+        backend = CountingMemoryBackend()
+        await backend.connect()
+        nodes = await _build_fixture(backend)
+        expander = GraphExpander(backend=backend)
+
+        results = await expander.expand(
+            anchors=QueryAnchors(
+                query="규정",
+                categories=["규정"],
+                category_node_ids=["cat_rule"],
+            ),
+            seed_nodes=[nodes["doc_r1"]],
+            budget=ExpansionBudget(max_total_expanded=1),
+        )
+
+        assert [r.node.id for r in results] == ["doc_r1"]
+        assert backend.neighbor_calls == []
+        assert backend.edge_filtered_batch_calls == []
+
     async def test_no_duplicates(self):
         backend = MemoryBackend()
         await backend.connect()
