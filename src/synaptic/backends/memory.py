@@ -182,6 +182,13 @@ class MemoryBackend:
                 result[edge.target_id].append(edge)
         return result
 
+    async def has_edges_of_kind(self, kind: str | EdgeKind) -> bool:
+        kind_value = kind.value if isinstance(kind, EdgeKind) else str(kind)
+        return any(
+            (edge.kind.value if isinstance(edge.kind, EdgeKind) else str(edge.kind)) == kind_value
+            for edge in self._edges.values()
+        )
+
     async def update_edge(self, edge: Edge) -> None:
         if edge.id in self._edges:
             self._edges[edge.id] = edge

@@ -259,6 +259,8 @@ CREATE INDEX IF NOT EXISTS idx_syn_edges_source ON syn_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_target ON syn_edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_source_kind ON syn_edges(source_id, kind);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_target_kind ON syn_edges(target_id, kind);
+CREATE INDEX IF NOT EXISTS idx_syn_edges_references_kind
+    ON syn_edges(kind) WHERE kind = 'references';
 CREATE INDEX IF NOT EXISTS idx_syn_nodes_kind_level ON syn_nodes(kind, level);
 CREATE INDEX IF NOT EXISTS idx_syn_memory_events_scope ON syn_memory_events(scope_key, created_at);
 CREATE INDEX IF NOT EXISTS idx_syn_memory_events_kind ON syn_memory_events(kind, created_at);
@@ -696,6 +698,16 @@ class SQLiteBackend:
                 ):
                     result[edge.target_id].append(edge)
         return result
+
+    async def has_edges_of_kind(self, kind: str | EdgeKind) -> bool:
+        kind_value = kind.value if isinstance(kind, EdgeKind) else str(kind)
+        db = self._db()
+        async with db.execute(
+            "SELECT 1 FROM syn_edges WHERE kind = ? LIMIT 1",
+            (kind_value,),
+        ) as cur:
+            row = await cur.fetchone()
+        return row is not None
 
     async def update_edge(self, edge: Edge) -> None:
         db = self._db()

@@ -124,6 +124,21 @@ class TestSQLiteEdges:
         assert [edge.id for edge in filtered[n1.id]] == ["related"]
         assert filtered[n1.id][0].properties["confidence"] == "0.9"
 
+    async def test_has_edges_of_kind_tracks_existing_edge_kinds(
+        self, sqlite: SQLiteBackend
+    ) -> None:
+        n1 = Node(title="A")
+        n2 = Node(title="B")
+        await sqlite.save_node(n1)
+        await sqlite.save_node(n2)
+
+        assert await sqlite.has_edges_of_kind(EdgeKind.REFERENCES) is False
+
+        await sqlite.save_edge(Edge(source_id=n1.id, target_id=n2.id, kind=EdgeKind.REFERENCES))
+
+        assert await sqlite.has_edges_of_kind(EdgeKind.REFERENCES) is True
+        assert await sqlite.has_edges_of_kind(EdgeKind.CONTRADICTS) is False
+
     async def test_get_edges_batch_light_skips_properties(self, sqlite: SQLiteBackend) -> None:
         n1 = Node(title="A")
         n2 = Node(title="B")
