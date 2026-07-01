@@ -250,6 +250,9 @@ class TestChunkNext:
 
 @pytest.mark.asyncio
 class TestBudget:
+    async def test_default_total_cap_is_bounded(self):
+        assert ExpansionBudget().max_total_expanded == 40
+
     async def test_total_cap_enforced(self):
         backend = MemoryBackend()
         await backend.connect()
