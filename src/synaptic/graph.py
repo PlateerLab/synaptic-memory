@@ -2853,11 +2853,13 @@ class SynapticGraph:
         *,
         scope: MemoryScope | None = None,
         since: float | None = None,
+        persist: bool = True,
     ) -> list[MemorySignal]:
         """Scan for suspicious or noteworthy memory signals.
 
-        Signals are persisted as observation nodes, never used for automatic
-        deletion. Repeated scans upsert the same deterministic signal nodes.
+        Signals are persisted as observation nodes by default, never used for
+        automatic deletion. Repeated scans upsert the same deterministic signal
+        nodes. Set ``persist=False`` for read-only diagnostics/eval reports.
         """
         effective_scope = scope or MemoryScope()
         nodes = await self._backend.list_nodes(limit=100_000)
@@ -3083,8 +3085,9 @@ class SynapticGraph:
                 repeated_failure_targets.add(target)
 
         signals.extend(await self._semantic_extract_drift_signals(effective_scope, since=since))
-        for signal in signals:
-            await self._persist_memory_signal(signal)
+        if persist:
+            for signal in signals:
+                await self._persist_memory_signal(signal)
         return signals
 
     async def memory_health(
@@ -3092,10 +3095,20 @@ class SynapticGraph:
         *,
         scope: MemoryScope | None = None,
         since: float | None = None,
+        persist_signals: bool = True,
     ) -> MemoryHealthReport:
-        """Return a compact operational report for the memory layer."""
+        """Return a compact operational report for the memory layer.
+
+        By default this also persists deterministic signal nodes via
+        :meth:`scan_memory_signals`. Set ``persist_signals=False`` for read-only
+        health snapshots.
+        """
         effective_scope = scope or MemoryScope()
-        signals = await self.scan_memory_signals(scope=effective_scope, since=since)
+        signals = await self.scan_memory_signals(
+            scope=effective_scope,
+            since=since,
+            persist=persist_signals,
+        )
         nodes = await self._backend.list_nodes(limit=100_000)
         edges = await self._all_edges(nodes)
         memory_events = await self._list_memory_events(scope=scope, since=since, limit=100_000)

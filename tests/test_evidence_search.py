@@ -319,6 +319,45 @@ class TestPipelineShape:
         assert relation_expansion.edge_confidence == pytest.approx(0.9)
         assert "ent_roadmap" in {item.node.id for item in with_graph.evidence}
 
+    async def test_openie_entity_seed_does_not_crowd_source_evidence(self):
+        backend = MemoryBackend()
+        await backend.connect()
+        await backend.save_node(
+            Node(
+                id="doc_record",
+                kind=NodeKind.ENTITY,
+                title="Record management plan document",
+                content="Annual record management plan under public records law.",
+                tags=["document"],
+                properties={"doc_id": "doc_record"},
+            )
+        )
+        await backend.save_node(
+            Node(
+                id="ent_record_plan",
+                kind=NodeKind.ENTITY,
+                title="Record management plan",
+                content="Record management plan record management plan.",
+                tags=["_openie", "_openie_entity"],
+            )
+        )
+        await backend.save_edge(
+            Edge(
+                id="mention_record_plan",
+                source_id="doc_record",
+                target_id="ent_record_plan",
+                kind=EdgeKind.MENTIONS,
+                properties={"is_openie": "true"},
+            )
+        )
+
+        result = await EvidenceSearch(backend=backend).search("record management plan", k=2)
+
+        assert "ent_record_plan" in set(result.seeds)
+        evidence_ids = {item.node.id for item in result.evidence}
+        assert "doc_record" in evidence_ids
+        assert "ent_record_plan" not in evidence_ids
+
 
 # --- Per-document cap end-to-end ---
 

@@ -190,8 +190,15 @@ class EvidenceAggregator:
             return []
 
         # --- Kind split: structured rows → atoms, rest → passages ---
-        structured = [s for s in scored if (s.node.properties or {}).get("_table_name")]
-        passage = [s for s in scored if not (s.node.properties or {}).get("_table_name")]
+        #
+        # OpenIE entity hubs are retrieval bridges, not source evidence, when
+        # they enter as direct FTS/PPR seeds. Keeping them in final evidence can
+        # crowd out the source document with a model-created artifact that only
+        # repeats the query phrase. Relation-expanded OpenIE targets are kept:
+        # those are the graph-only facts this layer is meant to surface.
+        visible_scored = [s for s in scored if not _is_openie_bridge_only_candidate(s)]
+        structured = [s for s in visible_scored if (s.node.properties or {}).get("_table_name")]
+        passage = [s for s in visible_scored if not (s.node.properties or {}).get("_table_name")]
 
         passage_evidence = self._aggregate_passages(
             passage,
@@ -375,3 +382,10 @@ def _make_evidence(cand: ScoredCandidate, *, reason: str) -> Evidence:
         document_id=props.get("doc_id", ""),
         category=props.get("category", ""),
     )
+
+
+def _is_openie_bridge_only_candidate(cand: ScoredCandidate) -> bool:
+    tags = cand.node.tags or []
+    if "_openie_entity" not in tags:
+        return False
+    return cand.reason not in {"semantic_relation", "related"}

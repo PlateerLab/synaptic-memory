@@ -30,9 +30,12 @@ cache/replay harness가 들어갔다.
    - 다음 50-row batch는 transient 빈 응답 2건이 있었지만 failure manifest 재시도로
      둘 다 성공했고, 75% coverage gate에서 relation target expansion이
      `3/96 -> 80/96`으로 유지됐다.
+   - 최종 50-row batch와 transient failure 2건 재시도로 100% coverage까지 올렸고,
+     full cache-only gate에서 R@5 no-regress, relation probe, revertibility,
+     cache coverage가 모두 PASS했다.
 
 따라서 이 문서는 **foundation merge 직후의 deterministic 검증 + DeepSeek
-Flash live warm 결과 + 다음 scale eval 계획**을 기록한다.
+Flash live warm 결과 + 100% cache-only gate 결과**를 기록한다.
 
 ---
 
@@ -766,6 +769,142 @@ Relation lift:
 
 ---
 
+## DeepSeek Flash 100% Coverage Eval
+
+75% coverage 이후 남은 50개 row를 추가 warm했다. 첫 50-row batch에서는
+DeepSeek transient 빈 응답 2건이 있었고, failure manifest 2건만 재시도해 모두
+복구했다.
+
+Warm result:
+
+| 항목 | 값 |
+|---|---:|
+| rows attempted | `50` |
+| rows succeeded | `48` |
+| extraction failures | `2` |
+| new entities | `254` |
+| new triples | `174` |
+| cache entries after warm | `202` |
+| projected coverage | `99.0%` |
+| elapsed | `762.0s` |
+
+Retry result:
+
+| 항목 | 값 |
+|---|---:|
+| rows attempted | `2` |
+| rows succeeded | `2` |
+| extraction failures | `0` |
+| new entities | `12` |
+| new triples | `8` |
+| cache entries after retry | `204` |
+| elapsed | `40.5s` |
+
+Final cache audit:
+
+| 항목 | 값 |
+|---|---:|
+| cache lines | `204` |
+| unique keys | `204` |
+| parseable records | `204` |
+| invalid JSON | `0` |
+| invalid records | `0` |
+| empty records | `6` |
+| entities | `1,049` |
+| triples | `706` |
+| result | PASS |
+
+100% 첫 replay에서는 OpenIE entity seed artifact가 최종 evidence top-k를 밀어내고,
+`KRA produced/related X` 같은 허브 relation이 relation probe를 과대표집하면서
+R@5 no-regress와 strong evidence gate가 실패했다. 이 후속 패치에서 다음 가드를
+추가했다.
+
+- 최종 evidence에서는 OpenIE entity가 direct FTS/PPR seed로 들어온 경우 제외한다.
+  relation edge를 타고 들어온 OpenIE target은 그대로 유지한다.
+- relation probe는 같은 `(source, relation)` 쌍을 기본 3개까지만 샘플링한다.
+- eval용 memory health report는 signal node를 DB에 persist하지 않는 read-only
+  mode로 생성한다.
+
+Cache-only scoring at 100% coverage:
+
+```bash
+uv run --extra sqlite --extra embedding python eval/scripts/openie_mz_poc.py \
+  --max-input-chunks 200 \
+  --openie-source-limit 200 \
+  --openie-max-chunks 200 \
+  --openie-cache ~/synaptic-eval/openie_cache_mz_200_qwen.jsonl \
+  --openie-cache-only \
+  --llm-model deepseek-v4-flash \
+  --relation-probe-limit 100 \
+  --min-relation-expanded-lift 20 \
+  --min-relation-evidence-lift 10 \
+  --min-strong-relation-evidence-rate 0.5 \
+  --min-openie-cache-coverage 1.0 \
+  --embed-base-url "" \
+  --results ~/synaptic-eval/mz_openie_cache_deepseek_to100_fixed_results.json
+```
+
+Scoring result:
+
+| 항목 | 값 |
+|---|---:|
+| cache eligible chunks | `200/200` |
+| cache coverage | `100.0%` |
+| relation edges created | `627` |
+| OpenIE artifacts | `2,403` |
+| extraction failures | `0` |
+| baseline R@1 | `93.2%` |
+| OpenIE R@1 | `90.9%` |
+| baseline R@5 | `100.0%` |
+| OpenIE R@5 | `100.0%` |
+| delta R@5 | `+0.0%` |
+| cache coverage gate | PASS |
+| relation probe gate | PASS |
+| strong relation evidence gate | PASS |
+| revertibility gate | PASS |
+
+Relation probe at 100% coverage:
+
+| 지표 | graph expansion off | graph expansion on |
+|---|---:|---:|
+| relation target expanded | `4/94` | `92/94` |
+| relation evidence hit | `0/94` | `35/94` |
+| strong relation evidence | `0/28` | `26/28` |
+
+Relation lift:
+
+| 지표 | 값 |
+|---|---:|
+| expanded lift | `+88` |
+| evidence lift | `+35` |
+| strong expanded lift | `+28` |
+| strong evidence lift | `+26` |
+| strong evidence rate | `92.9%` |
+
+Memory health snapshot:
+
+| 항목 | 값 |
+|---|---:|
+| signal count | `939` |
+| suspect count | `40` |
+| relation reinforced signals | `899` |
+| stale signals | `16` |
+| low-confidence relation signals | `7` |
+| OpenIE failure rate | `0.0%` |
+
+해석:
+
+- DeepSeek Flash cache는 200 chunk 기준 100% coverage까지 채워졌고, cache audit도
+  parse failure 없이 통과했다.
+- OpenIE entity hub를 최종 evidence에서 직접 반환하지 않도록 하면서 R@5 no-regress가
+  회복됐다. OpenIE target relation discovery는 유지됐다.
+- relation probe 과대표집을 막으면서 100% coverage에서도 strong relation evidence
+  rate가 `92.9%`로 안정화됐다.
+- full replay는 revertibility gate에서 `2,403`개 OpenIE artifact 제거 후 baseline
+  fingerprint가 복원됨을 확인했다.
+
+---
+
 ## Current Interpretation
 
 작업 전의 기본 RAG는 "질의와 직접 유사한 chunk" 중심이었다. PR #10 이후에는:
@@ -780,8 +919,9 @@ Relation lift:
 
 아직 남은 증명:
 
-- DeepSeek Flash live extraction 200 chunk / 100% coverage batch.
 - Qwen3.6 small quality reference 재측정.
-- cache coverage가 올라간 상태에서 R@1/R@5와 relation evidence lift가 유지되는지
-  확인.
+- 더 큰 query/evidence benchmark에서 100% coverage의 R@1/R@5와 relation lift가
+  유지되는지 확인.
 - full long-running pytest/QA suite를 빠른 CI와 nightly eval로 분리.
+- OpenIE purge/revertibility 검증을 batch delete로 최적화해 long eval wall time을
+  줄인다.
