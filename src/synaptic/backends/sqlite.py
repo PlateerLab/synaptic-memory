@@ -224,6 +224,117 @@ def _fts_and_first_threshold() -> int:
         return 0
 
 
+def _fts_lexical_rerank_pool() -> int:
+    raw = os.environ.get("SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL", "").strip()
+    if not raw:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("Ignoring invalid SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=%r", raw)
+        return 0
+
+
+_FTS_LEXICAL_RERANK_STOPWORDS: frozenset[str] = _EN_QUERY_STOPWORDS | frozenset({"many", "much"})
+_FTS_NUMERIC_CUE = re.compile(
+    r"\b(how many|how much|cost|mm|salary|average|temperature|age)\b",
+    re.IGNORECASE,
+)
+
+
+def _fts_lexical_terms(terms: list[str]) -> list[str]:
+    filtered: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        if _EN_QUERY_TOKEN.fullmatch(term):
+            key = term.lower().strip("'_-")
+            if key in _FTS_LEXICAL_RERANK_STOPWORDS:
+                continue
+        else:
+            key = term.casefold()
+        if key and key not in seen:
+            seen.add(key)
+            filtered.append(key)
+    return filtered
+
+
+def _term_variants(term: str) -> set[str]:
+    variants = {term}
+    if term.endswith("ies") and len(term) > 4:
+        variants.add(f"{term[:-3]}y")
+    if term.endswith("es") and len(term) > 3:
+        variants.add(term[:-2])
+    if term.endswith("s") and len(term) > 3:
+        variants.add(term[:-1])
+    return variants
+
+
+def _first_variant_pos(text: str, term: str) -> int:
+    positions = [text.find(variant) for variant in _term_variants(term)]
+    positions = [pos for pos in positions if pos >= 0]
+    return min(positions) if positions else -1
+
+
+def _fts_lexical_rerank_score(
+    query: str,
+    terms: list[str],
+    node: Node,
+    *,
+    rank: int,
+    pool_size: int,
+) -> float:
+    ranklin = 1.0 - (rank / max(pool_size, 1))
+    rerank_terms = _fts_lexical_terms(terms)
+    if not rerank_terms:
+        return ranklin
+
+    title = (node.title or "").lower()
+    content = (node.content or "").lower()
+    text = f"{title} {content}"
+
+    positions = [_first_variant_pos(text, term) for term in rerank_terms]
+    title_positions = [_first_variant_pos(title, term) for term in rerank_terms]
+    coverage = sum(pos >= 0 for pos in positions) / len(rerank_terms)
+    title_coverage = sum(pos >= 0 for pos in title_positions) / len(rerank_terms)
+    phrase = 1.0 if " ".join(rerank_terms[: min(4, len(rerank_terms))]) in text else 0.0
+    digit_cue = (
+        1.0 if _FTS_NUMERIC_CUE.search(query) and any(char.isdigit() for char in content) else 0.0
+    )
+    exact_question = 1.0 if query.lower().strip(" ?") in text else 0.0
+
+    # Opt-in only. These weights are deliberately bounded so the original
+    # FTS rank remains the main signal while coverage/phrase cues can rescue
+    # answer-like passages from a wider lexical pool.
+    return (
+        0.50 * ranklin
+        + 0.05 * coverage
+        + 0.40 * title_coverage
+        + 0.20 * phrase
+        + 0.10 * digit_cue
+        + 0.15 * exact_question
+    )
+
+
+def _rerank_fts_candidates(
+    query: str,
+    terms: list[str],
+    ranked: list[tuple[Node, float]],
+    *,
+    limit: int,
+    pool_size: int,
+) -> list[tuple[Node, float]]:
+    pool_size = min(pool_size, len(ranked))
+    rescored = [
+        (
+            _fts_lexical_rerank_score(query, terms, node, rank=rank, pool_size=pool_size),
+            node,
+        )
+        for rank, (node, _raw) in enumerate(ranked[:pool_size])
+    ]
+    rescored.sort(key=lambda item: item[0], reverse=True)
+    return [(node, -score) for score, node in rescored[:limit]]
+
+
 def _normalize_korean(text: str, *, query_mode: bool = False) -> str:
     """Normalize Korean text for FTS indexing/querying.
 
@@ -1466,6 +1577,8 @@ class SQLiteBackend:
             return []
 
         scored_nodes: dict[str, tuple[Node, float]] = {}
+        lexical_rerank_pool = _fts_lexical_rerank_pool()
+        query_limit = max(limit, lexical_rerank_pool)
 
         # Pass 1: FTS5 with title 3x boost.
         # bm25(table, w0, w1, w2) — col0=node_id(0), col1=title(3.0), col2=content(1.0).
@@ -1481,7 +1594,7 @@ class SQLiteBackend:
         """
 
         async def run_fts_match(match_expr: str):
-            async with db.execute(fts_sql, (match_expr, limit)) as cur:
+            async with db.execute(fts_sql, (match_expr, query_limit)) as cur:
                 return await cur.fetchall()
 
         try:
@@ -1504,13 +1617,13 @@ class SQLiteBackend:
 
         # Pass 2: LIKE-based substring scan for terms FTS5 missed.
         # Handles Korean compound words where tokenisation may not align.
-        if len(scored_nodes) < limit:
+        if len(scored_nodes) < query_limit:
             like_parts = " OR ".join("(title LIKE ? OR content LIKE ?)" for _ in terms)
             params: list[str | int] = []
             for t in terms:
                 like = f"%{t}%"
                 params.extend([like, like])
-            fallback_limit = _like_fallback_limit(limit, len(scored_nodes))
+            fallback_limit = _like_fallback_limit(query_limit, len(scored_nodes))
             params.append(fallback_limit)
             like_sql = f"SELECT id, title, content FROM syn_nodes WHERE {like_parts} LIMIT ?"
             async with db.execute(like_sql, params) as cur:
@@ -1532,7 +1645,7 @@ class SQLiteBackend:
                     # Use large positive offset so substring hits sort after FTS5
                     like_scored.append((node_id, 10000.0 - sub))
 
-            remaining_slots = max(0, limit - len(scored_nodes))
+            remaining_slots = max(0, query_limit - len(scored_nodes))
             if like_scored and remaining_slots:
                 like_scored.sort(key=lambda item: item[1])
                 survivors = like_scored[:remaining_slots]
@@ -1547,7 +1660,17 @@ class SQLiteBackend:
                         scored_nodes[node_id] = (node, raw)
 
         # Sort: FTS5 negatives first (ascending), then substring positives
-        ranked = sorted(scored_nodes.values(), key=lambda x: x[1])[:limit]
+        ranked = sorted(scored_nodes.values(), key=lambda x: x[1])[:query_limit]
+        if lexical_rerank_pool > limit and ranked:
+            ranked = _rerank_fts_candidates(
+                query,
+                terms,
+                ranked,
+                limit=limit,
+                pool_size=lexical_rerank_pool,
+            )
+        else:
+            ranked = ranked[:limit]
         if with_scores:
             return _lexical_relevance(ranked)
         return [n for n, _ in ranked]

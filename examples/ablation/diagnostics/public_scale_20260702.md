@@ -36,6 +36,7 @@ uv run --extra eval python examples/ablation/download_benchmarks.py --only msmar
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --overwrite-sqlite-db --sqlite-fast-build
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db --diagnose-raw-fts-limit 500
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db --diagnose-raw-fts-limit 500
 ```
 
 ## FiQA Results
@@ -87,6 +88,7 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | persistent SQLite full fast build + AND-first FTS threshold 20 | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 642.2s | 71.6s |
 | persistent SQLite full reuse + AND-first FTS threshold 20 | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 0.0s | 68.7s |
 | persistent SQLite full reuse + raw FTS@500 diagnostic | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 0.0s | 69.7s |
+| persistent SQLite full reuse + opt-in lexical rerank pool 500 | 8,841,823 | 50 | 0.234 | 0.353 | 0.433 | 22/50 | 0.0s | 70.4s |
 | persistent SQLite full reuse + TEI reranker + FTS seed 200 + cross top 200 | 8,841,823 | 50 | 0.211 | 0.307 | 0.393 | 20/50 | 0.0s | 72.7s |
 
 Raw FTS pool diagnostic for the full reuse run:
@@ -169,6 +171,10 @@ The local artifacts are gitignored:
   the final EvidenceSearch top-10 for 20/50. This separates candidate recall
   from final ranking and gives future large-corpus experiments a concrete
   target.
+- `SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500` is the first opt-in ranking
+  improvement on the full tier: it keeps the same persistent DB and lifts
+  full reuse from MRR@10 0.212 / Hit@10 20/50 to MRR@10 0.234 / Hit@10 22/50
+  with similar total search time.
 - TEI cross-reranking now handles large candidate pools without TEI batch-size
   errors by chunking requests, but the full 8.84M reranker smoke did not recover
   quality (MRR@10 0.211, Hit@10 20/50). The next target is better candidate

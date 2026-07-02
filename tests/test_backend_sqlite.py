@@ -10,6 +10,7 @@ import pytest
 from synaptic.backends.sqlite import (
     SQLiteBackend,
     _fts_and_first_threshold,
+    _fts_lexical_rerank_pool,
     _prepare_fts_query_terms,
 )
 from synaptic.models import Edge, EdgeKind, Node, NodeKind
@@ -142,6 +143,16 @@ class TestSQLiteNodes:
         monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD", "nope")
         assert _fts_and_first_threshold() == 0
 
+    def test_fts_lexical_rerank_pool_reads_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL", "500")
+        assert _fts_lexical_rerank_pool() == 500
+
+    def test_fts_lexical_rerank_pool_ignores_invalid_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL", "nope")
+        assert _fts_lexical_rerank_pool() == 0
+
     async def test_fts_and_first_prefers_all_terms_when_threshold_met(
         self,
         sqlite: SQLiteBackend,
@@ -195,6 +206,72 @@ class TestSQLiteNodes:
         )
 
         assert [node.id for node in results][:1] == ["plymouth"]
+
+    async def test_search_fts_lexical_rerank_pool_is_opt_in(
+        self,
+        sqlite: SQLiteBackend,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        await sqlite.save_nodes_batch(
+            [
+                Node(
+                    id="spam",
+                    title="Spam",
+                    content="alpha alpha alpha alpha gamma beta beta beta beta",
+                ),
+                Node(id="answer", title="Answer", content="alpha beta"),
+            ]
+        )
+
+        default_hits = await sqlite.search_fts("alpha beta", limit=1)
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL", "2")
+        reranked_hits = await sqlite.search_fts("alpha beta", limit=1)
+
+        assert [node.id for node in default_hits] == ["spam"]
+        assert [node.id for node in reranked_hits] == ["answer"]
+
+    async def test_search_fts_lexical_rerank_pool_skips_when_not_wider(
+        self,
+        sqlite: SQLiteBackend,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        await sqlite.save_nodes_batch(
+            [
+                Node(
+                    id="spam",
+                    title="Spam",
+                    content="alpha alpha alpha alpha gamma beta beta beta beta",
+                ),
+                Node(id="answer", title="Answer", content="alpha beta"),
+            ]
+        )
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL", "1")
+
+        hits = await sqlite.search_fts("alpha beta", limit=2)
+
+        assert [node.id for node in hits] == ["spam", "answer"]
+
+    async def test_search_fts_lexical_rerank_pool_keeps_score_contract(
+        self,
+        sqlite: SQLiteBackend,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        await sqlite.save_nodes_batch(
+            [
+                Node(
+                    id="spam",
+                    title="Spam",
+                    content="alpha alpha alpha alpha gamma beta beta beta beta",
+                ),
+                Node(id="answer", title="Answer", content="alpha beta"),
+            ]
+        )
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL", "2")
+
+        scored = await sqlite.search_fts("alpha beta", limit=1, with_scores=True)
+
+        assert scored[0][0].id == "answer"
+        assert scored[0][1] == 1.0
 
 
 class TestSQLiteEdges:
