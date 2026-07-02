@@ -16,9 +16,10 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import statistics
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,11 @@ class AgentLoopRow:
     prompt_tokens: int
     completion_tokens: int
     elapsed_sec: float
+    tool_sequence: list[str] = field(default_factory=list)
+    search_targets: list[str] = field(default_factory=list)
+    unique_tools: int = 0
+    unique_search_targets: int = 0
+    query_rewrites: int = 0
 
 
 def _display_path(path: Path) -> str:
@@ -85,6 +91,114 @@ def _first_relevant_trace_hit(
     return 0, 0
 
 
+def _ordered_unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        item = str(value).strip()
+        if not item:
+            continue
+        key = _normalize_text(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().lower())
+
+
+def _tool_args_from_key(key: str) -> dict[str, Any]:
+    _, sep, raw = str(key).partition(":")
+    if not sep:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _search_target_from_call(tool: str, args: dict[str, Any]) -> str:
+    query = str(args.get("query") or "").strip()
+    if query:
+        return query
+    if tool == "get_document":
+        return str(args.get("doc_id") or "").strip()
+    if tool in {"expand", "follow"}:
+        node_id = str(args.get("node_id") or "").strip()
+        edge_kind = str(args.get("edge_kind") or "").strip()
+        return " ".join(part for part in (node_id, edge_kind) if part)
+    if tool == "filter_nodes":
+        parts = [
+            args.get("table"),
+            args.get("property"),
+            args.get("op"),
+            args.get("value"),
+        ]
+        return " ".join(str(part) for part in parts if part)
+    if tool == "aggregate_nodes":
+        parts = [
+            args.get("table"),
+            args.get("group_by"),
+            args.get("metric"),
+            args.get("where_property"),
+            args.get("where_op"),
+            args.get("where_value"),
+        ]
+        return " ".join(str(part) for part in parts if part)
+    if tool == "join_related":
+        parts = [
+            args.get("from_value"),
+            args.get("fk_property"),
+            args.get("target_table"),
+        ]
+        values = args.get("from_values")
+        if isinstance(values, list):
+            parts.insert(0, ",".join(str(item) for item in values[:5]))
+        return " ".join(str(part) for part in parts if part)
+    if tool == "top_nodes":
+        parts = [
+            args.get("table"),
+            args.get("sort_by"),
+            args.get("order"),
+            args.get("where_property"),
+            args.get("where_op"),
+            args.get("where_value"),
+        ]
+        return " ".join(str(part) for part in parts if part)
+    return ""
+
+
+def _exploration_metrics(tool_log: list[dict[str, Any]], original_query: str) -> dict[str, object]:
+    tool_sequence: list[str] = []
+    targets: list[str] = []
+    rewrite_queries: list[str] = []
+    original = _normalize_text(original_query)
+    for item in tool_log:
+        tool = str(item.get("tool") or "").strip()
+        if not tool:
+            continue
+        tool_sequence.append(tool)
+        args = _tool_args_from_key(str(item.get("key") or ""))
+        target = _search_target_from_call(tool, args)
+        if target:
+            targets.append(target)
+        query = str(args.get("query") or "").strip()
+        if query and _normalize_text(query) != original:
+            rewrite_queries.append(query)
+    unique_targets = _ordered_unique(targets)
+    return {
+        "tool_sequence": tool_sequence,
+        "search_targets": unique_targets,
+        "unique_tools": len(set(tool_sequence)),
+        "unique_search_targets": len(unique_targets),
+        "query_rewrites": len(_ordered_unique(rewrite_queries)),
+    }
+
+
 def _percentile(values: list[float], q: float) -> float:
     if not values:
         return 0.0
@@ -101,6 +215,9 @@ def _summarize(rows: list[AgentLoopRow]) -> dict[str, object]:
     turns = [row.turns for row in rows]
     prompt_tokens = [row.prompt_tokens for row in rows]
     completion_tokens = [row.completion_tokens for row in rows]
+    unique_tools = [row.unique_tools for row in rows]
+    unique_targets = [row.unique_search_targets for row in rows]
+    query_rewrites = [row.query_rewrites for row in rows]
     reached_turns = [row.first_relevant_turn for row in rows if row.first_relevant_turn > 0]
     reached_calls = [
         row.first_relevant_tool_calls for row in rows if row.first_relevant_tool_calls > 0
@@ -116,6 +233,11 @@ def _summarize(rows: list[AgentLoopRow]) -> dict[str, object]:
         "p90_elapsed_sec": _percentile(elapsed, 0.90),
         "mean_prompt_tokens": sum(prompt_tokens) / n,
         "mean_completion_tokens": sum(completion_tokens) / n,
+        "mean_unique_tools": sum(unique_tools) / n,
+        "mean_unique_search_targets": sum(unique_targets) / n,
+        "mean_query_rewrites": sum(query_rewrites) / n,
+        "queries_with_multi_tool": sum(1 for row in rows if row.unique_tools > 1),
+        "queries_with_query_rewrites": sum(1 for row in rows if row.query_rewrites > 0),
         "duplicate_tool_calls": sum(row.duplicate_tool_calls for row in rows),
         "empty_tool_calls": sum(row.empty_tool_calls for row in rows),
         "mean_first_relevant_turn": sum(reached_turns) / len(reached_turns)
@@ -148,6 +270,11 @@ def _row_from_dict(data: dict[str, Any]) -> AgentLoopRow:
         prompt_tokens=int(data.get("prompt_tokens") or 0),
         completion_tokens=int(data.get("completion_tokens") or 0),
         elapsed_sec=float(data.get("elapsed_sec") or 0.0),
+        tool_sequence=[str(item) for item in data.get("tool_sequence", [])],
+        search_targets=[str(item) for item in data.get("search_targets", [])],
+        unique_tools=int(data.get("unique_tools") or 0),
+        unique_search_targets=int(data.get("unique_search_targets") or 0),
+        query_rewrites=int(data.get("query_rewrites") or 0),
     )
 
 
@@ -242,20 +369,26 @@ def _emit_markdown(
         f"- P50/P90 elapsed: {summary['p50_elapsed_sec']:.1f}s / {summary['p90_elapsed_sec']:.1f}s",
         f"- Mean prompt tokens: {summary['mean_prompt_tokens']:.0f}",
         f"- Mean completion tokens: {summary['mean_completion_tokens']:.0f}",
+        f"- Mean unique tools: {summary['mean_unique_tools']:.2f}",
+        f"- Mean unique search targets: {summary['mean_unique_search_targets']:.2f}",
+        f"- Mean query rewrites: {summary['mean_query_rewrites']:.2f}",
+        f"- Queries with >1 tool type: {summary['queries_with_multi_tool']}/{summary['queries']}",
+        f"- Queries with query rewrites: {summary['queries_with_query_rewrites']}/{summary['queries']}",
         f"- Duplicate tool calls: {summary['duplicate_tool_calls']}",
         f"- Empty tool calls: {summary['empty_tool_calls']}",
         "",
         "## Per Query",
         "",
-        "| QID | Reach | Turns | Calls | First Rel Turn | First Rel Calls | Found Relevant | Elapsed | Query |",
-        "|-----|:-----:|------:|------:|---------------:|----------------:|----------------|--------:|-------|",
+        "| QID | Reach | Turns | Calls | Tools | Targets | Rewrites | First Rel Turn | First Rel Calls | Found Relevant | Elapsed | Query |",
+        "|-----|:-----:|------:|------:|------:|--------:|---------:|---------------:|----------------:|----------------|--------:|-------|",
     ]
     for row in rows:
         found = ", ".join(row.found_relevant_docs) if row.found_relevant_docs else "-"
         query = row.query.replace("|", "\\|")[:90]
         lines.append(
             f"| {row.qid} | {'yes' if row.reached else 'no'} | {row.turns} | "
-            f"{row.tool_calls} | {row.first_relevant_turn or '-'} | "
+            f"{row.tool_calls} | {row.unique_tools} | {row.unique_search_targets} | "
+            f"{row.query_rewrites} | {row.first_relevant_turn or '-'} | "
             f"{row.first_relevant_tool_calls or '-'} | {found} | "
             f"{row.elapsed_sec:.1f}s | {query} |"
         )
@@ -297,6 +430,7 @@ async def _run_one(
     )
     duplicate_calls = sum(1 for item in result.tool_log if item.get("duplicate"))
     empty_calls = sum(1 for item in result.tool_log if int(item.get("n_results") or 0) == 0)
+    exploration = _exploration_metrics(result.tool_log, query)
     return AgentLoopRow(
         qid=qid,
         query=query,
@@ -313,6 +447,11 @@ async def _run_one(
         prompt_tokens=result.prompt_tokens,
         completion_tokens=result.completion_tokens,
         elapsed_sec=elapsed,
+        tool_sequence=list(exploration["tool_sequence"]),
+        search_targets=list(exploration["search_targets"]),
+        unique_tools=int(exploration["unique_tools"]),
+        unique_search_targets=int(exploration["unique_search_targets"]),
+        query_rewrites=int(exploration["query_rewrites"]),
     )
 
 

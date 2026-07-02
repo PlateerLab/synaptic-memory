@@ -116,6 +116,36 @@ def test_agent_loop_row_jsonl_roundtrip(tmp_path: Path) -> None:
     assert loop_runner._load_jsonl_rows(path) == [row]
 
 
+def test_agent_loop_exploration_metrics_count_query_rewrites() -> None:
+    tool_log = [
+        {
+            "tool": "deep_search",
+            "key": 'deep_search:{"query": "what is synaptic memory"}',
+            "n_results": 5,
+            "duplicate": False,
+        },
+        {
+            "tool": "search",
+            "key": 'search:{"query": "synaptic memory event ledger"}',
+            "n_results": 5,
+            "duplicate": False,
+        },
+        {
+            "tool": "get_document",
+            "key": 'get_document:{"doc_id": "doc-1", "query": "event ledger provenance"}',
+            "n_results": 1,
+            "duplicate": False,
+        },
+    ]
+
+    metrics = loop_runner._exploration_metrics(tool_log, "what is synaptic memory")
+
+    assert metrics["tool_sequence"] == ["deep_search", "search", "get_document"]
+    assert metrics["unique_tools"] == 3
+    assert metrics["unique_search_targets"] == 3
+    assert metrics["query_rewrites"] == 2
+
+
 def test_llm_preflight_error_message_names_endpoint_and_skip_hint() -> None:
     msg = loop_runner._llm_preflight_error_message(
         "http://127.0.0.1:18012/v1",
