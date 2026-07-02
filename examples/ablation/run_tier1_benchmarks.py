@@ -92,6 +92,30 @@ def _sqlite_reuse_meta_path(db_path: Path) -> Path:
     return db_path.with_name(f"{db_path.name}.tier1.json")
 
 
+async def _apply_sqlite_fast_build_pragmas(backend: object) -> None:
+    """Relax SQLite durability for rebuildable local benchmark DBs."""
+    db_getter = getattr(backend, "_db", None)
+    if not callable(db_getter):
+        return
+    db = db_getter()
+    for pragma in (
+        "PRAGMA synchronous=OFF",
+        "PRAGMA temp_store=MEMORY",
+        "PRAGMA cache_size=-262144",
+    ):
+        await db.execute(pragma)
+    await db.commit()
+
+
+async def _checkpoint_sqlite_backend(backend: object) -> None:
+    db_getter = getattr(backend, "_db", None)
+    if not callable(db_getter):
+        return
+    db = db_getter()
+    await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    await db.commit()
+
+
 def _remove_sqlite_artifacts(db_path: Path) -> None:
     for path in (
         db_path,
@@ -400,6 +424,7 @@ async def run_one(
     sqlite_db_path: Path | None = None,
     reuse_sqlite_db: bool = False,
     overwrite_sqlite_db: bool = False,
+    sqlite_fast_build: bool = False,
 ) -> Report:
     if sqlite_db_path is not None and not use_sqlite_graph:
         raise ValueError("--sqlite-db-path requires --use-sqlite-graph")
@@ -458,6 +483,8 @@ async def run_one(
     else:
         backend = MemoryBackend()
     await backend.connect()
+    if use_sqlite_graph and sqlite_fast_build and not reuse_sqlite_db:
+        await _apply_sqlite_fast_build_pragmas(backend)
     graph = SynapticGraph(
         backend,
         embedder=embedder,
@@ -490,16 +517,21 @@ async def run_one(
 
     total_items = len(items)
 
+    next_progress = progress_every
+
     def maybe_print_progress(done: int, start: float) -> None:
+        nonlocal next_progress
         if progress_every <= 0:
             return
-        if done < total_items and done % progress_every != 0:
+        if done < total_items and done < next_progress:
             return
         elapsed = time.perf_counter() - start
         print(
             f"  ingest: {done:,}/{total_items:,} docs ({elapsed:.1f}s)",
             flush=True,
         )
+        while next_progress <= done:
+            next_progress += progress_every
 
     embeddings: list[list[float] | None] = [None] * len(items)
     if not reused_sqlite and embedder is not None:
@@ -578,9 +610,11 @@ async def run_one(
             top5 = ", ".join(f"{p}({d})" for p, d in stats.top_phrases_by_df[:5])
             print(f"    top-DF: {top5}")
 
-    build_sec = time.perf_counter() - t_build
     if sqlite_db_path is not None and not reused_sqlite:
         _write_reuse_meta(sqlite_db_path, reuse_signature, node_count=n_docs)
+    if sqlite_fast_build and not reused_sqlite:
+        await _checkpoint_sqlite_backend(backend)
+    build_sec = time.perf_counter() - t_build
 
     mrr_total = 0.0
     r5_total = 0.0
@@ -640,6 +674,7 @@ def _emit_markdown(
     progress_every: int = 100000,
     sqlite_db_path: Path | None = None,
     reuse_sqlite_db: bool = False,
+    sqlite_fast_build: bool = False,
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -654,6 +689,7 @@ def _emit_markdown(
         f"- Progress every: {progress_every if progress_every > 0 else 'disabled'}",
         f"- SQLite DB path: {_display_path(sqlite_db_path) if sqlite_db_path else 'temporary'}",
         f"- SQLite DB reuse: {'yes' if reuse_sqlite_db else 'no'}",
+        f"- SQLite fast build: {'yes' if sqlite_fast_build else 'no'}",
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
@@ -794,6 +830,14 @@ async def amain(argv: list[str]) -> int:
         ),
     )
     p.add_argument(
+        "--sqlite-fast-build",
+        action="store_true",
+        help=(
+            "Use relaxed SQLite durability PRAGMAs for rebuildable benchmark DBs. "
+            "Only affects non-reuse SqliteGraphBackend builds."
+        ),
+    )
+    p.add_argument(
         "--embed-batch",
         type=int,
         default=64,
@@ -913,6 +957,8 @@ async def amain(argv: list[str]) -> int:
         raise SystemExit("--overwrite-sqlite-db requires --sqlite-db-path")
     if args.reuse_sqlite_db and args.overwrite_sqlite_db:
         raise SystemExit("--reuse-sqlite-db and --overwrite-sqlite-db are mutually exclusive")
+    if args.sqlite_fast_build and not args.use_sqlite_graph:
+        raise SystemExit("--sqlite-fast-build requires --use-sqlite-graph")
 
     embedder: EmbeddingProvider | None = None
     embedder_label = "none (FTS-only baseline)"
@@ -1016,6 +1062,8 @@ async def amain(argv: list[str]) -> int:
             f"{'yes' if args.reuse_sqlite_db else 'no'}"
             f"{' (overwrite)' if args.overwrite_sqlite_db else ''}"
         )
+    if args.use_sqlite_graph:
+        print(f"  sqlite fast build: {'yes' if args.sqlite_fast_build else 'no'}")
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -1042,6 +1090,7 @@ async def amain(argv: list[str]) -> int:
                 sqlite_db_path=args.sqlite_db_path,
                 reuse_sqlite_db=args.reuse_sqlite_db,
                 overwrite_sqlite_db=args.overwrite_sqlite_db,
+                sqlite_fast_build=args.sqlite_fast_build,
             )
         except FileNotFoundError as e:
             print(f"{ds.name:<24}  SKIP — {e}")
@@ -1067,6 +1116,7 @@ async def amain(argv: list[str]) -> int:
             progress_every=args.progress_every,
             sqlite_db_path=args.sqlite_db_path,
             reuse_sqlite_db=args.reuse_sqlite_db,
+            sqlite_fast_build=args.sqlite_fast_build,
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")

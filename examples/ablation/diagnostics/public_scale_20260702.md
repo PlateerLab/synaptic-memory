@@ -75,6 +75,8 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | persistent SQLite reuse | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 0.0s | 70.1s |
 | persistent SQLite reuse + English query filter | 1,000,000 | 50 | 0.479 | 0.553 | 0.600 | 31/50 | 0.0s | 9.1s |
 | persistent SQLite reuse + tag-filtered anchors | 1,000,000 | 50 | 0.479 | 0.553 | 0.600 | 31/50 | 0.0s | 7.5s |
+| persistent SQLite fast build | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 288.7s | 40.8s |
+| persistent SQLite reuse | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 0.0s | 41.5s |
 
 The local artifacts are gitignored:
 
@@ -84,6 +86,8 @@ The local artifacts are gitignored:
 - `tests/benchmark/data/msmarco_passage_5m.corpus.jsonl` - 1.8 GB, 5,000,000 rows
 - `tests/benchmark/data/msmarco_1m.db` - 1.2 GB persistent SQLite DB
 - `tests/benchmark/data/msmarco_1m.db.tier1.json` - 535 byte reuse sidecar
+- `tests/benchmark/data/msmarco_5m.db` - 6.0 GB persistent SQLite DB
+- `tests/benchmark/data/msmarco_5m.db.tier1.json` - 541 byte reuse sidecar
 
 ## Interpretation
 
@@ -117,14 +121,23 @@ The local artifacts are gitignored:
   Generate it with:
   `uv run --extra eval python examples/ablation/download_benchmarks.py --only msmarco_passage --large-corpus-limit 5000000 --large-output-suffix _5m`
   and run it with:
-  `uv run python examples/ablation/run_tier1_benchmarks.py --only msmarco --msmarco-path tests/benchmark/data/msmarco_passage_5m.json --corpus-limit 5000000 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_5m.db --overwrite-sqlite-db`.
+  `uv run python examples/ablation/run_tier1_benchmarks.py --only msmarco --msmarco-path tests/benchmark/data/msmarco_passage_5m.json --corpus-limit 5000000 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_5m.db --overwrite-sqlite-db --sqlite-fast-build`.
+- `--sqlite-fast-build` applies relaxed SQLite durability PRAGMAs only for
+  rebuildable benchmark DBs. A first 5M attempt without it reached 1M docs in
+  1428.3s; with fast build, the full 5M ingest completed in 273.4s and the
+  full build+checkpoint+search report completed in 288.7s build / 40.8s search.
+- 5M FTS-only quality drops versus 1M because the candidate set has 5x more
+  distractors and no embeddings/reranker: MRR@10 0.334 and Hit@10 24/50. The
+  important result is that the pipeline now has a reproducible 5M persistent
+  tier and can reuse it with 0.0s build time.
 
 ## Guard Policy
 
 - `.github/workflows/public-scale.yml` runs weekly/manual FiQA 10k and TREC-COVID 50k staged smokes.
 - FiQA 25k/full and TREC-COVID 100k/full remain manual checks because they are multi-minute runs and depend on ignored local benchmark data.
 - MS MARCO passage is the manual large tier: the downloader writes metadata JSON plus a gitignored corpus JSONL shard so 100k/1M/8.8M-style scale can be tested without committing giant artifacts.
-- If 100k+ docs becomes a required routine gate, the next target is faster initial FTS/index build.
+- If 5M quality needs to recover toward the 1M/100k tier, the next target is
+  semantic candidate generation or reranking on top of the persistent 5M DB.
 
 ## Remote Guard Dispatch
 
