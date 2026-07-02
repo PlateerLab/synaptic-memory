@@ -1836,7 +1836,10 @@ per-chunk fallback을 유지한다.
 - Memory Operating Guard workflow는 deterministic memory operating POC와 관련 contract
   tests를 scheduled/manual workflow로 분리한다. 빠른 PR CI는 그대로 유지하면서 event ledger,
   feedback, reinforcement, provenance, health report 회귀는 `/tmp/memory_operating_poc_results.json`
-  artifact로 남긴다.
+  artifact로 남긴다. 첫 manual dispatch 검증은
+  `2026-07-02T00:07:14Z`에 시작한
+  [GitHub Actions run 28556126467](https://github.com/PlateerLab/synaptic-memory/actions/runs/28556126467)에서
+  `success`로 완료됐다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
