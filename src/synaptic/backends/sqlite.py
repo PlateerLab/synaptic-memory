@@ -1680,6 +1680,16 @@ class SQLiteBackend:
         if not nodes:
             return
         db = self._db()
+        node_ids = [node.id for node in nodes]
+        existing_ids: set[str] = set()
+        for offset in range(0, len(node_ids), 500):
+            chunk = node_ids[offset : offset + 500]
+            placeholders = ",".join("?" for _ in chunk)
+            async with db.execute(
+                f"SELECT id FROM syn_nodes WHERE id IN ({placeholders})",
+                chunk,
+            ) as cur:
+                existing_ids.update(str(row["id"]) for row in await cur.fetchall())
         node_rows = []
         fts_rows = []
         for node in nodes:
@@ -1726,10 +1736,11 @@ class SQLiteBackend:
                 node_rows,
             )
             # FTS sync: delete then re-insert
-            await db.executemany(
-                "DELETE FROM syn_nodes_fts WHERE node_id = ?",
-                [(n.id,) for n in nodes],
-            )
+            if existing_ids:
+                await db.executemany(
+                    "DELETE FROM syn_nodes_fts WHERE node_id = ?",
+                    [(node_id,) for node_id in existing_ids],
+                )
             await db.executemany(
                 "INSERT INTO syn_nodes_fts(node_id, title, content) VALUES (?, ?, ?)",
                 fts_rows,

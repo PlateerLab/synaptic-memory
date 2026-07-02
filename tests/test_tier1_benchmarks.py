@@ -1,0 +1,105 @@
+"""Tests for Tier-1 benchmark runner helpers."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+RUNNER_PATH = (
+    Path(__file__).resolve().parents[1] / "examples" / "ablation" / "run_tier1_benchmarks.py"
+)
+SPEC = importlib.util.spec_from_file_location("run_tier1_benchmarks", RUNNER_PATH)
+assert SPEC is not None
+assert SPEC.loader is not None
+runner = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = runner
+SPEC.loader.exec_module(runner)
+
+
+@pytest.mark.asyncio
+async def test_corpus_limit_keeps_selected_query_gold_docs(tmp_path):
+    path = tmp_path / "tiny_bench.json"
+    path.write_text(
+        json.dumps(
+            {
+                "corpus": {
+                    "filler_a": {"title": "Filler A", "text": "unrelated alpha"},
+                    "filler_b": {"title": "Filler B", "text": "unrelated beta"},
+                    "gold_doc": {"title": "Gold", "text": "needle targetterm"},
+                },
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = await runner.run_one(
+        runner.Dataset(name="Tiny", path=path, reference="unit"),
+        subset=1,
+        corpus_limit=2,
+    )
+
+    assert report.n_docs == 2
+    assert report.hit_at_10 == 1
+    assert report.recall_at_10 == 1.0
+
+
+def test_threshold_violations_report_scale_regressions():
+    report = runner.Report(
+        name="Tiny",
+        n_docs=100,
+        n_queries=10,
+        mrr=0.25,
+        recall_at_5=0.1,
+        recall_at_10=0.2,
+        hit_at_10=3,
+        build_sec=12.0,
+        search_sec=4.0,
+        reference="unit",
+    )
+
+    violations = runner._threshold_violations(
+        [report],
+        max_build_sec=10.0,
+        max_search_sec=3.0,
+        min_hit_rate_at_10=0.5,
+        min_mrr=0.3,
+    )
+
+    assert violations == [
+        "Tiny: build 12.0s > 10.0s",
+        "Tiny: search 4.0s > 3.0s",
+        "Tiny: hit@10 rate 0.300 < 0.500",
+        "Tiny: MRR@10 0.250 < 0.300",
+    ]
+
+
+def test_threshold_violations_accept_passing_report():
+    report = runner.Report(
+        name="Tiny",
+        n_docs=100,
+        n_queries=10,
+        mrr=0.5,
+        recall_at_5=0.1,
+        recall_at_10=0.2,
+        hit_at_10=8,
+        build_sec=2.0,
+        search_sec=1.0,
+        reference="unit",
+    )
+
+    assert (
+        runner._threshold_violations(
+            [report],
+            max_build_sec=10.0,
+            max_search_sec=3.0,
+            min_hit_rate_at_10=0.5,
+            min_mrr=0.3,
+        )
+        == []
+    )

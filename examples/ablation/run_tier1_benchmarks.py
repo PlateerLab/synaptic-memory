@@ -1,9 +1,11 @@
-"""Tier-1 English multi-hop benchmark runner.
+"""Tier-1 English retrieval benchmark runner.
 
-Runs Synaptic's retrieval pipeline over three standard multi-hop
-corpora: HotPotQA-dev (full), MuSiQue-Ans-dev, and 2WikiMultiHopQA-dev.
-These are the datasets HippoRAG2, GraphRAG, and the broader KG-RAG
-line use for head-to-head comparisons.
+Runs Synaptic's retrieval pipeline over standard multi-hop corpora
+(HotPotQA-dev full, MuSiQue-Ans-dev, and 2WikiMultiHopQA-dev) and
+large BEIR-style retrieval corpora (FiQA, TREC-COVID, SciFact). The
+multi-hop sets are the datasets HippoRAG2, GraphRAG, and the broader
+KG-RAG line use for head-to-head comparisons; the BEIR sets are useful
+large-corpus scale checks with query/qrels ground truth.
 
 Two modes:
 
@@ -27,6 +29,7 @@ Usage
     # Embedder-free baseline (current published numbers)
     python examples/ablation/run_tier1_benchmarks.py
     python examples/ablation/run_tier1_benchmarks.py --only hotpotqa
+    python examples/ablation/run_tier1_benchmarks.py --only fiqa --subset 100
     python examples/ablation/run_tier1_benchmarks.py --subset 200
 
     # Full pipeline with Ollama embedder + TEI cross-encoder
@@ -44,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import tempfile
 import time
@@ -58,12 +62,18 @@ from synaptic.extensions.embedder import (
 )
 from synaptic.extensions.reranker_cross import TEIReranker
 from synaptic.graph import SynapticGraph
+from synaptic.models import Node, NodeKind
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCH = REPO_ROOT / "tests" / "benchmark" / "data"
 OUT_DIR = Path(__file__).parent / "diagnostics"
 
 TOP_K = 10
+
+
+def _benchmark_node_id(doc_id: str) -> str:
+    digest = hashlib.blake2b(doc_id.encode("utf-8"), digest_size=16).hexdigest()
+    return f"bench_{digest}"
 
 
 @dataclass
@@ -88,6 +98,21 @@ DATASETS = [
         name="2WikiMultihopQA dev",
         path=BENCH / "2wiki_dev.json",
         reference="HippoRAG2: R@5 90.4 %",
+    ),
+    Dataset(
+        name="FiQA test",
+        path=BENCH / "fiqa.json",
+        reference="BEIR FiQA: ~57k docs / 648 test queries",
+    ),
+    Dataset(
+        name="TREC-COVID test",
+        path=BENCH / "trec_covid.json",
+        reference="BEIR TREC-COVID: ~171k docs / 50 test queries",
+    ),
+    Dataset(
+        name="SciFact test",
+        path=BENCH / "scifact.json",
+        reference="BEIR SciFact: ~5k docs / 300 test queries",
     ),
 ]
 
@@ -131,6 +156,8 @@ async def run_one(
     entity_linker_cfg: tuple[int, float] | None = None,
     use_sqlite_graph: bool = False,
     embed_batch: int = 256,
+    ingest_batch: int = 20000,
+    corpus_limit: int | None = None,
 ) -> Report:
     if not ds.path.exists():
         raise FileNotFoundError(
@@ -173,7 +200,7 @@ async def run_one(
     # Pre-compute embeddings in large batches (GPU-friendly).
     # ``graph.add()`` accepts an ``embedding`` arg; if we pass it we
     # avoid the per-node single embed call that bottlenecks at batch=1.
-    items = [
+    items_all = [
         (
             doc_id,
             str(doc.get("title", "") or doc_id),
@@ -181,7 +208,20 @@ async def run_one(
         )
         for doc_id, doc in corpus.items()
     ]
-    items = [(d, t, x) for d, t, x in items if t or x]
+    items_all = [(d, t, x) for d, t, x in items_all if t or x]
+    if corpus_limit is not None and 0 < corpus_limit < len(items_all):
+        gold_doc_ids: set[str] = set()
+        for qid, _qtext in query_items:
+            rel = qrels.get(qid, {})
+            if isinstance(rel, dict):
+                gold_doc_ids.update(str(doc_id) for doc_id in rel)
+            else:
+                gold_doc_ids.update(str(doc_id) for doc_id in rel)
+        gold_items = [item for item in items_all if item[0] in gold_doc_ids]
+        filler_items = [item for item in items_all if item[0] not in gold_doc_ids]
+        items = [*gold_items, *filler_items][:corpus_limit]
+    else:
+        items = items_all
 
     embeddings: list[list[float] | None] = [None] * len(items)
     if embedder is not None:
@@ -192,13 +232,33 @@ async def run_one(
             for j, v in enumerate(vecs):
                 embeddings[i + j] = v if v else None
 
-    for (doc_id, title, text), emb in zip(items, embeddings):
-        await graph.add(
-            title=title,
-            content=text,
-            properties={"doc_id": doc_id},
-            embedding=emb,
-        )
+    save_nodes_batch = getattr(backend, "save_nodes_batch", None)
+    if phrase_extractor is None and callable(save_nodes_batch):
+        for i in range(0, len(items), ingest_batch):
+            batch = [
+                Node(
+                    id=_benchmark_node_id(doc_id),
+                    kind=NodeKind.CONCEPT,
+                    title=title,
+                    content=text,
+                    properties={"doc_id": doc_id},
+                    embedding=emb or [],
+                )
+                for (doc_id, title, text), emb in zip(
+                    items[i : i + ingest_batch],
+                    embeddings[i : i + ingest_batch],
+                )
+            ]
+            await save_nodes_batch(batch)
+    else:
+        for (doc_id, title, text), emb in zip(items, embeddings):
+            await graph.add(
+                title=title,
+                content=text,
+                properties={"doc_id": doc_id},
+                embedding=emb,
+                record_memory_event=False,
+            )
 
     # Post-hoc DF-filtered entity linking (opt-in via --entity-linker).
     # Runs AFTER ingest because the DF filter needs global corpus
@@ -262,9 +322,9 @@ async def run_one(
     search_sec = time.perf_counter() - t_search
 
     n = max(len(query_items), 1)
-    return Report(
+    report = Report(
         name=ds.name,
-        n_docs=len(corpus),
+        n_docs=len(items),
         n_queries=len(query_items),
         mrr=mrr_total / n,
         recall_at_5=r5_total / n,
@@ -274,6 +334,10 @@ async def run_one(
         search_sec=search_sec,
         reference=ds.reference,
     )
+    close = getattr(backend, "close", None)
+    if callable(close):
+        await close()
+    return report
 
 
 def _emit_markdown(
@@ -285,15 +349,19 @@ def _emit_markdown(
     decomposer_label: str = "none",
     phrase_extractor_label: str = "none",
     entity_linker_label: str = "none",
+    corpus_limit: int | None = None,
+    ingest_batch: int = 20000,
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
     path = OUT_DIR / f"tier1_{stamp}.md"
     lines = [
-        "# Tier-1 English multi-hop benchmark — Synaptic v0.16.0",
+        "# Tier-1 English retrieval benchmark — Synaptic",
         "",
         f"- Run at: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}",
         f"- Subset: {subset if subset else 'full'}",
+        f"- Corpus limit: {corpus_limit if corpus_limit else 'full'}",
+        f"- Ingest batch: {ingest_batch}",
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
@@ -319,12 +387,43 @@ def _emit_markdown(
     return path
 
 
+def _threshold_violations(
+    reports: list[Report],
+    *,
+    max_build_sec: float | None = None,
+    max_search_sec: float | None = None,
+    min_hit_rate_at_10: float | None = None,
+    min_mrr: float | None = None,
+) -> list[str]:
+    violations: list[str] = []
+    for report in reports:
+        hit_rate = report.hit_at_10 / max(report.n_queries, 1)
+        if max_build_sec is not None and report.build_sec > max_build_sec:
+            violations.append(
+                f"{report.name}: build {report.build_sec:.1f}s > {max_build_sec:.1f}s"
+            )
+        if max_search_sec is not None and report.search_sec > max_search_sec:
+            violations.append(
+                f"{report.name}: search {report.search_sec:.1f}s > {max_search_sec:.1f}s"
+            )
+        if min_hit_rate_at_10 is not None and hit_rate < min_hit_rate_at_10:
+            violations.append(
+                f"{report.name}: hit@10 rate {hit_rate:.3f} < {min_hit_rate_at_10:.3f}"
+            )
+        if min_mrr is not None and report.mrr < min_mrr:
+            violations.append(f"{report.name}: MRR@10 {report.mrr:.3f} < {min_mrr:.3f}")
+    return violations
+
+
 async def amain(argv: list[str]) -> int:
     p = argparse.ArgumentParser()
     p.add_argument(
         "--only",
         default=",".join(["hotpotqa", "musique", "2wiki"]),
-        help="comma-separated dataset keys (hotpotqa | musique | 2wiki)",
+        help=(
+            "comma-separated dataset keys "
+            "(hotpotqa | musique | 2wiki | fiqa | trec_covid | scifact)"
+        ),
     )
     p.add_argument("--subset", type=int, default=None)
     p.add_argument(
@@ -375,6 +474,45 @@ async def amain(argv: list[str]) -> int:
         help="Pre-compute corpus embeddings in batches of this size "
         "(default: 64 - safe under 6 GB free VRAM). Bump to 128-256 "
         "if more headroom.",
+    )
+    p.add_argument(
+        "--ingest-batch",
+        type=int,
+        default=20000,
+        help="Batch size for benchmark corpus node writes (default: 20000).",
+    )
+    p.add_argument(
+        "--corpus-limit",
+        type=int,
+        default=None,
+        help=(
+            "Index at most this many docs for staged scale smoke. The selected "
+            "queries' gold docs are kept first, then distractors are filled in."
+        ),
+    )
+    p.add_argument(
+        "--max-build-sec",
+        type=float,
+        default=None,
+        help="Fail if any dataset build takes longer than this many seconds.",
+    )
+    p.add_argument(
+        "--max-search-sec",
+        type=float,
+        default=None,
+        help="Fail if any dataset search phase takes longer than this many seconds.",
+    )
+    p.add_argument(
+        "--min-hit-rate-at-10",
+        type=float,
+        default=None,
+        help="Fail if any dataset Hit@10 / queries is below this value.",
+    )
+    p.add_argument(
+        "--min-mrr",
+        type=float,
+        default=None,
+        help="Fail if any dataset MRR@10 is below this value.",
     )
     p.add_argument(
         "--llm-decomposer-url",
@@ -509,18 +647,30 @@ async def amain(argv: list[str]) -> int:
         "hotpotqa": DATASETS[0],
         "musique": DATASETS[1],
         "2wiki": DATASETS[2],
+        "fiqa": DATASETS[3],
+        "trec_covid": DATASETS[4],
+        "scifact": DATASETS[5],
     }
-    selected = [by_key[k.strip()] for k in args.only.split(",") if k.strip()]
+    selected = []
+    for raw_key in args.only.split(","):
+        key = raw_key.strip()
+        if not key:
+            continue
+        if key not in by_key:
+            raise SystemExit(f"Unknown dataset key: {key}; available: {', '.join(by_key)}")
+        selected.append(by_key[key])
 
     mode = "full pipeline" if embedder or reranker else "embedder-free"
     backend_label = "SqliteGraphBackend (HNSW)" if args.use_sqlite_graph else "MemoryBackend"
-    print(f"Tier-1 multi-hop English benchmarks — Synaptic v0.16.0 {mode}")
+    print(f"Tier-1 English retrieval benchmarks — Synaptic {mode}")
     print(f"  backend:  {backend_label}")
     print(f"  embedder: {embedder_label}")
     print(f"  reranker: {reranker_label}")
     print(f"  decomposer: {decomposer_label}")
     print(f"  phrase hub: {phrase_extractor_label}")
     print(f"  entity linker: {entity_linker_label}")
+    print(f"  corpus limit: {args.corpus_limit if args.corpus_limit else 'full'}")
+    print(f"  ingest batch: {args.ingest_batch}")
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -541,6 +691,8 @@ async def amain(argv: list[str]) -> int:
                 entity_linker_cfg=entity_linker_cfg,
                 use_sqlite_graph=args.use_sqlite_graph,
                 embed_batch=args.embed_batch,
+                ingest_batch=args.ingest_batch,
+                corpus_limit=args.corpus_limit,
             )
         except FileNotFoundError as e:
             print(f"{ds.name:<24}  SKIP — {e}")
@@ -561,9 +713,24 @@ async def amain(argv: list[str]) -> int:
             decomposer_label=decomposer_label,
             phrase_extractor_label=phrase_extractor_label,
             entity_linker_label=entity_linker_label,
+            corpus_limit=args.corpus_limit,
+            ingest_batch=args.ingest_batch,
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")
+    violations = _threshold_violations(
+        reports,
+        max_build_sec=args.max_build_sec,
+        max_search_sec=args.max_search_sec,
+        min_hit_rate_at_10=args.min_hit_rate_at_10,
+        min_mrr=args.min_mrr,
+    )
+    if violations:
+        print()
+        print("Threshold violations:")
+        for violation in violations:
+            print(f"  - {violation}")
+        return 1
     return 0
 
 

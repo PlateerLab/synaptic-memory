@@ -1559,6 +1559,7 @@ class SynapticGraph:
         embedding: list[float] | None = None,
         properties: dict[str, str] | None = None,
         node_id: str | None = None,
+        record_memory_event: bool = True,
     ) -> Node:
         # NFC-normalize all user-provided text. Korean on macOS HFS+ arrives
         # as NFD, which breaks substring / FTS matching against NFC queries.
@@ -1639,17 +1640,18 @@ class SynapticGraph:
                 content,
             )
 
-        await self._save_memory_event(
-            MemoryEvent(
-                kind=MemoryEventKind.INGEST,
-                source=node.source or "graph",
-                source_id=node.id,
-                content_hash=_node_content_hash(node),
-                node_ids=[node.id],
-                edge_ids=await self._touching_edge_ids(node.id),
-                properties={"operation": "SynapticGraph.add", "kind": str(node.kind)},
+        if record_memory_event:
+            await self._save_memory_event(
+                MemoryEvent(
+                    kind=MemoryEventKind.INGEST,
+                    source=node.source or "graph",
+                    source_id=node.id,
+                    content_hash=_node_content_hash(node),
+                    node_ids=[node.id],
+                    edge_ids=await self._touching_edge_ids(node.id),
+                    properties={"operation": "SynapticGraph.add", "kind": str(node.kind)},
+                )
             )
-        )
         return node
 
     async def add_document(
