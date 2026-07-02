@@ -55,6 +55,18 @@ _PROCESS_FROM_RE = re.compile(
     r"(?P<verb>created|made|formed|produced)\s+from\s+(?P<source>.+)",
     re.IGNORECASE,
 )
+_PROCESS_TRAILING_WORDS = {
+    "breakdown",
+    "created",
+    "formation",
+    "formed",
+    "forming",
+    "made",
+    "process",
+    "processes",
+    "produced",
+    "weathering",
+}
 
 
 # --- Shared result shape ---
@@ -168,8 +180,7 @@ def _query_rewrite_hints(query: str, *, limit: int = 20) -> list[Hint]:
     process = _PROCESS_FROM_RE.search(query)
     if process:
         subject = process.group("subject")
-        source = process.group("source")
-        source_singular = source[:-1] if source.lower().endswith("s") else source
+        source_singular = _normalise_process_source(process.group("source"))
         add(
             f"making {subject} {source_singular} pieces",
             "process questions often use answer-text verbs like making/forming rather than created",
@@ -180,6 +191,18 @@ def _query_rewrite_hints(query: str, *, limit: int = 20) -> list[Hint]:
         )
 
     return hints[:3]
+
+
+def _normalise_process_source(source: str) -> str:
+    tokens = source.strip(" ?.!").split()
+    while len(tokens) > 1 and tokens[-1].lower() in _PROCESS_TRAILING_WORDS:
+        tokens.pop()
+    if not tokens:
+        return ""
+    last = tokens[-1]
+    if last.lower().endswith("s") and not last.lower().endswith("ss"):
+        tokens[-1] = last[:-1]
+    return " ".join(tokens)
 
 
 def _node_to_summary(

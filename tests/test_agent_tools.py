@@ -214,6 +214,22 @@ def test_query_rewrite_hints_process_from_question():
     assert "small pieces of rock form soil" in queries
 
 
+def test_query_rewrite_hints_strip_trailing_process_words():
+    hints = _query_rewrite_hints("how is soil created from rocks weathering process")
+    queries = [h.args["query"] for h in hints]
+
+    assert "making soil rock pieces" in queries
+    assert "making soil rocks weathering process pieces" not in queries
+
+
+def test_query_rewrite_hints_preserve_non_plural_ss_source():
+    hints = _query_rewrite_hints("how is policy created from class")
+    queries = [h.args["query"] for h in hints]
+
+    assert "making policy class pieces" in queries
+    assert "making policy clas pieces" not in queries
+
+
 @pytest.mark.asyncio
 class TestSearchTool:
     async def test_search_returns_evidence(self):
