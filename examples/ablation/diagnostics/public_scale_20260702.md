@@ -43,9 +43,15 @@ PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sql
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 500 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_search_benchmarks.py --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --modes graph_search,deep_search,scripted_session --result-limit 20 --tool-limit 10 --read-top-k 0 --scripted-turns 2
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_search_benchmarks.py --subset 10 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --modes agent_search --result-limit 20 --tool-limit 10 --intent context_explore
-PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url "$LLM_BASE_URL" --model "$LLM_MODEL" --api-key-env LLM_API_KEY --max-turns 5
 
-# Local Ollama fallback smoke when the H100/Qwen3.6 tunnel is down.
+# DeepSeek Flash agent-loop quality path.
+# Put DEEPSEEK_API_KEY in shell env, the repo .env, or the parent workspace .env.
+# Do not put the key in docs, commands, JSONL, or DBs.
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --llm-preset deepseek --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --max-turns 5 --llm-timeout 180 --preflight-timeout 15 --out-jsonl examples/ablation/diagnostics/agent_loop_deepseek_v4_flash_20.jsonl --resume
+
+# Historical local Ollama fallback smoke when the H100/Qwen3.6 tunnel is down.
+# This is functional/navigation-only and should not be used as the quality
+# reference for the agent loop.
 # Terminal 1:
 ssh -N -L 18134:127.0.0.1:11434 go243
 # Terminal 2:
@@ -141,6 +147,10 @@ Qwen3.6 tunnel was unavailable during this run (`vllm-tunnel1/2` restarting
 with `No route to host`), so this smoke used the `go243` Ollama fallback
 `qwen3:14b`. Treat it as a functional navigation smoke, not a Qwen3.6 quality
 reference.
+
+The preferred quality path for follow-up runs is now DeepSeek Flash via
+`--llm-preset deepseek`, with the API key supplied only through runtime env or a
+gitignored `.env` file.
 
 | Mode | Model | Docs | Queries | Reach | Mean turns | Mean calls | Mean first rel turn | Mean elapsed | Mean unique tools | Mean search targets | Mean rewrites | Multi-tool | Rewrites | Zero-tool |
 |------|-------|-----:|--------:|------:|-----------:|-----------:|--------------------:|-------------:|------------------:|--------------------:|--------------:|-----------:|---------:|----------:|
