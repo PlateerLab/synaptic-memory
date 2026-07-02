@@ -72,12 +72,14 @@ class _FakeClient:
     def __init__(self, agent_msgs):
         self._agent = list(agent_msgs)
         self.system_seen = ""  # last system message sent on an agent turn
+        self.agent_message_log: list[list] = []
         self.chat = self
         self.completions = self
 
     async def create(self, *, model, messages, tools=None, max_tokens=None):
         if tools is None:  # sufficiency judge
             return _Resp(_Msg(content='{"sufficient": true}'))
+        self.agent_message_log.append([dict(m) for m in messages])
         for m in messages:
             if m.get("role") == "system":
                 self.system_seen = m["content"]
@@ -171,4 +173,30 @@ async def test_efficiency_directive_env_can_disable(monkeypatch):
     client = _FakeClient([_Msg(content="answer")])
     await run_agent_loop(client=client, backend=b, query="q", sufficiency_gate=False)
     assert _EFFICIENCY_DIRECTIVE not in client.system_seen  # env disabled it
+    await b.close()
+
+
+@pytest.mark.asyncio
+async def test_force_first_tool_rejects_zero_tool_answer_once():
+    b = await _backend_one_node()
+    client = _FakeClient(
+        [
+            _Msg(content="prior-only answer"),
+            _Msg(tool_calls=[_ToolCall("search", {"query": "topic"}, "t1")]),
+            _Msg(content="grounded answer"),
+        ]
+    )
+
+    res = await run_agent_loop(
+        client=client,
+        backend=b,
+        query="topic",
+        sufficiency_gate=False,
+        force_first_tool=True,
+    )
+
+    assert res.final_answer == "grounded answer"
+    assert res.tool_calls_made == 1
+    assert res.tool_log[0]["tool"] == "search"
+    assert "not used the retrieval tools yet" in client.agent_message_log[1][-1]["content"]
     await b.close()

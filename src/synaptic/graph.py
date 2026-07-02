@@ -2108,6 +2108,7 @@ class SynapticGraph:
         sufficiency_gate: bool = True,
         gate_bridge: bool = False,
         efficiency_hint: bool = True,
+        force_first_tool: bool = False,
         record_trace: bool = False,
     ):
         """Multi-turn agent loop — Synaptic's measured-strongest mode.
@@ -2152,6 +2153,10 @@ class SynapticGraph:
                 prompt — trust search snippets, batch document reads, stop when
                 answered. Measured: tool_calls −15..−26%, per-query latency
                 −9..−20%, solve non-negative on single-hop AND multi-hop benches.
+            force_first_tool: Default False (env
+                ``SYNAPTIC_AGENT_FORCE_FIRST_TOOL=1``). Rejects a zero-tool
+                final answer once and asks the model to search first. Useful for
+                retrieval evaluations where all answers must be evidence-backed.
             prime_with_snapshot: If True (default), inject a markdown
                 snapshot of the graph (categories, top phrase hubs,
                 tables) into the system prompt to skip the agent's
@@ -2212,6 +2217,7 @@ class SynapticGraph:
             sufficiency_gate=sufficiency_gate,
             gate_bridge=gate_bridge,
             efficiency_hint=efficiency_hint,
+            force_first_tool=force_first_tool,
             record_trace=record_trace,
         )
 
