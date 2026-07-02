@@ -18,7 +18,7 @@ import json
 import os
 import statistics
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -127,6 +127,48 @@ def _summarize(rows: list[AgentLoopRow]) -> dict[str, object]:
     }
 
 
+def _row_to_json(row: AgentLoopRow) -> str:
+    return json.dumps(asdict(row), ensure_ascii=False, sort_keys=True)
+
+
+def _row_from_dict(data: dict[str, Any]) -> AgentLoopRow:
+    return AgentLoopRow(
+        qid=str(data.get("qid") or ""),
+        query=str(data.get("query") or ""),
+        reached=bool(data.get("reached")),
+        relevant_docs=[str(item) for item in data.get("relevant_docs", [])],
+        found_relevant_docs=[str(item) for item in data.get("found_relevant_docs", [])],
+        found_ids_count=int(data.get("found_ids_count") or 0),
+        turns=int(data.get("turns") or 0),
+        tool_calls=int(data.get("tool_calls") or 0),
+        first_relevant_turn=int(data.get("first_relevant_turn") or 0),
+        first_relevant_tool_calls=int(data.get("first_relevant_tool_calls") or 0),
+        duplicate_tool_calls=int(data.get("duplicate_tool_calls") or 0),
+        empty_tool_calls=int(data.get("empty_tool_calls") or 0),
+        prompt_tokens=int(data.get("prompt_tokens") or 0),
+        completion_tokens=int(data.get("completion_tokens") or 0),
+        elapsed_sec=float(data.get("elapsed_sec") or 0.0),
+    )
+
+
+def _load_jsonl_rows(path: Path) -> list[AgentLoopRow]:
+    if not path.exists():
+        return []
+    rows: list[AgentLoopRow] = []
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            rows.append(_row_from_dict(json.loads(line)))
+    return rows
+
+
+def _append_jsonl_row(path: Path, row: AgentLoopRow) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(_row_to_json(row) + "\n")
+
+
 def _emit_markdown(
     rows: list[AgentLoopRow],
     *,
@@ -138,6 +180,7 @@ def _emit_markdown(
     model: str,
     max_turns: int,
     sufficiency_gate: bool,
+    out_jsonl: Path | None,
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -155,6 +198,7 @@ def _emit_markdown(
         f"- Model: {model}",
         f"- Max turns: {max_turns}",
         f"- Sufficiency gate: {'yes' if sufficiency_gate else 'no'}",
+        f"- Incremental JSONL: {_display_path(out_jsonl) if out_jsonl else 'disabled'}",
         "- SQLite FTS AND-first threshold: "
         f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}",
         "- SQLite FTS lexical rerank pool: "
@@ -261,12 +305,25 @@ async def amain(argv: list[str] | None = None) -> int:
     parser.add_argument("--api-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--max-turns", type=int, default=5)
     parser.add_argument("--no-sufficiency-gate", action="store_true")
+    parser.add_argument(
+        "--out-jsonl",
+        type=Path,
+        default=None,
+        help="Append each completed query result to this JSONL file.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Load --out-jsonl and skip qids already present there.",
+    )
     args = parser.parse_args(argv)
 
     if args.subset <= 0:
         raise SystemExit("--subset must be positive")
     if args.max_turns <= 0:
         raise SystemExit("--max-turns must be positive")
+    if args.resume and args.out_jsonl is None:
+        raise SystemExit("--resume requires --out-jsonl")
     if not args.msmarco_path.exists():
         raise SystemExit(f"{args.msmarco_path} does not exist")
     if not args.sqlite_db_path.exists():
@@ -288,9 +345,15 @@ async def amain(argv: list[str] | None = None) -> int:
 
     backend = SqliteGraphBackend(str(args.sqlite_db_path))
     await backend.connect()
-    rows: list[AgentLoopRow] = []
+    rows: list[AgentLoopRow] = (
+        _load_jsonl_rows(args.out_jsonl) if args.resume and args.out_jsonl else []
+    )
+    completed_qids = {row.qid for row in rows}
     try:
         for qid, query in query_items:
+            if str(qid) in completed_qids:
+                print(f"{qid:>8} skip=resume", flush=True)
+                continue
             rel = qrels.get(qid, {})
             relevant = set(map(str, rel.keys())) if isinstance(rel, dict) else set(map(str, rel))
             if not relevant:
@@ -306,6 +369,9 @@ async def amain(argv: list[str] | None = None) -> int:
                 sufficiency_gate=not args.no_sufficiency_gate,
             )
             rows.append(row)
+            completed_qids.add(row.qid)
+            if args.out_jsonl is not None:
+                _append_jsonl_row(args.out_jsonl, row)
             found = ",".join(row.found_relevant_docs) if row.found_relevant_docs else "-"
             print(
                 f"{row.qid:>8} reach={'yes' if row.reached else 'no ':>3} "
@@ -327,6 +393,7 @@ async def amain(argv: list[str] | None = None) -> int:
         model=args.model,
         max_turns=args.max_turns,
         sufficiency_gate=not args.no_sufficiency_gate,
+        out_jsonl=args.out_jsonl,
     )
     print(f"\nMarkdown report -> {_display_path(report_path)}")
     return 0
