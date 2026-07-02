@@ -1840,6 +1840,11 @@ per-chunk fallback을 유지한다.
   `2026-07-02T00:07:14Z`에 시작한
   [GitHub Actions run 28556126467](https://github.com/PlateerLab/synaptic-memory/actions/runs/28556126467)에서
   `success`로 완료됐다.
+- OpenIE Fixture Guard workflow는 로컬 MZ 데이터와 API key 없이 synthetic chunks/query로
+  `openie_mz_poc.py --skip-openie`를 scheduled/manual 실행한다. GitHub-hosted runner에서
+  ingest, scoring, gate semantics, revertibility가 계속 연결되어 있는지 감시하고,
+  `/tmp/openie_fixture_results.json` artifact를 남긴다. 로컬 workflow-equivalent smoke는
+  fixture query `R@1=100%`, `R@5=100%`, revertibility `PASS`로 완료됐다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
