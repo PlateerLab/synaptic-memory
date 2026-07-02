@@ -44,7 +44,11 @@ jobs:
             --only fiqa \
             --subset 5 \
             --corpus-limit 10000 \
-            --use-sqlite-graph | tee /tmp/fiqa_scale_guard.log
+            --use-sqlite-graph \
+            --max-build-sec 120 \
+            --max-search-sec 20 \
+            --min-hit-rate-at-10 0.40 \
+            --min-mrr 0.20 | tee /tmp/fiqa_scale_guard.log
           cp "$(ls -t examples/ablation/diagnostics/tier1_*.md | head -1)" \
             /tmp/fiqa_scale_guard.md
 
@@ -55,7 +59,11 @@ jobs:
             --only trec_covid \
             --subset 10 \
             --corpus-limit 50000 \
-            --use-sqlite-graph | tee /tmp/trec_covid_scale_guard.log
+            --use-sqlite-graph \
+            --max-build-sec 240 \
+            --max-search-sec 30 \
+            --min-hit-rate-at-10 0.80 \
+            --min-mrr 0.50 | tee /tmp/trec_covid_scale_guard.log
           cp "$(ls -t examples/ablation/diagnostics/tier1_*.md | head -1)" \
             /tmp/trec_covid_scale_guard.md
 

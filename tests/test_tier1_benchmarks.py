@@ -47,3 +47,59 @@ async def test_corpus_limit_keeps_selected_query_gold_docs(tmp_path):
     assert report.n_docs == 2
     assert report.hit_at_10 == 1
     assert report.recall_at_10 == 1.0
+
+
+def test_threshold_violations_report_scale_regressions():
+    report = runner.Report(
+        name="Tiny",
+        n_docs=100,
+        n_queries=10,
+        mrr=0.25,
+        recall_at_5=0.1,
+        recall_at_10=0.2,
+        hit_at_10=3,
+        build_sec=12.0,
+        search_sec=4.0,
+        reference="unit",
+    )
+
+    violations = runner._threshold_violations(
+        [report],
+        max_build_sec=10.0,
+        max_search_sec=3.0,
+        min_hit_rate_at_10=0.5,
+        min_mrr=0.3,
+    )
+
+    assert violations == [
+        "Tiny: build 12.0s > 10.0s",
+        "Tiny: search 4.0s > 3.0s",
+        "Tiny: hit@10 rate 0.300 < 0.500",
+        "Tiny: MRR@10 0.250 < 0.300",
+    ]
+
+
+def test_threshold_violations_accept_passing_report():
+    report = runner.Report(
+        name="Tiny",
+        n_docs=100,
+        n_queries=10,
+        mrr=0.5,
+        recall_at_5=0.1,
+        recall_at_10=0.2,
+        hit_at_10=8,
+        build_sec=2.0,
+        search_sec=1.0,
+        reference="unit",
+    )
+
+    assert (
+        runner._threshold_violations(
+            [report],
+            max_build_sec=10.0,
+            max_search_sec=3.0,
+            min_hit_rate_at_10=0.5,
+            min_mrr=0.3,
+        )
+        == []
+    )

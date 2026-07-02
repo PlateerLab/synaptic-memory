@@ -387,6 +387,34 @@ def _emit_markdown(
     return path
 
 
+def _threshold_violations(
+    reports: list[Report],
+    *,
+    max_build_sec: float | None = None,
+    max_search_sec: float | None = None,
+    min_hit_rate_at_10: float | None = None,
+    min_mrr: float | None = None,
+) -> list[str]:
+    violations: list[str] = []
+    for report in reports:
+        hit_rate = report.hit_at_10 / max(report.n_queries, 1)
+        if max_build_sec is not None and report.build_sec > max_build_sec:
+            violations.append(
+                f"{report.name}: build {report.build_sec:.1f}s > {max_build_sec:.1f}s"
+            )
+        if max_search_sec is not None and report.search_sec > max_search_sec:
+            violations.append(
+                f"{report.name}: search {report.search_sec:.1f}s > {max_search_sec:.1f}s"
+            )
+        if min_hit_rate_at_10 is not None and hit_rate < min_hit_rate_at_10:
+            violations.append(
+                f"{report.name}: hit@10 rate {hit_rate:.3f} < {min_hit_rate_at_10:.3f}"
+            )
+        if min_mrr is not None and report.mrr < min_mrr:
+            violations.append(f"{report.name}: MRR@10 {report.mrr:.3f} < {min_mrr:.3f}")
+    return violations
+
+
 async def amain(argv: list[str]) -> int:
     p = argparse.ArgumentParser()
     p.add_argument(
@@ -461,6 +489,30 @@ async def amain(argv: list[str]) -> int:
             "Index at most this many docs for staged scale smoke. The selected "
             "queries' gold docs are kept first, then distractors are filled in."
         ),
+    )
+    p.add_argument(
+        "--max-build-sec",
+        type=float,
+        default=None,
+        help="Fail if any dataset build takes longer than this many seconds.",
+    )
+    p.add_argument(
+        "--max-search-sec",
+        type=float,
+        default=None,
+        help="Fail if any dataset search phase takes longer than this many seconds.",
+    )
+    p.add_argument(
+        "--min-hit-rate-at-10",
+        type=float,
+        default=None,
+        help="Fail if any dataset Hit@10 / queries is below this value.",
+    )
+    p.add_argument(
+        "--min-mrr",
+        type=float,
+        default=None,
+        help="Fail if any dataset MRR@10 is below this value.",
     )
     p.add_argument(
         "--llm-decomposer-url",
@@ -666,6 +718,19 @@ async def amain(argv: list[str]) -> int:
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")
+    violations = _threshold_violations(
+        reports,
+        max_build_sec=args.max_build_sec,
+        max_search_sec=args.max_search_sec,
+        min_hit_rate_at_10=args.min_hit_rate_at_10,
+        min_mrr=args.min_mrr,
+    )
+    if violations:
+        print()
+        print("Threshold violations:")
+        for violation in violations:
+            print(f"  - {violation}")
+        return 1
     return 0
 
 
