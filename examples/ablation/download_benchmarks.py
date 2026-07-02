@@ -26,6 +26,7 @@ Usage::
     python examples/ablation/download_benchmarks.py
     python examples/ablation/download_benchmarks.py --only hotpotqa_full
     python examples/ablation/download_benchmarks.py --only musique,2wiki
+    python examples/ablation/download_benchmarks.py --only msmarco_passage --large-scale-tier full
 """
 
 from __future__ import annotations
@@ -39,6 +40,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = REPO_ROOT / "tests" / "benchmark" / "data"
 MSMARCO_DEFAULT_CORPUS_LIMIT = 1_000_000
+# BEIR/msmarco corpus snapshot row count, verified against HuggingFace on 2026-07-02.
+MSMARCO_FULL_CORPUS_SIZE = 8_841_823
+LARGE_SCALE_TIERS = {
+    "1m": MSMARCO_DEFAULT_CORPUS_LIMIT,
+    "5m": 5_000_000,
+    "full": MSMARCO_FULL_CORPUS_SIZE,
+}
 
 
 def _hash_doc(title: str, text: str) -> str:
@@ -509,6 +517,16 @@ def main() -> None:
         ),
     )
     p.add_argument(
+        "--large-scale-tier",
+        choices=sorted(LARGE_SCALE_TIERS),
+        default=None,
+        help=(
+            "Named corpus size for large JSONL-sharded datasets. Overrides "
+            "--large-corpus-limit. 'full' means the complete MS MARCO passage "
+            f"corpus ({MSMARCO_FULL_CORPUS_SIZE:,} rows)."
+        ),
+    )
+    p.add_argument(
         "--large-output-suffix",
         default="",
         help=(
@@ -530,12 +548,16 @@ def main() -> None:
         if name in LARGE_BUILDERS:
             builder, filename = LARGE_BUILDERS[name]
             out_path = OUT_DIR / filename
-            if args.large_output_suffix:
-                out_path = out_path.with_name(
-                    f"{out_path.stem}{args.large_output_suffix}{out_path.suffix}"
-                )
+            corpus_limit = args.large_corpus_limit
+            suffix = args.large_output_suffix
+            if args.large_scale_tier:
+                corpus_limit = LARGE_SCALE_TIERS[args.large_scale_tier]
+                if not suffix and args.large_scale_tier != "1m":
+                    suffix = f"_{args.large_scale_tier}"
+            if suffix:
+                out_path = out_path.with_name(f"{out_path.stem}{suffix}{out_path.suffix}")
             print(f"\n=== {name} ===")
-            builder(out_path, corpus_limit=args.large_corpus_limit)
+            builder(out_path, corpus_limit=corpus_limit)
             continue
         builder, filename = BUILDERS[name]
         out_path = OUT_DIR / filename

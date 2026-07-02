@@ -161,6 +161,7 @@ class EvidenceSearch:
         "_backend_scored",
         "_calibrated_blend",
         "_calibration_loaded",
+        "_cross_rerank_top_n",
         "_cross_reranker",
         "_decomposer",
         "_embedder",
@@ -229,6 +230,17 @@ class EvidenceSearch:
         # ablation scripts flip behavior without threading the kwarg
         # through every facade.
         import os as _os
+
+        self._cross_rerank_top_n = 20
+        env_cross_top_n = _os.environ.get("SYNAPTIC_CROSS_RERANK_TOP_N")
+        if env_cross_top_n is not None:
+            try:
+                self._cross_rerank_top_n = max(0, int(env_cross_top_n))
+            except ValueError:
+                logger.warning(
+                    "Ignoring invalid SYNAPTIC_CROSS_RERANK_TOP_N=%r",
+                    env_cross_top_n,
+                )
 
         env_k = _os.environ.get("SYNAPTIC_PHRASE_SEED_K")
         if env_k is not None:
@@ -890,7 +902,7 @@ class EvidenceSearch:
         # (X2BEE Hard −34%, assort Conv −37% measured under blend=0.4).
         # Passage kinds (CHUNK, CONCEPT, plain ENTITY) still rerank.
         if self._cross_reranker is not None and scored:
-            top_n = min(20, len(scored))
+            top_n = min(self._cross_rerank_top_n, len(scored))
             top_candidates = scored[:top_n]
             rerank_indices = [
                 i

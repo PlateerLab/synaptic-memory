@@ -118,18 +118,32 @@ class TEIReranker:
         reranker = TEIReranker(base_url="http://gpu-server:8080")
     """
 
-    __slots__ = ("_base_url", "_timeout")
+    __slots__ = ("_base_url", "_max_batch_size", "_timeout")
 
     def __init__(
         self,
         base_url: str = "http://localhost:8080",
         *,
+        max_batch_size: int = 32,
         timeout: int = 60,
     ) -> None:
         self._base_url = base_url.rstrip("/")
+        self._max_batch_size = max(1, int(max_batch_size))
         self._timeout = timeout
 
     async def rerank(self, query: str, documents: list[str]) -> list[float]:
+        if not documents:
+            return []
+
+        scores = [0.0] * len(documents)
+        for offset in range(0, len(documents), self._max_batch_size):
+            chunk = documents[offset : offset + self._max_batch_size]
+            chunk_scores = await self._rerank_chunk(query, chunk)
+            for i, score in enumerate(chunk_scores[: len(chunk)]):
+                scores[offset + i] = score
+        return scores
+
+    async def _rerank_chunk(self, query: str, documents: list[str]) -> list[float]:
         import aiohttp
 
         url = f"{self._base_url}/rerank"

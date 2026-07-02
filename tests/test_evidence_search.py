@@ -263,6 +263,78 @@ class TestPipelineShape:
             "evidence_count",
         }.issubset(set(result.diagnostics))
 
+    async def test_cross_rerank_top_n_env_controls_candidate_count(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        class _CountingReranker:
+            def __init__(self) -> None:
+                self.count = 0
+
+            async def rerank(self, query: str, documents: list[str]) -> list[float]:
+                self.count = len(documents)
+                return [0.0] * len(documents)
+
+        backend = MemoryBackend()
+        await backend.connect()
+        for i in range(30):
+            await backend.save_node(
+                Node(
+                    id=f"n{i}",
+                    kind=NodeKind.CONCEPT,
+                    title=f"Alpha {i}",
+                    content=f"alpha candidate {i}",
+                )
+            )
+        reranker = _CountingReranker()
+        monkeypatch.setenv("SYNAPTIC_CROSS_RERANK_TOP_N", "25")
+
+        searcher = EvidenceSearch(
+            backend=backend,
+            reranker=reranker,
+            graph_expansion=False,
+            aggregate_candidate_pool_limit=0,
+        )
+        await searcher.search("alpha", k=5, fts_seed_limit=30)
+
+        assert reranker.count == 25
+
+    async def test_invalid_cross_rerank_top_n_env_falls_back_to_default(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        class _CountingReranker:
+            def __init__(self) -> None:
+                self.count = 0
+
+            async def rerank(self, query: str, documents: list[str]) -> list[float]:
+                self.count = len(documents)
+                return [0.0] * len(documents)
+
+        backend = MemoryBackend()
+        await backend.connect()
+        for i in range(30):
+            await backend.save_node(
+                Node(
+                    id=f"n{i}",
+                    kind=NodeKind.CONCEPT,
+                    title=f"Beta {i}",
+                    content=f"beta candidate {i}",
+                )
+            )
+        reranker = _CountingReranker()
+        monkeypatch.setenv("SYNAPTIC_CROSS_RERANK_TOP_N", "not-an-int")
+
+        searcher = EvidenceSearch(
+            backend=backend,
+            reranker=reranker,
+            graph_expansion=False,
+            aggregate_candidate_pool_limit=0,
+        )
+        await searcher.search("beta", k=5, fts_seed_limit=30)
+
+        assert reranker.count == 20
+
     async def test_fts_embedding_materialization_tracks_query_embedding_need(self):
         class CountingBackend(MemoryBackend):
             def __init__(self) -> None:

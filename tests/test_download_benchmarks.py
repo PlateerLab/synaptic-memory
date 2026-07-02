@@ -92,3 +92,76 @@ def test_large_output_suffix_keeps_default_shard(monkeypatch, tmp_path):
     downloader.main()
 
     assert calls == [tmp_path / "msmarco_passage_5m.json"]
+
+
+def test_large_scale_tier_full_uses_complete_corpus_and_safe_suffix(
+    monkeypatch,
+    tmp_path,
+):
+    calls: list[tuple[Path, int]] = []
+    monkeypatch.setattr(downloader, "OUT_DIR", tmp_path)
+    monkeypatch.setitem(
+        downloader.LARGE_BUILDERS,
+        "msmarco_passage",
+        (
+            lambda out_path, *, corpus_limit: calls.append((out_path, corpus_limit)),
+            "msmarco_passage.json",
+        ),
+    )
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "download_benchmarks.py",
+            "--only",
+            "msmarco_passage",
+            "--large-scale-tier",
+            "full",
+        ],
+    )
+
+    downloader.main()
+
+    assert calls == [
+        (
+            tmp_path / "msmarco_passage_full.json",
+            downloader.MSMARCO_FULL_CORPUS_SIZE,
+        )
+    ]
+
+
+def test_large_scale_tier_overrides_limit_but_keeps_explicit_suffix(
+    monkeypatch,
+    tmp_path,
+):
+    calls: list[tuple[Path, int]] = []
+    monkeypatch.setattr(downloader, "OUT_DIR", tmp_path)
+    monkeypatch.setitem(
+        downloader.LARGE_BUILDERS,
+        "msmarco_passage",
+        (
+            lambda out_path, *, corpus_limit: calls.append((out_path, corpus_limit)),
+            "msmarco_passage.json",
+        ),
+    )
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "download_benchmarks.py",
+            "--only",
+            "msmarco_passage",
+            "--large-corpus-limit",
+            "123",
+            "--large-scale-tier",
+            "5m",
+            "--large-output-suffix",
+            "_custom",
+        ],
+    )
+
+    downloader.main()
+
+    assert calls == [(tmp_path / "msmarco_passage_custom.json", 5_000_000)]

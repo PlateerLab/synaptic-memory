@@ -29,6 +29,32 @@ class TestVLLMReranker:
         assert scores == []
 
 
+class TestTEIReranker:
+    async def test_empty_documents_short_circuit(self):
+        scores = await TEIReranker("http://unreachable:9").rerank("q", [])
+        assert scores == []
+
+    async def test_chunks_large_batches_and_preserves_order(self):
+        class _FakeTEI(TEIReranker):
+            __slots__ = ("chunks",)
+
+            def __init__(self) -> None:
+                super().__init__("http://unused", max_batch_size=2)
+                self.chunks: list[list[str]] = []
+
+            async def _rerank_chunk(self, query: str, documents: list[str]) -> list[float]:
+                self.chunks.append(list(documents))
+                base = float(len(self.chunks) * 10)
+                return [base + i for i in range(len(documents))]
+
+        reranker = _FakeTEI()
+
+        scores = await reranker.rerank("q", ["a", "b", "c", "d", "e"])
+
+        assert reranker.chunks == [["a", "b"], ["c", "d"], ["e"]]
+        assert scores == [10.0, 11.0, 20.0, 21.0, 30.0]
+
+
 class TestRerankerFromUrl:
     def test_dispatch_vllm(self):
         assert isinstance(reranker_from_url("http://h:8000", backend="vllm"), VLLMReranker)

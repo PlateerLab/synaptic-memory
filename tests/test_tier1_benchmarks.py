@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -26,6 +27,26 @@ def test_msmarco_path_override_retargets_dataset(tmp_path):
 
     assert by_key["msmarco"].path == manifest
     assert by_key["msmarco"].name == runner.DATASETS[6].name
+
+
+def test_reuse_signature_excludes_search_time_components():
+    signature = runner._reuse_signature(
+        runner.Dataset(name="Tiny", path=Path("tiny.json"), reference="unit"),
+        {"corpus": {"doc": {}}, "source": "unit"},
+        corpus_limit=1,
+        embedder=None,
+        phrase_extractor=None,
+        entity_linker_cfg=None,
+    )
+
+    assert "reranker" not in signature
+    assert "decomposer" not in signature
+
+
+@pytest.mark.asyncio
+async def test_fts_seed_limit_rejects_non_positive():
+    with pytest.raises(SystemExit, match="--fts-seed-limit must be positive"):
+        await runner.amain(["--fts-seed-limit", "0"])
 
 
 @pytest.mark.asyncio
@@ -191,6 +212,46 @@ async def test_progress_every_reports_crossed_batch_boundary(tmp_path, capsys):
 
     assert "ingest: 4/5 docs" in output
     assert "ingest: 5/5 docs" in output
+
+
+@pytest.mark.asyncio
+async def test_fts_seed_limit_passes_to_graph_search(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    path = tmp_path / "tiny_bench.json"
+    path.write_text(
+        json.dumps(
+            {
+                "corpus": {"gold_doc": {"title": "Gold", "text": "needle targetterm"}},
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    seen: dict[str, int | None] = {}
+
+    class _FakeGraph:
+        def __init__(self, *args, **kwargs) -> None:
+            self.backend = args[0]
+
+        async def search(self, query: str, *, limit: int, fts_seed_limit: int | None = None):
+            seen["fts_seed_limit"] = fts_seed_limit
+            node = SimpleNamespace(properties={"doc_id": "gold_doc"})
+            return SimpleNamespace(nodes=[SimpleNamespace(node=node)])
+
+    monkeypatch.setattr(runner, "SynapticGraph", _FakeGraph)
+
+    report = await runner.run_one(
+        runner.Dataset(name="Tiny", path=path, reference="unit"),
+        subset=1,
+        corpus_limit=1,
+        fts_seed_limit=77,
+    )
+
+    assert seen["fts_seed_limit"] == 77
+    assert report.hit_at_10 == 1
 
 
 @pytest.mark.asyncio
