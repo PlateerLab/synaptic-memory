@@ -55,6 +55,18 @@ _PROCESS_FROM_RE = re.compile(
     r"(?P<verb>created|made|formed|produced)\s+from\s+(?P<source>.+)",
     re.IGNORECASE,
 )
+_BLOOD_RE = re.compile(
+    r"\b(?:bloodborne|blood-borne|blood(?![\s-]+(?:pressure|sugar|glucose|tests?)\b))\b",
+    re.IGNORECASE,
+)
+_SEXUAL_TRANSMISSION_RE = re.compile(
+    r"\b(?:sexually\s+transmitted|sexual(?:ly)?\s+transmission|stds?|stis?)\b",
+    re.IGNORECASE,
+)
+_DISEASE_OR_INFECTION_RE = re.compile(
+    r"\b(?:diseases?|infections?|stds?|stis?)\b",
+    re.IGNORECASE,
+)
 _PROCESS_TRAILING_WORDS = {
     "breakdown",
     "created",
@@ -188,6 +200,16 @@ def _query_rewrite_hints(query: str, *, limit: int = 20) -> list[Hint]:
         add(
             f"small pieces of {source_singular} form {subject}",
             "retry with an answer-shaped process phrase using the same subject and source",
+        )
+
+    if (
+        _BLOOD_RE.search(query)
+        and _SEXUAL_TRANSMISSION_RE.search(query)
+        and _DISEASE_OR_INFECTION_RE.search(query)
+    ):
+        add(
+            "sexual blood borne transmission routes",
+            "medical pages often describe this as sexual and blood-borne transmission rather than blood diseases",
         )
 
     return hints[:3]
