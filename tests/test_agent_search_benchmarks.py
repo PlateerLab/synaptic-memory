@@ -173,6 +173,45 @@ def test_agent_loop_load_local_env_without_overriding_shell_env(
     assert os.environ["DEEPSEEK_API_KEY"] == "from_shell"
 
 
+def test_agent_loop_deepseek_preset_resolves_provider_defaults() -> None:
+    assert loop_runner._resolve_llm_settings(
+        preset="deepseek",
+        llm_base_url=None,
+        model=None,
+        api_key_env=None,
+    ) == (
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+        "DEEPSEEK_API_KEY",
+    )
+
+
+def test_agent_loop_llm_preset_preserves_explicit_overrides() -> None:
+    assert loop_runner._resolve_llm_settings(
+        preset="deepseek",
+        llm_base_url="https://example.test/v1",
+        model="custom-model",
+        api_key_env="CUSTOM_KEY",
+    ) == (
+        "https://example.test/v1",
+        "custom-model",
+        "CUSTOM_KEY",
+    )
+
+
+def test_agent_loop_local_preset_keeps_existing_defaults() -> None:
+    assert loop_runner._resolve_llm_settings(
+        preset="local",
+        llm_base_url=None,
+        model=None,
+        api_key_env=None,
+    ) == (
+        "http://localhost:8012/v1",
+        "Qwen3.6-27B",
+        "OPENAI_API_KEY",
+    )
+
+
 def test_llm_preflight_error_message_names_endpoint_and_skip_hint() -> None:
     msg = loop_runner._llm_preflight_error_message(
         "http://127.0.0.1:18012/v1",
