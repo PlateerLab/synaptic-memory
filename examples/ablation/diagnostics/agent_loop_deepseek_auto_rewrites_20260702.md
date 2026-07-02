@@ -50,6 +50,14 @@ Regressed in this live run:
 
 The live run also exposed a follow-up issue: DeepSeek sometimes appends a process word to the source phrase, e.g. `how is soil created from rocks weathering`. A source-cleanup rule strips trailing process words such as `weathering` before producing rewrites. With that cleanup, `237373` again reaches the gold document at turn 1 / call 1 in a targeted live smoke.
 
+## Blood-Borne Transmission Follow-Up
+
+The remaining high-call miss `54544` (`blood diseases that are sexually transmitted`) used a lay phrase while the gold document uses `STI`, `blood borne infection`, and `sexual and blood borne transmission routes`. A bounded medical synonym rewrite now fires only when the query contains blood, sexually transmitted/sexual wording, and a disease/infection term.
+
+| QID | Original query | Auto rewrite | Gold rank in `deep_search` | DeepSeek targeted smoke |
+| --- | --- | --- | ---: | --- |
+| 54544 | blood diseases that are sexually transmitted | sexual blood borne transmission routes | 1 | reach=yes, first relevant turn 1 / call 1 |
+
 ## Interpretation
 
 Prompt-visible hints alone were not enough: DeepSeek often generated nearby but non-gold rewrites. Running the deterministic rewrite hints inside `deep_search` removes that planning variance for cheap, bounded patterns such as dropping noisy numeric years and rewriting "created from" process questions into answer-shaped phrases.

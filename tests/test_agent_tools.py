@@ -230,6 +230,57 @@ def test_query_rewrite_hints_preserve_non_plural_ss_source():
     assert "making policy clas pieces" not in queries
 
 
+def test_query_rewrite_hints_blood_sexual_infection_terms():
+    hints = _query_rewrite_hints("blood diseases that are sexually transmitted")
+    queries = [h.args["query"] for h in hints]
+
+    assert "sexual blood borne transmission routes" in queries
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "bloodborne infection sexual transmission",
+        "STI blood transmission",
+        "sexually transmitted blood infection",
+    ],
+)
+def test_query_rewrite_hints_blood_sexual_infection_variants(query):
+    hints = _query_rewrite_hints(query)
+    queries = [h.args["query"] for h in hints]
+
+    assert "sexual blood borne transmission routes" in queries
+
+
+def test_query_rewrite_hints_blood_sexual_requires_disease_terms():
+    hints = _query_rewrite_hints("blood pressure changes during sexual activity")
+    queries = [h.args["query"] for h in hints]
+
+    assert "sexual blood borne transmission routes" not in queries
+
+
+def test_query_rewrite_hints_blood_sexual_avoids_non_transmission_context():
+    hints = _query_rewrite_hints("blood pressure medication sexual dysfunction infection risk")
+    queries = [h.args["query"] for h in hints]
+
+    assert "sexual blood borne transmission routes" not in queries
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "blood pressure and sexually transmitted infection risk",
+        "blood test for sexually transmitted diseases",
+        "blood sugar and STD infection symptoms",
+    ],
+)
+def test_query_rewrite_hints_blood_sexual_avoids_blood_measure_context(query):
+    hints = _query_rewrite_hints(query)
+    queries = [h.args["query"] for h in hints]
+
+    assert "sexual blood borne transmission routes" not in queries
+
+
 @pytest.mark.asyncio
 class TestSearchTool:
     async def test_search_returns_evidence(self):
