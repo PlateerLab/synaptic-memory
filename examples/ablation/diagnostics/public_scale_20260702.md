@@ -35,6 +35,7 @@ PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benc
 uv run --extra eval python examples/ablation/download_benchmarks.py --only msmarco_passage --large-scale-tier full
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --overwrite-sqlite-db --sqlite-fast-build
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db --diagnose-raw-fts-limit 500
 ```
 
 ## FiQA Results
@@ -85,7 +86,14 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | persistent SQLite reuse + AND-first FTS threshold 20 | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 0.0s | 37.8s |
 | persistent SQLite full fast build + AND-first FTS threshold 20 | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 642.2s | 71.6s |
 | persistent SQLite full reuse + AND-first FTS threshold 20 | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 0.0s | 68.7s |
+| persistent SQLite full reuse + raw FTS@500 diagnostic | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 0.0s | 69.7s |
 | persistent SQLite full reuse + TEI reranker + FTS seed 200 + cross top 200 | 8,841,823 | 50 | 0.211 | 0.307 | 0.393 | 20/50 | 0.0s | 72.7s |
+
+Raw FTS pool diagnostic for the full reuse run:
+
+| Pool | MRR@10 | R@5 | R@10 | Hit@10 | Any@Pool | Raw FTS Time |
+|-----:|-------:|----:|-----:|-------:|---------:|-------------:|
+| 500 | 0.214 | 0.327 | 0.413 | 21/50 | 40/50 | 68.7s |
 
 The local artifacts are gitignored:
 
@@ -156,6 +164,11 @@ The local artifacts are gitignored:
 - Full-scale FTS-only quality drops further than 5M (MRR@10 0.212, Hit@10
   20/50), confirming that the next large-corpus work should improve candidate
   recall and ranking rather than only making storage bigger.
+- The raw FTS@500 diagnostic shows the headroom: official gold appears in the
+  top-500 pool for 40/50 queries but only reaches the raw top-10 for 21/50 and
+  the final EvidenceSearch top-10 for 20/50. This separates candidate recall
+  from final ranking and gives future large-corpus experiments a concrete
+  target.
 - TEI cross-reranking now handles large candidate pools without TEI batch-size
   errors by chunking requests, but the full 8.84M reranker smoke did not recover
   quality (MRR@10 0.211, Hit@10 20/50). The next target is better candidate

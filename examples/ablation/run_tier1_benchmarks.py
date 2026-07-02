@@ -390,6 +390,23 @@ def _recall_at_k(retrieved: list[str], relevant: set[str], k: int) -> float:
     return hits / len(relevant)
 
 
+def _doc_ids_from_nodes(nodes: list[object]) -> list[str]:
+    retrieved: list[str] = []
+    for node in nodes:
+        did = (getattr(node, "properties", {}) or {}).get("doc_id", "")
+        if did and did not in retrieved:
+            retrieved.append(str(did))
+    return retrieved
+
+
+async def _raw_fts_doc_ids(backend: object, query: str, *, limit: int) -> list[str]:
+    try:
+        nodes = await backend.search_fts(query, limit=limit, include_embedding=False)  # type: ignore[attr-defined]
+    except TypeError:
+        nodes = await backend.search_fts(query, limit=limit)  # type: ignore[attr-defined]
+    return _doc_ids_from_nodes(nodes)
+
+
 @dataclass
 class Report:
     name: str
@@ -402,6 +419,13 @@ class Report:
     build_sec: float
     search_sec: float
     reference: str
+    raw_fts_pool_limit: int = 0
+    raw_fts_mrr: float = 0.0
+    raw_fts_recall_at_5: float = 0.0
+    raw_fts_recall_at_10: float = 0.0
+    raw_fts_hit_at_10: int = 0
+    raw_fts_any_at_pool: int = 0
+    raw_fts_sec: float = 0.0
 
 
 async def run_one(
@@ -419,6 +443,7 @@ async def run_one(
     corpus_limit: int | None = None,
     progress_every: int = 100000,
     fts_seed_limit: int | None = None,
+    diagnose_raw_fts_limit: int | None = None,
     sqlite_db_path: Path | None = None,
     reuse_sqlite_db: bool = False,
     overwrite_sqlite_db: bool = False,
@@ -616,30 +641,50 @@ async def run_one(
     r5_total = 0.0
     r10_total = 0.0
     hit10 = 0
+    raw_fts_mrr_total = 0.0
+    raw_fts_r5_total = 0.0
+    raw_fts_r10_total = 0.0
+    raw_fts_hit10 = 0
+    raw_fts_any_pool = 0
+    raw_fts_sec = 0.0
 
-    t_search = time.perf_counter()
+    search_sec = 0.0
     for qid, qtext in query_items:
         rel = qrels.get(qid, {})
         relevant = set(rel.keys()) if isinstance(rel, dict) else set(map(str, rel))
         if not relevant:
             continue
+        if diagnose_raw_fts_limit:
+            t_raw = time.perf_counter()
+            raw_retrieved = await _raw_fts_doc_ids(
+                backend,
+                str(qtext),
+                limit=diagnose_raw_fts_limit,
+            )
+            raw_fts_sec += time.perf_counter() - t_raw
+            raw_rr = _reciprocal_rank(raw_retrieved[:TOP_K], relevant)
+            raw_fts_mrr_total += raw_rr
+            raw_fts_r5_total += _recall_at_k(raw_retrieved, relevant, 5)
+            raw_fts_r10_total += _recall_at_k(raw_retrieved, relevant, TOP_K)
+            if raw_rr > 0:
+                raw_fts_hit10 += 1
+            if any(did in relevant for did in raw_retrieved):
+                raw_fts_any_pool += 1
+
+        t_one_search = time.perf_counter()
         result = await graph.search(
             str(qtext),
             limit=TOP_K * 2,
             fts_seed_limit=fts_seed_limit,
         )
-        retrieved: list[str] = []
-        for hit in result.nodes:
-            did = (hit.node.properties or {}).get("doc_id", "")
-            if did and did not in retrieved:
-                retrieved.append(did)
+        retrieved = _doc_ids_from_nodes([hit.node for hit in result.nodes])
         rr = _reciprocal_rank(retrieved[:TOP_K], relevant)
         mrr_total += rr
         r5_total += _recall_at_k(retrieved, relevant, 5)
         r10_total += _recall_at_k(retrieved, relevant, TOP_K)
         if rr > 0:
             hit10 += 1
-    search_sec = time.perf_counter() - t_search
+        search_sec += time.perf_counter() - t_one_search
 
     n = max(len(query_items), 1)
     report = Report(
@@ -653,6 +698,13 @@ async def run_one(
         build_sec=build_sec,
         search_sec=search_sec,
         reference=ds.reference,
+        raw_fts_pool_limit=int(diagnose_raw_fts_limit or 0),
+        raw_fts_mrr=raw_fts_mrr_total / n if diagnose_raw_fts_limit else 0.0,
+        raw_fts_recall_at_5=raw_fts_r5_total / n if diagnose_raw_fts_limit else 0.0,
+        raw_fts_recall_at_10=raw_fts_r10_total / n if diagnose_raw_fts_limit else 0.0,
+        raw_fts_hit_at_10=raw_fts_hit10,
+        raw_fts_any_at_pool=raw_fts_any_pool,
+        raw_fts_sec=raw_fts_sec,
     )
     close = getattr(backend, "close", None)
     if callable(close):
@@ -673,6 +725,7 @@ def _emit_markdown(
     ingest_batch: int = 20000,
     progress_every: int = 100000,
     fts_seed_limit: int | None = None,
+    diagnose_raw_fts_limit: int | None = None,
     sqlite_db_path: Path | None = None,
     reuse_sqlite_db: bool = False,
     sqlite_fast_build: bool = False,
@@ -687,6 +740,7 @@ def _emit_markdown(
         f"- Subset: {subset if subset else 'full'}",
         f"- Corpus limit: {corpus_limit if corpus_limit else 'full'}",
         f"- FTS seed limit: {fts_seed_limit if fts_seed_limit else 'default'}",
+        f"- Raw FTS diagnostic limit: {diagnose_raw_fts_limit if diagnose_raw_fts_limit else 'disabled'}",
         f"- Ingest batch: {ingest_batch}",
         f"- Progress every: {progress_every if progress_every > 0 else 'disabled'}",
         f"- SQLite DB path: {_display_path(sqlite_db_path) if sqlite_db_path else 'temporary'}",
@@ -712,6 +766,24 @@ def _emit_markdown(
             f"{r.mrr:.3f} | {r.recall_at_5:.3f} | {r.recall_at_10:.3f} | "
             f"{r.hit_at_10}/{r.n_queries} | {r.build_sec:.1f}s | {r.search_sec:.1f}s |"
         )
+    raw_reports = [r for r in reports if r.raw_fts_pool_limit > 0]
+    if raw_reports:
+        lines.extend(
+            [
+                "",
+                "## Raw FTS Pool Diagnostic",
+                "",
+                "| Dataset | Pool | MRR@10 | R@5 | R@10 | Hit@10 | Any@Pool | Raw FTS Time |",
+                "|---------|-----:|-------:|----:|-----:|-------:|---------:|-------------:|",
+            ]
+        )
+        for r in raw_reports:
+            lines.append(
+                f"| {r.name} | {r.raw_fts_pool_limit} | {r.raw_fts_mrr:.3f} | "
+                f"{r.raw_fts_recall_at_5:.3f} | {r.raw_fts_recall_at_10:.3f} | "
+                f"{r.raw_fts_hit_at_10}/{r.n_queries} | "
+                f"{r.raw_fts_any_at_pool}/{r.n_queries} | {r.raw_fts_sec:.1f}s |"
+            )
     lines.append("")
     lines.append("## Context")
     lines.append("")
@@ -884,6 +956,16 @@ async def amain(argv: list[str]) -> int:
         ),
     )
     p.add_argument(
+        "--diagnose-raw-fts-limit",
+        type=int,
+        default=None,
+        help=(
+            "Also measure backend.search_fts(query, limit=N) as a raw candidate-pool "
+            "diagnostic. Reports official top-10 metrics plus Any@N without changing "
+            "graph.search() results."
+        ),
+    )
+    p.add_argument(
         "--max-build-sec",
         type=float,
         default=None,
@@ -976,6 +1058,8 @@ async def amain(argv: list[str]) -> int:
         raise SystemExit("--sqlite-fast-build requires --use-sqlite-graph")
     if args.fts_seed_limit is not None and args.fts_seed_limit <= 0:
         raise SystemExit("--fts-seed-limit must be positive")
+    if args.diagnose_raw_fts_limit is not None and args.diagnose_raw_fts_limit <= 0:
+        raise SystemExit("--diagnose-raw-fts-limit must be positive")
 
     embedder: EmbeddingProvider | None = None
     embedder_label = "none (FTS-only baseline)"
@@ -1069,6 +1153,10 @@ async def amain(argv: list[str]) -> int:
     print(f"  entity linker: {entity_linker_label}")
     print(f"  corpus limit: {args.corpus_limit if args.corpus_limit else 'full'}")
     print(f"  FTS seed limit: {args.fts_seed_limit if args.fts_seed_limit else 'default'}")
+    print(
+        "  raw FTS diagnostic limit: "
+        f"{args.diagnose_raw_fts_limit if args.diagnose_raw_fts_limit else 'disabled'}"
+    )
     print(f"  ingest batch: {args.ingest_batch}")
     print(f"  progress every: {args.progress_every if args.progress_every > 0 else 'disabled'}")
     print(
@@ -1113,6 +1201,7 @@ async def amain(argv: list[str]) -> int:
                 corpus_limit=args.corpus_limit,
                 progress_every=args.progress_every,
                 fts_seed_limit=args.fts_seed_limit,
+                diagnose_raw_fts_limit=args.diagnose_raw_fts_limit,
                 sqlite_db_path=args.sqlite_db_path,
                 reuse_sqlite_db=args.reuse_sqlite_db,
                 overwrite_sqlite_db=args.overwrite_sqlite_db,
@@ -1127,6 +1216,16 @@ async def amain(argv: list[str]) -> int:
             f"{r.mrr:>8.3f} {r.recall_at_5:>7.3f} {r.recall_at_10:>7.3f} "
             f"{r.hit_at_10:>5}/{r.n_queries:<4} {r.build_sec:>6.1f}s {r.search_sec:>7.1f}s"
         )
+        if r.raw_fts_pool_limit > 0:
+            print(
+                f"  raw FTS@{r.raw_fts_pool_limit}: "
+                f"MRR@10={r.raw_fts_mrr:.3f} "
+                f"R@5={r.raw_fts_recall_at_5:.3f} "
+                f"R@10={r.raw_fts_recall_at_10:.3f} "
+                f"Hit@10={r.raw_fts_hit_at_10}/{r.n_queries} "
+                f"Any@{r.raw_fts_pool_limit}={r.raw_fts_any_at_pool}/{r.n_queries} "
+                f"({r.raw_fts_sec:.1f}s)"
+            )
 
     if reports:
         out = _emit_markdown(
@@ -1141,6 +1240,7 @@ async def amain(argv: list[str]) -> int:
             ingest_batch=args.ingest_batch,
             progress_every=args.progress_every,
             fts_seed_limit=args.fts_seed_limit,
+            diagnose_raw_fts_limit=args.diagnose_raw_fts_limit,
             sqlite_db_path=args.sqlite_db_path,
             reuse_sqlite_db=args.reuse_sqlite_db,
             sqlite_fast_build=args.sqlite_fast_build,
