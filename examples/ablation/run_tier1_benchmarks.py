@@ -156,7 +156,7 @@ async def run_one(
     entity_linker_cfg: tuple[int, float] | None = None,
     use_sqlite_graph: bool = False,
     embed_batch: int = 256,
-    ingest_batch: int = 5000,
+    ingest_batch: int = 20000,
     corpus_limit: int | None = None,
 ) -> Report:
     if not ds.path.exists():
@@ -350,6 +350,7 @@ def _emit_markdown(
     phrase_extractor_label: str = "none",
     entity_linker_label: str = "none",
     corpus_limit: int | None = None,
+    ingest_batch: int = 20000,
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -360,6 +361,7 @@ def _emit_markdown(
         f"- Run at: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}",
         f"- Subset: {subset if subset else 'full'}",
         f"- Corpus limit: {corpus_limit if corpus_limit else 'full'}",
+        f"- Ingest batch: {ingest_batch}",
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
@@ -448,8 +450,8 @@ async def amain(argv: list[str]) -> int:
     p.add_argument(
         "--ingest-batch",
         type=int,
-        default=5000,
-        help="Batch size for benchmark corpus node writes (default: 5000).",
+        default=20000,
+        help="Batch size for benchmark corpus node writes (default: 20000).",
     )
     p.add_argument(
         "--corpus-limit",
@@ -616,6 +618,7 @@ async def amain(argv: list[str]) -> int:
     print(f"  phrase hub: {phrase_extractor_label}")
     print(f"  entity linker: {entity_linker_label}")
     print(f"  corpus limit: {args.corpus_limit if args.corpus_limit else 'full'}")
+    print(f"  ingest batch: {args.ingest_batch}")
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -659,6 +662,7 @@ async def amain(argv: list[str]) -> int:
             phrase_extractor_label=phrase_extractor_label,
             entity_linker_label=entity_linker_label,
             corpus_limit=args.corpus_limit,
+            ingest_batch=args.ingest_batch,
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")

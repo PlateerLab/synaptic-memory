@@ -48,9 +48,9 @@ After the SQLite batch FTS optimization:
 
 | Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |
 |-----:|--------:|-------:|----:|-----:|-------:|------:|-------:|
-| 50,000 | 10 | 0.933 | 0.008 | 0.015 | 10/10 | 49.3s | 1.3s |
-| 100,000 | 10 | 0.750 | 0.007 | 0.012 | 10/10 | 138.2s | 2.8s |
-| 171,332 | 10 | 0.598 | 0.004 | 0.011 | 10/10 | 370.4s | 5.2s |
+| 50,000 | 10 | 0.933 | 0.008 | 0.015 | 10/10 | 20.6s | 1.4s |
+| 100,000 | 10 | 0.750 | 0.007 | 0.012 | 10/10 | 55.2s | 2.8s |
+| 171,332 | 10 | 0.598 | 0.004 | 0.011 | 10/10 | 135.1s | 5.2s |
 
 TREC-COVID has many relevant documents per query, so R@5/R@10 is naturally
 small in this smoke even when Hit@10 is perfect.
@@ -60,6 +60,7 @@ small in this smoke even when Hit@10 is perfect.
 - Search latency remains usable at 171k docs: 5.2s over 10 queries.
 - The main large-corpus bottleneck is still initial FTS/index build, not retrieval.
 - Avoiding unnecessary FTS deletes for newly inserted nodes reduced full FiQA build time by about 9.9x.
+- Raising benchmark ingest batches to 20k reduced full TREC-COVID build time by about 2.7x.
 - `--corpus-limit` provides practical staged scale gates while preserving selected query gold docs.
 
 ## Guard Policy
