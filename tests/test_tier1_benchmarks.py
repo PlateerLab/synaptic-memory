@@ -137,6 +137,78 @@ async def test_progress_every_reports_ingest_progress(tmp_path, capsys):
     assert "ingest: 2/2 docs" in output
 
 
+@pytest.mark.asyncio
+async def test_sqlite_db_reuse_skips_reingest(tmp_path, capsys):
+    path = tmp_path / "tiny_bench.json"
+    db_path = tmp_path / "tiny.db"
+    path.write_text(
+        json.dumps(
+            {
+                "corpus": {
+                    "gold_doc": {"title": "Gold", "text": "needle targetterm"},
+                    "filler": {"title": "Filler", "text": "unrelated alpha"},
+                },
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    first = await runner.run_one(
+        runner.Dataset(name="Tiny", path=path, reference="unit"),
+        subset=1,
+        corpus_limit=2,
+        use_sqlite_graph=True,
+        sqlite_db_path=db_path,
+        progress_every=0,
+    )
+    capsys.readouterr()
+
+    # If the second run ingested from the source file again, the gold
+    # document would no longer match the query. Reuse should keep the
+    # already-built SQLite index intact.
+    path.write_text(
+        json.dumps(
+            {
+                "corpus": {
+                    "gold_doc": {"title": "Gold", "text": "changed text"},
+                    "filler": {"title": "Filler", "text": "unrelated alpha"},
+                },
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    second = await runner.run_one(
+        runner.Dataset(name="Tiny", path=path, reference="unit"),
+        subset=1,
+        corpus_limit=2,
+        use_sqlite_graph=True,
+        sqlite_db_path=db_path,
+        reuse_sqlite_db=True,
+        progress_every=0,
+    )
+    output = capsys.readouterr().out
+
+    assert first.hit_at_10 == 1
+    assert second.hit_at_10 == 1
+    assert second.n_docs == 2
+    assert "reuse sqlite db:" in output
+    assert db_path.with_name(f"{db_path.name}.tier1.json").exists()
+
+
+def test_reuse_meta_mismatches_report_changed_signature():
+    mismatches = runner._reuse_meta_mismatches(
+        {"version": 1, "dataset": "Tiny", "corpus_limit": 2},
+        {"version": 1, "dataset": "Tiny", "corpus_limit": 1},
+    )
+
+    assert mismatches == ["corpus_limit: 2 != 1"]
+
+
 def test_threshold_violations_report_scale_regressions():
     report = runner.Report(
         name="Tiny",

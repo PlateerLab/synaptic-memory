@@ -26,6 +26,10 @@ PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benc
 
 uv run --extra eval python examples/ablation/download_benchmarks.py --only msmarco_passage --large-corpus-limit 1000000
 PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --corpus-limit 1000000 --use-sqlite-graph
+
+# Persistent 1M DB for repeat runs after the initial build:
+PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --corpus-limit 1000000 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_1m.db --overwrite-sqlite-db
+PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --corpus-limit 1000000 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_1m.db --reuse-sqlite-db
 ```
 
 ## FiQA Results
@@ -86,6 +90,9 @@ The local artifacts are gitignored:
 - `--corpus-limit` provides practical staged scale gates while preserving selected query gold docs.
 - Long 1M runs should use ingest progress output; without it the build phase is
   too quiet for practical monitoring.
+- Repeat 1M runs should use `--sqlite-db-path` + `--reuse-sqlite-db`; the first
+  run still pays the materialization cost, but follow-up searches can skip the
+  31.9 minute ingest/index phase after sidecar metadata validation.
 
 ## Guard Policy
 
