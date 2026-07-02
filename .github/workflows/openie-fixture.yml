@@ -1,0 +1,66 @@
+name: OpenIE Fixture Guard
+
+# Scheduled, API-free smoke for the OpenIE PoC harness. The real MZ cache and
+# live LLM runs stay local, but this fixture keeps ingest, scoring, gate
+# semantics, and revertibility wired on GitHub-hosted runners.
+
+on:
+  schedule:
+    - cron: "30 7 * * *" # Daily 07:30 UTC
+  workflow_dispatch: {}
+
+jobs:
+  openie-fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra sqlite
+
+      - name: Create synthetic OpenIE fixture
+        run: |
+          cat > /tmp/openie_fixture_chunks.jsonl <<'JSONL'
+          {"doc_id":"alpha_doc","title":"Alpha Racing Policy","source":"fixture","content":"Alpha racing policy requires customer retention review and relation evidence for synthetic OpenIE smoke."}
+          {"doc_id":"beta_doc","title":"Beta Racing Procedure","source":"fixture","content":"Beta procedure documents unrelated payout handling for comparison."}
+          JSONL
+          cat > /tmp/openie_fixture_queries.json <<'JSON'
+          {"queries":[{"query":"customer retention review Alpha racing policy","gold_files":["alpha_doc"],"type":"fixture"}]}
+          JSON
+
+      - name: Run OpenIE skip-mode fixture smoke
+        run: |
+          uv run --extra sqlite python eval/scripts/openie_mz_poc.py \
+            --chunks /tmp/openie_fixture_chunks.jsonl \
+            --queries /tmp/openie_fixture_queries.json \
+            --baseline-db /tmp/openie_fixture_base.db \
+            --openie-db /tmp/openie_fixture_openie.db \
+            --results /tmp/openie_fixture_results.json \
+            --skip-openie \
+            --embed-base-url '' \
+            --search-limit 5 \
+            --max-input-chunks 2
+
+      - name: Run OpenIE PoC contract tests
+        run: uv run pytest tests/test_openie_mz_poc.py -q
+
+      - name: Upload OpenIE fixture results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openie-fixture-results
+          path: /tmp/openie_fixture_results.json
+          if-no-files-found: ignore
