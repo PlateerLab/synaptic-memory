@@ -1,0 +1,53 @@
+name: Memory Operating Guard
+
+# Scheduled, deterministic guard for the memory operating layer. This keeps the
+# long-running operational smoke out of fast PR CI while still catching regressions
+# in event ledgers, feedback, reinforcement, provenance, and health reporting.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # Daily 07:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  memory-operating:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra sqlite
+
+      - name: Run memory operating POC
+        run: |
+          uv run --extra sqlite python eval/scripts/memory_operating_poc.py \
+            --db /tmp/memory_operating_poc.db \
+            --results /tmp/memory_operating_poc_results.json
+
+      - name: Run memory operating contract tests
+        run: |
+          uv run pytest \
+            tests/test_memory_operating_layer.py \
+            tests/test_memory_operating_poc.py \
+            -q
+
+      - name: Upload memory operating results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-operating-results
+          path: /tmp/memory_operating_poc_results.json
+          if-no-files-found: ignore
