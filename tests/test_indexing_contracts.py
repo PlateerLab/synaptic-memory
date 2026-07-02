@@ -12,6 +12,7 @@ from synaptic import (
     InProcessIndexRouter,
     Node,
     NodeKind,
+    OpenSearchCandidateProvider,
     ScoredCandidate,
     StorageCandidateProvider,
     unique_candidates,
@@ -256,3 +257,133 @@ async def test_in_process_index_router_dedupes_and_reports_diagnostics():
     assert result.provider_counts == {"first": 1, "second": 2}
     assert result.diagnostics["raw_candidate_count"] == 3
     assert result.diagnostics["deduped_candidate_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_opensearch_candidate_provider_builds_filtered_queries_and_candidates():
+    class FakeOpenSearchClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        async def search(self, **kwargs):
+            self.calls.append(kwargs)
+            body = kwargs["body"]
+            query = body["query"]["bool"]["must"][0]["multi_match"]["query"]
+            if query == "alpha":
+                return {
+                    "hits": {
+                        "hits": [
+                            {
+                                "_id": "fallback-id",
+                                "_score": 4.0,
+                                "_source": {
+                                    "node_id": "chunk-alpha",
+                                    "document_id": "doc-alpha",
+                                    "title": "Alpha",
+                                    "kind": "chunk",
+                                    "source": "policy",
+                                },
+                            },
+                            {
+                                "_id": "chunk-shared",
+                                "_score": 2.0,
+                                "_source": {
+                                    "node_id": "chunk-shared",
+                                    "doc_id": "doc-shared",
+                                    "title": "Shared",
+                                    "kind": "chunk",
+                                },
+                            },
+                        ]
+                    }
+                }
+            return {
+                "hits": {
+                    "hits": [
+                        {
+                            "_id": "chunk-shared",
+                            "_score": 8.0,
+                            "_source": {
+                                "node_id": "chunk-shared",
+                                "document_id": "doc-shared",
+                                "title": "Shared Better",
+                                "kind": "chunk",
+                            },
+                        }
+                    ]
+                }
+            }
+
+    client = FakeOpenSearchClient()
+    provider = OpenSearchCandidateProvider(client, index="synaptic-chunks")
+
+    result = await provider.search_candidates(
+        CandidateSearchRequest(
+            query="alpha",
+            query_variants=["beta"],
+            limit=5,
+            filters=IndexFilter(
+                workspace_id="workspace-a",
+                acl_policy_ids=["acl-a", "acl-b"],
+                source_ids=["policy"],
+                document_ids=["doc-alpha"],
+                created_after=10.0,
+                properties={"department": "risk"},
+            ),
+        )
+    )
+
+    assert [candidate.node_id for candidate in result.candidates] == [
+        "chunk-shared",
+        "chunk-alpha",
+    ]
+    assert result.candidates[0].score == 1.0
+    assert result.candidates[0].query_variant == "beta"
+    assert result.candidates[1].score == 0.5
+    assert result.candidates[1].document_id == "doc-alpha"
+    assert result.candidates[1].metadata["source"] == "policy"
+    assert result.provider_counts == {"opensearch": 3}
+    assert result.diagnostics["query_variant_count"] == 2
+
+    first_body = client.calls[0]["body"]
+    filters = first_body["query"]["bool"]["filter"]
+    assert {"term": {"workspace_id": "workspace-a"}} in filters
+    assert {"terms": {"acl_policy_id": ["acl-a", "acl-b"]}} in filters
+    assert {
+        "bool": {
+            "should": [
+                {"terms": {"source_id": ["policy"]}},
+                {"terms": {"source": ["policy"]}},
+            ],
+            "minimum_should_match": 1,
+        }
+    } in filters
+    assert {"range": {"created_at": {"gte": 10.0}}} in filters
+    assert {"term": {"properties.department": "risk"}} in filters
+    assert {
+        "bool": {
+            "should": [
+                {"terms": {"document_id": ["doc-alpha"]}},
+                {"terms": {"doc_id": ["doc-alpha"]}},
+            ],
+            "minimum_should_match": 1,
+        }
+    } in filters
+
+
+@pytest.mark.asyncio
+async def test_opensearch_candidate_provider_health_uses_cluster_status():
+    class _Cluster:
+        async def health(self, *, index: str):
+            return {"status": "green", "index": index}
+
+    class FakeOpenSearchClient:
+        cluster = _Cluster()
+
+    provider = OpenSearchCandidateProvider(FakeOpenSearchClient(), index="synaptic-chunks")
+
+    report = await provider.index_health()
+
+    assert report.provider == "opensearch"
+    assert report.status == "green"
+    assert report.index_generation == "synaptic-chunks"

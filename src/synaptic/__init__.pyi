@@ -63,6 +63,7 @@ from synaptic.indexing import IngestionJobStage as IngestionJobStage
 from synaptic.indexing import IngestionJobStatus as IngestionJobStatus
 from synaptic.indexing import IngestionJobStore as IngestionJobStore
 from synaptic.indexing import InProcessIndexRouter as InProcessIndexRouter
+from synaptic.indexing import OpenSearchCandidateProvider as OpenSearchCandidateProvider
 from synaptic.indexing import ScoredCandidate as ScoredCandidate
 from synaptic.indexing import StorageCandidateProvider as StorageCandidateProvider
 from synaptic.indexing import unique_candidates as unique_candidates

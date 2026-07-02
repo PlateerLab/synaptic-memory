@@ -33,6 +33,7 @@ __all__ = [
     "IngestionJobStage",
     "IngestionJobStatus",
     "IngestionJobStore",
+    "OpenSearchCandidateProvider",
     "ScoredCandidate",
     "StorageCandidateProvider",
     "unique_candidates",
@@ -359,6 +360,185 @@ class StorageCandidateProvider:
         return list(await search_fts(query, **kwargs))
 
 
+class OpenSearchCandidateProvider:
+    """OpenSearch/Elasticsearch lexical provider.
+
+    The provider accepts an already-created async or sync client so importing
+    synaptic does not require OpenSearch dependencies. It applies structured
+    `IndexFilter` clauses in the index query before materialization and returns
+    only scored candidate ids plus compact metadata.
+    """
+
+    __slots__ = (
+        "_client",
+        "_field_map",
+        "_index",
+        "_metadata_fields",
+        "_name",
+        "_query_fields",
+    )
+
+    def __init__(
+        self,
+        client: object,
+        *,
+        index: str,
+        name: str = "opensearch",
+        query_fields: Sequence[str] = ("title^3", "content", "tags", "properties.search_keywords"),
+        metadata_fields: Sequence[str] = (
+            "node_id",
+            "document_id",
+            "doc_id",
+            "title",
+            "kind",
+            "source",
+            "page",
+            "chunk_id",
+            "category",
+            "domain",
+            "language",
+        ),
+        field_map: dict[str, str] | None = None,
+    ) -> None:
+        self._client = client
+        self._index = index
+        self._name = name
+        self._query_fields = list(query_fields)
+        self._metadata_fields = list(metadata_fields)
+        self._field_map = {
+            "node_id": "node_id",
+            "document_id": "document_id",
+            "doc_id": "doc_id",
+            "workspace_id": "workspace_id",
+            "user_id": "user_id",
+            "session_id": "session_id",
+            "domain": "domain",
+            "acl_policy_id": "acl_policy_id",
+            "source_id": "source_id",
+            "source": "source",
+            "language": "language",
+            "mime_type": "mime_type",
+            "tags": "tags",
+            "created_at": "created_at",
+            "updated_at": "updated_at",
+            **(field_map or {}),
+        }
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    async def search_candidates(
+        self,
+        request: CandidateSearchRequest,
+    ) -> CandidateSearchResult:
+        limit = max(0, int(request.limit))
+        if limit == 0:
+            return CandidateSearchResult(index_generation=self._index)
+        queries = _unique_queries(request.query, request.query_variants)
+        if not queries:
+            return CandidateSearchResult(index_generation=self._index)
+
+        raw_hits: list[tuple[dict[str, object], str, int]] = []
+        for query_variant in queries:
+            body = self._query_body(query_variant, request.filters, limit=limit)
+            response = await _maybe_await(
+                self._client.search(
+                    index=self._index,
+                    body=body,
+                    size=limit,
+                    _source=self._metadata_fields,
+                )
+            )
+            for rank, hit in enumerate(_search_hits(response)):
+                raw_hits.append((hit, query_variant, rank + 1))
+
+        max_raw_score = max(
+            (float(hit.get("_score") or 0.0) for hit, _query_variant, _rank in raw_hits),
+            default=0.0,
+        )
+        candidates: list[ScoredCandidate] = []
+        for hit, query_variant, rank in raw_hits:
+            source = _hit_source(hit)
+            node_id = _source_value(source, "node_id") or str(hit.get("_id", ""))
+            if not node_id:
+                continue
+            raw_score = float(hit.get("_score") or 0.0)
+            score = (raw_score / max_raw_score) if max_raw_score > 0 else _rank_score(rank - 1)
+            candidates.append(
+                ScoredCandidate(
+                    node_id=node_id,
+                    document_id=_source_value(source, "document_id", "doc_id"),
+                    score=_clamp_score(score),
+                    score_source=CandidateScoreSource.LEXICAL,
+                    rank=rank,
+                    query_variant=query_variant,
+                    provider=self.name,
+                    index_generation=_source_value(source, "index_generation") or self._index,
+                    metadata=_source_metadata(source, raw_score=raw_score),
+                )
+            )
+
+        return CandidateSearchResult(
+            candidates=unique_candidates(candidates, limit=limit, prefer_highest_score=True),
+            provider_counts={self.name: len(candidates)},
+            score_ranges=_provider_score_max(candidates),
+            diagnostics={
+                "query_variant_count": len(queries),
+                "raw_candidate_count": len(candidates),
+                "filtered": _has_filters(request.filters),
+            },
+            index_generation=self._index,
+        )
+
+    async def index_health(self) -> IndexLagReport:
+        cluster = getattr(self._client, "cluster", None)
+        health = getattr(cluster, "health", None) if cluster is not None else None
+        if callable(health):
+            try:
+                response = await _maybe_await(health(index=self._index))
+                payload = _response_dict(response)
+                return IndexLagReport(
+                    provider=self.name,
+                    status=str(payload.get("status") or "unknown"),
+                    index_generation=self._index,
+                    properties={"index": self._index},
+                )
+            except Exception as exc:
+                return IndexLagReport(
+                    provider=self.name,
+                    status="error",
+                    index_generation=self._index,
+                    properties={"error": type(exc).__name__, "index": self._index},
+                )
+        return IndexLagReport(
+            provider=self.name,
+            status="unknown",
+            index_generation=self._index,
+            properties={"index": self._index},
+        )
+
+    def _query_body(self, query: str, filters: IndexFilter, *, limit: int) -> dict[str, object]:
+        filter_clauses = _opensearch_filter_clauses(filters, self._field_map)
+        return {
+            "size": limit,
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": self._query_fields,
+                                "type": "best_fields",
+                            }
+                        }
+                    ],
+                    "filter": filter_clauses,
+                }
+            },
+        }
+
+
 class InProcessIndexRouter:
     """Simple deterministic router for local providers.
 
@@ -623,3 +803,154 @@ def _provider_score_max(candidates: Sequence[ScoredCandidate]) -> dict[str, floa
         provider = candidate.provider or "unknown"
         out[provider] = max(out.get(provider, 0.0), candidate.score)
     return out
+
+
+async def _maybe_await(value: object) -> object:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+def _opensearch_filter_clauses(
+    filters: IndexFilter,
+    field_map: dict[str, str],
+) -> list[dict[str, object]]:
+    clauses: list[dict[str, object]] = []
+    _term_filter(clauses, field_map, "workspace_id", filters.workspace_id)
+    _term_filter(clauses, field_map, "user_id", filters.user_id)
+    _term_filter(clauses, field_map, "session_id", filters.session_id)
+    _term_filter(clauses, field_map, "domain", filters.domain)
+    _terms_filter(clauses, field_map, "acl_policy_id", filters.acl_policy_ids)
+    if filters.source_ids:
+        clauses.append(
+            {
+                "bool": {
+                    "should": [
+                        {"terms": {field_map.get("source_id", "source_id"): filters.source_ids}},
+                        {"terms": {field_map.get("source", "source"): filters.source_ids}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            }
+        )
+    if filters.document_ids:
+        clauses.append(
+            {
+                "bool": {
+                    "should": [
+                        {
+                            "terms": {
+                                field_map.get("document_id", "document_id"): filters.document_ids
+                            }
+                        },
+                        {"terms": {field_map.get("doc_id", "doc_id"): filters.document_ids}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            }
+        )
+    _terms_filter(clauses, field_map, "language", filters.languages)
+    _terms_filter(clauses, field_map, "mime_type", filters.mime_types)
+    _terms_filter(clauses, field_map, "tags", filters.tags)
+    _range_filter(
+        clauses,
+        field_map.get("created_at", "created_at"),
+        gte=filters.created_after,
+        lte=filters.created_before,
+    )
+    _range_filter(
+        clauses,
+        field_map.get("updated_at", "updated_at"),
+        gte=filters.updated_after,
+        lte=filters.updated_before,
+    )
+    for key, value in filters.properties.items():
+        clauses.append({"term": {field_map.get(key, f"properties.{key}"): value}})
+    return clauses
+
+
+def _term_filter(
+    clauses: list[dict[str, object]],
+    field_map: dict[str, str],
+    key: str,
+    value: str,
+) -> None:
+    if value:
+        clauses.append({"term": {field_map.get(key, key): value}})
+
+
+def _terms_filter(
+    clauses: list[dict[str, object]],
+    field_map: dict[str, str],
+    key: str,
+    values: Sequence[str],
+) -> None:
+    if values:
+        clauses.append({"terms": {field_map.get(key, key): list(values)}})
+
+
+def _range_filter(
+    clauses: list[dict[str, object]],
+    field: str,
+    *,
+    gte: float | None,
+    lte: float | None,
+) -> None:
+    bounds: dict[str, float] = {}
+    if gte is not None:
+        bounds["gte"] = gte
+    if lte is not None:
+        bounds["lte"] = lte
+    if bounds:
+        clauses.append({"range": {field: bounds}})
+
+
+def _response_dict(response: object) -> dict[str, object]:
+    if isinstance(response, dict):
+        return response
+    body = getattr(response, "body", None)
+    if isinstance(body, dict):
+        return body
+    return {}
+
+
+def _search_hits(response: object) -> list[dict[str, object]]:
+    payload = _response_dict(response)
+    hits_obj = payload.get("hits", {})
+    if not isinstance(hits_obj, dict):
+        return []
+    raw_hits = hits_obj.get("hits", [])
+    if not isinstance(raw_hits, list):
+        return []
+    return [hit for hit in raw_hits if isinstance(hit, dict)]
+
+
+def _hit_source(hit: dict[str, object]) -> dict[str, object]:
+    source = hit.get("_source", {})
+    return source if isinstance(source, dict) else {}
+
+
+def _source_value(source: dict[str, object], *keys: str) -> str:
+    for key in keys:
+        value = source.get(key)
+        if value is not None:
+            return str(value)
+    return ""
+
+
+def _source_metadata(source: dict[str, object], *, raw_score: float) -> dict[str, object]:
+    metadata: dict[str, object] = {"raw_score": raw_score}
+    for key in (
+        "title",
+        "kind",
+        "source",
+        "page",
+        "chunk_id",
+        "category",
+        "domain",
+        "language",
+    ):
+        value = source.get(key)
+        if value is not None:
+            metadata[key] = value
+    return metadata

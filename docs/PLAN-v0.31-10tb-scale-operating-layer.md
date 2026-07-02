@@ -316,6 +316,16 @@ Goal: remove the 10TB-incompatible FTS bottleneck.
 - Return scored ids only; fetch full nodes in batches from metadata/graph store.
 - Add 100GB to 1TB PoC benchmark.
 
+Current implementation status:
+
+- `OpenSearchCandidateProvider` accepts an injected OpenSearch/Elasticsearch
+  client without adding a mandatory runtime dependency.
+- It converts `IndexFilter` into provider-side bool filters for workspace, ACL,
+  document id, source, language, mime type, tags, time ranges, and property
+  filters.
+- It returns deduped `ScoredCandidate` ids with normalized lexical scores and
+  compact metadata, leaving node hydration to `EvidenceSearch` / graph storage.
+
 ### Phase 4 - Vector Provider Upgrade
 
 Goal: make vector retrieval payload-filtered and batch-friendly.
@@ -372,9 +382,7 @@ The system is 10TB-ready only when all are true:
 ## Near-Term TODO
 
 1. Run DeepSeek 100-query follow-up against the `31/50` baseline.
-2. Add an OpenSearch/Elastic lexical `CandidateProvider` PoC with scope/ACL
-   filters.
-3. Upgrade the Qdrant helper into a vector `CandidateProvider` with payload
+2. Upgrade the Qdrant helper into a vector `CandidateProvider` with payload
    filters and scored candidate metadata.
-4. Add index lag/ingestion job persistence to a durable backend.
-5. Run a 100GB or 1TB corpus rehearsal before any 10TB ingestion work.
+3. Add index lag/ingestion job persistence to a durable backend.
+4. Run a 100GB or 1TB corpus rehearsal before any 10TB ingestion work.
