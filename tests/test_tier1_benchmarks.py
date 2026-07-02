@@ -29,6 +29,20 @@ def test_msmarco_path_override_retargets_dataset(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_sqlite_fast_build_pragmas_apply(tmp_path):
+    backend = runner.SqliteGraphBackend(str(tmp_path / "fast.db"))
+    await backend.connect()
+
+    await runner._apply_sqlite_fast_build_pragmas(backend)
+
+    async with backend._db().execute("PRAGMA synchronous") as cur:
+        row = await cur.fetchone()
+    await backend.close()
+
+    assert row[0] == 0
+
+
+@pytest.mark.asyncio
 async def test_corpus_limit_keeps_selected_query_gold_docs(tmp_path):
     path = tmp_path / "tiny_bench.json"
     path.write_text(
@@ -143,6 +157,40 @@ async def test_progress_every_reports_ingest_progress(tmp_path, capsys):
 
     assert "ingest: 1/2 docs" in output
     assert "ingest: 2/2 docs" in output
+
+
+@pytest.mark.asyncio
+async def test_progress_every_reports_crossed_batch_boundary(tmp_path, capsys):
+    path = tmp_path / "tiny_bench.json"
+    path.write_text(
+        json.dumps(
+            {
+                "corpus": {
+                    "gold_doc": {"title": "Gold", "text": "needle targetterm"},
+                    "filler_a": {"title": "Filler A", "text": "unrelated alpha"},
+                    "filler_b": {"title": "Filler B", "text": "unrelated beta"},
+                    "filler_c": {"title": "Filler C", "text": "unrelated gamma"},
+                    "filler_d": {"title": "Filler D", "text": "unrelated delta"},
+                },
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    await runner.run_one(
+        runner.Dataset(name="Tiny", path=path, reference="unit"),
+        subset=1,
+        corpus_limit=5,
+        ingest_batch=2,
+        progress_every=3,
+    )
+
+    output = capsys.readouterr().out
+
+    assert "ingest: 4/5 docs" in output
+    assert "ingest: 5/5 docs" in output
 
 
 @pytest.mark.asyncio
