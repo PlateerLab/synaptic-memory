@@ -42,6 +42,30 @@ _AGENT_LOOP_EXTRA_CONTEXT = """Benchmark context:
 """
 
 
+def _load_local_env(paths: list[Path] | None = None) -> None:
+    """Load gitignored local env files without overriding shell env."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # pragma: no cover - dependency is optional at runtime
+        load_dotenv = None
+
+    for path in paths or [REPO_ROOT / ".env", REPO_ROOT.parent / ".env"]:
+        if load_dotenv is not None:
+            load_dotenv(path, override=False)
+            continue
+        if not path.exists():
+            continue
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if not key or key in os.environ:
+                continue
+            os.environ[key] = value.strip().strip("\"'")
+
+
 @dataclass(slots=True)
 class AgentLoopRow:
     qid: str
@@ -463,6 +487,7 @@ async def _run_one(
 
 
 async def amain(argv: list[str] | None = None) -> int:
+    _load_local_env()
     parser = argparse.ArgumentParser()
     parser.add_argument("--msmarco-path", type=Path, default=DEFAULT_MSMARCO_PATH)
     parser.add_argument("--sqlite-db-path", type=Path, required=True)

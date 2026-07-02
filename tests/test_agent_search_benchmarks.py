@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -151,6 +152,25 @@ def test_agent_loop_extra_context_preserves_original_query_constraints() -> None
 
     assert "Preserve the original question's specific entities" in context
     assert "vague one-word target" in context
+
+
+def test_agent_loop_load_local_env_without_overriding_shell_env(
+    tmp_path: Path, monkeypatch
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("DEEPSEEK_API_KEY=from_file\n", encoding="utf-8")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    loop_runner._load_local_env([env_path])
+
+    assert os.environ["DEEPSEEK_API_KEY"] == "from_file"
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "from_shell")
+    env_path.write_text("DEEPSEEK_API_KEY=from_second_file\n", encoding="utf-8")
+
+    loop_runner._load_local_env([env_path])
+
+    assert os.environ["DEEPSEEK_API_KEY"] == "from_shell"
 
 
 def test_llm_preflight_error_message_names_endpoint_and_skip_hint() -> None:
