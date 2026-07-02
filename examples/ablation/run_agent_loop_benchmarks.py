@@ -36,6 +36,9 @@ _AGENT_LOOP_EXTRA_CONTEXT = """Benchmark context:
   evidence is insufficient, change the follow-up query or search target based on
   the snippets you saw.
 - Prefer evidence found through tools over prior knowledge.
+- Preserve the original question's specific entities, attributes, and relation
+  when rewriting. Do not retry with a vague one-word target if the original query
+  contained more constraints.
 """
 
 

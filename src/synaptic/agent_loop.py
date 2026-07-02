@@ -192,6 +192,12 @@ Tips
   After the first ``deep_search`` returns a few hits, do at least one more
   ``search`` with paraphrased keywords before concluding. A single document
   is rarely the complete answer to such a request.
+- **Follow-up searches must preserve the user's constraints.** Do not collapse
+  a specific question into a vague one-word query ("hives", "bsrn",
+  "operational"). Keep the named entity, attribute, and relation that make the
+  question answerable ("hives pregnancy sign", "BSRN bachelor's degree duration",
+  "Disneyland operating cost"). Short generic retries waste turns and drift away
+  from the gold evidence.
 - **"List all" / enumeration questions** ("X 목록", "X 상품 전체", "list all X")
   need the COMPLETE set. Raise the ``limit`` on ``filter_nodes`` / ``top_nodes``
   (e.g. 100) rather than the default 20. The GT for these patterns often

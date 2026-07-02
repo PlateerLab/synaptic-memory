@@ -146,6 +146,13 @@ def test_agent_loop_exploration_metrics_count_query_rewrites() -> None:
     assert metrics["query_rewrites"] == 2
 
 
+def test_agent_loop_extra_context_preserves_original_query_constraints() -> None:
+    context = loop_runner._AGENT_LOOP_EXTRA_CONTEXT
+
+    assert "Preserve the original question's specific entities" in context
+    assert "vague one-word target" in context
+
+
 def test_llm_preflight_error_message_names_endpoint_and_skip_hint() -> None:
     msg = loop_runner._llm_preflight_error_message(
         "http://127.0.0.1:18012/v1",

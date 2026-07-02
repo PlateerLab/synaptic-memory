@@ -14,6 +14,7 @@ import pytest
 
 from synaptic.agent_loop import (
     _EFFICIENCY_DIRECTIVE,
+    AGENT_SYSTEM,
     _args_key,
     _result_count,
     run_agent_loop,
@@ -37,6 +38,11 @@ def test_args_key_normalizes():
     assert a == b
     # different tool or args → different key
     assert _args_key("search", {"query": "x"}) != _args_key("deep_search", {"query": "x"})
+
+
+def test_agent_system_preserves_query_constraints_for_followups():
+    assert "Follow-up searches must preserve the user's constraints" in AGENT_SYSTEM
+    assert "named entity, attribute, and relation" in AGENT_SYSTEM
 
 
 # --- fake client (reused shape) ---------------------------------------
