@@ -114,3 +114,15 @@ def test_agent_loop_row_jsonl_roundtrip(tmp_path: Path) -> None:
     loop_runner._append_jsonl_row(path, row)
 
     assert loop_runner._load_jsonl_rows(path) == [row]
+
+
+def test_llm_preflight_error_message_names_endpoint_and_skip_hint() -> None:
+    msg = loop_runner._llm_preflight_error_message(
+        "http://127.0.0.1:18012/v1",
+        "Qwen3.6-27B",
+        RuntimeError("connection refused"),
+    )
+
+    assert "http://127.0.0.1:18012/v1" in msg
+    assert "Qwen3.6-27B" in msg
+    assert "--skip-preflight" in msg

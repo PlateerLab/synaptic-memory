@@ -151,6 +151,28 @@ def _row_from_dict(data: dict[str, Any]) -> AgentLoopRow:
     )
 
 
+def _llm_preflight_error_message(base_url: str, model: str, exc: BaseException) -> str:
+    return (
+        "LLM endpoint preflight failed "
+        f"(base_url={base_url!r}, model={model!r}): {type(exc).__name__}: {exc}. "
+        "Check the tunnel/endpoint before running the benchmark, or pass "
+        "--skip-preflight if the endpoint is reachable but does not implement /v1/models."
+    )
+
+
+async def _preflight_llm_endpoint(
+    client: object,
+    *,
+    base_url: str,
+    model: str,
+    timeout_sec: float,
+) -> None:
+    try:
+        await asyncio.wait_for(client.models.list(), timeout=timeout_sec)  # type: ignore[attr-defined]
+    except Exception as exc:
+        raise SystemExit(_llm_preflight_error_message(base_url, model, exc)) from exc
+
+
 def _load_jsonl_rows(path: Path) -> list[AgentLoopRow]:
     if not path.exists():
         return []
@@ -304,6 +326,23 @@ async def amain(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default="Qwen3.6-27B")
     parser.add_argument("--api-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--max-turns", type=int, default=5)
+    parser.add_argument(
+        "--llm-timeout",
+        type=float,
+        default=60.0,
+        help="Per-request LLM timeout in seconds.",
+    )
+    parser.add_argument(
+        "--preflight-timeout",
+        type=float,
+        default=10.0,
+        help="Timeout for the initial /v1/models endpoint check.",
+    )
+    parser.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        help="Skip the initial /v1/models endpoint check.",
+    )
     parser.add_argument("--no-sufficiency-gate", action="store_true")
     parser.add_argument(
         "--out-jsonl",
@@ -322,6 +361,10 @@ async def amain(argv: list[str] | None = None) -> int:
         raise SystemExit("--subset must be positive")
     if args.max_turns <= 0:
         raise SystemExit("--max-turns must be positive")
+    if args.llm_timeout <= 0:
+        raise SystemExit("--llm-timeout must be positive")
+    if args.preflight_timeout <= 0:
+        raise SystemExit("--preflight-timeout must be positive")
     if args.resume and args.out_jsonl is None:
         raise SystemExit("--resume requires --out-jsonl")
     if not args.msmarco_path.exists():
@@ -341,7 +384,14 @@ async def amain(argv: list[str] | None = None) -> int:
         raise SystemExit(f"{args.api_key_env} is not set; refusing to call remote LLM endpoint")
     if not api_key:
         api_key = "ignored"
-    client = AsyncOpenAI(base_url=args.llm_base_url, api_key=api_key)
+    client = AsyncOpenAI(base_url=args.llm_base_url, api_key=api_key, timeout=args.llm_timeout)
+    if not args.skip_preflight:
+        await _preflight_llm_endpoint(
+            client,
+            base_url=args.llm_base_url,
+            model=args.model,
+            timeout_sec=args.preflight_timeout,
+        )
 
     backend = SqliteGraphBackend(str(args.sqlite_db_path))
     await backend.connect()
