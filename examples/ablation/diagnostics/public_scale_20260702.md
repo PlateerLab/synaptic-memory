@@ -49,7 +49,7 @@ PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FT
 # Terminal 1:
 ssh -N -L 18134:127.0.0.1:11434 go243
 # Terminal 2:
-PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url http://127.0.0.1:18134/v1 --model qwen3:14b --api-key-env LLM_API_KEY --max-turns 3 --llm-timeout 180 --preflight-timeout 10 --out-jsonl examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl --resume
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url http://127.0.0.1:18134/v1 --model qwen3:14b --api-key-env LLM_API_KEY --max-turns 3 --llm-timeout 180 --preflight-timeout 10 --allow-zero-tool-answer --out-jsonl examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl --resume
 ```
 
 ## FiQA Results
@@ -154,6 +154,11 @@ on 2/20 queries and accumulated 6 empty-result tool calls. The tool histogram
 was `deep_search=17`, `search=12`, `get_document=9`, confirming the loop uses
 the enhanced search surface and then changes targets/tools, but often moves to
 weak follow-up targets on short MS MARCO web questions.
+
+The historical run above allowed zero-tool answers. Later benchmark runs should
+use the runner default, which forces at least one retrieval tool before accepting
+a final answer; use `--allow-zero-tool-answer` only to reproduce this exact
+baseline.
 
 The local artifacts are gitignored:
 

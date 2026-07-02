@@ -1404,6 +1404,7 @@ async def run_agent_loop(
     sufficiency_gate: bool = True,
     gate_bridge: bool = False,
     efficiency_hint: bool = True,
+    force_first_tool: bool = False,
     record_trace: bool = False,
 ) -> AgentSearchResult:
     """Run one multi-turn agent search.
@@ -1424,6 +1425,10 @@ async def run_agent_loop(
             appended.
         extra_context: Additional context appended to the system
             prompt — useful for injecting per-corpus instructions.
+        force_first_tool: If True, a zero-tool final answer on the first
+            available turns is rejected once with a search nudge. Useful for
+            retrieval benchmarks where answers must be grounded in tool
+            evidence, while keeping default application behaviour unchanged.
 
     Returns:
         :class:`AgentSearchResult` containing the final answer, the
@@ -1452,6 +1457,11 @@ async def run_agent_loop(
     env_eff = _os.environ.get("SYNAPTIC_AGENT_EFFICIENCY")
     if env_eff is not None:
         efficiency_hint = env_eff == "1"
+    # Retrieval-eval guard: some weaker local models answer from priors without
+    # calling tools. Keep default off for applications; allow env/benchmark opt-in.
+    env_force_first_tool = _os.environ.get("SYNAPTIC_AGENT_FORCE_FIRST_TOOL")
+    if env_force_first_tool is not None:
+        force_first_tool = env_force_first_tool == "1"
     graph_ctx = await build_graph_context(backend)
     base_prompt = system_prompt or AGENT_SYSTEM
     parts = [base_prompt, graph_ctx]
@@ -1587,6 +1597,25 @@ async def run_agent_loop(
                 )
         else:
             candidate = msg.content or ""
+            if (
+                force_first_tool
+                and candidate.strip()
+                and tool_calls == 0
+                and not found_ids
+                and turn < max_turns - 1
+            ):
+                messages.append({"role": "assistant", "content": candidate})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "You have not used the retrieval tools yet. This task must be "
+                            "answered from retrieved evidence. Run deep_search or search for "
+                            "the original question first, inspect the result, then answer."
+                        ),
+                    }
+                )
+                continue
             # L29 — query-time sufficiency gate (opt-in). Instead of accepting
             # the first non-tool message, ask the LLM once whether the answer
             # is actually supported by the evidence gathered; on a clear gap

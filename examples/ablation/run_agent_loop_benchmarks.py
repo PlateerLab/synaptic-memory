@@ -329,6 +329,7 @@ def _emit_markdown(
     model: str,
     max_turns: int,
     sufficiency_gate: bool,
+    force_first_tool: bool,
     out_jsonl: Path | None,
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -347,6 +348,7 @@ def _emit_markdown(
         f"- Model: {model}",
         f"- Max turns: {max_turns}",
         f"- Sufficiency gate: {'yes' if sufficiency_gate else 'no'}",
+        f"- Force first tool: {'yes' if force_first_tool else 'no'}",
         f"- Incremental JSONL: {_display_path(out_jsonl) if out_jsonl else 'disabled'}",
         "- SQLite FTS AND-first threshold: "
         f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}",
@@ -406,6 +408,7 @@ async def _run_one(
     model: str,
     max_turns: int,
     sufficiency_gate: bool,
+    force_first_tool: bool,
 ) -> AgentLoopRow:
     start = time.perf_counter()
     result = await run_agent_loop(
@@ -416,6 +419,7 @@ async def _run_one(
         max_turns=max_turns,
         extra_context=_AGENT_LOOP_EXTRA_CONTEXT,
         sufficiency_gate=sufficiency_gate,
+        force_first_tool=force_first_tool,
         record_trace=True,
     )
     elapsed = time.perf_counter() - start
@@ -483,6 +487,11 @@ async def amain(argv: list[str] | None = None) -> int:
         help="Skip the initial /v1/models endpoint check.",
     )
     parser.add_argument("--no-sufficiency-gate", action="store_true")
+    parser.add_argument(
+        "--allow-zero-tool-answer",
+        action="store_true",
+        help="Allow the model to answer without using any retrieval tool first.",
+    )
     parser.add_argument(
         "--out-jsonl",
         type=Path,
@@ -556,6 +565,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 model=args.model,
                 max_turns=args.max_turns,
                 sufficiency_gate=not args.no_sufficiency_gate,
+                force_first_tool=not args.allow_zero_tool_answer,
             )
             rows.append(row)
             completed_qids.add(row.qid)
@@ -582,6 +592,7 @@ async def amain(argv: list[str] | None = None) -> int:
         model=args.model,
         max_turns=args.max_turns,
         sufficiency_gate=not args.no_sufficiency_gate,
+        force_first_tool=not args.allow_zero_tool_answer,
         out_jsonl=args.out_jsonl,
     )
     print(f"\nMarkdown report -> {_display_path(report_path)}")
