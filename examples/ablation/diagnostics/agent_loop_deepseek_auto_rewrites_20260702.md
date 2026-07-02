@@ -68,6 +68,43 @@ Current deterministic `deep_search` also showed that several misses were caused 
 | 155234 | do bigger tires affect gas mileage | tire size factors influence gas mileage; tire width versus gas mileage | 1 | reach=yes, first relevant turn 1 / call 1 |
 | 208145 | how bicycle tire tubes are sized | bicycle tire tube size sidewall ETRTO metric imperial; bicycle tire sidewall tube size printed raised numbers | 1 | reach=yes, first relevant turn 1 / call 1 |
 
+## Current Main 50-Query Baseline
+
+After merging the process cleanup, blood-borne transmission rewrite, and answer-shaped rewrite hints, the current `main` DeepSeek 50-query run reached `31/50`, up from the original `23/50` and the earlier post-rewrite `25/50`.
+
+| Metric | Original 50-query run | Current main run |
+| --- | ---: | ---: |
+| Reach | 23/50 | 31/50 |
+| Mean turns | 4.14 | 4.18 |
+| Mean tool calls | 5.78 | 6.18 |
+| Mean first relevant turn | 1.70 | 1.16 |
+| Mean first relevant tool calls | 2.22 | 1.32 |
+| Empty tool calls | 11 | 6 |
+| Duplicate tool calls | 0 | 0 |
+
+Net new hits versus the original 50-query run:
+
+- `1101278` - do prince harry and william have last names
+- `125898` - define prosthetic device
+- `14151` - age requirements for name change
+- `155234` - do bigger tires affect gas mileage
+- `208145` - how bicycle tire tubes are sized
+- `237373` - how is soil created from rocks
+- `319564` - how much fiber is in carrots
+- `320792` - how much is a cost to run disneyland
+- `54544` - blood diseases that are sexually transmitted
+- `91711` - child psychiatrist salary 2016
+
+Regressed versus the original 50-query run:
+
+- `178627` - effects of detox juice cleanse
+- `45924` - average temperatures las vegas by month
+
+Artifacts:
+
+- `examples/ablation/diagnostics/agent_loop_20260703_000851.md`
+- `examples/ablation/diagnostics/agent_loop_deepseek_v4_flash_50_post_scale_plan.jsonl`
+
 ## Interpretation
 
 Prompt-visible hints alone were not enough: DeepSeek often generated nearby but non-gold rewrites. Running the deterministic rewrite hints inside `deep_search` removes that planning variance for cheap, bounded patterns such as dropping noisy numeric years and rewriting "created from" process questions into answer-shaped phrases.
