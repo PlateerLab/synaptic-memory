@@ -315,8 +315,6 @@ def _reuse_signature(
     *,
     corpus_limit: int | None,
     embedder: object | None,
-    reranker: object | None,
-    decomposer: object | None,
     phrase_extractor: object | None,
     entity_linker_cfg: tuple[int, float] | None,
 ) -> dict[str, object]:
@@ -335,8 +333,6 @@ def _reuse_signature(
         "corpus_limit": int(corpus_limit or 0),
         "benchmark_node_id": "blake2b16:bench_",
         "embedder": _object_signature(embedder),
-        "reranker": _object_signature(reranker),
-        "decomposer": _object_signature(decomposer),
         "phrase_extractor": _object_signature(phrase_extractor),
         "entity_linker_cfg": list(entity_linker_cfg) if entity_linker_cfg else [],
     }
@@ -422,6 +418,7 @@ async def run_one(
     ingest_batch: int = 20000,
     corpus_limit: int | None = None,
     progress_every: int = 100000,
+    fts_seed_limit: int | None = None,
     sqlite_db_path: Path | None = None,
     reuse_sqlite_db: bool = False,
     overwrite_sqlite_db: bool = False,
@@ -454,8 +451,6 @@ async def run_one(
         data,
         corpus_limit=corpus_limit,
         embedder=embedder,
-        reranker=reranker,
-        decomposer=decomposer,
         phrase_extractor=phrase_extractor,
         entity_linker_cfg=entity_linker_cfg,
     )
@@ -628,7 +623,11 @@ async def run_one(
         relevant = set(rel.keys()) if isinstance(rel, dict) else set(map(str, rel))
         if not relevant:
             continue
-        result = await graph.search(str(qtext), limit=TOP_K * 2)
+        result = await graph.search(
+            str(qtext),
+            limit=TOP_K * 2,
+            fts_seed_limit=fts_seed_limit,
+        )
         retrieved: list[str] = []
         for hit in result.nodes:
             did = (hit.node.properties or {}).get("doc_id", "")
@@ -673,6 +672,7 @@ def _emit_markdown(
     corpus_limit: int | None = None,
     ingest_batch: int = 20000,
     progress_every: int = 100000,
+    fts_seed_limit: int | None = None,
     sqlite_db_path: Path | None = None,
     reuse_sqlite_db: bool = False,
     sqlite_fast_build: bool = False,
@@ -686,6 +686,7 @@ def _emit_markdown(
         f"- Run at: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}",
         f"- Subset: {subset if subset else 'full'}",
         f"- Corpus limit: {corpus_limit if corpus_limit else 'full'}",
+        f"- FTS seed limit: {fts_seed_limit if fts_seed_limit else 'default'}",
         f"- Ingest batch: {ingest_batch}",
         f"- Progress every: {progress_every if progress_every > 0 else 'disabled'}",
         f"- SQLite DB path: {_display_path(sqlite_db_path) if sqlite_db_path else 'temporary'}",
@@ -693,6 +694,8 @@ def _emit_markdown(
         f"- SQLite fast build: {'yes' if sqlite_fast_build else 'no'}",
         "- SQLite FTS AND-first threshold: "
         f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}",
+        "- Cross-rerank top N: "
+        f"{os.environ.get('SYNAPTIC_CROSS_RERANK_TOP_N', '').strip() or '20'}",
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
@@ -872,6 +875,15 @@ async def amain(argv: list[str]) -> int:
         ),
     )
     p.add_argument(
+        "--fts-seed-limit",
+        type=int,
+        default=None,
+        help=(
+            "Override graph.search FTS seed-pool size. Useful with cross-encoder "
+            "rerankers that can promote relevant docs from a wider lexical pool."
+        ),
+    )
+    p.add_argument(
         "--max-build-sec",
         type=float,
         default=None,
@@ -962,6 +974,8 @@ async def amain(argv: list[str]) -> int:
         raise SystemExit("--reuse-sqlite-db and --overwrite-sqlite-db are mutually exclusive")
     if args.sqlite_fast_build and not args.use_sqlite_graph:
         raise SystemExit("--sqlite-fast-build requires --use-sqlite-graph")
+    if args.fts_seed_limit is not None and args.fts_seed_limit <= 0:
+        raise SystemExit("--fts-seed-limit must be positive")
 
     embedder: EmbeddingProvider | None = None
     embedder_label = "none (FTS-only baseline)"
@@ -1054,6 +1068,7 @@ async def amain(argv: list[str]) -> int:
     print(f"  phrase hub: {phrase_extractor_label}")
     print(f"  entity linker: {entity_linker_label}")
     print(f"  corpus limit: {args.corpus_limit if args.corpus_limit else 'full'}")
+    print(f"  FTS seed limit: {args.fts_seed_limit if args.fts_seed_limit else 'default'}")
     print(f"  ingest batch: {args.ingest_batch}")
     print(f"  progress every: {args.progress_every if args.progress_every > 0 else 'disabled'}")
     print(
@@ -1071,6 +1086,9 @@ async def amain(argv: list[str]) -> int:
             "  sqlite FTS AND-first threshold: "
             f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}"
         )
+    print(
+        f"  cross-rerank top N: {os.environ.get('SYNAPTIC_CROSS_RERANK_TOP_N', '').strip() or '20'}"
+    )
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -1094,6 +1112,7 @@ async def amain(argv: list[str]) -> int:
                 ingest_batch=args.ingest_batch,
                 corpus_limit=args.corpus_limit,
                 progress_every=args.progress_every,
+                fts_seed_limit=args.fts_seed_limit,
                 sqlite_db_path=args.sqlite_db_path,
                 reuse_sqlite_db=args.reuse_sqlite_db,
                 overwrite_sqlite_db=args.overwrite_sqlite_db,
@@ -1121,6 +1140,7 @@ async def amain(argv: list[str]) -> int:
             corpus_limit=args.corpus_limit,
             ingest_batch=args.ingest_batch,
             progress_every=args.progress_every,
+            fts_seed_limit=args.fts_seed_limit,
             sqlite_db_path=args.sqlite_db_path,
             reuse_sqlite_db=args.reuse_sqlite_db,
             sqlite_fast_build=args.sqlite_fast_build,

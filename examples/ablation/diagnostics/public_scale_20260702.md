@@ -6,7 +6,7 @@
 |---------|----------------|-------:|--------:|-------------|
 | BEIR FiQA test | `tests/benchmark/data/fiqa.json` | 57,638 docs | 648 | 5-10 queries |
 | BEIR TREC-COVID test | `tests/benchmark/data/trec_covid.json` | 171,332 docs | 50 | 10 queries |
-| BEIR MS MARCO passage dev | `tests/benchmark/data/msmarco_passage.json` + `.corpus.jsonl` | 1M shard by default from ~8.8M source passages | validation qrels | manual large tier |
+| BEIR MS MARCO passage dev | `tests/benchmark/data/msmarco_passage.json` + `.corpus.jsonl` | 1M shard by default; 5M/full side-by-side shards from 8,841,823 source passages | validation qrels | manual large tier |
 
 Mode: embedder-free `graph.search()` with `SqliteGraphBackend`.
 
@@ -30,6 +30,11 @@ PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benc
 # Persistent 1M DB for repeat runs after the initial build:
 PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --corpus-limit 1000000 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_1m.db --overwrite-sqlite-db
 PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --corpus-limit 1000000 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_1m.db --reuse-sqlite-db
+
+# Full MS MARCO passage tier:
+uv run --extra eval python examples/ablation/download_benchmarks.py --only msmarco_passage --large-scale-tier full
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --overwrite-sqlite-db --sqlite-fast-build
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db
 ```
 
 ## FiQA Results
@@ -78,6 +83,9 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | persistent SQLite fast build | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 288.7s | 40.8s |
 | persistent SQLite reuse | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 0.0s | 41.5s |
 | persistent SQLite reuse + AND-first FTS threshold 20 | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 0.0s | 37.8s |
+| persistent SQLite full fast build + AND-first FTS threshold 20 | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 642.2s | 71.6s |
+| persistent SQLite full reuse + AND-first FTS threshold 20 | 8,841,823 | 50 | 0.212 | 0.347 | 0.393 | 20/50 | 0.0s | 68.7s |
+| persistent SQLite full reuse + TEI reranker + FTS seed 200 + cross top 200 | 8,841,823 | 50 | 0.211 | 0.307 | 0.393 | 20/50 | 0.0s | 72.7s |
 
 The local artifacts are gitignored:
 
@@ -85,10 +93,14 @@ The local artifacts are gitignored:
 - `tests/benchmark/data/msmarco_passage.corpus.jsonl` - 35 MB at 100k, 361 MB at 1M
 - `tests/benchmark/data/msmarco_passage_5m.json` - 511 KB 5M manifest
 - `tests/benchmark/data/msmarco_passage_5m.corpus.jsonl` - 1.8 GB, 5,000,000 rows
+- `tests/benchmark/data/msmarco_passage_full.json` - 511 KB full manifest
+- `tests/benchmark/data/msmarco_passage_full.corpus.jsonl` - 3.2 GB, 8,841,823 rows
 - `tests/benchmark/data/msmarco_1m.db` - 1.2 GB persistent SQLite DB
 - `tests/benchmark/data/msmarco_1m.db.tier1.json` - 535 byte reuse sidecar
 - `tests/benchmark/data/msmarco_5m.db` - 6.0 GB persistent SQLite DB
 - `tests/benchmark/data/msmarco_5m.db.tier1.json` - 541 byte reuse sidecar
+- `tests/benchmark/data/msmarco_full.db` - 11 GB persistent SQLite DB
+- `tests/benchmark/data/msmarco_full.db.tier1.json` - 499 byte reuse sidecar
 
 ## Interpretation
 
@@ -135,14 +147,28 @@ The local artifacts are gitignored:
   with 41.379s inside SQLite FTS (97.3%). Setting
   `SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20` keeps the same 5M quality
   metrics while reducing reuse search from 41.5s to 37.8s.
+- Full MS MARCO passage is now locally available and reproducible with
+  `--large-scale-tier full`. The full shard preserves all 7,433 validation
+  gold docs with 0 missing gold docs and writes exactly 8,841,823 JSONL rows.
+- The full SQLite DB materializes 8,841,823 nodes and can be reused with
+  sidecar validation. Fast build completed in 642.2s; follow-up search-only
+  reuse completed in 68.7s over 50 queries.
+- Full-scale FTS-only quality drops further than 5M (MRR@10 0.212, Hit@10
+  20/50), confirming that the next large-corpus work should improve candidate
+  recall and ranking rather than only making storage bigger.
+- TEI cross-reranking now handles large candidate pools without TEI batch-size
+  errors by chunking requests, but the full 8.84M reranker smoke did not recover
+  quality (MRR@10 0.211, Hit@10 20/50). The next target is better candidate
+  generation and memory-aware scoring before reranking.
 
 ## Guard Policy
 
 - `.github/workflows/public-scale.yml` runs weekly/manual FiQA 10k and TREC-COVID 50k staged smokes.
 - FiQA 25k/full and TREC-COVID 100k/full remain manual checks because they are multi-minute runs and depend on ignored local benchmark data.
-- MS MARCO passage is the manual large tier: the downloader writes metadata JSON plus a gitignored corpus JSONL shard so 100k/1M/8.8M-style scale can be tested without committing giant artifacts.
-- If 5M quality needs to recover toward the 1M/100k tier, the next target is
-  semantic candidate generation or reranking on top of the persistent 5M DB.
+- MS MARCO passage is the manual large tier: the downloader writes metadata JSON plus a gitignored corpus JSONL shard so 100k/1M/5M/full scale can be tested without committing giant artifacts.
+- If 5M/full quality needs to recover toward the 1M/100k tier, the next target
+  is semantic candidate generation, memory-aware scoring, or graph/anchor
+  recall before cross-reranking.
 
 ## Remote Guard Dispatch
 
