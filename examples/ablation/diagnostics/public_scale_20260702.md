@@ -50,6 +50,7 @@ PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FT
 ssh -N -L 18134:127.0.0.1:11434 go243
 # Terminal 2:
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url http://127.0.0.1:18134/v1 --model qwen3:14b --api-key-env LLM_API_KEY --max-turns 3 --llm-timeout 180 --preflight-timeout 10 --allow-zero-tool-answer --out-jsonl examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl --resume
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url http://127.0.0.1:18134/v1 --model qwen3:14b --api-key-env LLM_API_KEY --max-turns 3 --llm-timeout 180 --preflight-timeout 10 --out-jsonl examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_force_first.jsonl
 ```
 
 ## FiQA Results
@@ -141,12 +142,15 @@ with `No route to host`), so this smoke used the `go243` Ollama fallback
 `qwen3:14b`. Treat it as a functional navigation smoke, not a Qwen3.6 quality
 reference.
 
-| Model | Docs | Queries | Reach | Mean turns | Mean calls | Mean first rel turn | Mean elapsed | Mean unique tools | Mean search targets | Mean rewrites | Multi-tool | Rewrites | Zero-tool |
-|-------|-----:|--------:|------:|-----------:|-----------:|--------------------:|-------------:|------------------:|--------------------:|--------------:|-----------:|---------:|----------:|
-| `qwen3:14b` via Ollama | 8,841,823 | 20 | 6/20 | 2.50 | 1.90 | 1.17 | 41.3s | 1.90 | 1.85 | 1.20 | 12/20 | 14/20 | 2/20 |
+| Mode | Model | Docs | Queries | Reach | Mean turns | Mean calls | Mean first rel turn | Mean elapsed | Mean unique tools | Mean search targets | Mean rewrites | Multi-tool | Rewrites | Zero-tool |
+|------|-------|-----:|--------:|------:|-----------:|-----------:|--------------------:|-------------:|------------------:|--------------------:|--------------:|-----------:|---------:|----------:|
+| historical zero-tool allowed | `qwen3:14b` via Ollama | 8,841,823 | 20 | 6/20 | 2.50 | 1.90 | 1.17 | 41.3s | 1.90 | 1.85 | 1.20 | 12/20 | 14/20 | 2/20 |
+| force-first-tool default | `qwen3:14b` via Ollama | 8,841,823 | 20 | 9/20 | 2.60 | 2.10 | 1.33 | 42.2s | 1.75 | 1.65 | 1.10 | 11/20 | 16/20 | 0/20 |
 
-Per-query report: `examples/ablation/diagnostics/agent_loop_20260702_181702.md`.
-Incremental rows: `examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl`.
+Historical per-query report: `examples/ablation/diagnostics/agent_loop_20260702_181702.md`.
+Historical incremental rows: `examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl`.
+Force-first per-query report: `examples/ablation/diagnostics/agent_loop_20260702_184227.md`.
+Force-first incremental rows: `examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_force_first.jsonl`.
 
 Observed failure pattern: the fallback model demonstrates real exploration
 behavior, but quality is not yet a Qwen3.6-grade reference. It made no tool call
@@ -159,6 +163,11 @@ The historical run above allowed zero-tool answers. Later benchmark runs should
 use the runner default, which forces at least one retrieval tool before accepting
 a final answer; use `--allow-zero-tool-answer` only to reproduce this exact
 baseline.
+
+The force-first-tool rerun improved reach from 6/20 to 9/20 with no observed
+regressions on this subset. The improved qids were `201376`, `1101278`, and
+`165002`; the latter two were previous zero-tool failures that became
+`deep_search` hits. Empty-result tool calls also fell from 6 to 4.
 
 The local artifacts are gitignored:
 
@@ -261,6 +270,10 @@ The local artifacts are gitignored:
   model also exposed an agent-control quality issue: it skipped tools entirely
   on 2/20 queries and sometimes chased weak rewritten targets, so it remains a
   functional navigation smoke rather than a final quality reference.
+- Enforcing one retrieval tool before accepting a benchmark answer removed the
+  zero-tool failure mode on the same 20-query slice and lifted reach from 6/20
+  to 9/20. This is now the benchmark runner default; applications can still keep
+  the original behavior unless they opt into `force_first_tool=True`.
 - TEI cross-reranking now handles large candidate pools without TEI batch-size
   errors by chunking requests, but the full 8.84M reranker smoke did not recover
   quality (MRR@10 0.211, Hit@10 20/50). The next target is better candidate
