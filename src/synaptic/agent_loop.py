@@ -202,9 +202,9 @@ Tips
   need the COMPLETE set. Raise the ``limit`` on ``filter_nodes`` / ``top_nodes``
   (e.g. 100) rather than the default 20. The GT for these patterns often
   has 5-10 specific rows; a narrow retry loop misses them.
-- **When a tool returns 0 results, it also returns a ``hints`` array.**
+- **When a tool returns a ``hints`` array, read it before guessing.**
   Each hint is a concrete corrective action (different operator, dropped
-  WHERE, alternative column). Read the hints and follow the first one
+  WHERE, alternative column, query rewrite). Follow the first relevant hint
   before reissuing a near-identical query — that is what wastes turns."""
 
 
@@ -1039,13 +1039,14 @@ def project_tool_result(result: dict | Any, *, max_chars: int = _TOOL_RESULT_BUD
 
     tool = result.get("tool", "")
     data = _project_data(tool, result.get("data") or {})
-    envelope: dict[str, Any] = {"tool": tool, "ok": result.get("ok", True), "data": data}
-    err = result.get("error")
-    if err:
-        envelope["error"] = err
+    envelope: dict[str, Any] = {"tool": tool, "ok": result.get("ok", True)}
     hints = result.get("hints")
     if hints:
         envelope["hints"] = hints[:3]
+    envelope["data"] = data
+    err = result.get("error")
+    if err:
+        envelope["error"] = err
 
     serialized = json.dumps(envelope, ensure_ascii=False)
     if len(serialized) <= max_chars:

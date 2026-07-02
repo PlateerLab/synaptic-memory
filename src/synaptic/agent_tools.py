@@ -35,6 +35,7 @@ never talk to each other directly.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -47,6 +48,13 @@ if TYPE_CHECKING:
     from synaptic.protocols import StorageBackend
 
 logger = logging.getLogger("agent-tools")
+
+_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+_PROCESS_FROM_RE = re.compile(
+    r"\bhow\s+(?:is|are|was|were)\s+(?P<subject>.+?)\s+"
+    r"(?P<verb>created|made|formed|produced)\s+from\s+(?P<source>.+)",
+    re.IGNORECASE,
+)
 
 
 # --- Shared result shape ---
@@ -132,6 +140,46 @@ def _budget_check(session: SearchSession, tool: str) -> ToolResult | None:
         )
     session.record_call()
     return None
+
+
+def _query_rewrite_hints(query: str, *, limit: int = 20) -> list[Hint]:
+    hints: list[Hint] = []
+    seen = {query.strip().lower()}
+
+    def add(candidate: str, reason: str) -> None:
+        candidate = " ".join(candidate.strip(" ?.!").split())
+        if not candidate:
+            return
+        key = candidate.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        hints.append(
+            Hint(action="search", args={"query": candidate, "limit": limit}, reason=reason)
+        )
+
+    without_year = _YEAR_RE.sub(" ", query)
+    if without_year != query:
+        add(
+            without_year,
+            "retry without the numeric year if the year is metadata/noise rather than answer text",
+        )
+
+    process = _PROCESS_FROM_RE.search(query)
+    if process:
+        subject = process.group("subject")
+        source = process.group("source")
+        source_singular = source[:-1] if source.lower().endswith("s") else source
+        add(
+            f"making {subject} {source_singular} pieces",
+            "process questions often use answer-text verbs like making/forming rather than created",
+        )
+        add(
+            f"small pieces of {source_singular} form {subject}",
+            "retry with an answer-shaped process phrase using the same subject and source",
+        )
+
+    return hints[:3]
 
 
 def _node_to_summary(
@@ -335,6 +383,7 @@ async def search_tool(
                         reason=f"query also touched '{cat}' — narrow search to that category",
                     )
                 )
+        hints.extend(_query_rewrite_hints(query))
 
     return ToolResult(
         tool="search",

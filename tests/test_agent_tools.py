@@ -17,6 +17,7 @@ import pytest
 import synaptic.agent_tools_v2 as tools_v2
 from synaptic.agent_tools import (
     ToolResult,
+    _query_rewrite_hints,
     count_tool,
     expand_tool,
     follow_tool,
@@ -196,6 +197,21 @@ async def _fresh_backend() -> MemoryBackend:
 
 
 # --- search_tool ---
+
+
+def test_query_rewrite_hints_drop_numeric_year():
+    hints = _query_rewrite_hints("child psychiatrist salary 2016")
+
+    assert hints[0].action == "search"
+    assert hints[0].args == {"query": "child psychiatrist salary", "limit": 20}
+
+
+def test_query_rewrite_hints_process_from_question():
+    hints = _query_rewrite_hints("how is soil created from rocks")
+    queries = [h.args["query"] for h in hints]
+
+    assert "making soil rock pieces" in queries
+    assert "small pieces of rock form soil" in queries
 
 
 @pytest.mark.asyncio
@@ -406,6 +422,165 @@ async def test_deep_search_caps_document_reads(monkeypatch):
 
     assert result.ok is True
     assert document_ids == ["doc_0", "doc_1", "doc_2", "doc_3", "doc_4"]
+
+
+@pytest.mark.asyncio
+async def test_deep_search_surfaces_query_rewrite_hints(monkeypatch):
+    async def fake_search_tool(
+        backend,
+        session,
+        query,
+        *,
+        limit,
+        category=None,
+        embedder=None,
+        **kwargs,
+    ):
+        return ToolResult(
+            tool="search",
+            ok=True,
+            data={
+                "evidence": [{"id": "chunk_0", "document_id": "doc_0"}],
+                "anchors": {},
+            },
+            session=session.summary(),
+        )
+
+    async def fake_expand(backend, session, node_id):
+        return ToolResult(tool="expand", ok=True, data={"neighbours": []})
+
+    async def fake_get_doc(backend, session, doc_id, query):
+        return ToolResult(
+            tool="get_document",
+            ok=True,
+            data={"document": {"id": doc_id}, "chunks": [], "chunk_count": 0},
+        )
+
+    monkeypatch.setattr(tools_v2, "search_tool", fake_search_tool)
+    monkeypatch.setattr(tools_v2, "_safe_expand", fake_expand)
+    monkeypatch.setattr(tools_v2, "_safe_get_doc", fake_get_doc)
+    backend = MemoryBackend()
+    await backend.connect()
+
+    result = await tools_v2.deep_search_tool(
+        backend,
+        SearchSession(),
+        "how is soil created from rocks",
+    )
+    queries = [h.args["query"] for h in result.hints]
+
+    assert "making soil rock pieces" in queries
+    assert "small pieces of rock form soil" in queries
+
+
+@pytest.mark.asyncio
+async def test_deep_search_runs_query_rewrite_hints(monkeypatch):
+    seen_queries: list[str] = []
+
+    async def fake_search_tool(
+        backend,
+        session,
+        query,
+        *,
+        limit,
+        category=None,
+        embedder=None,
+        **kwargs,
+    ):
+        seen_queries.append(query)
+        if query == "how is soil created from rocks":
+            evidence = [{"id": "initial", "document_id": "initial_doc"}]
+        else:
+            evidence = [{"id": f"rewrite_{len(seen_queries)}", "document_id": "gold_doc"}]
+        return ToolResult(
+            tool="search",
+            ok=True,
+            data={"evidence": evidence, "anchors": {}},
+            session=session.summary(),
+        )
+
+    async def fake_expand(backend, session, node_id):
+        return ToolResult(tool="expand", ok=True, data={"neighbours": []})
+
+    async def fake_get_doc(backend, session, doc_id, query):
+        return ToolResult(
+            tool="get_document",
+            ok=True,
+            data={"document": {"id": doc_id}, "chunks": [], "chunk_count": 0},
+        )
+
+    monkeypatch.setattr(tools_v2, "search_tool", fake_search_tool)
+    monkeypatch.setattr(tools_v2, "_safe_expand", fake_expand)
+    monkeypatch.setattr(tools_v2, "_safe_get_doc", fake_get_doc)
+    backend = MemoryBackend()
+    await backend.connect()
+
+    result = await tools_v2.deep_search_tool(
+        backend,
+        SearchSession(),
+        "how is soil created from rocks",
+    )
+
+    assert seen_queries == [
+        "how is soil created from rocks",
+        "making soil rock pieces",
+        "small pieces of rock form soil",
+    ]
+    assert result.data["rewrite_queries"] == [
+        "making soil rock pieces",
+        "small pieces of rock form soil",
+    ]
+    assert result.data["evidence"][0]["document_id"] == "gold_doc"
+
+
+@pytest.mark.asyncio
+async def test_deep_search_rewrite_can_rescue_empty_initial_search(monkeypatch):
+    async def fake_search_tool(
+        backend,
+        session,
+        query,
+        *,
+        limit,
+        category=None,
+        embedder=None,
+        **kwargs,
+    ):
+        evidence = (
+            []
+            if query == "child psychiatrist salary 2016"
+            else [{"id": "rewrite_hit", "document_id": "gold_doc"}]
+        )
+        return ToolResult(
+            tool="search",
+            ok=True,
+            data={"evidence": evidence, "anchors": {}},
+            session=session.summary(),
+        )
+
+    async def fake_expand(backend, session, node_id):
+        return ToolResult(tool="expand", ok=True, data={"neighbours": []})
+
+    async def fake_get_doc(backend, session, doc_id, query):
+        return ToolResult(
+            tool="get_document",
+            ok=True,
+            data={"document": {"id": doc_id}, "chunks": [], "chunk_count": 0},
+        )
+
+    monkeypatch.setattr(tools_v2, "search_tool", fake_search_tool)
+    monkeypatch.setattr(tools_v2, "_safe_expand", fake_expand)
+    monkeypatch.setattr(tools_v2, "_safe_get_doc", fake_get_doc)
+    backend = MemoryBackend()
+    await backend.connect()
+
+    result = await tools_v2.deep_search_tool(
+        backend,
+        SearchSession(),
+        "child psychiatrist salary 2016",
+    )
+
+    assert result.data["rewrite_queries"] == ["child psychiatrist salary"]
+    assert result.data["evidence"][0]["document_id"] == "gold_doc"
 
 
 # --- expand_tool ---

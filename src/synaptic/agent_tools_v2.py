@@ -31,6 +31,7 @@ from synaptic.agent_tools import (
     Hint,
     ToolResult,
     _budget_check,
+    _query_rewrite_hints,
     expand_tool,
     get_document_tool,
     search_tool,
@@ -49,6 +50,21 @@ def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> 
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(parsed, maximum))
+
+
+def _dedupe_evidence(items: list[dict], *, limit: int) -> list[dict]:
+    out: list[dict] = []
+    seen_ids: set[str] = set()
+    for item in items:
+        item_id = str(item.get("id") or "")
+        if item_id and item_id in seen_ids:
+            continue
+        if item_id:
+            seen_ids.add(item_id)
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
 
 
 async def deep_search_tool(
@@ -100,6 +116,43 @@ async def deep_search_tool(
         embedder=embedder,
     )
     evidence = search_result.data.get("evidence", [])
+    hints: list[Hint] = []
+    hints.extend(_query_rewrite_hints(query))
+    rewrite_queries: list[str] = []
+
+    if hints:
+        rewrite_evidence: list[dict] = []
+        seen_evidence_ids = {e.get("id", "") for e in evidence if isinstance(e, dict)}
+        for hint in hints[:2]:
+            if hint.action != "search":
+                continue
+            rewrite_query = str(hint.args.get("query") or "").strip()
+            if not rewrite_query:
+                continue
+            rewrite_result = await search_tool(
+                backend,
+                session,
+                rewrite_query,
+                limit=limit,
+                category=category,
+                embedder=embedder,
+            )
+            if not rewrite_result.ok:
+                continue
+            rewrite_queries.append(rewrite_query)
+            for item in rewrite_result.data.get("evidence", []):
+                if not isinstance(item, dict):
+                    continue
+                item_id = item.get("id", "")
+                if item_id and item_id in seen_evidence_ids:
+                    continue
+                seen_evidence_ids.add(item_id)
+                rewrite_evidence.append({**item, "rewrite_query": rewrite_query})
+
+        if rewrite_evidence:
+            rewrite_take = max(3, min(5, limit // 2))
+            evidence = [*rewrite_evidence[:rewrite_take], *evidence]
+            evidence = _dedupe_evidence(evidence, limit=limit)
 
     # Step 2: expand top hit (parallel with step 3)
     expanded_neighbours: list[dict] = []
@@ -139,7 +192,6 @@ async def deep_search_tool(
                 )
 
     # Build consolidated response
-    hints: list[Hint] = []
     if not evidence:
         # Decompose the query into its first content word and suggest
         # a FTS fallback. "try a different category" as a literal arg
@@ -174,6 +226,7 @@ async def deep_search_tool(
             "expanded_neighbours": expanded_neighbours[:5],
             "document_excerpts": doc_excerpts,
             "search_anchors": search_result.data.get("anchors", {}),
+            "rewrite_queries": rewrite_queries,
         },
         hints=hints,
         session=session.summary(),
