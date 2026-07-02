@@ -29,7 +29,7 @@ jobs:
           restore-keys: uv-${{ runner.os }}-
 
       - name: Install dependencies
-        run: uv sync --extra dev --extra sqlite
+        run: uv sync --extra dev --extra sqlite --extra embedding
 
       - name: Create synthetic OpenIE fixture
         run: |
