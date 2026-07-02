@@ -58,6 +58,16 @@ The remaining high-call miss `54544` (`blood diseases that are sexually transmit
 | --- | --- | --- | ---: | --- |
 | 54544 | blood diseases that are sexually transmitted | sexual blood borne transmission routes | 1 | reach=yes, first relevant turn 1 / call 1 |
 
+## Answer-Shaped Rewrite Follow-Up
+
+Current deterministic `deep_search` also showed that several misses were caused by answer-page phrasing rather than graph traversal failure. Bounded rewrites now preserve the query entity while switching to the wording commonly used in the relevant passage.
+
+| QID | Original query | Auto rewrite examples | Gold rank in `deep_search` | DeepSeek targeted smoke |
+| --- | --- | --- | ---: | --- |
+| 319564 | how much fiber is in carrots | one cup carrots grams fiber; one cup cooked carrots grams fiber | 3 | reach=yes, first relevant turn 1 / call 1 |
+| 155234 | do bigger tires affect gas mileage | tire size factors influence gas mileage; tire width versus gas mileage | 1 | reach=yes, first relevant turn 1 / call 1 |
+| 208145 | how bicycle tire tubes are sized | bicycle tire tube size sidewall ETRTO metric imperial; bicycle tire sidewall tube size printed raised numbers | 1 | reach=yes, first relevant turn 1 / call 1 |
+
 ## Interpretation
 
 Prompt-visible hints alone were not enough: DeepSeek often generated nearby but non-gold rewrites. Running the deterministic rewrite hints inside `deep_search` removes that planning variance for cheap, bounded patterns such as dropping noisy numeric years and rewriting "created from" process questions into answer-shaped phrases.
