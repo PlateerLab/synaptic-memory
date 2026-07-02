@@ -22,6 +22,7 @@ examples/benchmark_vs_competitors/hipporag_bench/
 *.db
 *.db-shm
 *.db-wal
+*.db.tier1.json
 # Local Claude Code session transcripts synced to H100 etc.
 .local-claude/
 temp/
