@@ -158,11 +158,14 @@ gitignored `.env` file.
 |------|-------|-----:|--------:|------:|-----------:|-----------:|--------------------:|-------------:|------------------:|--------------------:|--------------:|-----------:|---------:|----------:|
 | historical zero-tool allowed | `qwen3:14b` via Ollama | 8,841,823 | 20 | 6/20 | 2.50 | 1.90 | 1.17 | 41.3s | 1.90 | 1.85 | 1.20 | 12/20 | 14/20 | 2/20 |
 | force-first-tool default | `qwen3:14b` via Ollama | 8,841,823 | 20 | 9/20 | 2.60 | 2.10 | 1.33 | 42.2s | 1.75 | 1.65 | 1.10 | 11/20 | 16/20 | 0/20 |
+| DeepSeek Flash quality path | `deepseek-v4-flash` | 8,841,823 | 20 | 11/20 | 4.10 | 5.90 | 1.55 | 50.0s | 2.35 | 5.50 | 4.25 | 19/20 | 19/20 | 0/20 |
 
 Historical per-query report: `examples/ablation/diagnostics/agent_loop_20260702_181702.md`.
 Historical incremental rows: `examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl`.
 Force-first per-query report: `examples/ablation/diagnostics/agent_loop_20260702_184227.md`.
 Force-first incremental rows: `examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_force_first.jsonl`.
+DeepSeek per-query report: `examples/ablation/diagnostics/agent_loop_20260702_194134.md`.
+DeepSeek incremental rows: `examples/ablation/diagnostics/agent_loop_deepseek_v4_flash_20.jsonl`.
 
 Observed failure pattern: the fallback model demonstrates real exploration
 behavior, but quality is not yet a Qwen3.6-grade reference. It made no tool call
@@ -180,6 +183,18 @@ The force-first-tool rerun improved reach from 6/20 to 9/20 with no observed
 regressions on this subset. The improved qids were `201376`, `1101278`, and
 `165002`; the latter two were previous zero-tool failures that became
 `deep_search` hits. Empty-result tool calls also fell from 6 to 4.
+
+The DeepSeek Flash run reached 11/20 on the same subset, a +2 absolute gain over
+the local qwen fallback. DeepSeek-only hits were `178627`, `68095`, and
+`1090242`; the local qwen fallback only hit `1101278`. DeepSeek made no zero-tool
+answers and no duplicate tool calls. It also used materially more exploration:
+mean tool calls rose from 2.10 to 5.90, mean unique search targets from 1.65 to
+5.50, and mean query rewrites from 1.10 to 4.25. The trade-off is higher cost
+and latency: mean elapsed rose from 42.2s to 50.0s and mean prompt tokens from
+9.2k to 20.0k. The most useful positive signal is delayed discovery: `178627`,
+`87892`, and `1090242` reached the first relevant document only after turn 3,
+which confirms that true follow-up exploration can recover evidence not found by
+the first search.
 
 The local artifacts are gitignored:
 
