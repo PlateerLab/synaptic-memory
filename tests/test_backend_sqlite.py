@@ -525,3 +525,24 @@ class TestFindNodesByProperty:
         for i in range(5):
             await sqlite.save_node(Node(id=f"n{i}", properties={"k": "v"}))
         assert len(await sqlite.find_nodes_by_property("k", "v", limit=3)) == 3
+
+
+class TestListNodesByTag:
+    async def test_finds_exact_tag_with_kind_filter(self, sqlite: SQLiteBackend) -> None:
+        await sqlite.save_node(Node(id="cat", title="Category", tags=["category"]))
+        await sqlite.save_node(Node(id="doc", title="Doc", tags=["document"]))
+        await sqlite.save_node(
+            Node(id="lesson", title="Lesson", kind=NodeKind.LESSON, tags=["category"])
+        )
+
+        hits = await sqlite.list_nodes_by_tag("category", kind=NodeKind.CONCEPT)
+
+        assert [node.id for node in hits] == ["cat"]
+
+    async def test_respects_limit(self, sqlite: SQLiteBackend) -> None:
+        for i in range(5):
+            await sqlite.save_node(Node(id=f"cat_{i}", title=str(i), tags=["category"]))
+
+        hits = await sqlite.list_nodes_by_tag("category", limit=3)
+
+        assert len(hits) == 3

@@ -154,6 +154,19 @@ class CompositeBackend:
     ) -> list[Node]:
         return await self._graph.list_nodes(kind=kind, level=level, limit=limit)
 
+    async def list_nodes_by_tag(
+        self,
+        tag: str,
+        *,
+        kind: str | NodeKind | None = None,
+        limit: int = 100,
+    ) -> list[Node]:
+        list_by_tag = getattr(self._graph, "list_nodes_by_tag", None)
+        if callable(list_by_tag):
+            return await list_by_tag(tag, kind=kind, limit=limit)
+        nodes = await self._graph.list_nodes(kind=kind, limit=limit)
+        return [node for node in nodes if tag in (node.tags or [])]
+
     # --- Edge CRUD (all to Neo4j) ---
 
     async def save_edge(self, edge: Edge) -> None:

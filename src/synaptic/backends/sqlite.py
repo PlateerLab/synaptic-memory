@@ -616,6 +616,26 @@ class SQLiteBackend:
             rows = await cur.fetchall()
         return [_row_to_node(r) for r in rows]
 
+    async def list_nodes_by_tag(
+        self,
+        tag: str,
+        *,
+        kind: str | NodeKind | None = None,
+        limit: int = 100,
+    ) -> list[Node]:
+        db = self._db()
+        conditions = ["EXISTS (SELECT 1 FROM json_each(syn_nodes.tags_json) WHERE value = ?)"]
+        params: list[str | int] = [tag]
+        if kind is not None:
+            conditions.append("kind = ?")
+            params.append(str(kind))
+        params.append(limit)
+        where = " AND ".join(conditions)
+        sql = f"SELECT * FROM syn_nodes WHERE {where} ORDER BY updated_at DESC LIMIT ?"
+        async with db.execute(sql, params) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_node(r) for r in rows]
+
     async def find_nodes_by_property(
         self, key: str, value: str, *, limit: int = 1000
     ) -> list[Node]:

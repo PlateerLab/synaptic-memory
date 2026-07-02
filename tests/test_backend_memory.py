@@ -65,6 +65,18 @@ class TestMemoryBackendNodes:
         limited = await backend.list_nodes(limit=3)
         assert len(limited) == 3
 
+    async def test_list_nodes_by_tag_filters_kind_and_limit(self, backend: MemoryBackend) -> None:
+        await backend.save_node(Node(id="cat_a", title="A", tags=["category"]))
+        await backend.save_node(Node(id="cat_b", title="B", tags=["category"]))
+        await backend.save_node(Node(id="doc", title="Doc", tags=["document"]))
+        await backend.save_node(
+            Node(id="lesson", title="Lesson", kind=NodeKind.LESSON, tags=["category"])
+        )
+
+        hits = await backend.list_nodes_by_tag("category", kind=NodeKind.CONCEPT, limit=1)
+
+        assert [node.id for node in hits] == ["cat_a"]
+
 
 class TestMemoryBackendEdges:
     async def test_save_and_get(self, backend: MemoryBackend) -> None:

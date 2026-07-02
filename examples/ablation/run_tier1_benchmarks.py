@@ -154,6 +154,26 @@ DATASETS = [
 CorpusItem = tuple[str, str, str]
 
 
+def _dataset_key_map(msmarco_path: Path | None = None) -> dict[str, Dataset]:
+    by_key = {
+        "hotpotqa": DATASETS[0],
+        "musique": DATASETS[1],
+        "2wiki": DATASETS[2],
+        "fiqa": DATASETS[3],
+        "trec_covid": DATASETS[4],
+        "scifact": DATASETS[5],
+        "msmarco": DATASETS[6],
+    }
+    if msmarco_path is not None:
+        base = by_key["msmarco"]
+        by_key["msmarco"] = Dataset(
+            name=base.name,
+            path=msmarco_path,
+            reference=base.reference,
+        )
+    return by_key
+
+
 def _selected_gold_doc_ids(
     qrels: dict,
     query_items: list[tuple[str, str]],
@@ -749,6 +769,15 @@ async def amain(argv: list[str]) -> int:
         ),
     )
     p.add_argument(
+        "--msmarco-path",
+        type=Path,
+        default=None,
+        help=(
+            "Override the MS MARCO manifest path, e.g. "
+            "tests/benchmark/data/msmarco_passage_5m.json for side-by-side large tiers."
+        ),
+    )
+    p.add_argument(
         "--reuse-sqlite-db",
         action="store_true",
         help=(
@@ -956,15 +985,7 @@ async def amain(argv: list[str]) -> int:
             reranker = TEIReranker(base_url=args.reranker_url)
             reranker_label = f"TEI cross-encoder @ {args.reranker_url}"
 
-    by_key = {
-        "hotpotqa": DATASETS[0],
-        "musique": DATASETS[1],
-        "2wiki": DATASETS[2],
-        "fiqa": DATASETS[3],
-        "trec_covid": DATASETS[4],
-        "scifact": DATASETS[5],
-        "msmarco": DATASETS[6],
-    }
+    by_key = _dataset_key_map(args.msmarco_path)
     selected = []
     for raw_key in args.only.split(","):
         key = raw_key.strip()

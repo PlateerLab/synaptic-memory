@@ -508,6 +508,15 @@ def main() -> None:
             f"msmarco_passage (default: {MSMARCO_DEFAULT_CORPUS_LIMIT:,})."
         ),
     )
+    p.add_argument(
+        "--large-output-suffix",
+        default="",
+        help=(
+            "Optional suffix for large JSONL-sharded output manifests, e.g. "
+            "'_5m' writes msmarco_passage_5m.json and "
+            "msmarco_passage_5m.corpus.jsonl without replacing the default 1M shard."
+        ),
+    )
     args = p.parse_args()
 
     names = [n.strip() for n in args.only.split(",") if n.strip()]
@@ -521,6 +530,10 @@ def main() -> None:
         if name in LARGE_BUILDERS:
             builder, filename = LARGE_BUILDERS[name]
             out_path = OUT_DIR / filename
+            if args.large_output_suffix:
+                out_path = out_path.with_name(
+                    f"{out_path.stem}{args.large_output_suffix}{out_path.suffix}"
+                )
             print(f"\n=== {name} ===")
             builder(out_path, corpus_limit=args.large_corpus_limit)
             continue

@@ -83,6 +83,24 @@ class MemoryBackend:
                 break
         return result
 
+    async def list_nodes_by_tag(
+        self,
+        tag: str,
+        *,
+        kind: str | NodeKind | None = None,
+        limit: int = 100,
+    ) -> list[Node]:
+        result: list[Node] = []
+        for node in self._nodes.values():
+            if kind is not None and node.kind != kind:
+                continue
+            if tag not in (node.tags or []):
+                continue
+            result.append(node)
+            if len(result) >= limit:
+                break
+        return result
+
     async def get_nodes_batch(self, node_ids: list[str]) -> list[Node]:
         return [self._nodes[nid] for nid in node_ids if nid in self._nodes]
 
