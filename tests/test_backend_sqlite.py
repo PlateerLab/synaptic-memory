@@ -53,6 +53,39 @@ class TestSQLiteNodes:
         assert len(lessons) == 1
         assert lessons[0].kind == NodeKind.LESSON
 
+    async def test_save_nodes_batch_indexes_new_nodes_for_fts(
+        self,
+        sqlite: SQLiteBackend,
+    ) -> None:
+        await sqlite.save_nodes_batch(
+            [
+                Node(id="batch_a", title="Alpha", content="fresh corpus term"),
+                Node(id="batch_b", title="Beta", content="other text"),
+            ]
+        )
+
+        results = await sqlite.search_fts("fresh")
+
+        assert [node.id for node in results] == ["batch_a"]
+
+    async def test_save_nodes_batch_refreshes_existing_fts_rows(
+        self,
+        sqlite: SQLiteBackend,
+    ) -> None:
+        await sqlite.save_nodes_batch(
+            [Node(id="batch_update", title="Original", content="old searchable term")]
+        )
+
+        await sqlite.save_nodes_batch(
+            [Node(id="batch_update", title="Updated", content="new searchable term")]
+        )
+
+        old_results = await sqlite.search_fts("old")
+        new_results = await sqlite.search_fts("new")
+
+        assert "batch_update" not in {node.id for node in old_results}
+        assert "batch_update" in {node.id for node in new_results}
+
 
 class TestSQLiteEdges:
     async def test_save_and_get(self, sqlite: SQLiteBackend) -> None:

@@ -734,6 +734,17 @@ async def test_graph_mutations_record_memory_events():
 
 
 @pytest.mark.asyncio
+async def test_graph_add_can_skip_memory_event_for_bulk_loads():
+    backend = MemoryBackend()
+    graph = SynapticGraph(backend)
+
+    node = await graph.add("Bulk Node", "Body", record_memory_event=False)
+
+    assert node.id
+    assert await backend.list_memory_events(kind=MemoryEventKind.INGEST, limit=10) == []
+
+
+@pytest.mark.asyncio
 async def test_graph_edge_mutations_record_memory_events():
     backend = MemoryBackend()
     graph = SynapticGraph(backend)

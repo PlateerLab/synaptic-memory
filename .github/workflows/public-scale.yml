@@ -1,0 +1,72 @@
+name: Public Scale Guard
+
+# Scheduled, public large-corpus smoke for the SQLite/EvidenceSearch path.
+# Benchmark JSON files are gitignored, so this workflow regenerates public
+# datasets from HuggingFace and runs staged guards that keep selected query
+# gold docs in each indexed corpus.
+
+on:
+  schedule:
+    - cron: "30 6 * * 2" # Tuesdays 06:30 UTC
+  workflow_dispatch: {}
+
+jobs:
+  public-scale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --extra sqlite --extra eval
+
+      - name: Download public scale benchmarks
+        run: |
+          uv run --extra eval python examples/ablation/download_benchmarks.py \
+            --only fiqa,trec_covid
+
+      - name: Run FiQA 10k scale smoke
+        run: |
+          set -o pipefail
+          PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py \
+            --only fiqa \
+            --subset 5 \
+            --corpus-limit 10000 \
+            --use-sqlite-graph | tee /tmp/fiqa_scale_guard.log
+          cp "$(ls -t examples/ablation/diagnostics/tier1_*.md | head -1)" \
+            /tmp/fiqa_scale_guard.md
+
+      - name: Run TREC-COVID 50k scale smoke
+        run: |
+          set -o pipefail
+          PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py \
+            --only trec_covid \
+            --subset 10 \
+            --corpus-limit 50000 \
+            --use-sqlite-graph | tee /tmp/trec_covid_scale_guard.log
+          cp "$(ls -t examples/ablation/diagnostics/tier1_*.md | head -1)" \
+            /tmp/trec_covid_scale_guard.md
+
+      - name: Upload public scale results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-scale-results
+          path: |
+            /tmp/fiqa_scale_guard.log
+            /tmp/fiqa_scale_guard.md
+            /tmp/trec_covid_scale_guard.log
+            /tmp/trec_covid_scale_guard.md
+          if-no-files-found: ignore
