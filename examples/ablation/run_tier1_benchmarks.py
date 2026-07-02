@@ -5,7 +5,9 @@ Runs Synaptic's retrieval pipeline over standard multi-hop corpora
 large BEIR-style retrieval corpora (FiQA, TREC-COVID, SciFact). The
 multi-hop sets are the datasets HippoRAG2, GraphRAG, and the broader
 KG-RAG line use for head-to-head comparisons; the BEIR sets are useful
-large-corpus scale checks with query/qrels ground truth.
+large-corpus scale checks with query/qrels ground truth. MS MARCO uses
+a metadata JSON + corpus JSONL shard so 1M+ passage runs do not require
+committing giant benchmark artifacts.
 
 Two modes:
 
@@ -30,6 +32,8 @@ Usage
     python examples/ablation/run_tier1_benchmarks.py
     python examples/ablation/run_tier1_benchmarks.py --only hotpotqa
     python examples/ablation/run_tier1_benchmarks.py --only fiqa --subset 100
+    python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 \\
+        --corpus-limit 1000000 --use-sqlite-graph
     python examples/ablation/run_tier1_benchmarks.py --subset 200
 
     # Full pipeline with Ollama embedder + TEI cross-encoder
@@ -114,7 +118,119 @@ DATASETS = [
         path=BENCH / "scifact.json",
         reference="BEIR SciFact: ~5k docs / 300 test queries",
     ),
+    Dataset(
+        name="MS MARCO passage dev",
+        path=BENCH / "msmarco_passage.json",
+        reference="BEIR/MS MARCO passage: ~8.8M source passages; JSONL shard",
+    ),
 ]
+
+
+CorpusItem = tuple[str, str, str]
+
+
+def _selected_gold_doc_ids(
+    qrels: dict,
+    query_items: list[tuple[str, str]],
+) -> set[str]:
+    gold_doc_ids: set[str] = set()
+    for qid, _qtext in query_items:
+        rel = qrels.get(qid, {})
+        if isinstance(rel, dict):
+            gold_doc_ids.update(str(doc_id) for doc_id in rel)
+        else:
+            gold_doc_ids.update(str(doc_id) for doc_id in rel)
+    return gold_doc_ids
+
+
+def _load_inline_corpus_items(
+    corpus: dict,
+    qrels: dict,
+    query_items: list[tuple[str, str]],
+    corpus_limit: int | None,
+) -> list[CorpusItem]:
+    items_all = [
+        (
+            doc_id,
+            str(doc.get("title", "") or doc_id),
+            str(doc.get("text", "")),
+        )
+        for doc_id, doc in corpus.items()
+    ]
+    items_all = [(d, t, x) for d, t, x in items_all if t or x]
+    if corpus_limit is not None and 0 < corpus_limit < len(items_all):
+        gold_doc_ids = _selected_gold_doc_ids(qrels, query_items)
+        gold_items = [item for item in items_all if item[0] in gold_doc_ids]
+        filler_items = [item for item in items_all if item[0] not in gold_doc_ids]
+        if len(gold_items) >= corpus_limit:
+            return gold_items
+        return [*gold_items, *filler_items[: corpus_limit - len(gold_items)]]
+    return items_all
+
+
+def _load_jsonl_corpus_items(
+    data: dict,
+    dataset_path: Path,
+    qrels: dict,
+    query_items: list[tuple[str, str]],
+    corpus_limit: int | None,
+) -> list[CorpusItem]:
+    raw_corpus_path = data.get("corpus_path")
+    if not raw_corpus_path:
+        raise ValueError(f"{dataset_path} is missing corpus_path")
+    corpus_path = dataset_path.parent / str(raw_corpus_path)
+    if not corpus_path.exists():
+        raise FileNotFoundError(
+            f"{corpus_path} missing. Run: "
+            "python examples/ablation/download_benchmarks.py --only msmarco_passage"
+        )
+
+    downloaded_size = int(data.get("corpus_size") or 0)
+    target_limit = corpus_limit if corpus_limit and corpus_limit > 0 else downloaded_size
+    gold_doc_ids = _selected_gold_doc_ids(qrels, query_items)
+    filler_budget = max(target_limit - len(gold_doc_ids), 0)
+
+    gold_items: list[CorpusItem] = []
+    filler_items: list[CorpusItem] = []
+    seen_gold: set[str] = set()
+    with open(corpus_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            doc_id = str(row.get("_id") or row.get("id") or "")
+            if not doc_id:
+                continue
+            title = str(row.get("title") or doc_id)
+            text = str(row.get("text") or "")
+            if not (title or text):
+                continue
+            item = (doc_id, title, text)
+            if doc_id in gold_doc_ids:
+                if doc_id not in seen_gold:
+                    gold_items.append(item)
+                    seen_gold.add(doc_id)
+            elif len(filler_items) < filler_budget:
+                filler_items.append(item)
+
+            if len(filler_items) >= filler_budget and seen_gold >= gold_doc_ids:
+                break
+
+    if len(gold_items) >= target_limit:
+        return gold_items
+    return [*gold_items, *filler_items[: target_limit - len(gold_items)]]
+
+
+def _load_corpus_items(
+    data: dict,
+    dataset_path: Path,
+    qrels: dict,
+    query_items: list[tuple[str, str]],
+    corpus_limit: int | None,
+) -> list[CorpusItem]:
+    if data.get("schema") == "beir_jsonl_v1":
+        return _load_jsonl_corpus_items(data, dataset_path, qrels, query_items, corpus_limit)
+    return _load_inline_corpus_items(data["corpus"], qrels, query_items, corpus_limit)
 
 
 def _reciprocal_rank(retrieved: list[str], relevant: set[str]) -> float:
@@ -166,7 +282,6 @@ async def run_one(
     with open(ds.path, encoding="utf-8") as f:
         data = json.load(f)
 
-    corpus = data["corpus"]
     queries_all = data["queries"]
     qrels = data["qrels"]
 
@@ -200,28 +315,7 @@ async def run_one(
     # Pre-compute embeddings in large batches (GPU-friendly).
     # ``graph.add()`` accepts an ``embedding`` arg; if we pass it we
     # avoid the per-node single embed call that bottlenecks at batch=1.
-    items_all = [
-        (
-            doc_id,
-            str(doc.get("title", "") or doc_id),
-            str(doc.get("text", "")),
-        )
-        for doc_id, doc in corpus.items()
-    ]
-    items_all = [(d, t, x) for d, t, x in items_all if t or x]
-    if corpus_limit is not None and 0 < corpus_limit < len(items_all):
-        gold_doc_ids: set[str] = set()
-        for qid, _qtext in query_items:
-            rel = qrels.get(qid, {})
-            if isinstance(rel, dict):
-                gold_doc_ids.update(str(doc_id) for doc_id in rel)
-            else:
-                gold_doc_ids.update(str(doc_id) for doc_id in rel)
-        gold_items = [item for item in items_all if item[0] in gold_doc_ids]
-        filler_items = [item for item in items_all if item[0] not in gold_doc_ids]
-        items = [*gold_items, *filler_items][:corpus_limit]
-    else:
-        items = items_all
+    items = _load_corpus_items(data, ds.path, qrels, query_items, corpus_limit)
 
     embeddings: list[list[float] | None] = [None] * len(items)
     if embedder is not None:
@@ -422,7 +516,7 @@ async def amain(argv: list[str]) -> int:
         default=",".join(["hotpotqa", "musique", "2wiki"]),
         help=(
             "comma-separated dataset keys "
-            "(hotpotqa | musique | 2wiki | fiqa | trec_covid | scifact)"
+            "(hotpotqa | musique | 2wiki | fiqa | trec_covid | scifact | msmarco)"
         ),
     )
     p.add_argument("--subset", type=int, default=None)
@@ -650,6 +744,7 @@ async def amain(argv: list[str]) -> int:
         "fiqa": DATASETS[3],
         "trec_covid": DATASETS[4],
         "scifact": DATASETS[5],
+        "msmarco": DATASETS[6],
     }
     selected = []
     for raw_key in args.only.split(","):

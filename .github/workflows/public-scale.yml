@@ -8,7 +8,18 @@ name: Public Scale Guard
 on:
   schedule:
     - cron: "30 6 * * 2" # Tuesdays 06:30 UTC
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      run_msmarco:
+        description: "Also run the manual MS MARCO large-tier smoke"
+        required: false
+        type: boolean
+        default: false
+      msmarco_corpus_limit:
+        description: "MS MARCO shard/search corpus limit"
+        required: false
+        type: string
+        default: "100000"
 
 jobs:
   public-scale:
@@ -67,6 +78,25 @@ jobs:
           cp "$(ls -t examples/ablation/diagnostics/tier1_*.md | head -1)" \
             /tmp/trec_covid_scale_guard.md
 
+      - name: Download MS MARCO large-tier shard
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_msmarco }}
+        run: |
+          uv run --extra eval python examples/ablation/download_benchmarks.py \
+            --only msmarco_passage \
+            --large-corpus-limit "${{ inputs.msmarco_corpus_limit }}"
+
+      - name: Run MS MARCO large-tier smoke
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_msmarco }}
+        run: |
+          set -o pipefail
+          PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py \
+            --only msmarco \
+            --subset 50 \
+            --corpus-limit "${{ inputs.msmarco_corpus_limit }}" \
+            --use-sqlite-graph | tee /tmp/msmarco_large_guard.log
+          cp "$(ls -t examples/ablation/diagnostics/tier1_*.md | head -1)" \
+            /tmp/msmarco_large_guard.md
+
       - name: Upload public scale results
         if: always()
         uses: actions/upload-artifact@v4
@@ -77,4 +107,6 @@ jobs:
             /tmp/fiqa_scale_guard.md
             /tmp/trec_covid_scale_guard.log
             /tmp/trec_covid_scale_guard.md
+            /tmp/msmarco_large_guard.log
+            /tmp/msmarco_large_guard.md
           if-no-files-found: ignore

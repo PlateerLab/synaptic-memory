@@ -38,11 +38,19 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = REPO_ROOT / "tests" / "benchmark" / "data"
+MSMARCO_DEFAULT_CORPUS_LIMIT = 1_000_000
 
 
 def _hash_doc(title: str, text: str) -> str:
     """Stable doc_id based on content — dedupes across questions."""
     return hashlib.blake2b((title + "||" + text).encode("utf-8"), digest_size=8).hexdigest()
+
+
+def _display_path(path: Path) -> Path:
+    try:
+        return path.relative_to(REPO_ROOT)
+    except ValueError:
+        return path
 
 
 def _write(path: Path, obj: dict) -> None:
@@ -51,8 +59,23 @@ def _write(path: Path, obj: dict) -> None:
         json.dump(obj, f, ensure_ascii=False)
     size_mb = path.stat().st_size / (1024 * 1024)
     print(
-        f"  → {path.relative_to(REPO_ROOT)}  "
+        f"  → {_display_path(path)}  "
         f"({size_mb:.1f} MB, {len(obj['corpus'])} docs, {len(obj['queries'])} queries)"
+    )
+
+
+def _write_manifest(path: Path, obj: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False)
+    corpus_path = path.parent / str(obj.get("corpus_path", ""))
+    corpus_size_mb = corpus_path.stat().st_size / (1024 * 1024)
+    manifest_size_kb = path.stat().st_size / 1024
+    print(
+        f"  → {_display_path(path)}  "
+        f"({manifest_size_kb:.1f} KB manifest, "
+        f"{corpus_size_mb:.1f} MB corpus jsonl, "
+        f"{obj['corpus_size']} docs, {len(obj['queries'])} queries)"
     )
 
 
@@ -322,6 +345,140 @@ def build_scifact(out_path: Path) -> None:
     _build_beir("BeIR/scifact", "test", "scifact", out_path)
 
 
+def _build_beir_jsonl_shard(
+    corpus_repo: str,
+    split: str,
+    label: str,
+    out_path: Path,
+    *,
+    corpus_limit: int,
+    numeric_docid_index: bool = False,
+) -> None:
+    """Build a large BEIR shard as metadata JSON + corpus JSONL.
+
+    The small BEIR datasets fit comfortably in one JSON object. MS MARCO
+    does not: the source corpus has millions of passages. This writer
+    keeps all positive qrel docs for the selected split, then fills the
+    shard with corpus-order distractors up to ``corpus_limit``.
+    """
+    from datasets import load_dataset
+
+    if corpus_limit <= 0:
+        raise ValueError("--large-corpus-limit must be positive")
+
+    print(
+        f"Loading BEIR {label} ({corpus_repo}, split={split}, "
+        f"jsonl shard limit={corpus_limit:,})..."
+    )
+
+    queries_ds = load_dataset(corpus_repo, "queries", split="queries")
+    qrels_ds = load_dataset(f"BeIR/{label}-qrels", split=split)
+
+    qrels: dict[str, dict[str, int]] = {}
+    for row in qrels_ds:
+        qid = str(row["query-id"])
+        did = str(row["corpus-id"])
+        score = int(row.get("score") or 0)
+        if score <= 0:
+            continue
+        qrels.setdefault(qid, {})[did] = score
+
+    queries: dict[str, str] = {}
+    for row in queries_ds:
+        qid = str(row["_id"])
+        text = str(row.get("text") or "").strip()
+        if text and qid in qrels:
+            queries[qid] = text
+
+    qrels = {qid: rel for qid, rel in qrels.items() if qid in queries}
+    gold_doc_ids = {did for rel in qrels.values() for did in rel}
+    filler_budget = max(corpus_limit - len(gold_doc_ids), 0)
+
+    def row_payload(row: dict, doc_id: str) -> dict[str, str]:
+        return {
+            "_id": doc_id,
+            "title": str(row.get("title") or ""),
+            "text": str(row.get("text") or ""),
+        }
+
+    corpus_path = out_path.with_suffix(".corpus.jsonl")
+    written_gold: set[str] = set()
+    written_docs = 0
+    filler_docs = 0
+
+    corpus_ds = load_dataset(
+        corpus_repo,
+        "corpus",
+        split="corpus",
+        streaming=not numeric_docid_index,
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(corpus_path, "w", encoding="utf-8") as f:
+        if numeric_docid_index:
+            for did in sorted(gold_doc_ids, key=lambda value: int(value)):
+                row = corpus_ds[int(did)]
+                if str(row.get("_id")) != did:
+                    continue
+                f.write(json.dumps(row_payload(row, did), ensure_ascii=False) + "\n")
+                written_gold.add(did)
+                written_docs += 1
+
+        for row in corpus_ds:
+            did = str(row["_id"])
+            if did in gold_doc_ids:
+                if did in written_gold:
+                    continue
+                written_gold.add(did)
+            elif filler_docs < filler_budget:
+                filler_docs += 1
+            else:
+                continue
+
+            f.write(json.dumps(row_payload(row, did), ensure_ascii=False) + "\n")
+            written_docs += 1
+
+            if filler_docs >= filler_budget and len(written_gold) >= len(gold_doc_ids):
+                break
+
+    missing_gold = sorted(gold_doc_ids - written_gold)
+    _write_manifest(
+        out_path,
+        {
+            "name": f"BEIR {label} {split} large shard",
+            "schema": "beir_jsonl_v1",
+            "source": f"huggingface: {corpus_repo}",
+            "source_corpus": "MS MARCO passage ranking (~8.8M passages)",
+            "corpus_path": corpus_path.name,
+            "corpus_limit": corpus_limit,
+            "corpus_size": written_docs,
+            "query_size": len(queries),
+            "qrels_size": len(qrels),
+            "qrels_rows": sum(len(rel) for rel in qrels.values()),
+            "preserved_gold_docs": len(written_gold),
+            "missing_gold_docs": missing_gold[:100],
+            "queries": queries,
+            "qrels": qrels,
+        },
+    )
+
+
+def build_msmarco_passage(out_path: Path, *, corpus_limit: int) -> None:
+    """BEIR MS MARCO passage dev — web-scale passage retrieval.
+
+    The full source corpus is ~8.8M passages. The default local shard is
+    1M passages, preserving validation positives before filling with
+    distractors. Increase ``--large-corpus-limit`` for heavier runs.
+    """
+    _build_beir_jsonl_shard(
+        "BeIR/msmarco",
+        "validation",
+        "msmarco",
+        out_path,
+        corpus_limit=corpus_limit,
+        numeric_docid_index=True,
+    )
+
+
 BUILDERS = {
     "hotpotqa_full": (build_hotpotqa, "hotpotqa_full.json"),
     "musique": (build_musique, "musique_dev.json"),
@@ -329,6 +486,9 @@ BUILDERS = {
     "trec_covid": (build_trec_covid, "trec_covid.json"),
     "fiqa": (build_fiqa, "fiqa.json"),
     "scifact": (build_scifact, "scifact.json"),
+}
+LARGE_BUILDERS = {
+    "msmarco_passage": (build_msmarco_passage, "msmarco_passage.json"),
 }
 
 
@@ -339,15 +499,31 @@ def main() -> None:
         default=",".join(BUILDERS),
         help="comma-separated dataset names (default: all)",
     )
+    p.add_argument(
+        "--large-corpus-limit",
+        type=int,
+        default=MSMARCO_DEFAULT_CORPUS_LIMIT,
+        help=(
+            "Corpus rows to keep for large JSONL-sharded datasets such as "
+            f"msmarco_passage (default: {MSMARCO_DEFAULT_CORPUS_LIMIT:,})."
+        ),
+    )
     args = p.parse_args()
 
     names = [n.strip() for n in args.only.split(",") if n.strip()]
-    unknown = [n for n in names if n not in BUILDERS]
+    available = {**BUILDERS, **LARGE_BUILDERS}
+    unknown = [n for n in names if n not in available]
     if unknown:
-        print(f"Unknown datasets: {unknown}; available: {list(BUILDERS)}")
+        print(f"Unknown datasets: {unknown}; available: {list(available)}")
         sys.exit(1)
 
     for name in names:
+        if name in LARGE_BUILDERS:
+            builder, filename = LARGE_BUILDERS[name]
+            out_path = OUT_DIR / filename
+            print(f"\n=== {name} ===")
+            builder(out_path, corpus_limit=args.large_corpus_limit)
+            continue
         builder, filename = BUILDERS[name]
         out_path = OUT_DIR / filename
         print(f"\n=== {name} ===")
