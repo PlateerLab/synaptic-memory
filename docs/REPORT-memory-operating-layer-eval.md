@@ -1844,7 +1844,9 @@ per-chunk fallback을 유지한다.
   `openie_mz_poc.py --skip-openie`를 scheduled/manual 실행한다. GitHub-hosted runner에서
   ingest, scoring, gate semantics, revertibility가 계속 연결되어 있는지 감시하고,
   `/tmp/openie_fixture_results.json` artifact를 남긴다. 로컬 workflow-equivalent smoke는
-  fixture query `R@1=100%`, `R@5=100%`, revertibility `PASS`로 완료됐다.
+  fixture query `R@1=100%`, `R@5=100%`, revertibility `PASS`로 완료됐다. 첫 remote dispatch는
+  fixture smoke는 통과했지만 contract test preflight에서 `aiohttp`가 없어 실패했고,
+  workflow dependency를 `--extra embedding`까지 설치하도록 보정했다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
