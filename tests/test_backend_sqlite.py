@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 
 import pytest
 
-from synaptic.backends.sqlite import SQLiteBackend
+from synaptic.backends.sqlite import SQLiteBackend, _prepare_fts_query_terms
 from synaptic.models import Edge, EdgeKind, Node, NodeKind
 
 
@@ -85,6 +85,73 @@ class TestSQLiteNodes:
 
         assert "batch_update" not in {node.id for node in old_results}
         assert "batch_update" in {node.id for node in new_results}
+
+    def test_prepare_fts_query_terms_drops_english_question_noise(self) -> None:
+        terms = _prepare_fts_query_terms(
+            [
+                "how",
+                "many",
+                "years",
+                "did",
+                "william",
+                "bradford",
+                "serve",
+                "as",
+                "governor",
+                "of",
+                "plymouth",
+                "colony?",
+            ]
+        )
+
+        assert terms == [
+            "many",
+            "years",
+            "william",
+            "bradford",
+            "serve",
+            "governor",
+            "plymouth",
+            "colony",
+        ]
+
+    def test_prepare_fts_query_terms_keeps_stopword_only_query(self) -> None:
+        assert _prepare_fts_query_terms(["to", "be"]) == ["to", "be"]
+
+    def test_prepare_fts_query_terms_preserves_korean_terms(self) -> None:
+        assert _prepare_fts_query_terms(["경마산업", "관리", "규정"]) == [
+            "경마산업",
+            "관리",
+            "규정",
+        ]
+
+    def test_prepare_fts_query_terms_preserves_non_ascii_latin_terms(self) -> None:
+        assert _prepare_fts_query_terms(["café", "prices"]) == ["café", "prices"]
+
+    async def test_search_fts_filters_english_question_noise(
+        self,
+        sqlite: SQLiteBackend,
+    ) -> None:
+        await sqlite.save_nodes_batch(
+            [
+                Node(
+                    id="plymouth",
+                    title="William Bradford",
+                    content="William Bradford served as governor of Plymouth Colony.",
+                ),
+                Node(
+                    id="question_glue",
+                    title="Question Glue",
+                    content="how did is the of to as many generic words",
+                ),
+            ]
+        )
+
+        results = await sqlite.search_fts(
+            "how many years did william bradford serve as governor of plymouth colony?"
+        )
+
+        assert [node.id for node in results][:1] == ["plymouth"]
 
 
 class TestSQLiteEdges:

@@ -73,6 +73,7 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | temp SQLite | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 1913.3s | 69.9s |
 | persistent SQLite build | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 2184.3s | 71.0s |
 | persistent SQLite reuse | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 0.0s | 70.1s |
+| persistent SQLite reuse + English query filter | 1,000,000 | 50 | 0.479 | 0.553 | 0.600 | 31/50 | 0.0s | 9.1s |
 
 The local artifacts are gitignored:
 
@@ -100,6 +101,10 @@ The local artifacts are gitignored:
 - The persistent 1M DB is now built locally. A reuse run validates the sidecar,
   reports 1,000,000 docs, skips ingest, and preserves identical quality while
   reducing build time from 2184.3s to 0.0s.
+- English query-term filtering removes high-frequency question glue
+  (`how/is/the/of/to` etc.) before FTS5 `OR` matching. On the persistent 1M
+  DB this reduced 50-query search time from 70.1s to 9.1s while improving
+  MRR@10 from 0.462 to 0.479.
 
 ## Guard Policy
 

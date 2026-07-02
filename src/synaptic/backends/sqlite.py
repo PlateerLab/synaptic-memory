@@ -96,6 +96,121 @@ _KO_QUERY_NOISE: frozenset[str] = frozenset(
     }
 )
 
+_EN_QUERY_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_'-]*")
+_EN_QUERY_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "about",
+        "am",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "can",
+        "could",
+        "did",
+        "do",
+        "does",
+        "for",
+        "from",
+        "how",
+        "i",
+        "in",
+        "into",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "should",
+        "than",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "they",
+        "this",
+        "to",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+    }
+)
+
+
+def _prepare_fts_query_terms(terms: list[str]) -> list[str]:
+    """Clean query-time FTS terms without changing indexed content.
+
+    Natural English questions often include high-frequency glue words
+    (``how/is/the/of/to``) and punctuation. With FTS5 ``OR`` queries on
+    million-document corpora, those terms dominate candidate generation
+    and BM25 sorting. Keep meaningful English tokens, preserve Korean
+    and other non-ASCII terms, and fall back to the cleaned original
+    terms when a query is entirely stopwords.
+    """
+    cleaned: list[str] = []
+    meaningful_keys: set[str] = set()
+    seen: set[str] = set()
+
+    for raw in terms:
+        raw = raw.strip()
+        if not raw:
+            continue
+        if any(ord(c) > 127 for c in raw):
+            key = raw.casefold()
+            if key not in seen:
+                seen.add(key)
+                cleaned.append(raw)
+                meaningful_keys.add(key)
+            continue
+        chunks = _EN_QUERY_TOKEN.findall(raw)
+        if chunks:
+            for chunk in chunks:
+                key = chunk.lower().strip("'_-")
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                cleaned.append(chunk)
+                if key not in _EN_QUERY_STOPWORDS and (
+                    len(key) > 1 or any(c.isdigit() for c in key)
+                ):
+                    meaningful_keys.add(key)
+            continue
+
+    if not meaningful_keys:
+        return cleaned
+
+    filtered: list[str] = []
+    seen_filtered: set[str] = set()
+    for term in cleaned:
+        if _EN_QUERY_TOKEN.fullmatch(term):
+            key = term.lower().strip("'_-")
+            if key in _EN_QUERY_STOPWORDS:
+                continue
+            if len(key) <= 1 and not any(c.isdigit() for c in key):
+                continue
+        else:
+            key = term.casefold()
+        if key and key not in seen_filtered:
+            seen_filtered.add(key)
+            filtered.append(term)
+    return filtered or cleaned
+
 
 def _normalize_korean(text: str, *, query_mode: bool = False) -> str:
     """Normalize Korean text for FTS indexing/querying.
@@ -1314,6 +1429,7 @@ class SQLiteBackend:
             if any(c.isdigit() or ("a" <= c.lower() <= "z") for c in t):
                 terms.append(t)
                 term_seen.add(t)
+        terms = _prepare_fts_query_terms(terms)
         if not terms:
             return []
 
