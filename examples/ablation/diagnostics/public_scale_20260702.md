@@ -68,3 +68,17 @@ small in this smoke even when Hit@10 is perfect.
 - `.github/workflows/public-scale.yml` runs weekly/manual FiQA 10k and TREC-COVID 50k staged smokes.
 - FiQA 25k/full and TREC-COVID 100k/full remain manual checks because they are multi-minute runs and depend on ignored local benchmark data.
 - If 100k+ docs becomes a required routine gate, the next target is faster initial FTS/index build.
+
+## Remote Guard Dispatch
+
+After PR #101 merged, `Public Scale Guard` was manually dispatched on `main`:
+
+- Run: https://github.com/PlateerLab/synaptic-memory/actions/runs/28560097957
+- Result: success
+- Duration: 53s
+- FiQA 10k: build 1.2s, search 0.2s, MRR@10 0.425, Hit@10 3/5
+- TREC-COVID 50k: build 8.2s, search 1.9s, MRR@10 0.933, Hit@10 10/10
+
+The dispatch verifies that the scheduled/manual guard is visible on the default
+branch, downloads ignored public benchmark JSONs, enforces thresholds, and
+uploads both logs and markdown artifacts.
