@@ -205,6 +205,18 @@ def test_hints_capped_at_three():
     assert len(parsed["hints"]) == 3
 
 
+def test_hints_are_projected_before_data():
+    r = {
+        "tool": "search",
+        "ok": True,
+        "data": {"evidence": [{"id": "n1", "preview": "long evidence text"}]},
+        "hints": [{"action": "search", "args": {"query": "rewrite"}}],
+    }
+    out = project_tool_result(r)
+
+    assert out.index('"hints"') < out.index('"data"')
+
+
 def test_error_preserved():
     r = {"tool": "filter_nodes", "ok": False, "data": {}, "error": "bad op"}
     out = project_tool_result(r)
