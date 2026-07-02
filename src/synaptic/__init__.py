@@ -65,7 +65,9 @@ from synaptic.indexing import (
     IngestionJobStage,
     IngestionJobStatus,
     IngestionJobStore,
+    InProcessIndexRouter,
     ScoredCandidate,
+    StorageCandidateProvider,
     unique_candidates,
 )
 from synaptic.models import (
@@ -145,6 +147,7 @@ __all__ = [
     "IndexHealthBackend",
     "IndexLagReport",
     "IndexRouter",
+    "InProcessIndexRouter",
     "IngestionJob",
     "IngestionJobStage",
     "IngestionJobStatus",
@@ -185,6 +188,7 @@ __all__ = [
     "ScoredCandidate",
     "SpaCyEntityExtractor",
     "StorageBackend",
+    "StorageCandidateProvider",
     "SynapticGraph",
     "TableIngester",
     "TagExtractor",

@@ -18,6 +18,15 @@ from synaptic.extensions.evidence_search import (
     _bounded_ppr_seed_scores,
 )
 from synaptic.extensions.graph_expander import ExpansionBudget
+from synaptic.indexing import (
+    CandidateScoreSource,
+    CandidateSearchRequest,
+    CandidateSearchResult,
+    IndexLagReport,
+)
+from synaptic.indexing import (
+    ScoredCandidate as RoutedCandidate,
+)
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
@@ -370,6 +379,64 @@ class TestPipelineShape:
         backend.include_embedding_calls.clear()
         await searcher.search("alpha", k=1, query_embedding=[0.1, 0.2])
         assert backend.include_embedding_calls[0] is True
+
+    async def test_index_router_seeds_bypass_backend_fts(self):
+        class CountingBackend(MemoryBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.fts_calls = 0
+
+            async def search_fts(self, query: str, *, limit: int = 20) -> list[Node]:
+                self.fts_calls += 1
+                return await super().search_fts(query, limit=limit)
+
+        class FakeRouter:
+            def __init__(self) -> None:
+                self.requests: list[CandidateSearchRequest] = []
+
+            async def search_candidates(
+                self,
+                request: CandidateSearchRequest,
+            ) -> CandidateSearchResult:
+                self.requests.append(request)
+                return CandidateSearchResult(
+                    candidates=[
+                        RoutedCandidate(
+                            node_id="alpha",
+                            score=0.77,
+                            score_source=CandidateScoreSource.LEXICAL,
+                            rank=1,
+                            query_variant=request.query,
+                            provider="fake",
+                        )
+                    ],
+                    provider_counts={"fake": 1},
+                    score_ranges={"fake": 0.77},
+                )
+
+            async def index_health(self) -> list[IndexLagReport]:
+                return [IndexLagReport(provider="fake", status="ok")]
+
+        backend = CountingBackend()
+        await backend.connect()
+        await backend.save_node(
+            Node(
+                id="alpha",
+                kind=NodeKind.CHUNK,
+                title="alpha",
+                content="alpha routed content",
+            )
+        )
+        router = FakeRouter()
+
+        searcher = EvidenceSearch(backend=backend, index_router=router, graph_expansion=False)
+        result = await searcher.search("alpha", k=1)
+
+        assert backend.fts_calls == 0
+        assert router.requests[0].query == "alpha"
+        assert result.evidence[0].node.id == "alpha"
+        assert result.diagnostics["router_candidate_count"] == 1.0
+        assert result.diagnostics["router_provider_fake_count"] == 1.0
 
     async def test_ppr_seed_scores_are_bounded_by_relevance(self):
         scores = {f"n{i}": float(i) for i in range(80)}

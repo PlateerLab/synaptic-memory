@@ -9,9 +9,14 @@ from synaptic import (
     IngestionJob,
     IngestionJobStage,
     IngestionJobStatus,
+    InProcessIndexRouter,
+    Node,
+    NodeKind,
     ScoredCandidate,
+    StorageCandidateProvider,
     unique_candidates,
 )
+from synaptic.backends.memory import MemoryBackend
 
 
 def test_index_filter_defaults_are_isolated():
@@ -129,3 +134,125 @@ def test_ingestion_job_defaults_and_status_values():
     assert job.stage == IngestionJobStage.DISCOVER
     assert job.status == IngestionJobStatus.PENDING
     assert job.created_at <= job.updated_at
+
+
+@pytest.mark.asyncio
+async def test_storage_candidate_provider_returns_ids_variants_and_filters():
+    backend = MemoryBackend()
+    await backend.connect()
+    await backend.save_node(
+        Node(
+            id="alpha-w1",
+            kind=NodeKind.CHUNK,
+            title="Alpha policy",
+            content="alpha storage candidate",
+            tags=["policy"],
+            properties={"workspace_id": "w1", "doc_id": "doc-alpha"},
+        )
+    )
+    await backend.save_node(
+        Node(
+            id="alpha-w2",
+            kind=NodeKind.CHUNK,
+            title="Alpha other workspace",
+            content="alpha storage candidate",
+            tags=["policy"],
+            properties={"workspace_id": "w2", "doc_id": "doc-other"},
+        )
+    )
+    await backend.save_node(
+        Node(
+            id="beta-w1",
+            kind=NodeKind.CHUNK,
+            title="Beta policy",
+            content="beta storage candidate",
+            tags=["policy"],
+            properties={"workspace_id": "w1", "doc_id": "doc-beta"},
+        )
+    )
+
+    provider = StorageCandidateProvider(backend)
+    result = await provider.search_candidates(
+        CandidateSearchRequest(
+            query="alpha",
+            query_variants=["beta"],
+            limit=5,
+            filters=IndexFilter(workspace_id="w1", tags=["policy"]),
+        )
+    )
+
+    assert [candidate.node_id for candidate in result.candidates] == ["alpha-w1", "beta-w1"]
+    assert [candidate.query_variant for candidate in result.candidates] == ["alpha", "beta"]
+    assert result.candidates[0].document_id == "doc-alpha"
+    assert result.provider_counts == {"storage_fts": 2}
+    assert result.diagnostics["filtered"] is True
+
+
+@pytest.mark.asyncio
+async def test_in_process_index_router_dedupes_and_reports_diagnostics():
+    class FirstProvider:
+        @property
+        def name(self) -> str:
+            return "first"
+
+        async def search_candidates(
+            self,
+            request: CandidateSearchRequest,
+        ) -> CandidateSearchResult:
+            return CandidateSearchResult(
+                candidates=[
+                    ScoredCandidate(
+                        node_id="n1",
+                        score=0.2,
+                        provider=self.name,
+                        score_source=CandidateScoreSource.LEXICAL,
+                    )
+                ],
+                provider_counts={self.name: 1},
+                score_ranges={self.name: 0.2},
+            )
+
+        async def index_health(self) -> IndexLagReport:
+            return IndexLagReport(provider=self.name, status="ok")
+
+    class SecondProvider:
+        @property
+        def name(self) -> str:
+            return "second"
+
+        async def search_candidates(
+            self,
+            request: CandidateSearchRequest,
+        ) -> CandidateSearchResult:
+            return CandidateSearchResult(
+                candidates=[
+                    ScoredCandidate(
+                        node_id="n1",
+                        score=0.9,
+                        provider=self.name,
+                        score_source=CandidateScoreSource.VECTOR,
+                    ),
+                    ScoredCandidate(
+                        node_id="n2",
+                        score=0.8,
+                        provider=self.name,
+                        score_source=CandidateScoreSource.VECTOR,
+                    ),
+                ],
+                provider_counts={self.name: 2},
+                score_ranges={self.name: 0.9},
+            )
+
+        async def index_health(self) -> IndexLagReport:
+            return IndexLagReport(provider=self.name, status="ok")
+
+    router = InProcessIndexRouter([FirstProvider(), SecondProvider()])
+    result = await router.search_candidates(CandidateSearchRequest(query="q", limit=10))
+
+    assert [(candidate.node_id, candidate.provider) for candidate in result.candidates] == [
+        ("n1", "second"),
+        ("n2", "second"),
+    ]
+    assert result.provider_counts == {"first": 1, "second": 2}
+    assert result.diagnostics["raw_candidate_count"] == 3
+    assert result.diagnostics["deduped_candidate_count"] == 2

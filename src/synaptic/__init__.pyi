@@ -62,7 +62,9 @@ from synaptic.indexing import IngestionJob as IngestionJob
 from synaptic.indexing import IngestionJobStage as IngestionJobStage
 from synaptic.indexing import IngestionJobStatus as IngestionJobStatus
 from synaptic.indexing import IngestionJobStore as IngestionJobStore
+from synaptic.indexing import InProcessIndexRouter as InProcessIndexRouter
 from synaptic.indexing import ScoredCandidate as ScoredCandidate
+from synaptic.indexing import StorageCandidateProvider as StorageCandidateProvider
 from synaptic.indexing import unique_candidates as unique_candidates
 from synaptic.models import ActivatedNode as ActivatedNode
 from synaptic.models import ConsolidationLevel as ConsolidationLevel

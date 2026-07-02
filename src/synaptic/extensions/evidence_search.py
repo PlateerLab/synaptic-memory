@@ -63,12 +63,15 @@ from synaptic.extensions.hybrid_reranker import (
     ScoredCandidate,
 )
 from synaptic.extensions.query_anchor import QueryAnchorExtractor, QueryAnchors
+from synaptic.indexing import CandidateSearchRequest, IndexFilter
+from synaptic.models import MemoryScope, Node
 from synaptic.ppr import personalized_pagerank
 
 if TYPE_CHECKING:
     from synaptic.extensions.embedder import EmbeddingProvider
     from synaptic.extensions.query_anchor import PhraseExtractorProtocol
     from synaptic.extensions.reranker_cross import RerankerProtocol
+    from synaptic.indexing import IndexRouter
     from synaptic.protocols import QueryDecomposer, StorageBackend
 
 # RRF (Reciprocal Rank Fusion) constant — 60 is the canonical k from the
@@ -170,6 +173,7 @@ class EvidenceSearch:
         "_expansion_budget",
         "_fusion_mode",
         "_graph_expansion",
+        "_index_router",
         "_phrase_cache",
         "_phrase_cache_loaded",
         "_query_phrase_seed_k",
@@ -200,8 +204,10 @@ class EvidenceSearch:
         adaptive: bool = False,
         graph_expansion: bool = True,
         aggregate_candidate_pool_limit: int | None = None,
+        index_router: IndexRouter | None = None,
     ) -> None:
         self._backend = backend
+        self._index_router = index_router
         self._embedder = embedder
         self._cross_reranker = reranker
         self._decomposer = decomposer
@@ -417,6 +423,22 @@ class EvidenceSearch:
             structural=0.10,
         )
 
+    async def _hydrate_candidate_ids(self, node_ids: list[str]) -> dict[str, Node]:
+        """Hydrate routed candidate ids using batch reads when available."""
+        if not node_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(node_ids))
+        get_batch = getattr(self._backend, "get_nodes_batch", None)
+        if callable(get_batch):
+            nodes = await get_batch(unique_ids)
+            return {node.id: node for node in nodes}
+        out: dict[str, object] = {}
+        for node_id in unique_ids:
+            node = await self._backend.get_node(node_id)
+            if node is not None:
+                out[node_id] = node
+        return out
+
     async def search(
         self,
         query: str,
@@ -425,6 +447,8 @@ class EvidenceSearch:
         fts_seed_limit: int = 20,
         per_document_cap: int = 2,
         query_embedding: list[float] | None = None,
+        index_filters: IndexFilter | None = None,
+        scope: MemoryScope | None = None,
     ) -> EvidenceSearchResult:
         """Run the full 3rd-gen pipeline for ``query``.
 
@@ -441,6 +465,9 @@ class EvidenceSearch:
             query_embedding: Optional query vector for the semantic
                 signal. When ``None`` the reranker falls back to
                 lexical + graph + structural only.
+            index_filters: Optional provider-side filters for the routed
+                candidate path. The default empty filter keeps legacy behavior.
+            scope: Optional memory scope attached to routed candidate requests.
         """
         t0 = time()
         timings_ms: dict[str, float] = {}
@@ -469,31 +496,71 @@ class EvidenceSearch:
         stage_t0 = time()
         fts_scores: dict[str, float] = {}
         fts_include_embedding = query_embedding is not None
+        routed_fts = False
         # Fetch real scores when L01 is on OR adaptive mode may need them.
         want_scores = self._backend_scored and (self._real_scores_enabled or self._adaptive)
-        if want_scores:
-            if self._backend_fts_include_embedding:
-                scored_fts = await self._backend.search_fts(
-                    query,
-                    limit=fts_seed_limit,
-                    with_scores=True,
-                    include_embedding=fts_include_embedding,
+        if self._index_router is not None:
+            try:
+                router_result = await self._index_router.search_candidates(
+                    CandidateSearchRequest(
+                        query=query,
+                        limit=fts_seed_limit,
+                        filters=index_filters or IndexFilter(),
+                        scope=scope or MemoryScope(),
+                        embedding=query_embedding,
+                    )
                 )
+                diagnostics["router_candidate_count"] = float(len(router_result.candidates))
+                diagnostics["router_provider_count"] = float(len(router_result.provider_counts))
+                for provider, count in router_result.provider_counts.items():
+                    diagnostics[f"router_provider_{provider}_count"] = float(count)
+                for provider, score in router_result.score_ranges.items():
+                    diagnostics[f"router_provider_{provider}_max_score"] = float(score)
+
+                candidate_ids = [candidate.node_id for candidate in router_result.candidates]
+                hydrated = await self._hydrate_candidate_ids(candidate_ids)
+                fts_nodes = []
+                missing = 0
+                for rank, candidate in enumerate(router_result.candidates):
+                    node = hydrated.get(candidate.node_id)
+                    if node is None:
+                        missing += 1
+                        continue
+                    fts_nodes.append(node)
+                    score = max(0.0, min(1.0, float(candidate.score)))
+                    fts_scores[candidate.node_id] = score or max(0.10, 0.95 - rank * 0.03)
+                diagnostics["router_missing_count"] = float(missing)
+                scored_fts = None
+                routed_fts = True
+            except Exception as exc:
+                logger.warning("index router search failed; falling back to backend FTS: %s", exc)
+                diagnostics["router_failed"] = 1.0
+                routed_fts = False
+
+        if not routed_fts:
+            if want_scores:
+                if self._backend_fts_include_embedding:
+                    scored_fts = await self._backend.search_fts(
+                        query,
+                        limit=fts_seed_limit,
+                        with_scores=True,
+                        include_embedding=fts_include_embedding,
+                    )
+                else:
+                    scored_fts = await self._backend.search_fts(
+                        query, limit=fts_seed_limit, with_scores=True
+                    )
+                fts_nodes = [n for n, _ in scored_fts]
             else:
-                scored_fts = await self._backend.search_fts(
-                    query, limit=fts_seed_limit, with_scores=True
-                )
-            fts_nodes = [n for n, _ in scored_fts]
-        else:
-            scored_fts = None
-            if self._backend_fts_include_embedding:
-                fts_nodes = await self._backend.search_fts(
-                    query,
-                    limit=fts_seed_limit,
-                    include_embedding=fts_include_embedding,
-                )
-            else:
-                fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
+                scored_fts = None
+                if self._backend_fts_include_embedding:
+                    fts_nodes = await self._backend.search_fts(
+                        query,
+                        limit=fts_seed_limit,
+                        include_embedding=fts_include_embedding,
+                    )
+                else:
+                    fts_nodes = await self._backend.search_fts(query, limit=fts_seed_limit)
 
         # Adaptive coverage signal — computed once, gates L01/L02/L05 below.
         coverage = self._anchor_coverage(anchors, fts_nodes) if self._adaptive else None
@@ -506,7 +573,9 @@ class EvidenceSearch:
             self._real_scores_enabled
             or (self._adaptive and coverage is not None and coverage >= _COVERAGE_HI)
         )
-        if use_real:
+        if routed_fts:
+            pass
+        elif use_real:
             for node, rel in scored_fts:
                 fts_scores[node.id] = 0.10 + rel * 0.85
         else:

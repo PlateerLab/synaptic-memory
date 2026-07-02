@@ -296,6 +296,17 @@ Goal: prove the new boundary on the existing SQLite full DB.
 - Ensure default path remains identical when router is absent.
 - Add diagnostics for provider counts, score ranges, dedupe counts, and lag.
 
+Current implementation status:
+
+- `StorageCandidateProvider` wraps legacy `StorageBackend.search_fts()` and
+  returns scored candidate ids.
+- `InProcessIndexRouter` merges provider results, dedupes by best score, and
+  reports provider diagnostics.
+- `EvidenceSearch(index_router=...)` can use routed candidate ids for the seed
+  stage and hydrate only those ids.
+- `SynapticGraph(index_router=...)` wires the router into the public search
+  facade while keeping the default path unchanged when omitted.
+
 ### Phase 3 - External Lexical Provider
 
 Goal: remove the 10TB-incompatible FTS bottleneck.
@@ -361,9 +372,9 @@ The system is 10TB-ready only when all are true:
 ## Near-Term TODO
 
 1. Run DeepSeek 100-query follow-up against the `31/50` baseline.
-2. Implement an in-process `IndexRouter` prototype that wraps the current
-   `StorageBackend` without changing default search behavior.
-3. Draft OpenSearch/Qdrant provider PoC interfaces from the new
-   `src/synaptic/indexing.py` contracts.
+2. Add an OpenSearch/Elastic lexical `CandidateProvider` PoC with scope/ACL
+   filters.
+3. Upgrade the Qdrant helper into a vector `CandidateProvider` with payload
+   filters and scored candidate metadata.
 4. Add index lag/ingestion job persistence to a durable backend.
 5. Run a 100GB or 1TB corpus rehearsal before any 10TB ingestion work.
