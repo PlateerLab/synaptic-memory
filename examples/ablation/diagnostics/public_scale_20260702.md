@@ -67,15 +67,19 @@ small in this smoke even when Hit@10 is perfect.
 
 Manual large-tier shard from BEIR/MS MARCO passage validation:
 
-| Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |
-|-----:|--------:|-------:|----:|-----:|-------:|------:|-------:|
-| 100,000 | 50 | 0.673 | 0.740 | 0.770 | 39/50 | 81.9s | 5.4s |
-| 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 1913.3s | 69.9s |
+| Mode | Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |
+|------|-----:|--------:|-------:|----:|-----:|-------:|------:|-------:|
+| temp SQLite | 100,000 | 50 | 0.673 | 0.740 | 0.770 | 39/50 | 81.9s | 5.4s |
+| temp SQLite | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 1913.3s | 69.9s |
+| persistent SQLite build | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 2184.3s | 71.0s |
+| persistent SQLite reuse | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 0.0s | 70.1s |
 
 The local artifacts are gitignored:
 
 - `tests/benchmark/data/msmarco_passage.json` - 511 KB manifest
 - `tests/benchmark/data/msmarco_passage.corpus.jsonl` - 35 MB at 100k, 361 MB at 1M
+- `tests/benchmark/data/msmarco_1m.db` - 1.2 GB persistent SQLite DB
+- `tests/benchmark/data/msmarco_1m.db.tier1.json` - 535 byte reuse sidecar
 
 ## Interpretation
 
@@ -93,6 +97,9 @@ The local artifacts are gitignored:
 - Repeat 1M runs should use `--sqlite-db-path` + `--reuse-sqlite-db`; the first
   run still pays the materialization cost, but follow-up searches can skip the
   31.9 minute ingest/index phase after sidecar metadata validation.
+- The persistent 1M DB is now built locally. A reuse run validates the sidecar,
+  reports 1,000,000 docs, skips ingest, and preserves identical quality while
+  reducing build time from 2184.3s to 0.0s.
 
 ## Guard Policy
 
