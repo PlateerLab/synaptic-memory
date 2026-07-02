@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 RUNNER_PATH = (
     Path(__file__).resolve().parents[1] / "examples" / "ablation" / "run_agent_search_benchmarks.py"
 )
@@ -210,6 +212,31 @@ def test_agent_loop_local_preset_keeps_existing_defaults() -> None:
         "Qwen3.6-27B",
         "OPENAI_API_KEY",
     )
+
+
+def test_agent_loop_preflight_only_rejects_skip_preflight() -> None:
+    with pytest.raises(SystemExit, match="cannot be combined"):
+        loop_runner._validate_preflight_flags(preflight_only=True, skip_preflight=True)
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_preflight_only_skips_benchmark_inputs(monkeypatch, capsys) -> None:
+    calls = []
+
+    async def fake_preflight(client, *, base_url, model, timeout_sec) -> None:
+        calls.append((base_url, model, timeout_sec))
+
+    key_value = "value-for-test"
+    monkeypatch.setenv("DEEPSEEK_API_KEY", key_value)
+    monkeypatch.setattr(loop_runner, "_preflight_llm_endpoint", fake_preflight)
+
+    assert await loop_runner.amain(["--llm-preset", "deepseek", "--preflight-only"]) == 0
+
+    captured = capsys.readouterr()
+    assert calls == [("https://api.deepseek.com/v1", "deepseek-v4-flash", 10.0)]
+    assert "LLM preflight OK" in captured.out
+    assert key_value not in captured.out
+    assert key_value not in captured.err
 
 
 def test_llm_preflight_error_message_names_endpoint_and_skip_hint() -> None:
