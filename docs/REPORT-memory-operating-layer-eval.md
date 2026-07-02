@@ -1833,6 +1833,10 @@ per-chunk fallback을 유지한다.
   POC gate는 `health_reports_signal_pressure`를 추가해 `53/53` PASS했다. 대표 결과는
   `signal_count=18`, `growth_signal_count=9`, `suspect_count=9`,
   `growth_signal_rate=0.5`, `suspect_signal_rate=0.5`였다.
+- Memory Operating Guard workflow는 deterministic memory operating POC와 관련 contract
+  tests를 scheduled/manual workflow로 분리한다. 빠른 PR CI는 그대로 유지하면서 event ledger,
+  feedback, reinforcement, provenance, health report 회귀는 `/tmp/memory_operating_poc_results.json`
+  artifact로 남긴다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
