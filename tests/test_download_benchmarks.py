@@ -64,3 +64,31 @@ def test_msmarco_jsonl_shard_preserves_gold_before_filler(monkeypatch, tmp_path)
     assert manifest["corpus_size"] == 3
     assert manifest["preserved_gold_docs"] == 1
     assert [row["_id"] for row in rows] == ["3", "0", "1"]
+
+
+def test_large_output_suffix_keeps_default_shard(monkeypatch, tmp_path):
+    calls: list[Path] = []
+    monkeypatch.setattr(downloader, "OUT_DIR", tmp_path)
+    monkeypatch.setitem(
+        downloader.LARGE_BUILDERS,
+        "msmarco_passage",
+        (lambda out_path, *, corpus_limit: calls.append(out_path), "msmarco_passage.json"),
+    )
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "download_benchmarks.py",
+            "--only",
+            "msmarco_passage",
+            "--large-corpus-limit",
+            "5000000",
+            "--large-output-suffix",
+            "_5m",
+        ],
+    )
+
+    downloader.main()
+
+    assert calls == [tmp_path / "msmarco_passage_5m.json"]

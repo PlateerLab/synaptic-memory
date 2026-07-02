@@ -339,18 +339,25 @@ class QueryAnchorExtractor:
             return self._category_cache
 
         try:
-            nodes = await self._backend.list_nodes(
-                kind=NodeKind.CONCEPT,
-                limit=self._category_cache_limit,
-            )
+            list_by_tag = getattr(self._backend, "list_nodes_by_tag", None)
+            if callable(list_by_tag):
+                nodes = await list_by_tag(
+                    "category",
+                    kind=NodeKind.CONCEPT,
+                    limit=self._category_cache_limit,
+                )
+            else:
+                nodes = await self._backend.list_nodes(
+                    kind=NodeKind.CONCEPT,
+                    limit=self._category_cache_limit,
+                )
+                nodes = [n for n in nodes if "category" in (n.tags or [])]
         except Exception as exc:
             logger.warning("query-anchor: failed to load categories — %s", exc)
             self._category_cache = []
             return []
 
-        pairs = [
-            (_nfc(n.title or ""), n.id) for n in nodes if n.title and "category" in (n.tags or [])
-        ]
+        pairs = [(_nfc(n.title or ""), n.id) for n in nodes if n.title]
         self._category_cache = pairs
         logger.debug("query-anchor: cached %d category nodes", len(pairs))
         return pairs

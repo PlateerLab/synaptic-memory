@@ -74,11 +74,14 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | persistent SQLite build | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 2184.3s | 71.0s |
 | persistent SQLite reuse | 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 0.0s | 70.1s |
 | persistent SQLite reuse + English query filter | 1,000,000 | 50 | 0.479 | 0.553 | 0.600 | 31/50 | 0.0s | 9.1s |
+| persistent SQLite reuse + tag-filtered anchors | 1,000,000 | 50 | 0.479 | 0.553 | 0.600 | 31/50 | 0.0s | 7.5s |
 
 The local artifacts are gitignored:
 
 - `tests/benchmark/data/msmarco_passage.json` - 511 KB manifest
 - `tests/benchmark/data/msmarco_passage.corpus.jsonl` - 35 MB at 100k, 361 MB at 1M
+- `tests/benchmark/data/msmarco_passage_5m.json` - 511 KB 5M manifest
+- `tests/benchmark/data/msmarco_passage_5m.corpus.jsonl` - 1.8 GB, 5,000,000 rows
 - `tests/benchmark/data/msmarco_1m.db` - 1.2 GB persistent SQLite DB
 - `tests/benchmark/data/msmarco_1m.db.tier1.json` - 535 byte reuse sidecar
 
@@ -105,6 +108,16 @@ The local artifacts are gitignored:
   (`how/is/the/of/to` etc.) before FTS5 `OR` matching. On the persistent 1M
   DB this reduced 50-query search time from 70.1s to 9.1s while improving
   MRR@10 from 0.462 to 0.479.
+- QueryAnchor category loading now asks backends for nodes tagged `category`
+  instead of materializing the first 500 `CONCEPT` rows and filtering in
+  Python. On the persistent 1M MS MARCO DB, first anchor extraction dropped
+  from roughly 1.7-2.0s to 0.218s, and the 50-query reuse smoke improved from
+  9.1s to 7.5s with unchanged quality.
+- 5M MS MARCO corpus data is now locally available as a side-by-side shard.
+  Generate it with:
+  `uv run --extra eval python examples/ablation/download_benchmarks.py --only msmarco_passage --large-corpus-limit 5000000 --large-output-suffix _5m`
+  and run it with:
+  `uv run python examples/ablation/run_tier1_benchmarks.py --only msmarco --msmarco-path tests/benchmark/data/msmarco_passage_5m.json --corpus-limit 5000000 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_5m.db --overwrite-sqlite-db`.
 
 ## Guard Policy
 

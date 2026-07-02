@@ -20,6 +20,14 @@ sys.modules[SPEC.name] = runner
 SPEC.loader.exec_module(runner)
 
 
+def test_msmarco_path_override_retargets_dataset(tmp_path):
+    manifest = tmp_path / "msmarco_passage_5m.json"
+    by_key = runner._dataset_key_map(manifest)
+
+    assert by_key["msmarco"].path == manifest
+    assert by_key["msmarco"].name == runner.DATASETS[6].name
+
+
 @pytest.mark.asyncio
 async def test_corpus_limit_keeps_selected_query_gold_docs(tmp_path):
     path = tmp_path / "tiny_bench.json"

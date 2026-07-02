@@ -231,10 +231,15 @@ class _CountingBackend:
     def __init__(self, inner: MemoryBackend) -> None:
         self._inner = inner
         self.list_calls = 0
+        self.list_by_tag_calls = 0
 
     async def list_nodes(self, **kwargs):
         self.list_calls += 1
         return await self._inner.list_nodes(**kwargs)
+
+    async def list_nodes_by_tag(self, *args, **kwargs):
+        self.list_by_tag_calls += 1
+        return await self._inner.list_nodes_by_tag(*args, **kwargs)
 
     # Pass-through for anything else the extractor might call
     def __getattr__(self, name: str):
@@ -254,7 +259,8 @@ class TestCategoryCache:
         await extractor.extract("규정 및 지침")
         await extractor.extract("규정 및 지침")
 
-        assert backend.list_calls == 1
+        assert backend.list_calls == 0
+        assert backend.list_by_tag_calls == 1
 
     async def test_invalidate_cache_forces_reload(self):
         inner = MemoryBackend()
@@ -267,7 +273,8 @@ class TestCategoryCache:
         extractor.invalidate_cache()
         await extractor.extract("규정 및 지침")
 
-        assert backend.list_calls == 2
+        assert backend.list_calls == 0
+        assert backend.list_by_tag_calls == 2
 
 
 # --- Integration: full anchor shape ---
