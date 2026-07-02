@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import unicodedata
 from time import time
@@ -210,6 +211,17 @@ def _prepare_fts_query_terms(terms: list[str]) -> list[str]:
             seen_filtered.add(key)
             filtered.append(term)
     return filtered or cleaned
+
+
+def _fts_and_first_threshold() -> int:
+    raw = os.environ.get("SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD", "").strip()
+    if not raw:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("Ignoring invalid SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=%r", raw)
+        return 0
 
 
 def _normalize_korean(text: str, *, query_mode: bool = False) -> str:
@@ -1458,7 +1470,6 @@ class SQLiteBackend:
         # Pass 1: FTS5 with title 3x boost.
         # bm25(table, w0, w1, w2) — col0=node_id(0), col1=title(3.0), col2=content(1.0).
         # FTS5 bm25 returns negative values; more negative = better match.
-        fts_query = " OR ".join(f'"{t}"' for t in terms)
         node_columns = _node_select_columns("n", include_embedding=include_embedding)
         fts_sql = f"""
             SELECT {node_columns}, bm25(syn_nodes_fts, 0, 3.0, 1.0) AS _bm25
@@ -1468,9 +1479,22 @@ class SQLiteBackend:
             ORDER BY bm25(syn_nodes_fts, 0, 3.0, 1.0)
             LIMIT ?
         """
+
+        async def run_fts_match(match_expr: str):
+            async with db.execute(fts_sql, (match_expr, limit)) as cur:
+                return await cur.fetchall()
+
         try:
-            async with db.execute(fts_sql, (fts_query, limit)) as cur:
-                rows = await cur.fetchall()
+            and_first_threshold = min(_fts_and_first_threshold(), limit)
+            if and_first_threshold > 0 and len(terms) > 1:
+                and_query = " ".join(f'"{t}"' for t in terms)
+                rows = await run_fts_match(and_query)
+                if len(rows) < and_first_threshold:
+                    fts_query = " OR ".join(f'"{t}"' for t in terms)
+                    rows = await run_fts_match(fts_query)
+            else:
+                fts_query = " OR ".join(f'"{t}"' for t in terms)
+                rows = await run_fts_match(fts_query)
             for r in rows:
                 node = _row_to_node(r)
                 bm25_val = r["_bm25"] or 0.0  # negative; lower = better

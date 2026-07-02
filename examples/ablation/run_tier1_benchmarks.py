@@ -53,6 +53,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import tempfile
 import time
 from dataclasses import dataclass
@@ -690,6 +691,8 @@ def _emit_markdown(
         f"- SQLite DB path: {_display_path(sqlite_db_path) if sqlite_db_path else 'temporary'}",
         f"- SQLite DB reuse: {'yes' if reuse_sqlite_db else 'no'}",
         f"- SQLite fast build: {'yes' if sqlite_fast_build else 'no'}",
+        "- SQLite FTS AND-first threshold: "
+        f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}",
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
@@ -1064,6 +1067,10 @@ async def amain(argv: list[str]) -> int:
         )
     if args.use_sqlite_graph:
         print(f"  sqlite fast build: {'yes' if args.sqlite_fast_build else 'no'}")
+        print(
+            "  sqlite FTS AND-first threshold: "
+            f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}"
+        )
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()

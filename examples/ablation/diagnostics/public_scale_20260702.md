@@ -77,6 +77,7 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | persistent SQLite reuse + tag-filtered anchors | 1,000,000 | 50 | 0.479 | 0.553 | 0.600 | 31/50 | 0.0s | 7.5s |
 | persistent SQLite fast build | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 288.7s | 40.8s |
 | persistent SQLite reuse | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 0.0s | 41.5s |
+| persistent SQLite reuse + AND-first FTS threshold 20 | 5,000,000 | 50 | 0.334 | 0.407 | 0.473 | 24/50 | 0.0s | 37.8s |
 
 The local artifacts are gitignored:
 
@@ -130,6 +131,10 @@ The local artifacts are gitignored:
   distractors and no embeddings/reranker: MRR@10 0.334 and Hit@10 24/50. The
   important result is that the pipeline now has a reproducible 5M persistent
   tier and can reuse it with 0.0s build time.
+- 5M search is still FTS-bound: a 50-query timing pass measured 42.538s total,
+  with 41.379s inside SQLite FTS (97.3%). Setting
+  `SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20` keeps the same 5M quality
+  metrics while reducing reuse search from 41.5s to 37.8s.
 
 ## Guard Policy
 

@@ -7,7 +7,11 @@ from collections.abc import AsyncGenerator
 
 import pytest
 
-from synaptic.backends.sqlite import SQLiteBackend, _prepare_fts_query_terms
+from synaptic.backends.sqlite import (
+    SQLiteBackend,
+    _fts_and_first_threshold,
+    _prepare_fts_query_terms,
+)
 from synaptic.models import Edge, EdgeKind, Node, NodeKind
 
 
@@ -127,6 +131,45 @@ class TestSQLiteNodes:
 
     def test_prepare_fts_query_terms_preserves_non_ascii_latin_terms(self) -> None:
         assert _prepare_fts_query_terms(["café", "prices"]) == ["café", "prices"]
+
+    def test_fts_and_first_threshold_reads_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD", "20")
+        assert _fts_and_first_threshold() == 20
+
+    def test_fts_and_first_threshold_ignores_invalid_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD", "nope")
+        assert _fts_and_first_threshold() == 0
+
+    async def test_fts_and_first_prefers_all_terms_when_threshold_met(
+        self,
+        sqlite: SQLiteBackend,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD", "1")
+        await sqlite.save_node(Node(id="both", title="zz", content="alpha beta"))
+        await sqlite.save_node(Node(id="alpha", title="alpha alpha alpha", content="alpha"))
+        await sqlite.save_node(Node(id="beta", title="beta beta beta", content="beta"))
+
+        hits = await sqlite.search_fts("alpha beta", limit=1)
+
+        assert [node.id for node in hits] == ["both"]
+
+    async def test_fts_and_first_falls_back_when_threshold_not_met(
+        self,
+        sqlite: SQLiteBackend,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD", "2")
+        await sqlite.save_node(Node(id="both", title="zz", content="alpha beta"))
+        await sqlite.save_node(Node(id="alpha", title="alpha alpha alpha", content="alpha"))
+        await sqlite.save_node(Node(id="beta", title="beta beta beta", content="beta"))
+
+        hits = await sqlite.search_fts("alpha beta", limit=2)
+
+        assert len(hits) == 2
+        assert "both" in {node.id for node in hits}
 
     async def test_search_fts_filters_english_question_noise(
         self,
