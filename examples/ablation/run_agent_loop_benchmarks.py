@@ -341,6 +341,11 @@ def _llm_preflight_error_message(base_url: str, model: str, exc: BaseException) 
     )
 
 
+def _validate_preflight_flags(*, preflight_only: bool, skip_preflight: bool) -> None:
+    if preflight_only and skip_preflight:
+        raise SystemExit("--preflight-only cannot be combined with --skip-preflight")
+
+
 async def _preflight_llm_endpoint(
     client: object,
     *,
@@ -517,7 +522,7 @@ async def amain(argv: list[str] | None = None) -> int:
     _load_local_env()
     parser = argparse.ArgumentParser()
     parser.add_argument("--msmarco-path", type=Path, default=DEFAULT_MSMARCO_PATH)
-    parser.add_argument("--sqlite-db-path", type=Path, required=True)
+    parser.add_argument("--sqlite-db-path", type=Path, default=None)
     parser.add_argument("--subset", type=int, default=20)
     parser.add_argument("--corpus-limit", type=int, default=0)
     parser.add_argument(
@@ -550,6 +555,11 @@ async def amain(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip the initial /v1/models endpoint check.",
     )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="Validate the resolved LLM endpoint/key/model and exit before loading data.",
+    )
     parser.add_argument("--no-sufficiency-gate", action="store_true")
     parser.add_argument(
         "--allow-zero-tool-answer",
@@ -579,23 +589,19 @@ async def amain(argv: list[str] | None = None) -> int:
         raise SystemExit("--preflight-timeout must be positive")
     if args.resume and args.out_jsonl is None:
         raise SystemExit("--resume requires --out-jsonl")
+    _validate_preflight_flags(
+        preflight_only=args.preflight_only,
+        skip_preflight=args.skip_preflight,
+    )
     args.llm_base_url, args.model, args.api_key_env = _resolve_llm_settings(
         preset=args.llm_preset,
         llm_base_url=args.llm_base_url,
         model=args.model,
         api_key_env=args.api_key_env,
     )
-    if not args.msmarco_path.exists():
-        raise SystemExit(f"{args.msmarco_path} does not exist")
-    if not args.sqlite_db_path.exists():
-        raise SystemExit(f"{args.sqlite_db_path} does not exist")
 
     from openai import AsyncOpenAI
 
-    data = json.loads(args.msmarco_path.read_text(encoding="utf-8"))
-    query_items = list(data["queries"].items())[: args.subset]
-    qrels = data["qrels"]
-    n_docs = args.corpus_limit or int(data.get("corpus_size") or 0)
     api_key = os.environ.get(args.api_key_env) or ""
     local_endpoint = any(marker in args.llm_base_url for marker in ("localhost", "127.0.0.1"))
     if not api_key and not local_endpoint:
@@ -610,6 +616,21 @@ async def amain(argv: list[str] | None = None) -> int:
             model=args.model,
             timeout_sec=args.preflight_timeout,
         )
+    if args.preflight_only:
+        print(f"LLM preflight OK: base_url={args.llm_base_url} model={args.model}")
+        return 0
+
+    if not args.msmarco_path.exists():
+        raise SystemExit(f"{args.msmarco_path} does not exist")
+    if args.sqlite_db_path is None:
+        raise SystemExit("--sqlite-db-path is required unless --preflight-only is set")
+    if not args.sqlite_db_path.exists():
+        raise SystemExit(f"{args.sqlite_db_path} does not exist")
+
+    data = json.loads(args.msmarco_path.read_text(encoding="utf-8"))
+    query_items = list(data["queries"].items())[: args.subset]
+    qrels = data["qrels"]
+    n_docs = args.corpus_limit or int(data.get("corpus_size") or 0)
 
     backend = SqliteGraphBackend(str(args.sqlite_db_path))
     await backend.connect()

@@ -48,6 +48,7 @@ PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FT
 # Put DEEPSEEK_API_KEY in shell env, the repo .env, or the parent workspace .env.
 # Do not put the key in docs, commands, JSONL, or DBs.
 uv run python examples/ablation/configure_deepseek_env.py
+uv run python examples/ablation/run_agent_loop_benchmarks.py --llm-preset deepseek --preflight-only --preflight-timeout 15
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --llm-preset deepseek --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --max-turns 5 --llm-timeout 180 --preflight-timeout 15 --out-jsonl examples/ablation/diagnostics/agent_loop_deepseek_v4_flash_20.jsonl --resume
 
 # Historical local Ollama fallback smoke when the H100/Qwen3.6 tunnel is down.
