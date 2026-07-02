@@ -66,21 +66,26 @@ Manual large-tier shard from BEIR/MS MARCO passage validation:
 | Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |
 |-----:|--------:|-------:|----:|-----:|-------:|------:|-------:|
 | 100,000 | 50 | 0.673 | 0.740 | 0.770 | 39/50 | 81.9s | 5.4s |
+| 1,000,000 | 50 | 0.462 | 0.543 | 0.580 | 30/50 | 1913.3s | 69.9s |
 
 The local artifacts are gitignored:
 
 - `tests/benchmark/data/msmarco_passage.json` - 511 KB manifest
-- `tests/benchmark/data/msmarco_passage.corpus.jsonl` - 35 MB corpus shard
+- `tests/benchmark/data/msmarco_passage.corpus.jsonl` - 35 MB at 100k, 361 MB at 1M
 
 ## Interpretation
 
 - Search latency remains usable at 171k docs: 5.2s over 10 queries.
 - MS MARCO confirms the large-tier path on a web passage corpus: 100k docs,
   50 queries, 5.4s total search, and 0.673 MRR@10 without embeddings or reranking.
+- MS MARCO 1M is now proven end-to-end, but it is a heavy manual tier:
+  31.9 minutes build time and 69.9s total search for 50 queries.
 - The main large-corpus bottleneck is still initial FTS/index build, not retrieval.
 - Avoiding unnecessary FTS deletes for newly inserted nodes reduced full FiQA build time by about 9.9x.
 - Raising benchmark ingest batches to 20k reduced full TREC-COVID build time by about 2.7x.
 - `--corpus-limit` provides practical staged scale gates while preserving selected query gold docs.
+- Long 1M runs should use ingest progress output; without it the build phase is
+  too quiet for practical monitoring.
 
 ## Guard Policy
 

@@ -106,6 +106,37 @@ async def test_jsonl_corpus_limit_keeps_selected_query_gold_docs(tmp_path):
     assert report.recall_at_10 == 1.0
 
 
+@pytest.mark.asyncio
+async def test_progress_every_reports_ingest_progress(tmp_path, capsys):
+    path = tmp_path / "tiny_bench.json"
+    path.write_text(
+        json.dumps(
+            {
+                "corpus": {
+                    "gold_doc": {"title": "Gold", "text": "needle targetterm"},
+                    "filler": {"title": "Filler", "text": "unrelated alpha"},
+                },
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    await runner.run_one(
+        runner.Dataset(name="Tiny", path=path, reference="unit"),
+        subset=1,
+        corpus_limit=2,
+        ingest_batch=1,
+        progress_every=1,
+    )
+
+    output = capsys.readouterr().out
+
+    assert "ingest: 1/2 docs" in output
+    assert "ingest: 2/2 docs" in output
+
+
 def test_threshold_violations_report_scale_regressions():
     report = runner.Report(
         name="Tiny",
