@@ -274,6 +274,7 @@ async def run_one(
     embed_batch: int = 256,
     ingest_batch: int = 20000,
     corpus_limit: int | None = None,
+    progress_every: int = 100000,
 ) -> Report:
     if not ds.path.exists():
         raise FileNotFoundError(
@@ -316,6 +317,18 @@ async def run_one(
     # ``graph.add()`` accepts an ``embedding`` arg; if we pass it we
     # avoid the per-node single embed call that bottlenecks at batch=1.
     items = _load_corpus_items(data, ds.path, qrels, query_items, corpus_limit)
+    total_items = len(items)
+
+    def maybe_print_progress(done: int, start: float) -> None:
+        if progress_every <= 0:
+            return
+        if done < total_items and done % progress_every != 0:
+            return
+        elapsed = time.perf_counter() - start
+        print(
+            f"  ingest: {done:,}/{total_items:,} docs ({elapsed:.1f}s)",
+            flush=True,
+        )
 
     embeddings: list[list[float] | None] = [None] * len(items)
     if embedder is not None:
@@ -327,8 +340,10 @@ async def run_one(
                 embeddings[i + j] = v if v else None
 
     save_nodes_batch = getattr(backend, "save_nodes_batch", None)
+    t_ingest = time.perf_counter()
     if phrase_extractor is None and callable(save_nodes_batch):
         for i in range(0, len(items), ingest_batch):
+            done = min(i + ingest_batch, total_items)
             batch = [
                 Node(
                     id=_benchmark_node_id(doc_id),
@@ -344,8 +359,9 @@ async def run_one(
                 )
             ]
             await save_nodes_batch(batch)
+            maybe_print_progress(done, t_ingest)
     else:
-        for (doc_id, title, text), emb in zip(items, embeddings):
+        for idx, ((doc_id, title, text), emb) in enumerate(zip(items, embeddings), start=1):
             await graph.add(
                 title=title,
                 content=text,
@@ -353,6 +369,7 @@ async def run_one(
                 embedding=emb,
                 record_memory_event=False,
             )
+            maybe_print_progress(idx, t_ingest)
 
     # Post-hoc DF-filtered entity linking (opt-in via --entity-linker).
     # Runs AFTER ingest because the DF filter needs global corpus
@@ -445,6 +462,7 @@ def _emit_markdown(
     entity_linker_label: str = "none",
     corpus_limit: int | None = None,
     ingest_batch: int = 20000,
+    progress_every: int = 100000,
 ) -> Path:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -456,6 +474,7 @@ def _emit_markdown(
         f"- Subset: {subset if subset else 'full'}",
         f"- Corpus limit: {corpus_limit if corpus_limit else 'full'}",
         f"- Ingest batch: {ingest_batch}",
+        f"- Progress every: {progress_every if progress_every > 0 else 'disabled'}",
         f"- Embedder: {embedder_label}",
         f"- Reranker: {reranker_label}",
         f"- Decomposer: {decomposer_label}",
@@ -574,6 +593,14 @@ async def amain(argv: list[str]) -> int:
         type=int,
         default=20000,
         help="Batch size for benchmark corpus node writes (default: 20000).",
+    )
+    p.add_argument(
+        "--progress-every",
+        type=int,
+        default=100000,
+        help=(
+            "Print ingest progress every N docs during build (default: 100000; set 0 to disable)."
+        ),
     )
     p.add_argument(
         "--corpus-limit",
@@ -766,6 +793,7 @@ async def amain(argv: list[str]) -> int:
     print(f"  entity linker: {entity_linker_label}")
     print(f"  corpus limit: {args.corpus_limit if args.corpus_limit else 'full'}")
     print(f"  ingest batch: {args.ingest_batch}")
+    print(f"  progress every: {args.progress_every if args.progress_every > 0 else 'disabled'}")
     if embedder is not None:
         print(f"  embed batch: {args.embed_batch}")
     print()
@@ -788,6 +816,7 @@ async def amain(argv: list[str]) -> int:
                 embed_batch=args.embed_batch,
                 ingest_batch=args.ingest_batch,
                 corpus_limit=args.corpus_limit,
+                progress_every=args.progress_every,
             )
         except FileNotFoundError as e:
             print(f"{ds.name:<24}  SKIP — {e}")
@@ -810,6 +839,7 @@ async def amain(argv: list[str]) -> int:
             entity_linker_label=entity_linker_label,
             corpus_limit=args.corpus_limit,
             ingest_batch=args.ingest_batch,
+            progress_every=args.progress_every,
         )
         print()
         print(f"Markdown report → {out.relative_to(REPO_ROOT)}")
