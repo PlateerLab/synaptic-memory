@@ -219,6 +219,20 @@ AGENT_TOOLS = [
                 "properties": {
                     "query": {"type": "string"},
                     "category": {"type": "string"},
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "Evidence items to return; use 10-20 for broad public-web "
+                            "questions where the first few hits may miss the answer."
+                        ),
+                    },
+                    "read_top_k": {
+                        "type": "integer",
+                        "description": (
+                            "How many top parent documents to read; keep 1-3 unless "
+                            "the snippets are inconclusive."
+                        ),
+                    },
                 },
                 "required": ["query"],
             },
@@ -231,7 +245,13 @@ AGENT_TOOLS = [
             "description": "Basic text search. Returns top candidate nodes.",
             "parameters": {
                 "type": "object",
-                "properties": {"query": {"type": "string"}},
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Candidate evidence items to return; capped by the runtime.",
+                    },
+                },
                 "required": ["query"],
             },
         },
@@ -456,6 +476,14 @@ class AgentSearchResult:
 # --- Internals -----------------------------------------------------
 
 
+def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(parsed, maximum))
+
+
 async def _dispatch_tool(
     name: str,
     args: dict,
@@ -486,10 +514,18 @@ async def _dispatch_tool(
                 session,
                 args.get("query", ""),
                 category=args.get("category"),
+                limit=_bounded_int(args.get("limit"), default=10, minimum=1, maximum=20),
+                read_top_k=_bounded_int(args.get("read_top_k"), default=2, minimum=0, maximum=5),
                 embedder=embedder,
             )
         elif name == "search":
-            r = await search_tool(backend, session, args.get("query", ""), embedder=embedder)
+            r = await search_tool(
+                backend,
+                session,
+                args.get("query", ""),
+                limit=_bounded_int(args.get("limit"), default=10, minimum=1, maximum=20),
+                embedder=embedder,
+            )
         elif name == "expand":
             r = await expand_tool(
                 backend,
