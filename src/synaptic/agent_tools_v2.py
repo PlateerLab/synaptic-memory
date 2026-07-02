@@ -43,12 +43,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agent-tools-v2")
 
 
+def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(parsed, maximum))
+
+
 async def deep_search_tool(
     backend: StorageBackend,
     session: SearchSession,
     query: str,
     *,
-    limit: int = 5,
+    limit: int = 10,
     category: str | None = None,
     read_top_k: int = 2,
     embedder: object | None = None,
@@ -74,6 +82,8 @@ async def deep_search_tool(
         embedder: Optional embedder for EvidenceSearch.
         reranker: Optional cross-encoder reranker.
     """
+    limit = _bounded_int(limit, default=10, minimum=1, maximum=20)
+    read_top_k = _bounded_int(read_top_k, default=2, minimum=0, maximum=5)
     budget = _budget_check(session, "deep_search")
     if budget is not None:
         return budget

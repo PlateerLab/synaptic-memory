@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+import synaptic.agent_tools_v2 as tools_v2
 from synaptic.agent_tools import (
     ToolResult,
     count_tool,
@@ -272,6 +273,139 @@ class TestSearchTool:
         assert result.ok is True
         assert result.data["evidence"] == []
         assert len(result.hints) > 0
+
+
+# --- deep_search_tool ---
+
+
+@pytest.mark.asyncio
+async def test_deep_search_defaults_to_wider_evidence_pool(monkeypatch):
+    captured_limits: list[int] = []
+
+    async def fake_search_tool(
+        backend,
+        session,
+        query,
+        *,
+        limit,
+        category=None,
+        embedder=None,
+        **kwargs,
+    ):
+        captured_limits.append(limit)
+        return ToolResult(
+            tool="search",
+            ok=True,
+            data={"evidence": [], "anchors": {}},
+            session=session.summary(),
+        )
+
+    monkeypatch.setattr(tools_v2, "search_tool", fake_search_tool)
+    backend = MemoryBackend()
+    await backend.connect()
+
+    result = await tools_v2.deep_search_tool(backend, SearchSession(), "broad question")
+
+    assert result.ok is True
+    assert captured_limits == [10]
+
+
+@pytest.mark.asyncio
+async def test_deep_search_caps_evidence_pool(monkeypatch):
+    captured_limits: list[int] = []
+
+    async def fake_search_tool(
+        backend,
+        session,
+        query,
+        *,
+        limit,
+        category=None,
+        embedder=None,
+        **kwargs,
+    ):
+        captured_limits.append(limit)
+        return ToolResult(
+            tool="search",
+            ok=True,
+            data={"evidence": [], "anchors": {}},
+            session=session.summary(),
+        )
+
+    monkeypatch.setattr(tools_v2, "search_tool", fake_search_tool)
+    backend = MemoryBackend()
+    await backend.connect()
+
+    result = await tools_v2.deep_search_tool(
+        backend,
+        SearchSession(),
+        "broad question",
+        limit=99,
+        read_top_k="invalid",
+    )
+
+    assert result.ok is True
+    assert captured_limits == [20]
+
+
+@pytest.mark.asyncio
+async def test_deep_search_caps_document_reads(monkeypatch):
+    document_ids: list[str] = []
+
+    async def fake_search_tool(
+        backend,
+        session,
+        query,
+        *,
+        limit,
+        category=None,
+        embedder=None,
+        **kwargs,
+    ):
+        return ToolResult(
+            tool="search",
+            ok=True,
+            data={
+                "evidence": [
+                    {"id": f"chunk_{idx}", "document_id": f"doc_{idx}"} for idx in range(6)
+                ],
+                "anchors": {},
+            },
+            session=session.summary(),
+        )
+
+    async def fake_expand(backend, session, node_id):
+        return ToolResult(
+            tool="expand",
+            ok=True,
+            data={"seed": {"id": node_id}, "neighbours": []},
+            session=session.summary(),
+        )
+
+    async def fake_get_doc(backend, session, doc_id, query):
+        document_ids.append(doc_id)
+        return ToolResult(
+            tool="get_document",
+            ok=True,
+            data={"document": {"id": doc_id}, "chunks": [], "chunk_count": 0},
+            session=session.summary(),
+        )
+
+    monkeypatch.setattr(tools_v2, "search_tool", fake_search_tool)
+    monkeypatch.setattr(tools_v2, "_safe_expand", fake_expand)
+    monkeypatch.setattr(tools_v2, "_safe_get_doc", fake_get_doc)
+    backend = MemoryBackend()
+    await backend.connect()
+
+    result = await tools_v2.deep_search_tool(
+        backend,
+        SearchSession(),
+        "broad question",
+        read_top_k=99,
+    )
+
+    assert result.ok is True
+    assert document_ids == ["doc_0", "doc_1", "doc_2", "doc_3", "doc_4"]
 
 
 # --- expand_tool ---

@@ -15,10 +15,14 @@ import pytest
 from synaptic.agent_loop import (
     _EFFICIENCY_DIRECTIVE,
     AGENT_SYSTEM,
+    AGENT_TOOLS,
     _args_key,
+    _bounded_int,
+    _dispatch_tool,
     _result_count,
     run_agent_loop,
 )
+from synaptic.agent_tools import ToolResult
 from synaptic.backends.sqlite_graph import SqliteGraphBackend
 from synaptic.models import ConsolidationLevel, Node, NodeKind
 
@@ -43,6 +47,72 @@ def test_args_key_normalizes():
 def test_agent_system_preserves_query_constraints_for_followups():
     assert "Follow-up searches must preserve the user's constraints" in AGENT_SYSTEM
     assert "named entity, attribute, and relation" in AGENT_SYSTEM
+
+
+def _tool_schema(name: str) -> dict:
+    for tool in AGENT_TOOLS:
+        fn = tool["function"]
+        if fn["name"] == name:
+            return fn
+    raise AssertionError(f"missing tool schema: {name}")
+
+
+def test_agent_tool_schema_exposes_search_limits():
+    deep_props = _tool_schema("deep_search")["parameters"]["properties"]
+    assert {"query", "category", "limit", "read_top_k"}.issubset(deep_props)
+
+    search_props = _tool_schema("search")["parameters"]["properties"]
+    assert {"query", "limit"}.issubset(search_props)
+
+
+def test_bounded_int_clamps_tool_limits():
+    assert _bounded_int("15", default=10, minimum=1, maximum=20) == 15
+    assert _bounded_int(" 15 ", default=10, minimum=1, maximum=20) == 15
+    assert _bounded_int(None, default=10, minimum=1, maximum=20) == 10
+    assert _bounded_int("invalid", default=10, minimum=1, maximum=20) == 10
+    assert _bounded_int(99, default=10, minimum=1, maximum=20) == 20
+    assert _bounded_int(-5, default=10, minimum=1, maximum=20) == 1
+
+
+@pytest.mark.asyncio
+async def test_dispatch_passes_agent_requested_search_limits(monkeypatch):
+    import synaptic.agent_tools as agent_tools
+    import synaptic.agent_tools_v2 as agent_tools_v2
+
+    calls: list[tuple] = []
+
+    async def fake_deep_search_tool(
+        backend,
+        session,
+        query,
+        *,
+        category=None,
+        limit=10,
+        read_top_k=2,
+        embedder=None,
+    ):
+        calls.append(("deep_search", query, category, limit, read_top_k))
+        return ToolResult(tool="deep_search", ok=True, data={"evidence": []})
+
+    async def fake_search_tool(backend, session, query, *, limit=10, embedder=None):
+        calls.append(("search", query, limit))
+        return ToolResult(tool="search", ok=True, data={"evidence": []})
+
+    monkeypatch.setattr(agent_tools_v2, "deep_search_tool", fake_deep_search_tool)
+    monkeypatch.setattr(agent_tools, "search_tool", fake_search_tool)
+
+    await _dispatch_tool(
+        "deep_search",
+        {"query": "q", "category": "cat", "limit": 99, "read_top_k": 9},
+        None,
+        None,
+    )
+    await _dispatch_tool("search", {"query": "q", "limit": -5}, None, None)
+
+    assert calls == [
+        ("deep_search", "q", "cat", 20, 5),
+        ("search", "q", 1),
+    ]
 
 
 # --- fake client (reused shape) ---------------------------------------
