@@ -41,6 +41,9 @@ PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sql
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 200 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 500 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 500 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --use-sqlite-graph --sqlite-db-path tests/benchmark/data/msmarco_full.db --reuse-sqlite-db
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_search_benchmarks.py --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --modes graph_search,deep_search,scripted_session --result-limit 20 --tool-limit 10 --read-top-k 0 --scripted-turns 2
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_search_benchmarks.py --subset 10 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --modes agent_search --result-limit 20 --tool-limit 10 --intent context_explore
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url "$LLM_BASE_URL" --model "$LLM_MODEL" --api-key-env LLM_API_KEY --max-turns 5
 ```
 
 ## FiQA Results
@@ -104,6 +107,24 @@ Raw FTS pool diagnostic for the full reuse run:
 | Pool | MRR@10 | R@5 | R@10 | Hit@10 | Any@Pool | Raw FTS Time |
 |-----:|-------:|----:|-----:|-------:|---------:|-------------:|
 | 500 | 0.214 | 0.327 | 0.413 | 21/50 | 40/50 | 68.7s |
+
+## MS MARCO Agent Tool-Surface Retrieval Results
+
+LLM-free measurement of the deterministic agent-facing retrieval surfaces:
+
+This is not the full agent loop that changes follow-up queries based on earlier
+evidence. Reach@All counts queries where at least one relevant document appeared
+anywhere in the returned evidence for that mode. Retrieval Ops/Q counts the
+single `graph.search`/`agent_search` operation or the SearchSession tool calls
+used by agent-tool modes. Do not interpret this table as the score for
+LLM-planned agent exploration; use `run_agent_loop_benchmarks.py` for that.
+
+| Mode | Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Reach@All | Search | Retrieval Ops/Q | Docs/Q |
+|------|-----:|--------:|-------:|----:|-----:|-------:|----------:|-------:|----------------:|-------:|
+| `graph_search` | 8,841,823 | 50 | 0.234 | 0.353 | 0.433 | 22/50 | 25/50 | 69.8s | 1.00 | 17.86 |
+| `deep_search` | 8,841,823 | 50 | 0.226 | 0.333 | 0.433 | 22/50 | 22/50 | 203.4s | 3.00 | 10.00 |
+| `scripted_session` | 8,841,823 | 50 | 0.226 | 0.333 | 0.433 | 22/50 | 24/50 | 413.7s | 4.00 | 19.76 |
+| `agent_search` context-explore smoke (n=10) | 8,841,823 | 10 | 0.217 | 0.500 | 0.500 | 5/10 | 5/10 | 48.8s | 1.00 | 5.00 |
 
 The local artifacts are gitignored:
 
@@ -190,6 +211,13 @@ The local artifacts are gitignored:
   0.219 to 0.264 and Hit@10 from 229/500 to 248/500. Search cost increases
   from 546.0s to 577.3s, a roughly 5.7% latency increase for a roughly 20.5%
   MRR@10 lift.
+- Agent tool-surface retrieval now has a reproducible full-corpus runner. On
+  flat MS MARCO passages, deterministic `deep_search` and a two-turn scripted
+  session do not improve top-10 quality over `graph.search`; the scripted
+  session raises cumulative reach versus `deep_search` (22/50 to 24/50) but
+  costs about 2x more. The true agent benchmark should use the LLM-planned
+  `run_agent_loop()` path, where the agent can rewrite follow-up queries and
+  change search targets based on earlier evidence.
 - TEI cross-reranking now handles large candidate pools without TEI batch-size
   errors by chunking requests, but the full 8.84M reranker smoke did not recover
   quality (MRR@10 0.211, Hit@10 20/50). The next target is better candidate
