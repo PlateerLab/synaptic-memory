@@ -748,6 +748,8 @@ def _emit_markdown(
         f"- SQLite fast build: {'yes' if sqlite_fast_build else 'no'}",
         "- SQLite FTS AND-first threshold: "
         f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}",
+        "- SQLite FTS lexical rerank pool: "
+        f"{os.environ.get('SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL', '').strip() or '0'}",
         "- Cross-rerank top N: "
         f"{os.environ.get('SYNAPTIC_CROSS_RERANK_TOP_N', '').strip() or '20'}",
         f"- Embedder: {embedder_label}",
@@ -1173,6 +1175,10 @@ async def amain(argv: list[str]) -> int:
         print(
             "  sqlite FTS AND-first threshold: "
             f"{os.environ.get('SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD', '').strip() or '0'}"
+        )
+        print(
+            "  sqlite FTS lexical rerank pool: "
+            f"{os.environ.get('SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL', '').strip() or '0'}"
         )
     print(
         f"  cross-rerank top N: {os.environ.get('SYNAPTIC_CROSS_RERANK_TOP_N', '').strip() or '20'}"
