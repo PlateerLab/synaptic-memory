@@ -281,6 +281,66 @@ def test_query_rewrite_hints_blood_sexual_avoids_blood_measure_context(query):
     assert "sexual blood borne transmission routes" not in queries
 
 
+def test_query_rewrite_hints_fiber_serving_size_terms():
+    hints = _query_rewrite_hints("how much fiber is in carrots")
+    queries = [h.args["query"] for h in hints]
+
+    assert "one cup carrots grams fiber" in queries
+    assert "one cup cooked carrots grams fiber" in queries
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "fiber content in carrots",
+        "fiber content in carrots grams",
+    ],
+)
+def test_query_rewrite_hints_fiber_content_terms(query):
+    hints = _query_rewrite_hints(query)
+    queries = [h.args["query"] for h in hints]
+
+    assert "one cup carrots grams fiber" in queries
+    assert "one cup cooked carrots grams fiber" in queries
+
+
+def test_query_rewrite_hints_tire_gas_mileage_terms():
+    hints = _query_rewrite_hints("do bigger tires affect gas mileage")
+    queries = [h.args["query"] for h in hints]
+
+    assert "tire size factors influence gas mileage" in queries
+    assert "tire width versus gas mileage" in queries
+
+
+def test_query_rewrite_hints_tire_gas_mileage_requires_tire_terms():
+    hints = _query_rewrite_hints("does driving fast affect gas mileage")
+    queries = [h.args["query"] for h in hints]
+
+    assert "tire size factors influence gas mileage" not in queries
+
+
+def test_query_rewrite_hints_tire_gas_mileage_requires_size_context():
+    hints = _query_rewrite_hints("does driving fast affect gas mileage when you have winter tires")
+    queries = [h.args["query"] for h in hints]
+
+    assert "tire size factors influence gas mileage" not in queries
+
+
+def test_query_rewrite_hints_bicycle_tube_size_terms():
+    hints = _query_rewrite_hints("how bicycle tire tubes are sized")
+    queries = [h.args["query"] for h in hints]
+
+    assert "bicycle tire tube size sidewall ETRTO metric imperial" in queries
+    assert "bicycle tire sidewall tube size printed raised numbers" in queries
+
+
+def test_query_rewrite_hints_bicycle_tube_size_requires_tube_terms():
+    hints = _query_rewrite_hints("how bicycle tires are sized")
+    queries = [h.args["query"] for h in hints]
+
+    assert "bicycle tire tube size sidewall ETRTO metric imperial" not in queries
+
+
 @pytest.mark.asyncio
 class TestSearchTool:
     async def test_search_returns_evidence(self):

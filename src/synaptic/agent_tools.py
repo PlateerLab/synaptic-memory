@@ -67,6 +67,29 @@ _DISEASE_OR_INFECTION_RE = re.compile(
     r"\b(?:diseases?|infections?|stds?|stis?)\b",
     re.IGNORECASE,
 )
+_FIBER_IN_RE = re.compile(
+    r"\bhow\s+much\s+fiber\s+(?:is|are)\s+in\s+(?P<food>.+)",
+    re.IGNORECASE,
+)
+_FIBER_CONTENT_IN_RE = re.compile(
+    r"\bfiber\s+content\s+(?:in|of)\s+(?P<food>.+)",
+    re.IGNORECASE,
+)
+_FIBER_TRAILING_WORDS = {"fiber", "content", "gram", "grams", "per", "serving", "servings"}
+_TIRE_GAS_RE = re.compile(
+    r"\b(?:tires?|tyres?)\b.*\b(?:gas\s+mileage|fuel\s+economy)\b"
+    r"|\b(?:gas\s+mileage|fuel\s+economy)\b.*\b(?:tires?|tyres?)\b",
+    re.IGNORECASE,
+)
+_TIRE_SIZE_CONTEXT_RE = re.compile(
+    r"\b(?:bigger|larger|smaller|wider|narrower|width|size|sized|diameter)\b",
+    re.IGNORECASE,
+)
+_BICYCLE_TUBE_SIZE_RE = re.compile(
+    r"\b(?:bicycle|bike)\b.*\b(?:tires?|tyres?)\b.*\btubes?\b.*\b(?:sized?|sizing|sizes?)\b"
+    r"|\b(?:sized?|sizing|sizes?)\b.*\b(?:bicycle|bike)\b.*\b(?:tires?|tyres?)\b.*\btubes?\b",
+    re.IGNORECASE,
+)
 _PROCESS_TRAILING_WORDS = {
     "breakdown",
     "created",
@@ -212,6 +235,39 @@ def _query_rewrite_hints(query: str, *, limit: int = 20) -> list[Hint]:
             "medical pages often describe this as sexual and blood-borne transmission rather than blood diseases",
         )
 
+    fiber = _FIBER_IN_RE.search(query) or _FIBER_CONTENT_IN_RE.search(query)
+    if fiber:
+        food = _normalise_food_rewrite_tail(fiber.group("food"))
+        if food:
+            add(
+                f"one cup {food} grams fiber",
+                "nutrition answers often state fiber per cup and in grams rather than repeating the question wording",
+            )
+            add(
+                f"one cup cooked {food} grams fiber",
+                "vegetable nutrition pages often report cooked serving sizes with grams of fiber",
+            )
+
+    if _TIRE_GAS_RE.search(query) and _TIRE_SIZE_CONTEXT_RE.search(query):
+        add(
+            "tire size factors influence gas mileage",
+            "vehicle-efficiency pages often describe tire size/width as factors that influence gas mileage",
+        )
+        add(
+            "tire width versus gas mileage",
+            "retry with the answer-heading phrasing used by tire efficiency pages",
+        )
+
+    if _BICYCLE_TUBE_SIZE_RE.search(query):
+        add(
+            "bicycle tire tube size sidewall ETRTO metric imperial",
+            "bike tube sizing pages often point to sidewall numbers and ETRTO/metric/imperial size labels",
+        )
+        add(
+            "bicycle tire sidewall tube size printed raised numbers",
+            "retry with the answer-text phrase that says tube sizes are printed on the tire sidewall",
+        )
+
     return hints[:3]
 
 
@@ -224,6 +280,17 @@ def _normalise_process_source(source: str) -> str:
     last = tokens[-1]
     if last.lower().endswith("s") and not last.lower().endswith("ss"):
         tokens[-1] = last[:-1]
+    return " ".join(tokens)
+
+
+def _normalise_rewrite_tail(value: str) -> str:
+    return " ".join(value.strip(" ?.!").split())
+
+
+def _normalise_food_rewrite_tail(value: str) -> str:
+    tokens = _normalise_rewrite_tail(value).split()
+    while tokens and tokens[-1].lower() in _FIBER_TRAILING_WORDS:
+        tokens.pop()
     return " ".join(tokens)
 
 
