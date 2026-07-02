@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 tests/benchmark/data/*.json
+tests/benchmark/data/*.jsonl
 .claude/
 tmp/
 마사회/

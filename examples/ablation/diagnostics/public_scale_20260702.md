@@ -6,6 +6,7 @@
 |---------|----------------|-------:|--------:|-------------|
 | BEIR FiQA test | `tests/benchmark/data/fiqa.json` | 57,638 docs | 648 | 5-10 queries |
 | BEIR TREC-COVID test | `tests/benchmark/data/trec_covid.json` | 171,332 docs | 50 | 10 queries |
+| BEIR MS MARCO passage dev | `tests/benchmark/data/msmarco_passage.json` + `.corpus.jsonl` | 1M shard by default from ~8.8M source passages | validation qrels | manual large tier |
 
 Mode: embedder-free `graph.search()` with `SqliteGraphBackend`.
 
@@ -22,6 +23,9 @@ PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benc
 PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only trec_covid --subset 10 --corpus-limit 50000 --use-sqlite-graph
 PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only trec_covid --subset 10 --corpus-limit 100000 --use-sqlite-graph
 PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only trec_covid --subset 10 --use-sqlite-graph
+
+uv run --extra eval python examples/ablation/download_benchmarks.py --only msmarco_passage --large-corpus-limit 1000000
+PYTHONUNBUFFERED=1 uv run --extra sqlite python examples/ablation/run_tier1_benchmarks.py --only msmarco --subset 50 --corpus-limit 1000000 --use-sqlite-graph
 ```
 
 ## FiQA Results
@@ -55,9 +59,24 @@ After the SQLite batch FTS optimization:
 TREC-COVID has many relevant documents per query, so R@5/R@10 is naturally
 small in this smoke even when Hit@10 is perfect.
 
+## MS MARCO Passage Results
+
+Manual large-tier shard from BEIR/MS MARCO passage validation:
+
+| Docs | Queries | MRR@10 | R@5 | R@10 | Hit@10 | Build | Search |
+|-----:|--------:|-------:|----:|-----:|-------:|------:|-------:|
+| 100,000 | 50 | 0.673 | 0.740 | 0.770 | 39/50 | 81.9s | 5.4s |
+
+The local artifacts are gitignored:
+
+- `tests/benchmark/data/msmarco_passage.json` - 511 KB manifest
+- `tests/benchmark/data/msmarco_passage.corpus.jsonl` - 35 MB corpus shard
+
 ## Interpretation
 
 - Search latency remains usable at 171k docs: 5.2s over 10 queries.
+- MS MARCO confirms the large-tier path on a web passage corpus: 100k docs,
+  50 queries, 5.4s total search, and 0.673 MRR@10 without embeddings or reranking.
 - The main large-corpus bottleneck is still initial FTS/index build, not retrieval.
 - Avoiding unnecessary FTS deletes for newly inserted nodes reduced full FiQA build time by about 9.9x.
 - Raising benchmark ingest batches to 20k reduced full TREC-COVID build time by about 2.7x.
@@ -67,6 +86,7 @@ small in this smoke even when Hit@10 is perfect.
 
 - `.github/workflows/public-scale.yml` runs weekly/manual FiQA 10k and TREC-COVID 50k staged smokes.
 - FiQA 25k/full and TREC-COVID 100k/full remain manual checks because they are multi-minute runs and depend on ignored local benchmark data.
+- MS MARCO passage is the manual large tier: the downloader writes metadata JSON plus a gitignored corpus JSONL shard so 100k/1M/8.8M-style scale can be tested without committing giant artifacts.
 - If 100k+ docs becomes a required routine gate, the next target is faster initial FTS/index build.
 
 ## Remote Guard Dispatch

@@ -49,6 +49,63 @@ async def test_corpus_limit_keeps_selected_query_gold_docs(tmp_path):
     assert report.recall_at_10 == 1.0
 
 
+@pytest.mark.asyncio
+async def test_jsonl_corpus_limit_keeps_selected_query_gold_docs(tmp_path):
+    manifest = tmp_path / "large_bench.json"
+    corpus_path = tmp_path / "large_bench.corpus.jsonl"
+    corpus_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "_id": "filler_a",
+                        "title": "Filler A",
+                        "text": "unrelated alpha",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "_id": "filler_b",
+                        "title": "Filler B",
+                        "text": "unrelated beta",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "_id": "gold_doc",
+                        "title": "Gold",
+                        "text": "needle targetterm",
+                    }
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Tiny JSONL",
+                "schema": "beir_jsonl_v1",
+                "corpus_path": corpus_path.name,
+                "corpus_size": 3,
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = await runner.run_one(
+        runner.Dataset(name="Tiny JSONL", path=manifest, reference="unit"),
+        subset=1,
+        corpus_limit=2,
+    )
+
+    assert report.n_docs == 2
+    assert report.hit_at_10 == 1
+    assert report.recall_at_10 == 1.0
+
+
 def test_threshold_violations_report_scale_regressions():
     report = runner.Report(
         name="Tiny",
