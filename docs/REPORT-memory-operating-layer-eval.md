@@ -1846,7 +1846,10 @@ per-chunk fallback을 유지한다.
   `/tmp/openie_fixture_results.json` artifact를 남긴다. 로컬 workflow-equivalent smoke는
   fixture query `R@1=100%`, `R@5=100%`, revertibility `PASS`로 완료됐다. 첫 remote dispatch는
   fixture smoke는 통과했지만 contract test preflight에서 `aiohttp`가 없어 실패했고,
-  workflow dependency를 `--extra embedding`까지 설치하도록 보정했다.
+  workflow dependency를 `--extra embedding`까지 설치하도록 보정했다. 보정 후
+  `2026-07-02T00:17:34Z`에 시작한
+  [GitHub Actions run 28556526305](https://github.com/PlateerLab/synaptic-memory/actions/runs/28556526305)가
+  `success`로 완료됐다.
 - PR #15의 300-edge SQLite micro-benchmark는 old per-edge write
   `109,962.04ms` 대비 batch write `195.85ms`로 `561.45x` 빨랐다.
 - PR #17의 100-chunk repeated-entity micro-benchmark는 backend `get_node()` `1`,
