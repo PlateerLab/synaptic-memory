@@ -50,6 +50,12 @@ async def test_fts_seed_limit_rejects_non_positive():
 
 
 @pytest.mark.asyncio
+async def test_diagnose_raw_fts_limit_rejects_non_positive():
+    with pytest.raises(SystemExit, match="--diagnose-raw-fts-limit must be positive"):
+        await runner.amain(["--diagnose-raw-fts-limit", "0"])
+
+
+@pytest.mark.asyncio
 async def test_sqlite_fast_build_pragmas_apply(tmp_path):
     backend = runner.SqliteGraphBackend(str(tmp_path / "fast.db"))
     await backend.connect()
@@ -255,6 +261,37 @@ async def test_fts_seed_limit_passes_to_graph_search(
 
 
 @pytest.mark.asyncio
+async def test_diagnose_raw_fts_limit_reports_pool_metrics(tmp_path):
+    path = tmp_path / "tiny_bench.json"
+    path.write_text(
+        json.dumps(
+            {
+                "corpus": {
+                    "gold_doc": {"title": "Gold", "text": "needle targetterm"},
+                    "distractor": {"title": "Other", "text": "needle unrelated"},
+                },
+                "queries": {"q1": "targetterm"},
+                "qrels": {"q1": {"gold_doc": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = await runner.run_one(
+        runner.Dataset(name="Tiny", path=path, reference="unit"),
+        subset=1,
+        corpus_limit=2,
+        diagnose_raw_fts_limit=2,
+    )
+
+    assert report.hit_at_10 == 1
+    assert report.raw_fts_pool_limit == 2
+    assert report.raw_fts_hit_at_10 == 1
+    assert report.raw_fts_any_at_pool == 1
+    assert report.raw_fts_mrr == 1.0
+
+
+@pytest.mark.asyncio
 async def test_sqlite_db_reuse_skips_reingest(tmp_path, capsys):
     path = tmp_path / "tiny_bench.json"
     db_path = tmp_path / "tiny.db"
@@ -354,6 +391,41 @@ def test_threshold_violations_report_scale_regressions():
         "Tiny: hit@10 rate 0.300 < 0.500",
         "Tiny: MRR@10 0.250 < 0.300",
     ]
+
+
+def test_emit_markdown_includes_raw_fts_diagnostics(monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "OUT_DIR", tmp_path)
+    report = runner.Report(
+        name="Tiny",
+        n_docs=100,
+        n_queries=10,
+        mrr=0.25,
+        recall_at_5=0.1,
+        recall_at_10=0.2,
+        hit_at_10=3,
+        build_sec=12.0,
+        search_sec=4.0,
+        reference="unit",
+        raw_fts_pool_limit=50,
+        raw_fts_mrr=0.4,
+        raw_fts_recall_at_5=0.2,
+        raw_fts_recall_at_10=0.3,
+        raw_fts_hit_at_10=5,
+        raw_fts_any_at_pool=8,
+        raw_fts_sec=1.2,
+    )
+
+    path = runner._emit_markdown(
+        [report],
+        subset=10,
+        embedder_label="none",
+        reranker_label="none",
+        diagnose_raw_fts_limit=50,
+    )
+
+    content = path.read_text(encoding="utf-8")
+    assert "Raw FTS Pool Diagnostic" in content
+    assert "| Tiny | 50 | 0.400 | 0.200 | 0.300 | 5/10 | 8/10 | 1.2s |" in content
 
 
 def test_threshold_violations_accept_passing_report():
