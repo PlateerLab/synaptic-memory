@@ -49,7 +49,7 @@ PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FT
 # Terminal 1:
 ssh -N -L 18134:127.0.0.1:11434 go243
 # Terminal 2:
-PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 5 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url http://127.0.0.1:18134/v1 --model qwen3:14b --api-key-env LLM_API_KEY --max-turns 3 --llm-timeout 180 --preflight-timeout 10 --out-jsonl examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl --resume
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url http://127.0.0.1:18134/v1 --model qwen3:14b --api-key-env LLM_API_KEY --max-turns 3 --llm-timeout 180 --preflight-timeout 10 --out-jsonl examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl --resume
 ```
 
 ## FiQA Results
@@ -141,12 +141,19 @@ with `No route to host`), so this smoke used the `go243` Ollama fallback
 `qwen3:14b`. Treat it as a functional navigation smoke, not a Qwen3.6 quality
 reference.
 
-| Model | Docs | Queries | Reach | Mean turns | Mean calls | Mean first rel turn | Mean elapsed | Mean unique tools | Mean search targets | Mean rewrites | Multi-tool | Rewrites |
-|-------|-----:|--------:|------:|-----------:|-----------:|--------------------:|-------------:|------------------:|--------------------:|--------------:|-----------:|---------:|
-| `qwen3:14b` via Ollama | 8,841,823 | 5 | 3/5 | 2.60 | 1.60 | 1.33 | 41.8s | 1.60 | 1.40 | 1.40 | 3/5 | 5/5 |
+| Model | Docs | Queries | Reach | Mean turns | Mean calls | Mean first rel turn | Mean elapsed | Mean unique tools | Mean search targets | Mean rewrites | Multi-tool | Rewrites | Zero-tool |
+|-------|-----:|--------:|------:|-----------:|-----------:|--------------------:|-------------:|------------------:|--------------------:|--------------:|-----------:|---------:|----------:|
+| `qwen3:14b` via Ollama | 8,841,823 | 20 | 6/20 | 2.50 | 1.90 | 1.17 | 41.3s | 1.90 | 1.85 | 1.20 | 12/20 | 14/20 | 2/20 |
 
-Per-query report: `examples/ablation/diagnostics/agent_loop_20260702_180201.md`.
+Per-query report: `examples/ablation/diagnostics/agent_loop_20260702_181702.md`.
 Incremental rows: `examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl`.
+
+Observed failure pattern: the fallback model demonstrates real exploration
+behavior, but quality is not yet a Qwen3.6-grade reference. It made no tool call
+on 2/20 queries and accumulated 6 empty-result tool calls. The tool histogram
+was `deep_search=17`, `search=12`, `get_document=9`, confirming the loop uses
+the enhanced search surface and then changes targets/tools, but often moves to
+weak follow-up targets on short MS MARCO web questions.
 
 The local artifacts are gitignored:
 
@@ -241,11 +248,14 @@ The local artifacts are gitignored:
   `run_agent_loop()` path, where the agent can rewrite follow-up queries and
   change search targets based on earlier evidence.
 - The first live `run_agent_loop()` full-corpus smoke ran through an Ollama
-  `qwen3:14b` fallback while the H100/Qwen3.6 tunnel was down. It reached
-  3/5 MS MARCO gold documents and, importantly, recorded actual exploration
-  behavior: query rewrites occurred on 5/5 queries and multiple tool types on
-  3/5 queries. This confirms the benchmark is measuring agent-driven follow-up
-  search, not just a single retrieval call.
+  `qwen3:14b` fallback while the H100/Qwen3.6 tunnel was down. The 20-query
+  pass reached 6/20 MS MARCO gold documents and, importantly, recorded actual
+  exploration behavior: query rewrites occurred on 14/20 queries and multiple
+  tool types on 12/20 queries. This confirms the benchmark is measuring
+  agent-driven follow-up search, not just a single retrieval call. The fallback
+  model also exposed an agent-control quality issue: it skipped tools entirely
+  on 2/20 queries and sometimes chased weak rewritten targets, so it remains a
+  functional navigation smoke rather than a final quality reference.
 - TEI cross-reranking now handles large candidate pools without TEI batch-size
   errors by chunking requests, but the full 8.84M reranker smoke did not recover
   quality (MRR@10 0.211, Hit@10 20/50). The next target is better candidate
