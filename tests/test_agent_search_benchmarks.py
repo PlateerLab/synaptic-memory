@@ -89,3 +89,28 @@ def test_first_relevant_trace_hit_falls_back_to_final_found_ids() -> None:
         final_turn=3,
         final_tool_calls=5,
     ) == (3, 5)
+
+
+def test_agent_loop_row_jsonl_roundtrip(tmp_path: Path) -> None:
+    row = loop_runner.AgentLoopRow(
+        qid="q1",
+        query="what happened",
+        reached=True,
+        relevant_docs=["d1", "d2"],
+        found_relevant_docs=["d2"],
+        found_ids_count=3,
+        turns=2,
+        tool_calls=4,
+        first_relevant_turn=2,
+        first_relevant_tool_calls=3,
+        duplicate_tool_calls=1,
+        empty_tool_calls=0,
+        prompt_tokens=123,
+        completion_tokens=45,
+        elapsed_sec=6.7,
+    )
+    path = tmp_path / "agent_loop.jsonl"
+
+    loop_runner._append_jsonl_row(path, row)
+
+    assert loop_runner._load_jsonl_rows(path) == [row]
