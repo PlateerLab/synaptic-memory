@@ -44,6 +44,12 @@ PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FT
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_search_benchmarks.py --subset 50 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --modes graph_search,deep_search,scripted_session --result-limit 20 --tool-limit 10 --read-top-k 0 --scripted-turns 2
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_search_benchmarks.py --subset 10 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --modes agent_search --result-limit 20 --tool-limit 10 --intent context_explore
 PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 20 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url "$LLM_BASE_URL" --model "$LLM_MODEL" --api-key-env LLM_API_KEY --max-turns 5
+
+# Local Ollama fallback smoke when the H100/Qwen3.6 tunnel is down.
+# Terminal 1:
+ssh -N -L 18134:127.0.0.1:11434 go243
+# Terminal 2:
+PYTHONUNBUFFERED=1 SYNAPTIC_SQLITE_FTS_AND_FIRST_THRESHOLD=20 SYNAPTIC_SQLITE_FTS_LEXICAL_RERANK_POOL=500 uv run python examples/ablation/run_agent_loop_benchmarks.py --subset 5 --msmarco-path tests/benchmark/data/msmarco_passage_full.json --corpus-limit 8841823 --sqlite-db-path tests/benchmark/data/msmarco_full.db --llm-base-url http://127.0.0.1:18134/v1 --model qwen3:14b --api-key-env LLM_API_KEY --max-turns 3 --llm-timeout 180 --preflight-timeout 10 --out-jsonl examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl --resume
 ```
 
 ## FiQA Results
@@ -125,6 +131,22 @@ LLM-planned agent exploration; use `run_agent_loop_benchmarks.py` for that.
 | `deep_search` | 8,841,823 | 50 | 0.226 | 0.333 | 0.433 | 22/50 | 22/50 | 203.4s | 3.00 | 10.00 |
 | `scripted_session` | 8,841,823 | 50 | 0.226 | 0.333 | 0.433 | 22/50 | 24/50 | 413.7s | 4.00 | 19.76 |
 | `agent_search` context-explore smoke (n=10) | 8,841,823 | 10 | 0.217 | 0.500 | 0.500 | 5/10 | 5/10 | 48.8s | 1.00 | 5.00 |
+
+## MS MARCO LLM-Planned Agent Loop Smoke
+
+This is the real `run_agent_loop()` path: the model can inspect earlier
+evidence, change tool choice, and rewrite follow-up search targets. The H100
+Qwen3.6 tunnel was unavailable during this run (`vllm-tunnel1/2` restarting
+with `No route to host`), so this smoke used the `go243` Ollama fallback
+`qwen3:14b`. Treat it as a functional navigation smoke, not a Qwen3.6 quality
+reference.
+
+| Model | Docs | Queries | Reach | Mean turns | Mean calls | Mean first rel turn | Mean elapsed | Mean unique tools | Mean search targets | Mean rewrites | Multi-tool | Rewrites |
+|-------|-----:|--------:|------:|-----------:|-----------:|--------------------:|-------------:|------------------:|--------------------:|--------------:|-----------:|---------:|
+| `qwen3:14b` via Ollama | 8,841,823 | 5 | 3/5 | 2.60 | 1.60 | 1.33 | 41.8s | 1.60 | 1.40 | 1.40 | 3/5 | 5/5 |
+
+Per-query report: `examples/ablation/diagnostics/agent_loop_20260702_180201.md`.
+Incremental rows: `examples/ablation/diagnostics/agent_loop_ollama_qwen3_14b_smoke.jsonl`.
 
 The local artifacts are gitignored:
 
@@ -218,6 +240,12 @@ The local artifacts are gitignored:
   costs about 2x more. The true agent benchmark should use the LLM-planned
   `run_agent_loop()` path, where the agent can rewrite follow-up queries and
   change search targets based on earlier evidence.
+- The first live `run_agent_loop()` full-corpus smoke ran through an Ollama
+  `qwen3:14b` fallback while the H100/Qwen3.6 tunnel was down. It reached
+  3/5 MS MARCO gold documents and, importantly, recorded actual exploration
+  behavior: query rewrites occurred on 5/5 queries and multiple tool types on
+  3/5 queries. This confirms the benchmark is measuring agent-driven follow-up
+  search, not just a single retrieval call.
 - TEI cross-reranking now handles large candidate pools without TEI batch-size
   errors by chunking requests, but the full 8.84M reranker smoke did not recover
   quality (MRR@10 0.211, Hit@10 20/50). The next target is better candidate
