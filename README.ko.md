@@ -1,6 +1,6 @@
 # Synaptic Memory
 
-**인덱싱에 API 호출 0회. 인프라 0. 락인 0.**
+**기본 경로는 인덱싱 API 호출 0회. 인프라 0. 락인 0.**
 LLM 에이전트용 지식 그래프 + MCP 도구 서버. 하이브리드 검색, CDC 기반 실시간 DB 동기화, 한국어 FTS 내장.
 
 [![PyPI](https://img.shields.io/pypi/v/synaptic-memory)](https://pypi.org/project/synaptic-memory/)
@@ -82,7 +82,7 @@ MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
 ```
 
 **라이브러리가 하는 건 딱 두 가지:**
-1. **그래프를 잘 구축한다** — 인덱싱에 LLM 비용 0원
+1. **그래프를 잘 구축한다** — 기본은 비용 없는 deterministic extraction
 2. **LLM에게 좋은 도구를 쥐어준다** — 판단은 LLM이, 코드는 데이터만
 
 ---
@@ -90,8 +90,17 @@ MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
 ## 설치
 
 ```bash
-# 추천 — README의 모든 예제가 작동하는 조합
+# 일반 로컬 그래프 + MCP 조합
 pip install "synaptic-memory[sqlite,korean,vector,mcp]"
+
+# 팀/프로덕션 그래프: PostgreSQL + pgvector
+pip install "synaptic-memory[postgresql,embedding,reranker]"
+
+# 스케일아웃 보조 구성: Kuzu 그래프 + Qdrant 벡터 + MinIO blob
+pip install "synaptic-memory[scale]"
+
+# LangChain retriever 예제를 실행할 때 추가
+pip install "synaptic-memory[langchain]"
 
 # 또는 Postgres / Kuzu / Qdrant / MinIO 까지 전부
 pip install "synaptic-memory[all]"
@@ -110,12 +119,70 @@ pip install synaptic-memory[embedding]     # + 임베딩 API (aiohttp)
 pip install synaptic-memory[reranker]      # + flashrank cross-encoder
 pip install synaptic-memory[langchain]     # + LangChain retriever 어댑터
 pip install synaptic-memory[postgresql]    # + asyncpg + pgvector
+pip install synaptic-memory[mysql]         # + aiomysql DB 인제스트
+pip install synaptic-memory[oracle]        # + oracledb DB 인제스트
+pip install synaptic-memory[mssql]         # + aioodbc DB 인제스트
+pip install synaptic-memory[kuzu]          # + 임베디드 property graph 백엔드
+pip install synaptic-memory[qdrant]        # + Qdrant 벡터 helper
+pip install synaptic-memory[minio]         # + MinIO/S3 호환 blob helper
+pip install synaptic-memory[scale]         # + Kuzu + Qdrant + MinIO + aiohttp
 pip install synaptic-memory[docs]          # + PDF/DOCX/PPTX/XLSX/HWP 로더
 ```
 
 </details>
 
 ---
+
+## 인프라 연계
+
+기본 one-liner는 로컬 SQLite 그래프를 만듭니다. 이미 쓰는 운영 인프라에
+붙일 때는 backend를 직접 만들고 연결한 뒤 `from_data()`, `from_chunks()`,
+`from_database()`에 넘기면 됩니다.
+
+```python
+from synaptic import SynapticGraph
+from synaptic.backends.postgresql import PostgreSQLBackend
+
+backend = PostgreSQLBackend("postgresql://user:pass@host:5432/synaptic")
+await backend.connect()
+
+graph = await SynapticGraph.from_data("./docs/", backend=backend, preset="rag")
+```
+
+현재 backend 역할:
+
+| 경로 | 설치 | 데이터 담당 | 적합한 상황 |
+|------|------|-------------|-------------|
+| 로컬 앱/노트북 | `sqlite,korean,vector` | SQLite FTS5 + 로컬 usearch HNSW | 빠른 도입, 데모, 작은 서비스 |
+| 팀 서비스 | `postgresql,embedding,reranker` | PostgreSQL + pgvector + pg_trgm | 공유 그래프, 백업, SQL 운영 |
+| 그래프 중심 임베디드 | `kuzu,korean,embedding` | Kuzu property graph | 로컬 graph traversal / Cypher workflow |
+| 스케일아웃 조합 | `scale` | Kuzu 등 graph store + Qdrant + MinIO | graph/vector/blob 책임 분리 |
+
+Qdrant와 MinIO는 단독 그래프 저장소가 아니라 helper service입니다.
+`CompositeBackend`를 통해 사용합니다. graph storage는 node/edge를 갖고,
+Qdrant는 ANN vector search를 담당하며, MinIO/S3 호환 저장소는 큰
+`Node.content`를 외부 blob으로 분리합니다.
+
+```python
+from synaptic.backends.composite import CompositeBackend
+from synaptic.backends.kuzu import KuzuBackend
+from synaptic.backends.minio_store import MinIOBackend
+from synaptic.backends.qdrant import QdrantBackend
+
+backend = CompositeBackend(
+    KuzuBackend("synaptic.kuzu"),
+    vector=QdrantBackend("http://localhost:6333", collection="synaptic"),
+    blob=MinIOBackend("localhost:9000", bucket="synaptic"),
+)
+await backend.connect()
+
+graph = await SynapticGraph.from_data("./docs/", backend=backend, preset="scale")
+```
+
+라이브러리는 backend contract와 retrieval layer를 제공합니다. 다만 수 TB급
+운영 코퍼스에서는 별도 운영 레이어도 같이 설계해야 합니다. 예를 들면 durable
+ingestion queue, parser/OCR worker, 외부 lexical index, tenant/ACL filter,
+index lag 모니터링, 각 저장소별 backup/restore가 필요합니다.
 
 ## 빠른 시작
 
@@ -210,13 +277,14 @@ asyncio.run(main())
 |------|---------------|---------------|
 | GraphRAG 계열 (MS GraphRAG, Cognee, Graphiti) | LLM으로 엔티티 + 관계 + 커뮤니티 요약 추출 | 서사형 코퍼스에서 recall 최상. 대신 문서 추가마다 LLM 토큰 비용 |
 | LightRAG 계열 | LLM 호출을 쿼리 시점으로 지연 | 인덱스 비용 낮음. 대신 쿼리마다 비용 |
-| **Synaptic** | **없음.** 구조·통계 시그널만 (FK, NEXT_CHUNK, phrase DF 허브, MENTIONS) | 비용 0 + 결정론적. 단, 새로운 관계를 스스로 합성하지 않음 |
+| **Synaptic 기본 경로** | **없음.** 구조·통계 시그널만 (FK, NEXT_CHUNK, phrase DF 허브, MENTIONS) | 비용 0 + 결정론적. 명시적 cross-reference를 LLM 없이 엣지화 |
 
-인덱싱에 LLM을 쓰지 않습니다. 그래프는 지식 저장소가 아니라 검색 인덱스입니다.
-LLM이 합성한 요약이 필요하면 그래프 위에 별도 에이전트 레이어로 쌓으세요 —
-Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합니다.
+기본 인덱싱은 LLM-free입니다. 그래프는 지식 저장소가 아니라 검색 인덱스입니다.
+문서에 명시된 cross-reference는 LLM 없이 `REFERENCES` 엣지로 만들 수 있습니다.
+OpenIE를 opt-in하면 bounded/revertible 방식으로 LLM 기반 semantic relation을
+추가할 수 있지만, 기본 deterministic 경로에는 포함되지 않습니다.
 
-> **v0.28+**: `graph.search()`는 하나의 경로만 사용합니다. BM25 + HNSW +
+> **현재 API**: `graph.search()`는 하나의 경로만 사용합니다. BM25 + HNSW +
 > PPR + cross-encoder + MMR 기반 EvidenceSearch 파이프라인입니다.
 > 예전 `engine=` 스위치는 제거되었으므로 예제는
 > `graph.search("질문")`처럼 바로 호출하면 됩니다.
@@ -230,7 +298,7 @@ Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합�
 |------|------|
 | `deep_search` | **추천.** 검색 → 확장 → 문서 읽기를 한 번에 |
 | `compare_search` | 복합 질문 자동 분해 + 병렬 검색 |
-| `knowledge_search` | 핵심 의미 검색 (v0.14.2+에서 EvidenceSearch 경유) |
+| `knowledge_search` | EvidenceSearch 기반 핵심 의미 검색 |
 | `agent_search` | FTS + 벡터 하이브리드 + intent routing |
 | `expand` | 1-hop 그래프 이웃 탐색 |
 | `get_document` | 쿼리 관련 청크만 선별한 문서 전문 |
@@ -243,8 +311,9 @@ Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합�
 | `filter_nodes` | 속성 필터 (>=, <=, contains) — `{total, showing}` 반환으로 카운팅 정확 |
 | `aggregate_nodes` | GROUP BY + COUNT/SUM/AVG/MAX/MIN + WHERE 사전 필터 |
 | `join_related` | FK 기반 관련 레코드 조회 — RELATED 엣지 순회 (O(degree)) |
+| `top_nodes` | “가장 X한”, “top N”, “최대/최소”, “최근” 질의를 단일 호출로 처리 |
 
-### 인제스트 / CDC 도구 (v0.14.0+)
+### 인제스트 / CDC 도구
 대화 중에 Claude가 새 자료를 배울 수 있도록 하는 도구.
 
 | 도구 | 용도 |
@@ -255,7 +324,7 @@ Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합�
 | `knowledge_ingest_path` | 로컬 CSV/JSONL/TXT 파일 단건 인제스트 |
 | `knowledge_remove` | 단건 노드 삭제 (엣지 cascade) |
 | `knowledge_sync_from_database` | CDC 증분 동기화 |
-| `knowledge_backfill` | 누락된 임베딩·phrase 허브 복구 (v0.14.4+) |
+| `knowledge_backfill` | 누락된 임베딩·phrase 허브 복구 |
 
 ### 탐색 도구
 | 도구 | 용도 |
@@ -301,88 +370,64 @@ graph.reranker_weights = RerankerWeights(
 await graph.reinforce([node_id], success=True)  # 이 결과가 도움 됨 → 다음엔 상위로
 ```
 
+### Memory operating layer
+
+검색을 항상 stateful하게 만들지 않고도 관찰할 수 있습니다.
+
+```python
+from synaptic import FeedbackSignal, MemoryScope
+
+scope = MemoryScope(workspace_id="docs", user_id="alice")
+result = await graph.search("환불 예외", record=True, scope=scope)
+
+await graph.record_feedback(
+    event_id=result.event_id,
+    signal=FeedbackSignal.EXPLICIT_POSITIVE,
+    success=True,
+    scope=scope,
+)
+
+health = await graph.memory_health(scope=scope)
+signals = await graph.scan_memory_signals(scope=scope)
+```
+
+event, feedback, provenance, health signal은 그래프 metadata로 저장됩니다.
+`Node.content`에 섞지 않고, LLM prompt에 원본 metadata 전체를 자동으로 밀어 넣지도 않습니다.
+
 ---
 
-## 벤치마크
+## 벤치마크와 보고서
 
-아래 숫자는 버전 태그가 붙은 역사적 스냅샷입니다. 정확한 재현은 링크된
-스크립트/보고서를 기준으로 하고, 지속적으로 정리되는 결과 로그는
-[`docs/comparison/synaptic_results.md`](docs/comparison/synaptic_results.md)를 보세요.
+루트 README는 현재 설치 경로와 공개 API를 기준으로 유지합니다. 상세 수치는
+오래된 측정값이 현재 API 계약처럼 보이지 않도록 버전이 붙은 보고서에 둡니다.
 
-### 재현 가능한 임베더-프리 베이스라인 (노트북 2초)
+빠른 로컬 smoke:
+
+```bash
+synaptic-quickstart --json
+```
+
+가벼운 한국어 FTS 벤치마크:
 
 ```bash
 pip install "synaptic-memory[korean]"
 python examples/benchmark_allganize.py
 ```
 
-결정론적 출력 (v0.16.0):
-
-```
-Dataset                  Corpus  Queries      MRR     R@10        Hit     Time
---------------------------------------------------------------------------------
-Allganize RAG-ko            200      200    0.947    1.000   200/200     9.3s
-Allganize RAG-Eval          300      300    0.911    0.950   285/300     5.9s
-```
-
-임베더·reranker 없이 **EvidenceSearch 파이프라인(BM25 + PPR + MMR)** 만으로
-낸 결과입니다. 전체 소스:
-[`examples/benchmark_allganize.py`](examples/benchmark_allganize.py).
-원본: [allganize/RAG-Evaluation-Dataset-KO](https://huggingface.co/datasets/allganize/RAG-Evaluation-Dataset-KO).
-
-> **v0.16.0 개선 누적**. v0.15.1의 query-mode Kiwi + v0.16.0의 engine default
-> 전환으로 Korean 공개 벤치마크 전반에서 MRR이 **+0.22~+0.33 상승**. 영어
-> HotPotQA-24도 **+0.148**. 자세한 ablation:
-> [`examples/ablation/run_ablation.py`](examples/ablation/run_ablation.py).
-
-### 영어 multi-hop 표준 벤치마크 (500q subset, v0.16.0)
+선택 패키지/API key가 준비된 경우 competitor harness:
 
 ```bash
-pip install "synaptic-memory[eval]"
-python examples/ablation/download_benchmarks.py
-python examples/ablation/run_tier1_benchmarks.py --subset 500
+python examples/benchmark_vs_competitors/run_comparison.py --only synaptic
 ```
 
-| 데이터셋 | 소스 | Docs | MRR@10 | R@5 | Hit@10 |
-|---------|------|------|--------|-----|--------|
-| HotPotQA dev (distractor) | HuggingFace | 66,635 | **0.784** | 0.585 | 459/500 (91.8%) |
-| 2WikiMultihopQA dev | HuggingFace | 56,687 | **0.795** | 0.501 | 456/500 (91.2%) |
-| MuSiQue-Ans dev | HuggingFace | 21,100 | 0.590 | 0.379 | 381/500 (76.2%) |
+참고 보고서:
 
-HippoRAG2 등 선행 연구와의 해석은
-[docs/comparison/synaptic_results.md](docs/comparison/synaptic_results.md#tier-15--english-multi-hop-standard-benchmarks-v0160)
-참고. 직접 비교 지표가 아니므로 엄격한 head-to-head는 조심하지만,
-**MuSiQue R@5 0.379 vs HippoRAG2 0.747 격차**는 embedder 도입 시 좁힐 여지.
-
-### 전체 파이프라인 (임베더 + reranker, pre-v0.16.0 측정)
-
-아래 수치는 **v0.16.0 engine flip 이전** 측정값으로, **EvidenceSearch + 임베더
-(Ollama `qwen3-embedding:4b`) + cross-encoder reranker(TEI `bge-reranker-v2-m3`)**
-조합이었습니다. 재현에는 GPU 환경이 필요합니다. 전체 harness:
-[`eval/run_all.py`](eval/run_all.py). v0.16.1에서 재측정 예정.
-
-### 단일 검색
-
-| 데이터셋 | 유형 | 노드 | MRR | Hit |
-|---------|------|------|-----|-----|
-| KRRA Easy | 한국어 문서 (비공개) | 19,720 | **0.967** | 20/20 |
-| KRRA Hard | 한국어 문서 (비공개) | 19,720 | **1.000** | 15/15 |
-| X2BEE Easy | PostgreSQL 이커머스 (비공개) | 19,843 | **1.000** | 20/20 |
-| assort Easy | 패션 CSV (비공개) | 13,909 | **0.867** | 13/15 |
-| HotPotQA-24 | 영어 multi-hop (공개 서브셋) | 226 | **0.964** | 24/24 |
-
-> HotPotQA-24는 24문항 서브셋. 전체 HotPotQA-dev(7,405q) 전체 실행은
-> v0.16.1에서 예정 (PPR O(corpus) 최적화 후).
-
-### 멀티턴 에이전트 (GPT-4o-mini, 최대 5턴)
-
-| 데이터셋 | 결과 |
-|---------|------|
-| KRRA Hard agent | 10-13/15 (67-87%) |
-| **X2BEE Hard agent** | **17/19 (89%)** |
-| **assort Hard agent** | **12/15 (80%)** |
-
-필터 / 집계 / FK 조인 / 카운팅 같은 정형 데이터 질의가 그래프 기반 도구로 end-to-end 동작합니다.
+| 보고서 | 내용 |
+|--------|------|
+| [docs/comparison/synaptic_results.md](docs/comparison/synaptic_results.md) | 재현 가능한 Synaptic 벤치마크 결과와 provenance |
+| [docs/REPORT-rag-vs-synaptic.md](docs/REPORT-rag-vs-synaptic.md) | 금융 법령 multi-hop 검색에서 RAG와 synaptic-memory 비교 |
+| [docs/REPORT-memory-operating-layer-eval.md](docs/REPORT-memory-operating-layer-eval.md) | memory operating layer 평가와 health/reporting gate |
+| [examples/benchmark_vs_competitors/README.md](examples/benchmark_vs_competitors/README.md) | competitor adapter 공정성 주의사항 |
 
 ---
 
@@ -409,13 +454,15 @@ StorageBackend (Protocol)
 
 ## 백엔드
 
-| 백엔드 | 벡터 검색 | 규모 | 용도 |
-|--------|----------|------|------|
-| `MemoryBackend` | cosine | ~1만 | 테스트 |
-| `SqliteGraphBackend` | **usearch HNSW** | ~10만 | **기본 권장** |
-| `KuzuBackend` | HNSW | ~1천만 | 그래프 중심 |
-| `PostgreSQLBackend` | pgvector | ~100만 | 프로덕션 |
-| `CompositeBackend` | Qdrant | 무제한 | 스케일아웃 |
+| 백엔드 | 설치 옵션 | 역할 | 용도 |
+|--------|-----------|------|------|
+| `MemoryBackend` | core | 인프로세스 그래프 | 테스트와 예제 |
+| `SqliteGraphBackend` | `sqlite`, `vector` | 로컬 그래프 + FTS5 + usearch HNSW | 기본 로컬/임베디드 배포 |
+| `KuzuBackend` | `kuzu` | 임베디드 property graph + Cypher | 그래프 중심 로컬 workflow |
+| `PostgreSQLBackend` | `postgresql` | durable graph + pgvector + pg_trgm | 공유 프로덕션 서비스 |
+| `QdrantBackend` | `qdrant` | vector-only helper | `CompositeBackend` 뒤 ANN search |
+| `MinIOBackend` | `minio` | blob-only helper | `CompositeBackend` 뒤 큰 content offload |
+| `CompositeBackend` | `scale` | graph + vector + blob store 라우터 | 스케일아웃 조합 |
 
 ---
 
@@ -431,6 +478,15 @@ StorageBackend (Protocol)
 | `mcp` | Claude Desktop/Code MCP 서버 |
 | `langchain` | LangChain retriever 어댑터 |
 | `postgresql` | asyncpg + pgvector |
+| `mysql` | aiomysql DB 인제스트 |
+| `oracle` | oracledb DB 인제스트 |
+| `mssql` | aioodbc DB 인제스트 |
+| `kuzu` | 임베디드 Kuzu graph 백엔드 |
+| `qdrant` | Qdrant vector helper |
+| `minio` | MinIO/S3 호환 blob helper |
+| `scale` | Kuzu + Qdrant + MinIO + aiohttp |
+| `rag` | spaCy + aiohttp endpoint helper |
+| `all` | 주요 DB, vector, MCP, 한국어, reranker 옵션 묶음 |
 | `docs` | PDF/DOCX/PPTX/XLSX/HWP 문서 로더 (xgen-doc2chunk) |
 
 ---
