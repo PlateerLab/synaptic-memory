@@ -22,10 +22,25 @@ Recording command:
 uv run python examples/launch_demo.py
 ```
 
+Generated assets:
+
+- [synaptic-memory-demo.mp4](synaptic-memory-demo.mp4)
+- [synaptic-memory-demo.gif](synaptic-memory-demo.gif)
+
+Preview:
+
+![Synaptic Memory demo](synaptic-memory-demo.gif)
+
 Fast verification command:
 
 ```bash
 uv run python examples/launch_demo.py --no-pause
+```
+
+Regenerate the MP4/GIF from this server:
+
+```bash
+uv run python docs/launch/render_demo_video.py
 ```
 
 Optional recording tools:

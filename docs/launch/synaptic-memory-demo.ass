@@ -1,0 +1,28 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1280
+PlayResY: 720
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: Terminal,Liberation Mono,30,&H00E5E7EB,&H000000FF,&H00111827,&H00111827,0,0,0,0,100,100,0,0,1,0,0,7,80,60,95,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 0,0:00:00.00,0:00:01.00,Terminal,,0,0,0,,Synaptic Memory\NGraph memory for RAG agents
+Dialogue: 0,0:00:01.00,0:00:02.00,Terminal,,0,0,0,,Synaptic Memory\NGraph memory for RAG agents\NDocuments + SQL rows + feedback
+Dialogue: 0,0:00:02.00,0:00:04.00,Terminal,,0,0,0,,Synaptic Memory\NGraph memory for RAG agents\NDocuments + SQL rows + feedback\NDefault path: no LLM calls at indexing time
+Dialogue: 0,0:00:04.00,0:00:05.00,Terminal,,0,0,0,,1. Build a tiny mixed graph\NCreated graph: 4 nodes
+Dialogue: 0,0:00:05.00,0:00:07.20,Terminal,,0,0,0,,1. Build a tiny mixed graph\NCreated graph: 4 nodes\NSources: 2 policy docs + 2 support ticket rows
+Dialogue: 0,0:00:07.20,0:00:08.20,Terminal,,0,0,0,,2. Search and record retrieval\Nevent_id: <retrieval-event-id>
+Dialogue: 0,0:00:08.20,0:00:09.20,Terminal,,0,0,0,,2. Search and record retrieval\Nevent_id: <retrieval-event-id>\N1. ticket:T-1001                score=0.660 source=ticket
+Dialogue: 0,0:00:09.20,0:00:10.20,Terminal,,0,0,0,,2. Search and record retrieval\Nevent_id: <retrieval-event-id>\N1. ticket:T-1001                score=0.660 source=ticket\N2. Refund Policy                score=0.435 source=policy/refunds.md
+Dialogue: 0,0:00:10.20,0:00:12.40,Terminal,,0,0,0,,2. Search and record retrieval\Nevent_id: <retrieval-event-id>\N1. ticket:T-1001                score=0.660 source=ticket\N2. Refund Policy                score=0.435 source=policy/refunds.md\N3. Shipping Policy              score=0.210 source=policy/shipping.md
+Dialogue: 0,0:00:12.40,0:00:14.60,Terminal,,0,0,0,,3. Feed back that the evidence helped\NRecorded explicit positive feedback for the top evidence.
+Dialogue: 0,0:00:14.60,0:00:15.60,Terminal,,0,0,0,,4. Inspect memory health metadata\Nmemory_events:    2
+Dialogue: 0,0:00:15.60,0:00:16.60,Terminal,,0,0,0,,4. Inspect memory health metadata\Nmemory_events:    2\Nretrieval_events: 2
+Dialogue: 0,0:00:16.60,0:00:17.60,Terminal,,0,0,0,,4. Inspect memory health metadata\Nmemory_events:    2\Nretrieval_events: 2\Nmemory_scores:    2
+Dialogue: 0,0:00:17.60,0:00:18.60,Terminal,,0,0,0,,4. Inspect memory health metadata\Nmemory_events:    2\Nretrieval_events: 2\Nmemory_scores:    2\Nhealth_signals:   0
+Dialogue: 0,0:00:18.60,0:00:19.60,Terminal,,0,0,0,,4. Inspect memory health metadata\Nmemory_events:    2\Nretrieval_events: 2\Nmemory_scores:    2\Nhealth_signals:   0\NNo raw provenance was appended to Node.content.
+Dialogue: 0,0:00:19.60,0:00:22.60,Terminal,,0,0,0,,4. Inspect memory health metadata\Nmemory_events:    2\Nretrieval_events: 2\Nmemory_scores:    2\Nhealth_signals:   0\NNo raw provenance was appended to Node.content.\NSwap the backend to PostgreSQL/Kuzu/Qdrant when the corpus grows.

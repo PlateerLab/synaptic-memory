@@ -48,12 +48,12 @@ Must-have:
   quickstart.
 - GitHub topics and description.
 - GitHub release notes.
-- 60-second demo plan and recording command: `docs/launch/demo_video.md`.
+- 60-second generated demo and recording command: `docs/launch/demo_video.md`.
 - Show HN draft: `docs/launch/show_hn_draft.md`.
 
 Nice-to-have:
 
-- Exported terminal GIF or short MP4 from `examples/launch_demo.py`.
+- Edited voiceover version of the generated terminal GIF/MP4.
 - Architecture image showing documents/SQL -> graph -> EvidenceSearch -> MCP
   agent tools.
 - Short Korean post for GeekNews / LinkedIn.
