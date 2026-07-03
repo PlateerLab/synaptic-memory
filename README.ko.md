@@ -93,6 +93,12 @@ MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
 # 일반 로컬 그래프 + MCP 조합
 pip install "synaptic-memory[sqlite,korean,vector,mcp]"
 
+# 팀/프로덕션 그래프: PostgreSQL + pgvector
+pip install "synaptic-memory[postgresql,embedding,reranker]"
+
+# 스케일아웃 보조 구성: Kuzu 그래프 + Qdrant 벡터 + MinIO blob
+pip install "synaptic-memory[scale]"
+
 # LangChain retriever 예제를 실행할 때 추가
 pip install "synaptic-memory[langchain]"
 
@@ -113,12 +119,70 @@ pip install synaptic-memory[embedding]     # + 임베딩 API (aiohttp)
 pip install synaptic-memory[reranker]      # + flashrank cross-encoder
 pip install synaptic-memory[langchain]     # + LangChain retriever 어댑터
 pip install synaptic-memory[postgresql]    # + asyncpg + pgvector
+pip install synaptic-memory[mysql]         # + aiomysql DB 인제스트
+pip install synaptic-memory[oracle]        # + oracledb DB 인제스트
+pip install synaptic-memory[mssql]         # + aioodbc DB 인제스트
+pip install synaptic-memory[kuzu]          # + 임베디드 property graph 백엔드
+pip install synaptic-memory[qdrant]        # + Qdrant 벡터 helper
+pip install synaptic-memory[minio]         # + MinIO/S3 호환 blob helper
+pip install synaptic-memory[scale]         # + Kuzu + Qdrant + MinIO + aiohttp
 pip install synaptic-memory[docs]          # + PDF/DOCX/PPTX/XLSX/HWP 로더
 ```
 
 </details>
 
 ---
+
+## 인프라 연계
+
+기본 one-liner는 로컬 SQLite 그래프를 만듭니다. 이미 쓰는 운영 인프라에
+붙일 때는 backend를 직접 만들고 연결한 뒤 `from_data()`, `from_chunks()`,
+`from_database()`에 넘기면 됩니다.
+
+```python
+from synaptic import SynapticGraph
+from synaptic.backends.postgresql import PostgreSQLBackend
+
+backend = PostgreSQLBackend("postgresql://user:pass@host:5432/synaptic")
+await backend.connect()
+
+graph = await SynapticGraph.from_data("./docs/", backend=backend, preset="rag")
+```
+
+현재 backend 역할:
+
+| 경로 | 설치 | 데이터 담당 | 적합한 상황 |
+|------|------|-------------|-------------|
+| 로컬 앱/노트북 | `sqlite,korean,vector` | SQLite FTS5 + 로컬 usearch HNSW | 빠른 도입, 데모, 작은 서비스 |
+| 팀 서비스 | `postgresql,embedding,reranker` | PostgreSQL + pgvector + pg_trgm | 공유 그래프, 백업, SQL 운영 |
+| 그래프 중심 임베디드 | `kuzu,korean,embedding` | Kuzu property graph | 로컬 graph traversal / Cypher workflow |
+| 스케일아웃 조합 | `scale` | Kuzu 등 graph store + Qdrant + MinIO | graph/vector/blob 책임 분리 |
+
+Qdrant와 MinIO는 단독 그래프 저장소가 아니라 helper service입니다.
+`CompositeBackend`를 통해 사용합니다. graph storage는 node/edge를 갖고,
+Qdrant는 ANN vector search를 담당하며, MinIO/S3 호환 저장소는 큰
+`Node.content`를 외부 blob으로 분리합니다.
+
+```python
+from synaptic.backends.composite import CompositeBackend
+from synaptic.backends.kuzu import KuzuBackend
+from synaptic.backends.minio_store import MinIOBackend
+from synaptic.backends.qdrant import QdrantBackend
+
+backend = CompositeBackend(
+    KuzuBackend("synaptic.kuzu"),
+    vector=QdrantBackend("http://localhost:6333", collection="synaptic"),
+    blob=MinIOBackend("localhost:9000", bucket="synaptic"),
+)
+await backend.connect()
+
+graph = await SynapticGraph.from_data("./docs/", backend=backend, preset="scale")
+```
+
+라이브러리는 backend contract와 retrieval layer를 제공합니다. 다만 수 TB급
+운영 코퍼스에서는 별도 운영 레이어도 같이 설계해야 합니다. 예를 들면 durable
+ingestion queue, parser/OCR worker, 외부 lexical index, tenant/ACL filter,
+index lag 모니터링, 각 저장소별 backup/restore가 필요합니다.
 
 ## 빠른 시작
 
@@ -390,13 +454,15 @@ StorageBackend (Protocol)
 
 ## 백엔드
 
-| 백엔드 | 벡터 검색 | 규모 | 용도 |
-|--------|----------|------|------|
-| `MemoryBackend` | cosine | ~1만 | 테스트 |
-| `SqliteGraphBackend` | **usearch HNSW** | ~10만 | **기본 권장** |
-| `KuzuBackend` | HNSW | ~1천만 | 그래프 중심 |
-| `PostgreSQLBackend` | pgvector | ~100만 | 프로덕션 |
-| `CompositeBackend` | Qdrant | 무제한 | 스케일아웃 |
+| 백엔드 | 설치 옵션 | 역할 | 용도 |
+|--------|-----------|------|------|
+| `MemoryBackend` | core | 인프로세스 그래프 | 테스트와 예제 |
+| `SqliteGraphBackend` | `sqlite`, `vector` | 로컬 그래프 + FTS5 + usearch HNSW | 기본 로컬/임베디드 배포 |
+| `KuzuBackend` | `kuzu` | 임베디드 property graph + Cypher | 그래프 중심 로컬 workflow |
+| `PostgreSQLBackend` | `postgresql` | durable graph + pgvector + pg_trgm | 공유 프로덕션 서비스 |
+| `QdrantBackend` | `qdrant` | vector-only helper | `CompositeBackend` 뒤 ANN search |
+| `MinIOBackend` | `minio` | blob-only helper | `CompositeBackend` 뒤 큰 content offload |
+| `CompositeBackend` | `scale` | graph + vector + blob store 라우터 | 스케일아웃 조합 |
 
 ---
 
@@ -412,6 +478,15 @@ StorageBackend (Protocol)
 | `mcp` | Claude Desktop/Code MCP 서버 |
 | `langchain` | LangChain retriever 어댑터 |
 | `postgresql` | asyncpg + pgvector |
+| `mysql` | aiomysql DB 인제스트 |
+| `oracle` | oracledb DB 인제스트 |
+| `mssql` | aioodbc DB 인제스트 |
+| `kuzu` | 임베디드 Kuzu graph 백엔드 |
+| `qdrant` | Qdrant vector helper |
+| `minio` | MinIO/S3 호환 blob helper |
+| `scale` | Kuzu + Qdrant + MinIO + aiohttp |
+| `rag` | spaCy + aiohttp endpoint helper |
+| `all` | 주요 DB, vector, MCP, 한국어, reranker 옵션 묶음 |
 | `docs` | PDF/DOCX/PPTX/XLSX/HWP 문서 로더 (xgen-doc2chunk) |
 
 ---
