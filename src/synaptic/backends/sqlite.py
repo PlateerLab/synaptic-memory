@@ -396,6 +396,7 @@ def _normalize_korean(text: str, *, query_mode: bool = False) -> str:
     return _KO_PARTICLE.sub(r"\1", text)
 
 
+from synaptic.indexing import IndexLagReport, IngestionJob, IngestionJobStage, IngestionJobStatus
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
@@ -493,6 +494,33 @@ CREATE TABLE IF NOT EXISTS syn_memory_scores (
     PRIMARY KEY(scope_key, node_id, edge_id)
 );
 
+CREATE TABLE IF NOT EXISTS syn_ingestion_jobs (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL DEFAULT '',
+    version TEXT NOT NULL DEFAULT '',
+    stage TEXT NOT NULL DEFAULT 'discover',
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempt INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT '',
+    properties_json TEXT NOT NULL DEFAULT '{}',
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS syn_index_lag_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'unknown',
+    index_generation TEXT NOT NULL DEFAULT '',
+    pending_documents INTEGER NOT NULL DEFAULT 0,
+    pending_chunks INTEGER NOT NULL DEFAULT 0,
+    failed_jobs INTEGER NOT NULL DEFAULT 0,
+    lag_seconds REAL NOT NULL DEFAULT 0.0,
+    p95_index_latency_seconds REAL NOT NULL DEFAULT 0.0,
+    properties_json TEXT NOT NULL DEFAULT '{}',
+    checked_at REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_syn_edges_source ON syn_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_target ON syn_edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_syn_edges_source_kind ON syn_edges(source_id, kind);
@@ -504,6 +532,12 @@ CREATE INDEX IF NOT EXISTS idx_syn_memory_events_scope ON syn_memory_events(scop
 CREATE INDEX IF NOT EXISTS idx_syn_memory_events_kind ON syn_memory_events(kind, created_at);
 CREATE INDEX IF NOT EXISTS idx_syn_retrieval_events_scope ON syn_retrieval_events(scope_key, created_at);
 CREATE INDEX IF NOT EXISTS idx_syn_memory_scores_node ON syn_memory_scores(node_id, score);
+CREATE INDEX IF NOT EXISTS idx_syn_ingestion_jobs_document
+    ON syn_ingestion_jobs(document_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_syn_ingestion_jobs_stage_status
+    ON syn_ingestion_jobs(stage, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_syn_index_lag_reports_provider
+    ON syn_index_lag_reports(provider, checked_at);
 """
 
 
@@ -1499,6 +1533,121 @@ class SQLiteBackend:
             rows = await cur.fetchall()
         return [_row_to_memory_score(r) for r in rows]
 
+    async def save_ingestion_job(self, job: IngestionJob) -> None:
+        db = self._db()
+        await db.execute(
+            """INSERT INTO syn_ingestion_jobs
+            (id, document_id, version, stage, status, attempt, error,
+             properties_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                document_id=excluded.document_id,
+                version=excluded.version,
+                stage=excluded.stage,
+                status=excluded.status,
+                attempt=excluded.attempt,
+                error=excluded.error,
+                properties_json=excluded.properties_json,
+                created_at=excluded.created_at,
+                updated_at=excluded.updated_at""",
+            (
+                job.id,
+                job.document_id,
+                job.version,
+                str(job.stage),
+                str(job.status),
+                job.attempt,
+                job.error,
+                json.dumps(job.properties),
+                job.created_at,
+                job.updated_at,
+            ),
+        )
+        await db.commit()
+
+    async def get_ingestion_job(self, job_id: str) -> IngestionJob | None:
+        db = self._db()
+        async with db.execute("SELECT * FROM syn_ingestion_jobs WHERE id = ?", (job_id,)) as cur:
+            row = await cur.fetchone()
+        return _row_to_ingestion_job(row) if row is not None else None
+
+    async def list_ingestion_jobs(
+        self,
+        *,
+        document_id: str = "",
+        stage: str | IngestionJobStage | None = None,
+        status: str | IngestionJobStatus | None = None,
+        limit: int = 100,
+    ) -> list[IngestionJob]:
+        db = self._db()
+        clauses: list[str] = []
+        params: list[object] = []
+        if document_id:
+            clauses.append("document_id = ?")
+            params.append(document_id)
+        if stage is not None:
+            clauses.append("stage = ?")
+            params.append(str(stage))
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(str(status))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(int(limit))
+        async with db.execute(
+            f"SELECT * FROM syn_ingestion_jobs{where} ORDER BY updated_at DESC LIMIT ?",
+            params,
+        ) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_ingestion_job(r) for r in rows]
+
+    async def save_index_lag_report(self, report: IndexLagReport) -> None:
+        db = self._db()
+        await db.execute(
+            """INSERT INTO syn_index_lag_reports
+            (provider, status, index_generation, pending_documents,
+             pending_chunks, failed_jobs, lag_seconds,
+             p95_index_latency_seconds, properties_json, checked_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                report.provider,
+                report.status,
+                report.index_generation,
+                report.pending_documents,
+                report.pending_chunks,
+                report.failed_jobs,
+                report.lag_seconds,
+                report.p95_index_latency_seconds,
+                json.dumps(report.properties),
+                report.checked_at,
+            ),
+        )
+        await db.commit()
+
+    async def list_index_lag_reports(
+        self,
+        *,
+        provider: str = "",
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[IndexLagReport]:
+        db = self._db()
+        clauses: list[str] = []
+        params: list[object] = []
+        if provider:
+            clauses.append("provider = ?")
+            params.append(provider)
+        if since is not None:
+            clauses.append("checked_at >= ?")
+            params.append(float(since))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(int(limit))
+        async with db.execute(
+            f"SELECT * FROM syn_index_lag_reports{where} ORDER BY checked_at DESC LIMIT ?",
+            params,
+        ) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_index_lag_report(r) for r in rows]
+
     # --- Batch read ---
 
     async def get_nodes_batch(self, node_ids: list[str]) -> list[Node]:
@@ -2336,6 +2485,16 @@ def _json_str_dict(raw: str | None) -> dict[str, str]:
     return {str(k): str(v) for k, v in data.items()}
 
 
+def _json_object_dict(raw: str | None) -> dict[str, object]:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _prop_int(props: dict[str, str], key: str, default: int) -> int:
     try:
         return int(float(props.get(key, default)))
@@ -2386,4 +2545,34 @@ def _row_to_memory_score(row: aiosqlite.Row) -> MemoryScore:
         failure_count=int(row["failure_count"]),
         score=float(row["score"]),
         updated_at=float(row["updated_at"]),
+    )
+
+
+def _row_to_ingestion_job(row: aiosqlite.Row) -> IngestionJob:
+    return IngestionJob(
+        id=row["id"],
+        document_id=row["document_id"],
+        version=row["version"],
+        stage=IngestionJobStage(row["stage"]),
+        status=IngestionJobStatus(row["status"]),
+        attempt=int(row["attempt"]),
+        error=row["error"],
+        properties=_json_str_dict(row["properties_json"]),
+        created_at=float(row["created_at"]),
+        updated_at=float(row["updated_at"]),
+    )
+
+
+def _row_to_index_lag_report(row: aiosqlite.Row) -> IndexLagReport:
+    return IndexLagReport(
+        provider=row["provider"],
+        status=row["status"],
+        index_generation=row["index_generation"],
+        pending_documents=int(row["pending_documents"]),
+        pending_chunks=int(row["pending_chunks"]),
+        failed_jobs=int(row["failed_jobs"]),
+        lag_seconds=float(row["lag_seconds"]),
+        p95_index_latency_seconds=float(row["p95_index_latency_seconds"]),
+        properties=_json_object_dict(row["properties_json"]),
+        checked_at=float(row["checked_at"]),
     )

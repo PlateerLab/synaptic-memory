@@ -57,6 +57,101 @@ def test_candidate_search_request_scope_defaults_are_isolated():
     assert second.scope.workspace_id == ""
 
 
+async def _assert_operational_store_roundtrip(backend) -> None:
+    first = IngestionJob(
+        id="job-1",
+        document_id="doc-a",
+        version="v1",
+        stage=IngestionJobStage.CHUNK,
+        status=IngestionJobStatus.RUNNING,
+        attempt=2,
+        properties={"workspace_id": "workspace-a"},
+        created_at=10.0,
+        updated_at=11.0,
+    )
+    second = IngestionJob(
+        id="job-2",
+        document_id="doc-b",
+        version="v3",
+        stage=IngestionJobStage.VECTOR_INDEX,
+        status=IngestionJobStatus.FAILED,
+        error="timeout",
+        created_at=12.0,
+        updated_at=13.0,
+    )
+
+    await backend.save_ingestion_job(first)
+    await backend.save_ingestion_job(second)
+
+    got = await backend.get_ingestion_job("job-1")
+    assert got is not None
+    assert got.document_id == "doc-a"
+    assert got.stage == IngestionJobStage.CHUNK
+    assert got.status == IngestionJobStatus.RUNNING
+    assert got.attempt == 2
+    assert got.properties == {"workspace_id": "workspace-a"}
+    assert [job.id for job in await backend.list_ingestion_jobs(limit=10)] == [
+        "job-2",
+        "job-1",
+    ]
+    assert [
+        job.id
+        for job in await backend.list_ingestion_jobs(
+            stage=IngestionJobStage.VECTOR_INDEX,
+            status=IngestionJobStatus.FAILED,
+            limit=10,
+        )
+    ] == ["job-2"]
+    assert [job.id for job in await backend.list_ingestion_jobs(document_id="doc-a")] == ["job-1"]
+
+    await backend.save_index_lag_report(
+        IndexLagReport(
+            provider="qdrant",
+            status="ok",
+            index_generation="vec-v1",
+            pending_documents=2,
+            pending_chunks=5,
+            failed_jobs=1,
+            lag_seconds=3.5,
+            p95_index_latency_seconds=1.2,
+            properties={"points_count": 42, "collection": "synaptic-vectors"},
+            checked_at=20.0,
+        )
+    )
+    await backend.save_index_lag_report(
+        IndexLagReport(
+            provider="opensearch",
+            status="yellow",
+            index_generation="lex-v2",
+            checked_at=30.0,
+        )
+    )
+
+    reports = await backend.list_index_lag_reports(limit=10)
+    assert [report.provider for report in reports] == ["opensearch", "qdrant"]
+    qdrant_reports = await backend.list_index_lag_reports(provider="qdrant", since=15.0)
+    assert len(qdrant_reports) == 1
+    assert qdrant_reports[0].pending_chunks == 5
+    assert qdrant_reports[0].properties["points_count"] == 42
+
+
+@pytest.mark.asyncio
+async def test_memory_backend_operational_store_roundtrip():
+    await _assert_operational_store_roundtrip(MemoryBackend())
+
+
+@pytest.mark.asyncio
+async def test_sqlite_backend_operational_store_roundtrip(tmp_path):
+    from synaptic.backends.sqlite import SQLiteBackend
+
+    backend = SQLiteBackend(tmp_path / "ops.db")
+    await backend.connect()
+    try:
+        await _assert_operational_store_roundtrip(backend)
+    finally:
+        await backend.close()
+
+
 def test_unique_candidates_preserves_first_seen_order():
     candidates = [
         ScoredCandidate(node_id="n1", score=0.9, provider="lexical"),

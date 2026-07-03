@@ -355,6 +355,15 @@ Goal: make new/changed data manageable as memory, not bulk reloads.
 - Add delete/update tombstone flow.
 - Add index lag and failed-stage health report.
 
+Current implementation status:
+
+- `IngestionJobStore` now has Memory/SQLite persistence for stage, status,
+  attempt, error, version, and job properties.
+- `IndexHealthBackend` now has Memory/SQLite persistence for provider lag
+  reports, pending counts, failed jobs, p95 latency, and provider properties.
+- This records operational state only; idempotent parse/chunk/embed/index
+  orchestration and tombstones remain the next pipeline step.
+
 ### Phase 6 - Memory Health at Scale
 
 Goal: keep feedback and pollution management useful with increasing data.
@@ -392,5 +401,5 @@ The system is 10TB-ready only when all are true:
 ## Near-Term TODO
 
 1. Run DeepSeek 100-query follow-up against the `31/50` baseline.
-2. Add index lag/ingestion job persistence to a durable backend.
+2. Add idempotent ingestion stage orchestration and tombstone/replay flow.
 3. Run a 100GB or 1TB corpus rehearsal before any 10TB ingestion work.
