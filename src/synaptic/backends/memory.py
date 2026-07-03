@@ -6,6 +6,7 @@ import math
 from collections.abc import Sequence
 from difflib import SequenceMatcher
 
+from synaptic.indexing import IndexLagReport, IngestionJob, IngestionJobStage, IngestionJobStatus
 from synaptic.models import (
     ConsolidationLevel,
     Edge,
@@ -23,7 +24,15 @@ from synaptic.models import (
 class MemoryBackend:
     """Dict-based in-memory backend. No external dependencies."""
 
-    __slots__ = ("_edges", "_memory_events", "_memory_scores", "_nodes", "_retrieval_events")
+    __slots__ = (
+        "_edges",
+        "_index_lag_reports",
+        "_ingestion_jobs",
+        "_memory_events",
+        "_memory_scores",
+        "_nodes",
+        "_retrieval_events",
+    )
 
     def __init__(self) -> None:
         self._nodes: dict[str, Node] = {}
@@ -31,6 +40,8 @@ class MemoryBackend:
         self._memory_events: dict[str, MemoryEvent] = {}
         self._retrieval_events: dict[str, RetrievalEvent] = {}
         self._memory_scores: dict[tuple[str, str, str], MemoryScore] = {}
+        self._ingestion_jobs: dict[str, IngestionJob] = {}
+        self._index_lag_reports: list[IndexLagReport] = []
 
     async def connect(self) -> None:
         pass
@@ -41,6 +52,8 @@ class MemoryBackend:
         self._memory_events.clear()
         self._retrieval_events.clear()
         self._memory_scores.clear()
+        self._ingestion_jobs.clear()
+        self._index_lag_reports.clear()
 
     # --- Node CRUD ---
 
@@ -386,6 +399,60 @@ class MemoryBackend:
             if edge_filter and score.edge_id not in edge_filter:
                 continue
             out.append(score)
+            if len(out) >= limit:
+                break
+        return out
+
+    async def save_ingestion_job(self, job: IngestionJob) -> None:
+        self._ingestion_jobs[job.id] = job
+
+    async def get_ingestion_job(self, job_id: str) -> IngestionJob | None:
+        return self._ingestion_jobs.get(job_id)
+
+    async def list_ingestion_jobs(
+        self,
+        *,
+        document_id: str = "",
+        stage: str | IngestionJobStage | None = None,
+        status: str | IngestionJobStatus | None = None,
+        limit: int = 100,
+    ) -> list[IngestionJob]:
+        out: list[IngestionJob] = []
+        jobs = sorted(self._ingestion_jobs.values(), key=lambda job: job.updated_at, reverse=True)
+        for job in jobs:
+            if document_id and job.document_id != document_id:
+                continue
+            if stage is not None and str(job.stage) != str(stage):
+                continue
+            if status is not None and str(job.status) != str(status):
+                continue
+            out.append(job)
+            if len(out) >= limit:
+                break
+        return out
+
+    async def save_index_lag_report(self, report: IndexLagReport) -> None:
+        self._index_lag_reports.append(report)
+
+    async def list_index_lag_reports(
+        self,
+        *,
+        provider: str = "",
+        since: float | None = None,
+        limit: int = 100,
+    ) -> list[IndexLagReport]:
+        out: list[IndexLagReport] = []
+        reports = sorted(
+            self._index_lag_reports,
+            key=lambda report: report.checked_at,
+            reverse=True,
+        )
+        for report in reports:
+            if provider and report.provider != provider:
+                continue
+            if since is not None and report.checked_at < since:
+                continue
+            out.append(report)
             if len(out) >= limit:
                 break
         return out

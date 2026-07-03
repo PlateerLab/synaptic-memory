@@ -8,6 +8,13 @@ from synaptic.agent_search import SearchIntent, suggest_intent
 from synaptic.backends.memory import MemoryBackend
 from synaptic.extensions.entity_extractor_openie import ChainedEntityExtractor, LLMOpenIEExtractor
 from synaptic.graph import SynapticGraph, _default_fts_seed_limit
+from synaptic.indexing import (
+    CandidateScoreSource,
+    CandidateSearchRequest,
+    CandidateSearchResult,
+    IndexLagReport,
+    ScoredCandidate,
+)
 from synaptic.models import DigestResult, EdgeKind, MaintenanceResult, Node, NodeKind
 from synaptic.ontology import (
     build_agent_ontology,
@@ -45,6 +52,35 @@ class _CountingBatchBackend(MemoryBackend):
     async def save_nodes_batch(self, nodes):
         self.batch_save_sizes.append(len(nodes))
         await super().save_nodes_batch(nodes)
+
+
+class _FakeIndexRouter:
+    def __init__(self, node_id: str = "router-hit") -> None:
+        self.node_id = node_id
+        self.requests: list[CandidateSearchRequest] = []
+
+    async def search_candidates(
+        self,
+        request: CandidateSearchRequest,
+    ) -> CandidateSearchResult:
+        self.requests.append(request)
+        return CandidateSearchResult(
+            candidates=[
+                ScoredCandidate(
+                    node_id=self.node_id,
+                    score=0.9,
+                    score_source=CandidateScoreSource.LEXICAL,
+                    rank=1,
+                    query_variant=request.query,
+                    provider="fake_router",
+                )
+            ],
+            provider_counts={"fake_router": 1},
+            score_ranges={"fake_router": 0.9},
+        )
+
+    async def index_health(self) -> list[IndexLagReport]:
+        return [IndexLagReport(provider="fake_router", status="ok")]
 
 
 class TestGraphFullOpenIE:
@@ -617,6 +653,30 @@ class TestSearchRuntimeOptions:
 
         await g.search("retrieval topic", limit=3)
         assert len(g._evidence_search_cache) == 2
+
+    async def test_index_router_is_wired_into_search_and_cache_key(self) -> None:
+        backend = MemoryBackend()
+        await backend.connect()
+        await backend.save_node(
+            Node(
+                id="router-hit",
+                kind=NodeKind.CHUNK,
+                title="Router Hit",
+                content="retrieval topic from router",
+            )
+        )
+        router = _FakeIndexRouter()
+        g = SynapticGraph(backend, index_router=router)
+
+        result = await g.search("retrieval topic", limit=1, rerank=False)
+
+        assert result.nodes[0].node.id == "router-hit"
+        assert result.diagnostics["router_candidate_count"] == 1.0
+        assert router.requests[0].query == "retrieval topic"
+        assert g._evidence_search_cache
+
+        g.index_router = _FakeIndexRouter("missing")
+        assert g._evidence_search_cache == {}
 
     async def test_reranker_weight_change_clears_evidence_search_cache(self) -> None:
         g = await self._graph(_SpyReranker())

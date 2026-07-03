@@ -304,6 +304,7 @@ class SynapticGraph:
         "_embedder",
         "_evidence_search_cache",
         "_hebbian",
+        "_index_router",
         "_json_exporter",
         "_md_exporter",
         "_ontology",
@@ -331,6 +332,7 @@ class SynapticGraph:
         query_decomposer: QueryDecomposer | None = None,
         reranker: object | None = None,
         reranker_weights: object | None = None,
+        index_router: object | None = None,
         cache_size: int = 256,
         vector_min_cosine: float | None = None,
         vector_relative_drop: float | None = None,
@@ -356,6 +358,7 @@ class SynapticGraph:
         self._chunk_entity_index = chunk_entity_index
         self._query_decomposer = query_decomposer
         self._reranker = reranker
+        self._index_router = index_router
         # Optional RerankerWeights for the hybrid reranker. None keeps the
         # built-in defaults; set it (e.g. via the ``reranker_weights`` property
         # or a factory arg) to enable the usage/time memory axis.
@@ -1495,6 +1498,22 @@ class SynapticGraph:
         return self._backend
 
     @property
+    def index_router(self) -> object | None:
+        """Optional candidate router used by EvidenceSearch.
+
+        ``None`` keeps the legacy StorageBackend seed path. Setting a router
+        switches new searcher instances to candidate-id retrieval while existing
+        cached searchers are discarded.
+        """
+
+        return self._index_router
+
+    @index_router.setter
+    def index_router(self, router: object | None) -> None:
+        self._index_router = router
+        self._evidence_search_cache.clear()
+
+    @property
     def reranker_weights(self) -> object | None:
         """Weights for the hybrid reranker (a :class:`RerankerWeights`).
 
@@ -2484,6 +2503,8 @@ class SynapticGraph:
             search_kwargs["per_document_cap"] = per_document_cap
         if embedding is not None:
             search_kwargs["query_embedding"] = embedding
+        if scope is not None:
+            search_kwargs["scope"] = scope
         ev_result = await searcher.search(query, **search_kwargs)
 
         # Adapter: Evidence (node + score + reason) → ActivatedNode
@@ -2573,6 +2594,7 @@ class SynapticGraph:
             id(active_reranker),
             id(self._reranker_weights),
             id(self._query_decomposer),
+            id(self._index_router),
         )
         searcher = self._evidence_search_cache.get(key)
         if searcher is None:
@@ -2585,6 +2607,7 @@ class SynapticGraph:
                 reranker=active_reranker,
                 reranker_weights=self._reranker_weights,
                 decomposer=self._query_decomposer,
+                index_router=self._index_router,
             )
             self._evidence_search_cache[key] = searcher
         return searcher
