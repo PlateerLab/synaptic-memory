@@ -48,12 +48,12 @@ Must-have:
   quickstart.
 - GitHub topics and description.
 - GitHub release notes.
+- 60-second demo plan and recording command: `docs/launch/demo_video.md`.
 - Show HN draft: `docs/launch/show_hn_draft.md`.
 
 Nice-to-have:
 
-- 30-60 second terminal GIF:
-  `pip install`, `synaptic-quickstart --json`, `from_data()`, `search()`.
+- Exported terminal GIF or short MP4 from `examples/launch_demo.py`.
 - Architecture image showing documents/SQL -> graph -> EvidenceSearch -> MCP
   agent tools.
 - Short Korean post for GeekNews / LinkedIn.
@@ -77,6 +77,8 @@ memory health signals.
 Highlights:
 
 - `synaptic-quickstart` for a 5-minute local smoke test.
+- `examples/launch_demo.py` for a 60-second launch video over documents, SQL
+  rows, retrieval feedback, and memory health metadata.
 - `SynapticGraph.from_data()`, `from_chunks()`, and `from_database()` presets:
   `local`, `rag`, `agent`, `scale`.
 - Infrastructure paths for SQLite, PostgreSQL + pgvector, Kuzu, Qdrant, and
@@ -164,10 +166,11 @@ https://github.com/PlateerLab/synaptic-memory
 
 1. GitHub release.
 2. PyPI release metadata check.
-3. HN Show HN.
-4. Korean mirror post: GeekNews / LinkedIn.
-5. Reddit posts only where allowed.
-6. Follow-up technical blog post:
+3. Record the 60-second terminal demo from `docs/launch/demo_video.md`.
+4. HN Show HN.
+5. Korean mirror post: GeekNews / LinkedIn.
+6. Reddit posts only where allowed.
+7. Follow-up technical blog post:
    "Why RAG agents need graph tools, not only vector search."
 
 ---

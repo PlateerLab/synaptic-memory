@@ -128,7 +128,7 @@ Blockers:
 
 Nice-to-have:
 
-- [ ] 30-60 second terminal GIF or asciinema recording.
+- [ ] 60-second terminal GIF or MP4 from `docs/launch/demo_video.md`.
 - [ ] One architecture image for social posts.
 - [ ] Korean mirror post for GeekNews / LinkedIn.
 - [ ] A small "RAG vs Synaptic" diagram in the docs.
