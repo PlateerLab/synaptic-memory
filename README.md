@@ -97,6 +97,12 @@ MCP tools → LLM agent explores via graph-aware multi-turn tool use
 # Recommended local graph + MCP setup
 pip install "synaptic-memory[sqlite,korean,vector,mcp]"
 
+# Team / production graph on PostgreSQL + pgvector
+pip install "synaptic-memory[postgresql,embedding,reranker]"
+
+# Scale-out helpers: Kuzu graph + Qdrant vector + MinIO blob storage
+pip install "synaptic-memory[scale]"
+
 # Add this for the LangChain retriever example
 pip install "synaptic-memory[langchain]"
 
@@ -117,12 +123,69 @@ pip install synaptic-memory[embedding]     # + aiohttp for embedding APIs
 pip install synaptic-memory[reranker]      # + flashrank cross-encoder
 pip install synaptic-memory[langchain]     # + LangChain retriever adapter
 pip install synaptic-memory[postgresql]    # + asyncpg + pgvector
+pip install synaptic-memory[mysql]         # + aiomysql DB ingest
+pip install synaptic-memory[oracle]        # + oracledb DB ingest
+pip install synaptic-memory[mssql]         # + aioodbc DB ingest
+pip install synaptic-memory[kuzu]          # + embedded property graph backend
+pip install synaptic-memory[qdrant]        # + Qdrant vector helper
+pip install synaptic-memory[minio]         # + MinIO/S3-compatible blob helper
+pip install synaptic-memory[scale]         # + Kuzu + Qdrant + MinIO + aiohttp
 pip install synaptic-memory[docs]          # + xgen-doc2chunk (PDF/DOCX/PPTX/XLSX/HWP)
 ```
 
 </details>
 
 ---
+
+## Infrastructure Integration
+
+The default one-liner creates a local SQLite graph. For existing
+infrastructure, create the backend yourself, connect it, and pass it to
+`from_data()`, `from_chunks()`, or `from_database()`.
+
+```python
+from synaptic import SynapticGraph
+from synaptic.backends.postgresql import PostgreSQLBackend
+
+backend = PostgreSQLBackend("postgresql://user:pass@host:5432/synaptic")
+await backend.connect()
+
+graph = await SynapticGraph.from_data("./docs/", backend=backend, preset="rag")
+```
+
+Current backend roles:
+
+| Path | Install | What owns the data | When to use |
+|------|---------|--------------------|-------------|
+| Local app / laptop | `sqlite,korean,vector` | SQLite FTS5 + local usearch HNSW | fastest adoption, demos, small services |
+| Team service | `postgresql,embedding,reranker` | PostgreSQL + pgvector + pg_trgm | durable shared graph, backups, SQL ops |
+| Graph-heavy embedded | `kuzu,korean,embedding` | Kuzu property graph | local graph traversal / Cypher workflows |
+| Scale-out composition | `scale` | Kuzu or another graph store + Qdrant + MinIO | separate graph, vector, and blob responsibilities |
+
+Qdrant and MinIO are helper services, not full graph stores. Use them through
+`CompositeBackend`: graph storage keeps nodes/edges, Qdrant handles ANN vector
+search, and MinIO/S3-compatible storage offloads large `Node.content`.
+
+```python
+from synaptic.backends.composite import CompositeBackend
+from synaptic.backends.kuzu import KuzuBackend
+from synaptic.backends.minio_store import MinIOBackend
+from synaptic.backends.qdrant import QdrantBackend
+
+backend = CompositeBackend(
+    KuzuBackend("synaptic.kuzu"),
+    vector=QdrantBackend("http://localhost:6333", collection="synaptic"),
+    blob=MinIOBackend("localhost:9000", bucket="synaptic"),
+)
+await backend.connect()
+
+graph = await SynapticGraph.from_data("./docs/", backend=backend, preset="scale")
+```
+
+The library gives you the backend contracts and the retrieval layer. For
+multi-terabyte production corpora, plan the surrounding operating layer too:
+durable ingestion queues, parser/OCR workers, external lexical indexes,
+tenant/ACL filters, index-lag monitoring, and backup/restore for each store.
 
 ## Quick Start
 
@@ -441,13 +504,15 @@ Agent tools → MCP server → LLM agent
 
 ## Backends
 
-| Backend | Vector Search | Scale | Use Case |
-|---------|--------------|-------|----------|
-| `MemoryBackend` | cosine | ~10K | Testing |
-| `SqliteGraphBackend` | **usearch HNSW** | ~100K | **Default** |
-| `KuzuBackend` | HNSW | ~10M | Graph-heavy |
-| `PostgreSQLBackend` | pgvector | ~1M | Production |
-| `CompositeBackend` | Qdrant | Unlimited | Scale-out |
+| Backend | Install extra | Role | Use case |
+|---------|---------------|------|----------|
+| `MemoryBackend` | core | in-process graph | tests and examples |
+| `SqliteGraphBackend` | `sqlite`, `vector` | local graph + FTS5 + usearch HNSW | default local/embedded deployment |
+| `KuzuBackend` | `kuzu` | embedded property graph + Cypher | graph-heavy local workflows |
+| `PostgreSQLBackend` | `postgresql` | durable graph + pgvector + pg_trgm | shared production service |
+| `QdrantBackend` | `qdrant` | vector-only helper | ANN search behind `CompositeBackend` |
+| `MinIOBackend` | `minio` | blob-only helper | large content offload behind `CompositeBackend` |
+| `CompositeBackend` | `scale` | router over graph + vector + blob stores | scale-out composition |
 
 ---
 
@@ -462,6 +527,15 @@ Agent tools → MCP server → LLM agent
 | `sqlite` | aiosqlite backend |
 | `langchain` | LangChain retriever adapter |
 | `postgresql` | asyncpg + pgvector |
+| `mysql` | aiomysql database ingest |
+| `oracle` | oracledb database ingest |
+| `mssql` | aioodbc database ingest |
+| `kuzu` | embedded Kuzu graph backend |
+| `qdrant` | Qdrant vector helper |
+| `minio` | MinIO/S3-compatible blob helper |
+| `scale` | Kuzu + Qdrant + MinIO + aiohttp |
+| `rag` | spaCy + aiohttp endpoint helpers |
+| `all` | common database, vector, MCP, Korean, reranker extras |
 | `docs` | xgen-doc2chunk for PDF/DOCX/PPTX/XLSX/HWP loading |
 
 ---
