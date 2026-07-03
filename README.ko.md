@@ -24,6 +24,24 @@ synaptic-quickstart --db quickstart.db
 
 ---
 
+## 왜 그냥 RAG가 아닌가?
+
+일반 RAG는 독립적인 chunk에서 답을 찾는 경우가 많습니다. Synaptic은 먼저
+그래프를 만들기 때문에 에이전트가 검색하고, 관계를 따라가고, 정형 row를
+조회하고, 어떤 evidence가 도움이 됐는지 기억할 수 있습니다.
+
+| 일반 RAG | Synaptic Memory |
+|----------|-----------------|
+| chunk + vector search | 문서, chunk, row, edge |
+| 데이터 변경 시 재빌드가 흔함 | live DB용 CDC sync |
+| 기본은 single-shot retrieval | 멀티턴 탐색용 MCP 도구 |
+| feedback은 인덱스 밖에 있음 | 선택적 memory event, feedback, health signal |
+
+vector DB 대체재가 아닙니다. 기존 문서, SQL 데이터, embedding endpoint,
+agent runtime 주변에 붙는 graph/tool layer입니다.
+
+---
+
 ## 그래프 구축과 검색
 
 ```python

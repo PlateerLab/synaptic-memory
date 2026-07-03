@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a capability, backend, integration, or documentation improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow or limitation are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like synaptic-memory to do?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Ingest
+        - Search / ranking
+        - MCP / agent tools
+        - Memory operating layer
+        - Backend / infrastructure
+        - Documentation
+        - Evaluation / benchmarks
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, examples, corpus shape, scale, or constraints.
+    validations:
+      required: false

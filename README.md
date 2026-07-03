@@ -26,6 +26,24 @@ zero-dependency smoke test. Full source for the expanded example:
 
 ---
 
+## Why not just RAG?
+
+Plain RAG usually answers from independent chunks. Synaptic builds a graph first,
+so an agent can search, follow relations, inspect structured rows, and remember
+which evidence helped.
+
+| Plain RAG | Synaptic Memory |
+|-----------|-----------------|
+| chunks + vector search | documents, chunks, rows, and edges |
+| usually rebuilds on data change | CDC sync for live databases |
+| single-shot retrieval by default | MCP tools for multi-turn exploration |
+| feedback lives outside the index | optional memory events, feedback, and health signals |
+
+It is not a vector database replacement. It is the graph and tool layer around
+your existing documents, SQL data, embedding endpoint, and agent runtime.
+
+---
+
 ## Build and search
 
 ```python
