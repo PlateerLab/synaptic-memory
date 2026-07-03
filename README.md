@@ -26,7 +26,7 @@ zero-dependency smoke test. Full source for the expanded example:
 
 ---
 
-## Two calls to build a graph
+## Build and search
 
 ```python
 import asyncio
@@ -36,7 +36,7 @@ async def main():
     # Any data → knowledge graph (CSV, JSONL, directory)
     graph = await SynapticGraph.from_data("./my_data/", preset="rag")
     try:
-        result = await graph.search("my question", engine="evidence")
+        result = await graph.search("my question")
         print(result.nodes[0].node.title if result.nodes else "no result")
     finally:
         await graph.close()
@@ -132,7 +132,7 @@ async def main():
     # CSV file
     graph = await SynapticGraph.from_data("products.csv")
     try:
-        result = await graph.search("my question", engine="evidence")
+        result = await graph.search("my question")
         for activated in result.nodes[:5]:
             print(activated.node.title, activated.activation)
     finally:
@@ -173,11 +173,13 @@ from synaptic.integrations.langchain import SynapticRetriever
 
 async def main():
     graph = await SynapticGraph.from_data("./docs/")
-    retriever = SynapticRetriever(graph=graph, k=5, engine="evidence")
-
-    docs = await retriever.ainvoke("my question")
-    for doc in docs:
-        print(doc.page_content[:80], "   ", doc.metadata["score"])
+    try:
+        retriever = SynapticRetriever(graph=graph, k=5)
+        docs = await retriever.ainvoke("my question")
+        for doc in docs:
+            print(doc.page_content[:80], "   ", doc.metadata["score"])
+    finally:
+        await graph.close()
 
 asyncio.run(main())
 ```
@@ -258,15 +260,14 @@ Synaptic does *not* do is LLM-synthesize fuzzy semantic relations or
 community summaries — if you need those, layer them with your own
 agent; Synaptic gives you the primitives.
 
-> **v0.16.0+**: `graph.search()` defaults to the hybrid
+> **v0.28+**: `graph.search()` has one retrieval path: the hybrid
 > EvidenceSearch pipeline (BM25 + HNSW + PPR + cross-encoder + MMR).
-> `engine="legacy"` still works but raises `DeprecationWarning`;
-> removal is pushed to v0.18.0 to bundle with HippoRAG2-style
-> architecture work.
+> The old `engine=` switch was removed, so examples should call
+> `graph.search("question")` directly.
 
 ---
 
-## Agent Tools (42 total)
+## Agent Tools
 
 ### Text search tools
 | Tool | Purpose |
@@ -353,6 +354,11 @@ await graph.reinforce([node_id], success=True)  # this result helped → lift it
 ---
 
 ## Benchmarks
+
+The numbers below are version-tagged historical snapshots. Use the linked
+scripts/reports for exact reproduction, and prefer
+[`docs/comparison/synaptic_results.md`](docs/comparison/synaptic_results.md)
+for a continuously curated result log.
 
 ### Reproducible FTS-only baseline (< 2 seconds on a laptop)
 
@@ -533,11 +539,11 @@ MuSiQue-Ans-dev 500q full pipeline R@5 **0.453** vs HippoRAG2's
 published **0.747** (−0.294). Three rounds of targeted fixes (LLM
 query decomposition, inline phrase hub, DF-filtered entity linker)
 all regressed the score — the gap is structural. Closing it
-requires OpenIE triple extraction + query→triple dense linking,
-which is a v0.18.0+ research track rather than a default pipeline
-change. Synaptic's strength is Korean / structured-data RAG;
+requires OpenIE triple extraction + query→triple dense linking.
+That work now lives as an opt-in, bounded, revertible layer rather
+than a default deterministic path. Synaptic's strength is Korean / structured-data RAG;
 English Wikipedia multi-hop is honestly documented as a trade-off.
-See [`docs/PLAN-v0.18-architecture.md`](docs/PLAN-v0.18-architecture.md#q2--indexing--llm-free-유지-vs-selective-llm-도입).
+See the OpenIE and memory operating layer plans under `docs/PLAN-v0.30+`.
 
 ### Multi-turn agent (GPT-4o-mini, 5 turns max)
 
@@ -567,7 +573,7 @@ StorageBackend (Protocol)
   ↓
 Retrieval pipeline (BM25 + vector + PRF + PPR + reranker + MMR)
   ↓
-Agent tools (42) → MCP server → LLM agent
+Agent tools → MCP server → LLM agent
 ```
 
 ---
@@ -612,13 +618,14 @@ Agent tools (42) → MCP server → LLM agent
 | [docs/comparison/published_numbers.md](docs/comparison/published_numbers.md) | Competitor self-reported numbers (with sources) |
 | [docs/paper/draft.md](docs/paper/draft.md) | arXiv preprint draft — Streaming Retrieval with Top-K Invariance |
 | [docs/paper/theorem.md](docs/paper/theorem.md) | Formal theorem + proof sketch |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Future plans |
+| [docs/ADOPTION.md](docs/ADOPTION.md) | Install, presets, and first integration path |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Historical roadmap |
 
 ## Dev
 
 ```bash
 uv sync --extra dev --extra sqlite --extra mcp
-uv run pytest tests/ -q                   # 809+ tests
+uv run pytest tests/ -q
 uv run ruff check --fix
 ```
 
