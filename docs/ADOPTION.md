@@ -37,7 +37,7 @@ from synaptic import SynapticGraph
 
 graph = await SynapticGraph.from_data("./docs/", preset="rag")
 try:
-    result = await graph.search("refund policy exception", engine="evidence")
+    result = await graph.search("refund policy exception")
 finally:
     await graph.close()
 ```
