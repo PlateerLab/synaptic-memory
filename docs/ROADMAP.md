@@ -1,11 +1,13 @@
-# Synaptic Memory — Roadmap
+# Synaptic Memory — Historical Roadmap
 
-> 마지막 업데이트: 2026-04-20 (v0.17.2 PyPI + v0.18-alpha 진행 중)
+> 마지막 업데이트: 2026-04-20. 이 문서는 v0.17~v0.18 시점의 역사적
+> 로드맵입니다. 현재 설치/사용 흐름은 루트 README, 최신 변경 이력은
+> CHANGELOG, 이후 고도화 계획은 PLAN-v0.30+ / PLAN-v0.31+ 문서를 보세요.
 
-## 현재 상태
+## 당시 상태
 
-- **PyPI stable**: [`synaptic-memory==0.17.2`](https://pypi.org/project/synaptic-memory/0.17.2/)
-- **진행 트랙**: v0.18-alpha (`graph.chat()` agent-loop public API)
+- **PyPI stable 당시 기준**: [`synaptic-memory==0.17.2`](https://pypi.org/project/synaptic-memory/0.17.2/)
+- **당시 진행 트랙**: v0.18-alpha (`graph.chat()` agent-loop public API)
 - **라이선스**: Apache-2.0 (v0.17.2 에서 MIT → Apache-2.0 전환)
 - **테스트**: **942** 단위 테스트 통과
 - **MCP 도구**: 36개
