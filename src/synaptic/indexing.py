@@ -34,6 +34,7 @@ __all__ = [
     "IngestionJobStatus",
     "IngestionJobStore",
     "OpenSearchCandidateProvider",
+    "QdrantCandidateProvider",
     "ScoredCandidate",
     "StorageCandidateProvider",
     "unique_candidates",
@@ -539,6 +540,196 @@ class OpenSearchCandidateProvider:
         }
 
 
+class QdrantCandidateProvider:
+    """Qdrant vector provider.
+
+    The provider accepts an injected async or sync Qdrant-compatible client and
+    converts `IndexFilter` into payload filters. It returns scored candidate ids
+    only; graph/metadata hydration stays in the normal retrieval pipeline.
+    """
+
+    __slots__ = (
+        "_client",
+        "_collection",
+        "_field_map",
+        "_name",
+        "_payload_fields",
+        "_using",
+    )
+
+    def __init__(
+        self,
+        client: object,
+        *,
+        collection: str,
+        name: str = "qdrant",
+        payload_fields: Sequence[str] = (
+            "node_id",
+            "document_id",
+            "doc_id",
+            "title",
+            "kind",
+            "source",
+            "page",
+            "chunk_id",
+            "category",
+            "domain",
+            "language",
+        ),
+        field_map: dict[str, str] | None = None,
+        using: str | None = None,
+    ) -> None:
+        self._client = client
+        self._collection = collection
+        self._name = name
+        self._payload_fields = list(payload_fields)
+        self._using = using
+        self._field_map = {
+            "node_id": "node_id",
+            "document_id": "document_id",
+            "doc_id": "doc_id",
+            "workspace_id": "workspace_id",
+            "user_id": "user_id",
+            "session_id": "session_id",
+            "domain": "domain",
+            "acl_policy_id": "acl_policy_id",
+            "source_id": "source_id",
+            "source": "source",
+            "language": "language",
+            "mime_type": "mime_type",
+            "tags": "tags",
+            "created_at": "created_at",
+            "updated_at": "updated_at",
+            **(field_map or {}),
+        }
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    async def search_candidates(
+        self,
+        request: CandidateSearchRequest,
+    ) -> CandidateSearchResult:
+        limit = max(0, int(request.limit))
+        if limit == 0:
+            return CandidateSearchResult(index_generation=self._collection)
+        if not request.embedding:
+            return CandidateSearchResult(
+                diagnostics={"missing_embedding": True},
+                index_generation=self._collection,
+            )
+
+        payload_filter = _qdrant_filter(request.filters, self._field_map)
+        response = await self._search(request.embedding, limit=limit, payload_filter=payload_filter)
+        raw_points = _qdrant_points(response)
+        max_raw_score = max((_qdrant_score(point) for point in raw_points), default=0.0)
+        candidates: list[ScoredCandidate] = []
+        for rank, point in enumerate(raw_points, start=1):
+            payload = _qdrant_payload(point)
+            node_id = _payload_value(payload, "node_id") or _qdrant_id(point)
+            if not node_id:
+                continue
+            raw_score = _qdrant_score(point)
+            candidates.append(
+                ScoredCandidate(
+                    node_id=node_id,
+                    document_id=_payload_value(payload, "document_id", "doc_id"),
+                    score=_normalize_vector_score(raw_score, max_raw_score, rank),
+                    score_source=CandidateScoreSource.VECTOR,
+                    rank=rank,
+                    query_variant=request.query,
+                    provider=self.name,
+                    index_generation=_payload_value(payload, "index_generation")
+                    or self._collection,
+                    metadata=_payload_metadata(payload, raw_score=raw_score),
+                )
+            )
+
+        return CandidateSearchResult(
+            candidates=unique_candidates(candidates, limit=limit, prefer_highest_score=True),
+            provider_counts={self.name: len(candidates)},
+            score_ranges=_provider_score_max(candidates),
+            diagnostics={
+                "raw_candidate_count": len(candidates),
+                "filtered": _has_filters(request.filters),
+                "payload_filter": payload_filter is not None,
+            },
+            index_generation=self._collection,
+        )
+
+    async def index_health(self) -> IndexLagReport:
+        getter = getattr(self._client, "get_collection", None)
+        if callable(getter):
+            try:
+                try:
+                    response = await _maybe_await(getter(collection_name=self._collection))
+                except TypeError:
+                    response = await _maybe_await(getter(self._collection))
+                payload = _response_dict(response)
+                points_count = _object_int(response, payload, "points_count")
+                return IndexLagReport(
+                    provider=self.name,
+                    status=str(_object_str(response, payload, "status") or "ok"),
+                    index_generation=self._collection,
+                    properties={
+                        "collection": self._collection,
+                        "points_count": points_count,
+                    },
+                )
+            except Exception as exc:
+                return IndexLagReport(
+                    provider=self.name,
+                    status="error",
+                    index_generation=self._collection,
+                    properties={"collection": self._collection, "error": type(exc).__name__},
+                )
+        return IndexLagReport(
+            provider=self.name,
+            status="unknown",
+            index_generation=self._collection,
+            properties={"collection": self._collection},
+        )
+
+    async def _search(
+        self,
+        embedding: list[float],
+        *,
+        limit: int,
+        payload_filter: dict[str, object] | None,
+    ) -> object:
+        query_points = getattr(self._client, "query_points", None)
+        if callable(query_points):
+            kwargs: dict[str, object] = {
+                "collection_name": self._collection,
+                "query": embedding,
+                "limit": limit,
+                "with_payload": self._payload_fields,
+            }
+            if payload_filter is not None:
+                kwargs["query_filter"] = payload_filter
+            if self._using:
+                kwargs["using"] = self._using
+            return await _maybe_await(query_points(**kwargs))
+
+        search = getattr(self._client, "search", None)
+        if callable(search):
+            kwargs = {
+                "collection_name": self._collection,
+                "query_vector": embedding,
+                "limit": limit,
+                "with_payload": self._payload_fields,
+            }
+            if payload_filter is not None:
+                kwargs["query_filter"] = payload_filter
+            if self._using:
+                kwargs["vector_name"] = self._using
+            return await _maybe_await(search(**kwargs))
+
+        msg = "Qdrant client must expose query_points() or search()."
+        raise TypeError(msg)
+
+
 class InProcessIndexRouter:
     """Simple deterministic router for local providers.
 
@@ -954,3 +1145,197 @@ def _source_metadata(source: dict[str, object], *, raw_score: float) -> dict[str
         if value is not None:
             metadata[key] = value
     return metadata
+
+
+def _qdrant_filter(
+    filters: IndexFilter,
+    field_map: dict[str, str],
+) -> dict[str, object] | None:
+    must: list[dict[str, object]] = []
+    _qdrant_match(must, field_map, "workspace_id", filters.workspace_id)
+    _qdrant_match(must, field_map, "user_id", filters.user_id)
+    _qdrant_match(must, field_map, "session_id", filters.session_id)
+    _qdrant_match(must, field_map, "domain", filters.domain)
+    _qdrant_match_any(must, field_map, "acl_policy_id", filters.acl_policy_ids)
+    if filters.source_ids:
+        must.append(
+            {
+                "should": [
+                    _qdrant_match_condition(
+                        field_map.get("source_id", "source_id"),
+                        filters.source_ids,
+                    ),
+                    _qdrant_match_condition(
+                        field_map.get("source", "source"),
+                        filters.source_ids,
+                    ),
+                ]
+            }
+        )
+    if filters.document_ids:
+        must.append(
+            {
+                "should": [
+                    _qdrant_match_condition(
+                        field_map.get("document_id", "document_id"),
+                        filters.document_ids,
+                    ),
+                    _qdrant_match_condition(
+                        field_map.get("doc_id", "doc_id"),
+                        filters.document_ids,
+                    ),
+                ]
+            }
+        )
+    _qdrant_match_any(must, field_map, "language", filters.languages)
+    _qdrant_match_any(must, field_map, "mime_type", filters.mime_types)
+    _qdrant_match_any(must, field_map, "tags", filters.tags)
+    _qdrant_range(
+        must,
+        field_map.get("created_at", "created_at"),
+        gte=filters.created_after,
+        lte=filters.created_before,
+    )
+    _qdrant_range(
+        must,
+        field_map.get("updated_at", "updated_at"),
+        gte=filters.updated_after,
+        lte=filters.updated_before,
+    )
+    for key, value in filters.properties.items():
+        must.append({"key": field_map.get(key, f"properties.{key}"), "match": {"value": value}})
+    return {"must": must} if must else None
+
+
+def _qdrant_match(
+    must: list[dict[str, object]],
+    field_map: dict[str, str],
+    key: str,
+    value: str,
+) -> None:
+    if value:
+        must.append({"key": field_map.get(key, key), "match": {"value": value}})
+
+
+def _qdrant_match_any(
+    must: list[dict[str, object]],
+    field_map: dict[str, str],
+    key: str,
+    values: Sequence[str],
+) -> None:
+    if values:
+        must.append(_qdrant_match_condition(field_map.get(key, key), values))
+
+
+def _qdrant_match_condition(field: str, values: Sequence[str]) -> dict[str, object]:
+    return {"key": field, "match": {"any": list(values)}}
+
+
+def _qdrant_range(
+    must: list[dict[str, object]],
+    field: str,
+    *,
+    gte: float | None,
+    lte: float | None,
+) -> None:
+    bounds: dict[str, float] = {}
+    if gte is not None:
+        bounds["gte"] = gte
+    if lte is not None:
+        bounds["lte"] = lte
+    if bounds:
+        must.append({"key": field, "range": bounds})
+
+
+def _qdrant_points(response: object) -> list[object]:
+    if isinstance(response, list):
+        return response
+    points = getattr(response, "points", None)
+    if isinstance(points, list):
+        return points
+    payload = _response_dict(response)
+    result = payload.get("result")
+    if isinstance(result, dict):
+        raw_points = result.get("points", [])
+        return list(raw_points) if isinstance(raw_points, list) else []
+    if isinstance(result, list):
+        return result
+    return []
+
+
+def _qdrant_payload(point: object) -> dict[str, object]:
+    if isinstance(point, dict):
+        payload = point.get("payload", {})
+    else:
+        payload = getattr(point, "payload", {})
+    return payload if isinstance(payload, dict) else {}
+
+
+def _qdrant_id(point: object) -> str:
+    if isinstance(point, dict):
+        value = point.get("id", "")
+    else:
+        value = getattr(point, "id", "")
+    return "" if value is None else str(value)
+
+
+def _qdrant_score(point: object) -> float:
+    if isinstance(point, dict):
+        value = point.get("score", 0.0)
+    else:
+        value = getattr(point, "score", 0.0)
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _payload_value(payload: dict[str, object], *keys: str) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if value is not None:
+            return str(value)
+    return ""
+
+
+def _payload_metadata(payload: dict[str, object], *, raw_score: float) -> dict[str, object]:
+    metadata: dict[str, object] = {"raw_score": raw_score}
+    for key in (
+        "title",
+        "kind",
+        "source",
+        "page",
+        "chunk_id",
+        "category",
+        "domain",
+        "language",
+    ):
+        value = payload.get(key)
+        if value is not None:
+            metadata[key] = value
+    return metadata
+
+
+def _normalize_vector_score(raw_score: float, max_raw_score: float, rank: int) -> float:
+    if raw_score <= 0:
+        return _rank_score(rank - 1)
+    if max_raw_score > 1.0:
+        return _clamp_score(raw_score / max_raw_score)
+    return _clamp_score(raw_score)
+
+
+def _object_str(response: object, payload: dict[str, object], key: str) -> str:
+    value = payload.get(key)
+    if value is None:
+        value = getattr(response, key, "")
+    return "" if value is None else str(value)
+
+
+def _object_int(response: object, payload: dict[str, object], key: str) -> int:
+    value = payload.get(key)
+    if value is None:
+        value = getattr(response, key, 0)
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0

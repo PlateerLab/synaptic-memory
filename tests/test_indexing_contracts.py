@@ -13,6 +13,7 @@ from synaptic import (
     Node,
     NodeKind,
     OpenSearchCandidateProvider,
+    QdrantCandidateProvider,
     ScoredCandidate,
     StorageCandidateProvider,
     unique_candidates,
@@ -387,3 +388,163 @@ async def test_opensearch_candidate_provider_health_uses_cluster_status():
     assert report.provider == "opensearch"
     assert report.status == "green"
     assert report.index_generation == "synaptic-chunks"
+
+
+@pytest.mark.asyncio
+async def test_qdrant_candidate_provider_builds_payload_filters_and_candidates():
+    class _Point:
+        def __init__(
+            self,
+            *,
+            point_id: str,
+            score: float,
+            payload: dict[str, object],
+        ) -> None:
+            self.id = point_id
+            self.score = score
+            self.payload = payload
+
+    class _Response:
+        def __init__(self, points: list[_Point]) -> None:
+            self.points = points
+
+    class FakeQdrantClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        async def query_points(self, **kwargs):
+            self.calls.append(kwargs)
+            return _Response(
+                [
+                    _Point(
+                        point_id="fallback-a",
+                        score=0.42,
+                        payload={
+                            "node_id": "chunk-alpha",
+                            "document_id": "doc-alpha",
+                            "title": "Alpha",
+                            "kind": "chunk",
+                            "source": "policy",
+                        },
+                    ),
+                    _Point(
+                        point_id="fallback-b",
+                        score=0.88,
+                        payload={
+                            "node_id": "chunk-beta",
+                            "doc_id": "doc-beta",
+                            "title": "Beta",
+                            "kind": "chunk",
+                        },
+                    ),
+                    _Point(
+                        point_id="fallback-a",
+                        score=0.96,
+                        payload={
+                            "node_id": "chunk-alpha",
+                            "document_id": "doc-alpha",
+                            "title": "Alpha Better",
+                            "kind": "chunk",
+                        },
+                    ),
+                ]
+            )
+
+    client = FakeQdrantClient()
+    provider = QdrantCandidateProvider(client, collection="synaptic-vectors")
+
+    result = await provider.search_candidates(
+        CandidateSearchRequest(
+            query="alpha",
+            embedding=[0.1, 0.2, 0.3],
+            limit=5,
+            filters=IndexFilter(
+                workspace_id="workspace-a",
+                acl_policy_ids=["acl-a"],
+                source_ids=["policy"],
+                document_ids=["doc-alpha"],
+                updated_before=20.0,
+                properties={"department": "risk"},
+            ),
+        )
+    )
+
+    assert [candidate.node_id for candidate in result.candidates] == [
+        "chunk-alpha",
+        "chunk-beta",
+    ]
+    assert result.candidates[0].score == 0.96
+    assert result.candidates[0].score_source == CandidateScoreSource.VECTOR
+    assert result.candidates[0].document_id == "doc-alpha"
+    assert result.candidates[1].document_id == "doc-beta"
+    assert result.provider_counts == {"qdrant": 3}
+    assert result.diagnostics["payload_filter"] is True
+
+    call = client.calls[0]
+    assert call["collection_name"] == "synaptic-vectors"
+    assert call["query"] == [0.1, 0.2, 0.3]
+    assert call["with_payload"] == [
+        "node_id",
+        "document_id",
+        "doc_id",
+        "title",
+        "kind",
+        "source",
+        "page",
+        "chunk_id",
+        "category",
+        "domain",
+        "language",
+    ]
+    payload_filter = call["query_filter"]
+    assert {"key": "workspace_id", "match": {"value": "workspace-a"}} in payload_filter["must"]
+    assert {"key": "acl_policy_id", "match": {"any": ["acl-a"]}} in payload_filter["must"]
+    assert {"key": "updated_at", "range": {"lte": 20.0}} in payload_filter["must"]
+    assert {"key": "properties.department", "match": {"value": "risk"}} in payload_filter["must"]
+    assert {
+        "should": [
+            {"key": "source_id", "match": {"any": ["policy"]}},
+            {"key": "source", "match": {"any": ["policy"]}},
+        ]
+    } in payload_filter["must"]
+    assert {
+        "should": [
+            {"key": "document_id", "match": {"any": ["doc-alpha"]}},
+            {"key": "doc_id", "match": {"any": ["doc-alpha"]}},
+        ]
+    } in payload_filter["must"]
+
+
+@pytest.mark.asyncio
+async def test_qdrant_candidate_provider_requires_embedding():
+    class FakeQdrantClient:
+        async def query_points(self, **kwargs):  # pragma: no cover - should not be called
+            raise AssertionError(kwargs)
+
+    provider = QdrantCandidateProvider(FakeQdrantClient(), collection="synaptic-vectors")
+
+    result = await provider.search_candidates(CandidateSearchRequest(query="alpha"))
+
+    assert result.candidates == []
+    assert result.diagnostics["missing_embedding"] is True
+
+
+@pytest.mark.asyncio
+async def test_qdrant_candidate_provider_health_uses_collection_status():
+    class _Collection:
+        status = "green"
+        points_count = 42
+
+    class FakeQdrantClient:
+        async def get_collection(self, *, collection_name: str):
+            assert collection_name == "synaptic-vectors"
+            return _Collection()
+
+    provider = QdrantCandidateProvider(FakeQdrantClient(), collection="synaptic-vectors")
+
+    report = await provider.index_health()
+
+    assert report.provider == "qdrant"
+    assert report.status == "green"
+    assert report.index_generation == "synaptic-vectors"
+    assert report.properties["points_count"] == 42

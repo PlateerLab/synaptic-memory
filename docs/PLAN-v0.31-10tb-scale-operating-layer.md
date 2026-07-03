@@ -335,6 +335,16 @@ Goal: make vector retrieval payload-filtered and batch-friendly.
 - Add batch graph/metadata hydration for vector results.
 - Add shard/collection strategy by workspace/domain/language.
 
+Current implementation status:
+
+- `QdrantCandidateProvider` accepts an injected Qdrant-compatible client
+  without adding a mandatory runtime dependency.
+- It uses `CandidateSearchRequest.embedding` and converts `IndexFilter` into
+  Qdrant payload filters for workspace, ACL, document id, source, language,
+  mime type, tags, time ranges, and property filters.
+- It returns deduped vector `ScoredCandidate` ids with compact payload metadata,
+  leaving node hydration to `EvidenceSearch` / graph storage.
+
 ### Phase 5 - Ingestion Pipeline
 
 Goal: make new/changed data manageable as memory, not bulk reloads.
@@ -382,7 +392,5 @@ The system is 10TB-ready only when all are true:
 ## Near-Term TODO
 
 1. Run DeepSeek 100-query follow-up against the `31/50` baseline.
-2. Upgrade the Qdrant helper into a vector `CandidateProvider` with payload
-   filters and scored candidate metadata.
-3. Add index lag/ingestion job persistence to a durable backend.
-4. Run a 100GB or 1TB corpus rehearsal before any 10TB ingestion work.
+2. Add index lag/ingestion job persistence to a durable backend.
+3. Run a 100GB or 1TB corpus rehearsal before any 10TB ingestion work.
