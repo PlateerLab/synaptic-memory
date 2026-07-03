@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and adoption help
+    url: https://github.com/PlateerLab/synaptic-memory/discussions
+    about: Ask questions, discuss integration choices, or share use cases.
+  - name: Documentation
+    url: https://github.com/PlateerLab/synaptic-memory#readme
+    about: Start with the README, quickstart, install extras, and reports.

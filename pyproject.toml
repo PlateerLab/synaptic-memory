@@ -14,16 +14,25 @@ keywords = [
     "knowledge-graph",
     "agent-memory",
     "auto-ontology",
+    "change-data-capture",
+    "graphrag",
     "hebbian-learning",
+    "hybrid-search",
+    "korean-nlp",
+    "langchain",
+    "mcp",
+    "mcp-server",
     "personalized-pagerank",
     "evidence-chain",
     "memory-consolidation",
-    "hybrid-search",
     "ontology",
-    "mcp",
+    "postgresql",
+    "rag",
     "kuzu",
     "qdrant",
     "cypher",
+    "semantic-search",
+    "vector-search",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -43,6 +52,10 @@ Homepage = "https://github.com/PlateerLab/synaptic-memory"
 Repository = "https://github.com/PlateerLab/synaptic-memory"
 Documentation = "https://github.com/PlateerLab/synaptic-memory/blob/main/README.md"
 Changelog = "https://github.com/PlateerLab/synaptic-memory/blob/main/CHANGELOG.md"
+Issues = "https://github.com/PlateerLab/synaptic-memory/issues"
+Discussions = "https://github.com/PlateerLab/synaptic-memory/discussions"
+Reports = "https://github.com/PlateerLab/synaptic-memory/tree/main/docs"
+Quickstart = "https://github.com/PlateerLab/synaptic-memory#5-minute-start"
 
 [project.scripts]
 synaptic-mcp = "synaptic.cli.mcp:main"

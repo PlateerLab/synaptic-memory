@@ -1,209 +1,142 @@
-# Show HN launch draft
+# Show HN Draft
 
-**Status:** draft — do not post until Week 2 checklist below is green.
-
----
-
-## Title candidates (pick one, test against title gotchas)
-
-1. **Show HN: Synaptic Memory – RAG with zero LLM calls at index time**
-2. Show HN: Synaptic Memory – SQLite-native RAG + CDC for live production databases
-3. Show HN: Synaptic Memory – a knowledge graph for LLM agents that doesn't need an LLM to build
-
-**Recommended:** #1. Shortest, makes the concrete claim, triggers curiosity.
-
-**Title rules (HN-proofed):**
-- ≤ 80 chars including "Show HN: ".
-- No emoji, no version numbers, no exclamation marks.
-- "Zero LLM calls at index time" is the hook — it's falsifiable, which helps.
+**Status:** draft. Do not post until the launch checklist is green and the
+current release is on PyPI.
 
 ---
 
-## Body
+## Title Candidates
 
-> Hi HN,
->
-> Synaptic Memory is a Python library and MCP server that turns any
-> corpus — CSV, JSONL, PDFs, or a live SQL database — into a knowledge
-> graph that LLM agents can search, without ever calling an LLM to
-> build it.
->
-> Most of the "agent memory" space (Mem0, Zep/Graphiti, Cognee,
-> LightRAG, MS GraphRAG) leans on an LLM at index time to extract
-> entities, relations, or community summaries. That's great for
-> recall, but it adds a per-document inference cost, a privacy
-> surface, and a "can I run this on-prem without calling an external
-> API" problem. I kept running into that wall at work on Korean
-> enterprise deployments where external API calls are simply a
-> non-starter.
->
-> Synaptic takes the other path: build the graph with structural and
-> statistical signals only (FK edges, sentence-boundary chunking,
-> document-frequency phrase hubs, NEXT_CHUNK sequence), then let the
-> agent's LLM do the judgment at **query** time. The retrieval
-> pipeline is BM25 (FTS5) + usearch HNSW vectors + Personalized
-> PageRank + cross-encoder reranker + MMR — all local, all optional.
->
-> Things I think are genuinely useful:
->
-> * **Zero LLM at indexing.** A 10-document CSV → searchable graph in
->   < 0.2 s. A 200-document Korean enterprise benchmark runs in under
->   two seconds on a laptop (details below).
-> * **Native CDC.** `SynapticGraph.from_database(..., mode="cdc")`
->   gives you deterministic node IDs, and `sync_from_database()`
->   propagates inserts/updates/deletes incrementally. A regression
->   test locks in that CDC-mode top-k matches a full rebuild — so
->   your production database and your retrieval index stay in sync
->   without a nightly reindex job.
-> * **Structured + unstructured in the same graph.** CSV/SQL rows
->   land as typed property nodes with FK edges (RELATED); documents
->   land as Category → Document → Chunk. The 36 MCP tools let an
->   agent mix `filter_nodes` / `aggregate_nodes` / `join_related`
->   with `deep_search` in one conversation.
-> * **Korean FTS built in.** Kiwi morphological analyzer,
->   auto-detected by the 50 %-Hangul heuristic so structured English
->   data doesn't get over-segmented.
-> * **SQLite default.** No Neo4j, no Postgres, no vector DB to run.
->   Postgres + pgvector, Kuzu, and Qdrant backends exist if you need
->   them.
->
-> What I'm intentionally *not* claiming:
->
-> * Not "a new generation of RAG." The algorithmic primitives
->   (BM25, HNSW, PPR, cross-encoder, MMR) are all well known — the
->   contribution is the integration, the CDC path, and the
->   LLM-free-at-index-time property, not a new retrieval algorithm.
-> * Not tested at web scale. Default backend is good to roughly
->   100 k nodes; above that you want the Postgres or Kuzu backend,
->   which I've used in production but haven't benchmarked publicly.
-> * Single maintainer. v0.15.0 is marked Beta for a reason.
->
-> **Reproducible numbers** (the part I care most about, given how
-> much self-reported benchmark trouble this space has had lately):
->
-> ```
-> $ pip install "synaptic-memory[korean]"
-> $ python examples/benchmark_allganize.py
-> Dataset                  Corpus  Queries      MRR     R@10        Hit     Time
-> Allganize RAG-ko            200      200    0.947    1.000   200/200     9.3s
-> Allganize RAG-Eval          300      300    0.911    0.950   285/300     5.9s
-> ```
->
-> That's **embedder-free** — no vector index, no cross-encoder, zero
-> LLM calls at any point. Two releases of cumulative gain from the
-> v0.15.0 legacy baseline (Allganize RAG-ko: 0.621 → 0.743 via
-> query-time Korean morphological stripping in v0.15.1, then → 0.947
-> via the v0.16.0 engine default flip to the hybrid EvidenceSearch
-> pipeline).
->
-> English standard benchmarks (500q subsets of HotPotQA-dev /
-> MuSiQue-Ans / 2WikiMultihopQA, also embedder-free):
->
-> ```
-> HotPotQA dev (66,635 docs)         MRR@10 0.784   Hit@10 91.8 %
-> 2WikiMultihopQA dev (56,687 docs)  MRR@10 0.795   Hit@10 91.2 %
-> MuSiQue-Ans dev (21,100 docs)      MRR@10 0.590   Hit@10 76.2 %
-> ```
->
-> MuSiQue shows the expected weakness of an embedder-free system on
-> 2-4 hop chains — R@5 0.379 vs HippoRAG2's 0.747. We don't hide
-> it; closing that gap is what the v0.16.1 embedder path is for.
->
-> License: MIT. Links:
->
-> * GitHub: https://github.com/PlateerLab/synaptic-memory
-> * PyPI: https://pypi.org/project/synaptic-memory/
-> * LangChain integration: `pip install "synaptic-memory[langchain]"` →
->   `from synaptic.integrations.langchain import SynapticRetriever`
-> * Quick start: https://github.com/PlateerLab/synaptic-memory#5-minute-start
->
-> Things I'd genuinely like feedback on:
->
-> * Are there obvious benchmarks (BEIR subsets, LoCoMo, LongMemEval)
->   you'd want to see before trusting the numbers?
-> * Does the CDC story solve a real pain, or is nightly reindex
->   "good enough" in practice for most of you?
-> * How badly does the "36 MCP tools" surface clash with how you
->   actually wire agents?
->
-> Happy to answer questions. Thanks for reading.
+1. **Show HN: Synaptic Memory - a graph memory layer for agentic RAG**
+2. Show HN: Synaptic Memory - LLM-free indexing for agent search
+3. Show HN: Synaptic Memory - knowledge graph + MCP tools for RAG agents
+
+Recommended: #1. It is short, accurate, and does not over-index on a benchmark
+claim.
 
 ---
 
-## Top-comment prep (post yourself immediately after submission)
+## Body Draft
 
-> A few things I'd flag up front that might come up in comments:
+Hi HN,
+
+I built Synaptic Memory, a Python library and MCP server that turns documents,
+CSV/JSONL files, and SQL databases into a searchable knowledge graph for LLM
+agents.
+
+The design goal is simple: keep indexing deterministic by default, then give
+the agent better tools at query time. A lot of graph/RAG systems use an LLM at
+index time to extract entities, relations, or summaries. That can work well, but
+it also creates a per-document cost, a privacy surface, and an on-prem deployment
+problem. Synaptic's default path uses structural and statistical signals instead:
+document hierarchy, chunks, foreign keys, explicit references, phrase/entity
+hubs, graph expansion, BM25, optional vectors, optional reranking, and MCP tools.
+
+What it does:
+
+- Ingests directories, CSV/JSONL, office files through an optional parser, and
+  relational databases.
+- Builds a graph of documents, chunks, table rows, and typed edges.
+- Supports live DB sync via CDC-style incremental updates for practical
+  database-backed corpora.
+- Exposes MCP tools such as `deep_search`, `compare_search`, `filter_nodes`,
+  `aggregate_nodes`, `join_related`, and `top_nodes`.
+- Supports local SQLite, PostgreSQL + pgvector, Kuzu, Qdrant, and MinIO/S3-style
+  composition through optional extras.
+- Adds an opt-in memory operating layer: retrieval events, feedback,
+  provenance, scope-aware reinforcement, and health signals.
+
+Five-minute local test:
+
+```bash
+pip install "synaptic-memory[sqlite,korean,vector]"
+synaptic-quickstart --db quickstart.db
+```
+
+Basic usage:
+
+```python
+from synaptic import SynapticGraph
+
+graph = await SynapticGraph.from_data("./docs/", preset="rag")
+result = await graph.search("refund exception")
+```
+
+What I am not claiming:
+
+- Not a vector database replacement. It is the graph/tool/memory layer around
+  your documents, SQL data, embedding endpoint, and agent runtime.
+- Not web-scale out of the box. The core library provides backend contracts and
+  retrieval logic; multi-terabyte production deployments still need ingestion
+  workers, external indexes, ACL filtering, monitoring, and backup/restore.
+- Not magic truth discovery. Feedback and health signals are observations, not
+  automatic truth judgments.
+
+Links:
+
+- GitHub: https://github.com/PlateerLab/synaptic-memory
+- PyPI: https://pypi.org/project/synaptic-memory/
+- Quick start: https://github.com/PlateerLab/synaptic-memory#5-minute-start
+- RAG comparison report: https://github.com/PlateerLab/synaptic-memory/blob/main/docs/REPORT-rag-vs-synaptic.md
+- Memory operating layer report: https://github.com/PlateerLab/synaptic-memory/blob/main/docs/REPORT-memory-operating-layer-eval.md
+
+License: Apache-2.0. Python 3.12+.
+
+I would especially like feedback on:
+
+- Whether the MCP tool surface is too broad or useful in real agent setups.
+- Which public RAG / agent-search benchmarks would make the results more
+  trustworthy.
+- Whether CDC-style database sync solves a real workflow pain, or whether most
+  teams are fine with periodic rebuilds.
+
+Thanks for reading.
+
+---
+
+## First Comment Prep
+
+Post this as the first comment if the HN thread starts getting technical
+questions:
+
+> A few clarifications:
 >
-> 1. **"3rd-gen GraphRAG" terminology.** An earlier README version
->    used this framing. I've since removed it — self-proclaimed
->    generations are a bad look given what happened to the 84 %
->    LoCoMo claim last year. The table now just compares indexing
->    cost across approaches.
-> 2. **HotPotQA is run at a 500-query subset**, not the full
->    7,405-question dev set, because PPR's first-hit cost is
->    O(corpus_size) on the current implementation and a full run
->    takes ~3.7 hours on a laptop. Optimising that is tracked as
->    v0.16.1.
-> 3. **MuSiQue lags HippoRAG2 by a lot** (R@5 0.379 vs 0.747). That's
->    the honest result — embedder-free retrieval cannot bridge 2-4
->    hop chains that share no lexical overlap. The paper is explicit
->    about it; v0.16.1 adds the embedder path for a fairer rematch.
-> 4. **Python 3.12+ only.** I know 3.10/3.11 covers more enterprise
->    deployments — relaxing this is on the roadmap.
+> - The default path is LLM-free at indexing time. OpenIE/LLM extraction exists
+>   as an opt-in layer, not the default.
+> - Qdrant and MinIO are helper services behind `CompositeBackend`; they do not
+>   store the full graph by themselves.
+> - The memory layer records events, feedback, provenance, and health signals as
+>   metadata. It does not append raw provenance into `Node.content`, and it does
+>   not dump raw ledger rows into prompts.
+> - The project is beta. The strongest current use case is infra-friendly RAG for
+>   mixed document + SQL corpora, especially when an agent needs multi-turn
+>   search tools rather than one-shot vector retrieval.
 
 ---
 
-## Timing
+## Launch Checklist
 
-- **Best slots:** Tue–Thu, 09:00–11:00 PT (~17:00 KST). Avoid
-  holidays, major product launches, earnings weeks.
-- **Don't submit before Week 2 checklist (below) is ✅.** A failed
-  Show HN is very hard to redo.
+Blockers:
 
----
+- [ ] Latest README and README.ko.md are merged to `main`.
+- [ ] PyPI release is current.
+- [ ] `synaptic-quickstart --json` works from a clean install.
+- [ ] GitHub repo description, topics, homepage, and social preview are set.
+- [ ] Issues are enabled.
+- [ ] Discussions are enabled or the draft avoids promising Discussions.
+- [ ] Release notes link to the current reports and quickstart.
 
-## Week-2 pre-launch checklist
+Nice-to-have:
 
-### Must-haves (block launch)
-- [x] `examples/quickstart.py` runs clean on `pip install "synaptic-memory[sqlite,korean,vector]"`.
-- [x] `examples/benchmark_allganize.py` finishes in < 15 s and prints stable numbers (v0.16.0).
-- [x] `examples/langchain_retriever.py` works end-to-end.
-- [x] `examples/ablation/run_tier1_benchmarks.py --subset 500` finishes within an hour.
-- [x] README "5-minute start" block is copy-pasteable.
-- [x] No broken links in README / README.ko.md.
-- [x] Unit tests green (`uv run pytest tests/ -q ...` → 819 pass).
-- [x] README.ko.md in sync with README.md (v0.16.0).
-- [x] docs/TUTORIAL.en.md exists.
-- [x] v0.16.0 published on PyPI.  ← **requires `uv publish` before posting**
-- [ ] GitHub repo has a description, topics, and a social preview image.
-- [ ] Discussions or an Issues template enabled (so HN commenters can file follow-ups).
+- [ ] 60-second terminal GIF or MP4 from `docs/launch/demo_video.md`.
+- [ ] One architecture image for social posts.
+- [ ] Korean mirror post for GeekNews / LinkedIn.
+- [ ] A small "RAG vs Synaptic" diagram in the docs.
 
-### Nice-to-haves (don't block)
-- [ ] Anthropic MCP registry submission in flight.
-- [ ] Short Loom / asciinema cast linked from README ("60-second demo").
-- [ ] Comparison table vs Mem0 / Zep / Cognee in `docs/COMPARISON.md` in English.
-- [ ] Colab notebook mirror of `benchmark_allganize.py`.
+Post-launch:
 
-### Post-launch monitoring (first 6 hours)
-- Refresh HN front page every 10–15 minutes for the first 2 hours.
-- Reply to every top-level comment within 30 minutes.
-- Lead with specifics, never marketing language.
-- If a comment is harsh but technical, thank them and answer the
-  technical point — never get defensive.
-- Cross-post to:
-  - r/LocalLLaMA (after HN momentum is clear)
-  - r/Python (once stars cross 200)
-  - AI Korea Slack / GeekNews (hada.io) — same day, Korean version
-  - X/Twitter thread with the benchmark gif
-
----
-
-## Korean mirror post (for GeekNews / 브런치, same day)
-
-동일 내용을 한국어로 준비하되:
-
-- 제목: **"LLM 호출 없이 인덱싱하는 RAG — Synaptic Memory (Show HN)"**
-- 한국어 Allganize 벤치마크 숫자를 **전면**에 배치 (영어권과 달리
-  한국어 독자는 이 숫자에 더 민감).
-- 한국어 FTS(Kiwi), on-prem 중심 포지셔닝을 강조.
-- 국내 SI / 대기업 채택 상담 가능 여부를 명시 (엔터프라이즈 유입 채널).
+- Watch comments for the first 2 hours.
+- Answer technical questions with specifics and links.
+- Do not ask for upvotes.
+- If a benchmark question is unclear, point to the reproduction command or say
+  exactly what has not been measured yet.
