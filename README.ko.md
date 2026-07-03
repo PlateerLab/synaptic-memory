@@ -24,7 +24,7 @@ synaptic-quickstart --db quickstart.db
 
 ---
 
-## 두 번의 호출로 그래프 구축
+## 그래프 구축과 검색
 
 ```python
 import asyncio
@@ -34,7 +34,7 @@ async def main():
     # 아무 데이터 → 지식 그래프 (CSV, JSONL, 디렉터리)
     graph = await SynapticGraph.from_data("./내_데이터/", preset="rag")
     try:
-        result = await graph.search("내 질문", engine="evidence")
+        result = await graph.search("내 질문")
         print(result.nodes[0].node.title if result.nodes else "결과 없음")
     finally:
         await graph.close()
@@ -129,7 +129,7 @@ async def main():
     # CSV 파일
     graph = await SynapticGraph.from_data("products.csv")
     try:
-        result = await graph.search("내 질문", engine="evidence")
+        result = await graph.search("내 질문")
         for activated in result.nodes[:5]:
             print(activated.node.title, activated.activation)
     finally:
@@ -167,11 +167,13 @@ from synaptic.integrations.langchain import SynapticRetriever
 
 async def main():
     graph = await SynapticGraph.from_data("./docs/")
-    retriever = SynapticRetriever(graph=graph, k=5, engine="evidence")
-
-    docs = await retriever.ainvoke("내 질문")
-    for doc in docs:
-        print(doc.page_content[:80], "   ", doc.metadata["score"])
+    try:
+        retriever = SynapticRetriever(graph=graph, k=5)
+        docs = await retriever.ainvoke("내 질문")
+        for doc in docs:
+            print(doc.page_content[:80], "   ", doc.metadata["score"])
+    finally:
+        await graph.close()
 
 asyncio.run(main())
 ```
@@ -214,13 +216,14 @@ asyncio.run(main())
 LLM이 합성한 요약이 필요하면 그래프 위에 별도 에이전트 레이어로 쌓으세요 —
 Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합니다.
 
-> **v0.16.0**: `graph.search()` 기본 엔진이 **`"evidence"`** 로 전환되었습니다.
-> `engine="legacy"`는 `DeprecationWarning`을 띄우며 v0.17.0에서 제거 예정.
-> Korean 공개 벤치마크에서 **MRR 0.621 → 0.947** (Allganize RAG-ko) 달성.
+> **v0.28+**: `graph.search()`는 하나의 경로만 사용합니다. BM25 + HNSW +
+> PPR + cross-encoder + MMR 기반 EvidenceSearch 파이프라인입니다.
+> 예전 `engine=` 스위치는 제거되었으므로 예제는
+> `graph.search("질문")`처럼 바로 호출하면 됩니다.
 
 ---
 
-## 에이전트 도구 (42개)
+## 에이전트 도구
 
 ### 텍스트 검색 도구
 | 도구 | 용도 |
@@ -242,7 +245,7 @@ Synaptic은 primitive를 제공하고, 합성 여부는 사용자가 선택합�
 | `join_related` | FK 기반 관련 레코드 조회 — RELATED 엣지 순회 (O(degree)) |
 
 ### 인제스트 / CDC 도구 (v0.14.0+)
-대화 중에 Claude가 새 자료를 배울 수 있도록 하는 6개 도구.
+대화 중에 Claude가 새 자료를 배울 수 있도록 하는 도구.
 
 | 도구 | 용도 |
 |------|------|
@@ -301,6 +304,10 @@ await graph.reinforce([node_id], success=True)  # 이 결과가 도움 됨 → �
 ---
 
 ## 벤치마크
+
+아래 숫자는 버전 태그가 붙은 역사적 스냅샷입니다. 정확한 재현은 링크된
+스크립트/보고서를 기준으로 하고, 지속적으로 정리되는 결과 로그는
+[`docs/comparison/synaptic_results.md`](docs/comparison/synaptic_results.md)를 보세요.
 
 ### 재현 가능한 임베더-프리 베이스라인 (노트북 2초)
 
@@ -395,7 +402,7 @@ StorageBackend (Protocol)
   ↓
 검색 파이프라인 (BM25 + 벡터 + PRF + PPR + reranker + MMR)
   ↓
-에이전트 도구 (42개) → MCP 서버 → LLM 에이전트
+에이전트 도구 → MCP 서버 → LLM 에이전트
 ```
 
 ---
@@ -435,15 +442,16 @@ StorageBackend (Protocol)
 | [docs/GUIDE.md](docs/GUIDE.md) | 친절한 전체 안내서 (처음 접하는 사람용) |
 | [docs/TUTORIAL.md](docs/TUTORIAL.md) | 30분 단계별 실습 |
 | [docs/CONCEPTS.md](docs/CONCEPTS.md) | 파이프라인 심화 설명 |
+| [docs/ADOPTION.md](docs/ADOPTION.md) | 설치 옵션, preset, 첫 적용 경로 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 신경망 영감 초기 설계 |
 | [docs/COMPARISON.md](docs/COMPARISON.md) | GraphRAG / LightRAG 등과 비교 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 향후 로드맵 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 역사적 로드맵 |
 
 ## 개발
 
 ```bash
 uv sync --extra dev --extra sqlite --extra mcp
-uv run pytest tests/ -q                   # 818+ 테스트
+uv run pytest tests/ -q
 uv run ruff check --fix
 ```
 
