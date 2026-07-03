@@ -45,7 +45,8 @@ Documentation = "https://github.com/PlateerLab/synaptic-memory/blob/main/README.
 Changelog = "https://github.com/PlateerLab/synaptic-memory/blob/main/CHANGELOG.md"
 
 [project.scripts]
-synaptic-mcp = "synaptic.mcp.server:main"
+synaptic-mcp = "synaptic.cli.mcp:main"
+synaptic-quickstart = "synaptic.cli.quickstart:main"
 synaptic-snapshot = "synaptic.cli.snapshot:main"
 synaptic-agent-batch = "synaptic.cli.agent_batch:main"
 

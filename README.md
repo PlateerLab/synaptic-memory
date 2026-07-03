@@ -16,12 +16,13 @@ CDC-based live database sync, and Korean FTS built in.
 
 ```bash
 pip install "synaptic-memory[sqlite,korean,vector]"
-python examples/quickstart.py
+synaptic-quickstart --db quickstart.db
 ```
 
-That command ingests [`examples/data/products.csv`](examples/data/products.csv)
-into a SQLite-backed graph and runs three searches — all **without calling
-any LLM** at indexing time. Full source: [`examples/quickstart.py`](examples/quickstart.py).
+That command builds a tiny SQLite-backed graph and runs three searches — all
+**without calling any LLM** at indexing time. Omit `--db` for an in-memory,
+zero-dependency smoke test. Full source for the expanded example:
+[`examples/quickstart.py`](examples/quickstart.py).
 
 ---
 
@@ -33,35 +34,30 @@ from synaptic import SynapticGraph
 
 async def main():
     # Any data → knowledge graph (CSV, JSONL, directory)
-    graph = await SynapticGraph.from_data("./my_data/")
-
-    # Or directly from a database — SQLite / PostgreSQL / MySQL / Oracle / MSSQL
-    graph = await SynapticGraph.from_database(
-        "postgresql://user:pass@host:5432/dbname"
-    )
-
-    # Live database? Use CDC mode and only re-read what changed.
-    graph = await SynapticGraph.from_database(
-        "postgresql://user:pass@host:5432/dbname",
-        db="knowledge.db",
-        mode="cdc",       # deterministic node IDs + sync state recorded
-    )
-    result = await graph.sync_from_database(
-        "postgresql://user:pass@host:5432/dbname"
-    )
-    print(result.added, result.updated, result.deleted)
-
-    # Or bring your own chunker (LangChain, Unstructured, custom OCR, ...)
-    chunks = my_parser.split("manual.pdf")
-    graph = await SynapticGraph.from_chunks(chunks)
-
-    # Search
-    result = await graph.search("my question", engine="evidence")
+    graph = await SynapticGraph.from_data("./my_data/", preset="rag")
+    try:
+        result = await graph.search("my question", engine="evidence")
+        print(result.nodes[0].node.title if result.nodes else "no result")
+    finally:
+        await graph.close()
 
 asyncio.run(main())
 ```
 
 That's it. Auto-detects file format or DB schema, generates an ontology profile, ingests, indexes, builds FK edges.
+
+Presets keep the common knobs compact:
+
+```python
+# local: deterministic, no external services (default)
+graph = await SynapticGraph.from_chunks(chunks, preset="local")
+
+# rag: reads SYNAPTIC_EMBED_URL / SYNAPTIC_RERANK_URL if set
+graph = await SynapticGraph.from_data("./docs/", preset="rag")
+
+# agent: rag + deterministic component bridging for multi-turn exploration
+graph = await SynapticGraph.from_data("./docs/", preset="agent")
+```
 
 > **Live database sync (CDC)** — `mode="cdc"` enables incremental
 > updates: tables with an `updated_at`-style column are read with a
@@ -86,7 +82,7 @@ Knowledge Graph
   ├─ Documents: Category → Document → Chunk
   └─ Structured: table rows as ENTITY nodes + RELATED edges (FKs)
   ↓
-42 MCP tools → LLM agent explores via graph-aware multi-turn tool use
+MCP tools → LLM agent explores via graph-aware multi-turn tool use
 ```
 
 **Two jobs, nothing else:**
@@ -135,26 +131,20 @@ from synaptic import SynapticGraph
 async def main():
     # CSV file
     graph = await SynapticGraph.from_data("products.csv")
-
-    # JSONL documents
-    graph = await SynapticGraph.from_data("documents.jsonl")
-
-    # Entire directory (scans all CSV/JSONL)
-    graph = await SynapticGraph.from_data("./my_corpus/")
-
-    # With embedding (optional, improves semantic search)
-    graph = await SynapticGraph.from_data(
-        "./my_corpus/",
-        embed_url="http://localhost:11434/v1",
-    )
-
-    # Search
-    result = await graph.search("my question", engine="evidence")
-    for activated in result.nodes[:5]:
-        print(activated.node.title, activated.activation)
+    try:
+        result = await graph.search("my question", engine="evidence")
+        for activated in result.nodes[:5]:
+            print(activated.node.title, activated.activation)
+    finally:
+        await graph.close()
 
 asyncio.run(main())
 ```
+
+You can pass `preset="rag"` to read `SYNAPTIC_EMBED_URL` and
+`SYNAPTIC_RERANK_URL`, or use `GraphBuildOptions` when you want one reusable
+configuration object across `from_data()`, `from_chunks()`, and
+`from_database()`.
 
 ### Option B: MCP server (Claude Desktop / Code)
 
@@ -163,7 +153,7 @@ synaptic-mcp --db my_graph.db
 synaptic-mcp --db my_graph.db --embed-url http://localhost:11434/v1
 ```
 
-Claude can now call 42 tools to explore your graph — search, ingest
+Claude can now call MCP tools to explore your graph — search, ingest
 new files into the graph mid-conversation, and sync from a live
 database without dropping to a CLI.
 

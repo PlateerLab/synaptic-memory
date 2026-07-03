@@ -51,9 +51,7 @@ async def main() -> None:
                 print(f"     metadata keys: {sorted(doc.metadata.keys())}")
             print()
     finally:
-        close = getattr(graph._backend, "close", None)
-        if close is not None:
-            await close()
+        await graph.close()
 
 
 if __name__ == "__main__":

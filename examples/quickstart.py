@@ -66,11 +66,7 @@ async def main() -> None:
                 print(f"  {i}. {name:<30}  score={activated.activation:.3f}")
             print()
     finally:
-        # Close the backend connection cleanly so aiosqlite's worker
-        # thread exits before the event loop does.
-        close = getattr(graph._backend, "close", None)
-        if close is not None:
-            await close()
+        await graph.close()
 
 
 if __name__ == "__main__":

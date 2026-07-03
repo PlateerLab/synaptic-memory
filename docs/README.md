@@ -15,6 +15,10 @@ Synaptic Memory가 **무엇이고, 왜 필요하고, 어떻게 쓰는지** 친�
 30분 안에 따라할 수 있는 단계별 실습. CSV 한 개부터 멀티 테이블 FK 관계,
 LLM 에이전트, MCP 서버까지 순서대로 경험합니다.
 
+### [ADOPTION.md](ADOPTION.md)
+기존 RAG/agent 애플리케이션에 붙일 때 필요한 설치 옵션, quickstart,
+`preset`, `GraphBuildOptions`, MCP 진입점을 한 장으로 정리한 적용 가이드.
+
 ---
 
 ## 🧠 내부 동작이 궁금한 분
@@ -46,9 +50,9 @@ Flash live eval 준비 상태를 정리합니다.
 ## 🗺 계획 / 로드맵
 
 ### [ROADMAP.md](ROADMAP.md)
-버전별 기능 추가 계획. 현재 PyPI 최신은 **v0.17.2** (Apache-2.0 라이선스
-전환 + agent_loop ID-extraction fix). **v0.18-alpha** 에서 `graph.chat()`
-agent-loop 가 공개 API 로 승격됨.
+v0.17~v0.18 시점의 역사적 로드맵과 측정 근거. 현재 설치/사용 흐름은
+루트 [`README.md`](../README.md), 변경 이력은 [`CHANGELOG.md`](../CHANGELOG.md),
+최신 고도화 계획은 `PLAN-v0.30+` / `PLAN-v0.31+` 문서를 기준으로 보세요.
 
 ### [PLAN-v0.17-ontology.md](PLAN-v0.17-ontology.md)
 v0.17 ontology/정형 데이터 파이프라인 설계. MuSiQue 한계 논의 포함.

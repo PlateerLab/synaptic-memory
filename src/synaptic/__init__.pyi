@@ -93,6 +93,8 @@ from synaptic.ontology import PropertyDef as PropertyDef
 from synaptic.ontology import RelationConstraint as RelationConstraint
 from synaptic.ontology import TypeDef as TypeDef
 from synaptic.ontology import build_agent_ontology as build_agent_ontology
+from synaptic.options import GraphBuildOptions as GraphBuildOptions
+from synaptic.options import SynapticPreset as SynapticPreset
 from synaptic.ppr import personalized_pagerank as personalized_pagerank
 from synaptic.protocols import Digester as Digester
 from synaptic.protocols import EntityExtractor as EntityExtractor

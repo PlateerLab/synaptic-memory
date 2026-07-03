@@ -136,6 +136,7 @@ from synaptic.models import (
     memory_scope_key,
 )
 from synaptic.ontology import OntologyRegistry, build_agent_ontology
+from synaptic.options import GraphBuildOptions, SynapticPreset, resolve_graph_build_options
 from synaptic.protocols import (
     Digester,
     EntityExtractor,
@@ -770,15 +771,17 @@ class SynapticGraph:
         *,
         db: str = "synaptic.db",
         backend: StorageBackend | None = None,
+        preset: SynapticPreset | str | None = None,
+        options: GraphBuildOptions | None = None,
         profile: object | None = None,
         openie_extractor: EntityExtractor | None = None,
-        openie_enabled: bool = False,
+        openie_enabled: bool | None = None,
         embed_url: str | None = None,
-        embed_model: str = "qwen3-embedding:4b",
+        embed_model: str | None = None,
         rerank_url: str | None = None,
-        rerank_backend: str = "vllm",
-        rerank_model: str = "BAAI/bge-reranker-v2-m3",
-        connect: bool = False,
+        rerank_backend: str | None = None,
+        rerank_model: str | None = None,
+        connect: bool | None = None,
     ) -> SynapticGraph:
         """ONE-LINE graph construction from any data source.
 
@@ -800,6 +803,10 @@ class SynapticGraph:
 
             graph = await SynapticGraph.from_data("./my_docs/")
             result = await graph.search("my question")
+
+            # Endpoint-aware defaults via env vars:
+            # SYNAPTIC_EMBED_URL, SYNAPTIC_RERANK_URL, ...
+            graph = await SynapticGraph.from_data("./my_docs/", preset="rag")
 
             # With embedding
             graph = await SynapticGraph.from_data(
@@ -823,6 +830,11 @@ class SynapticGraph:
                 it instead of the default SQLite. When given, the caller
                 owns its connection lifecycle. When omitted, a SQLite
                 graph backend is created at ``db``.
+            preset: Optional named option bundle: ``"local"`` (default),
+                ``"rag"`` (read endpoint env vars), ``"agent"`` (RAG
+                plus deterministic component bridging), or ``"scale"``.
+            options: Optional :class:`GraphBuildOptions` instance for
+                reusing constructor options across ``from_*`` calls.
             profile: Optional :class:`DomainProfile` (or a TOML path).
                 When omitted, a profile is auto-generated from samples —
                 that builds the Category→Document→Chunk hierarchy but
@@ -867,6 +879,18 @@ class SynapticGraph:
         )
         from synaptic.extensions.profile_generator import ProfileGenerator
         from synaptic.extensions.table_ingester import TableIngester
+
+        runtime = resolve_graph_build_options(
+            preset=preset,
+            options=options,
+            embed_url=embed_url,
+            embed_model=embed_model,
+            rerank_url=rerank_url,
+            rerank_backend=rerank_backend,
+            rerank_model=rerank_model,
+            openie_enabled=openie_enabled,
+            connect=connect,
+        )
 
         path = Path(data_path)
         backend = await cls._open_backend(backend, db)
@@ -954,7 +978,7 @@ class SynapticGraph:
                 samples=samples,
                 categories=categories if categories else None,
             )
-        if openie_enabled and profile is not None:
+        if runtime.openie_enabled and profile is not None:
             profile.openie_enabled = True  # type: ignore[attr-defined]
 
         # Ingest each file
@@ -1027,12 +1051,12 @@ class SynapticGraph:
 
         return await cls._finalize(
             backend,
-            embed_url=embed_url,
-            embed_model=embed_model,
-            rerank_url=rerank_url,
-            rerank_backend=rerank_backend,
-            rerank_model=rerank_model,
-            connect=connect,
+            embed_url=runtime.embed_url,
+            embed_model=runtime.embed_model,
+            rerank_url=runtime.rerank_url,
+            rerank_backend=runtime.rerank_backend,
+            rerank_model=runtime.rerank_model,
+            connect=runtime.connect,
         )
 
     @classmethod
@@ -1042,14 +1066,17 @@ class SynapticGraph:
         *,
         db: str = "synaptic.db",
         backend: StorageBackend | None = None,
+        preset: SynapticPreset | str | None = None,
+        options: GraphBuildOptions | None = None,
         profile: object | None = None,
         openie_extractor: EntityExtractor | None = None,
-        openie_enabled: bool = False,
+        openie_enabled: bool | None = None,
         embed_url: str | None = None,
-        embed_model: str = "qwen3-embedding:4b",
+        embed_model: str | None = None,
         rerank_url: str | None = None,
-        rerank_backend: str = "vllm",
-        rerank_model: str = "BAAI/bge-reranker-v2-m3",
+        rerank_backend: str | None = None,
+        rerank_model: str | None = None,
+        connect: bool | None = None,
     ) -> SynapticGraph:
         """Ingest pre-parsed / pre-chunked documents directly.
 
@@ -1080,6 +1107,9 @@ class SynapticGraph:
                 is auto-generated from the first 20 chunks.
             backend: Optional pre-built :class:`StorageBackend` (see
                 :meth:`from_data`). Defaults to SQLite at ``db``.
+            preset / options: Reusable configuration for embedding,
+                reranking, OpenIE opt-in, and component bridging. See
+                :meth:`from_data`.
             openie_extractor: Optional opt-in OpenIE extractor. Runs
                 only when ``openie_enabled=True`` or the supplied profile
                 has ``openie_enabled=True``.
@@ -1113,6 +1143,18 @@ class SynapticGraph:
         )
         from synaptic.extensions.profile_generator import ProfileGenerator
 
+        runtime = resolve_graph_build_options(
+            preset=preset,
+            options=options,
+            embed_url=embed_url,
+            embed_model=embed_model,
+            rerank_url=rerank_url,
+            rerank_backend=rerank_backend,
+            rerank_model=rerank_model,
+            openie_enabled=openie_enabled,
+            connect=connect,
+        )
+
         backend = await cls._open_backend(backend, db)
 
         # Auto-generate a profile from the first 20 chunks if the
@@ -1126,7 +1168,7 @@ class SynapticGraph:
                 samples=samples,
                 categories=list(dict.fromkeys(categories)) if categories else None,
             )
-        if openie_enabled and profile is not None:
+        if runtime.openie_enabled and profile is not None:
             profile.openie_enabled = True  # type: ignore[attr-defined]
 
         # Materialise chunks into a temp JSONL so they flow through
@@ -1195,11 +1237,12 @@ class SynapticGraph:
 
         return await cls._finalize(
             backend,
-            embed_url=embed_url,
-            embed_model=embed_model,
-            rerank_url=rerank_url,
-            rerank_backend=rerank_backend,
-            rerank_model=rerank_model,
+            embed_url=runtime.embed_url,
+            embed_model=runtime.embed_model,
+            rerank_url=runtime.rerank_url,
+            rerank_backend=runtime.rerank_backend,
+            rerank_model=runtime.rerank_model,
+            connect=runtime.connect,
         )
 
     @classmethod
@@ -1212,11 +1255,14 @@ class SynapticGraph:
         tables: list[str] | None = None,
         row_limit: int = 500_000,
         mode: str = "full",
+        preset: SynapticPreset | str | None = None,
+        options: GraphBuildOptions | None = None,
         embed_url: str | None = None,
-        embed_model: str = "qwen3-embedding:4b",
+        embed_model: str | None = None,
         rerank_url: str | None = None,
-        rerank_backend: str = "vllm",
-        rerank_model: str = "BAAI/bge-reranker-v2-m3",
+        rerank_backend: str | None = None,
+        rerank_model: str | None = None,
+        connect: bool | None = None,
     ) -> SynapticGraph:
         """ONE-LINE graph construction from a relational database.
 
@@ -1264,10 +1310,24 @@ class SynapticGraph:
         Args:
             backend: Optional pre-built :class:`StorageBackend` for the
                 graph store — see :meth:`from_data`. Defaults to SQLite.
+            preset / options: Reusable configuration for embedding,
+                reranking, and component bridging. OpenIE is ignored for
+                relational ingests.
             embed_url / rerank_url: Optional embedder / reranker server
                 URLs — same semantics as :meth:`from_data`.
         """
         from synaptic.extensions.db_ingester import DbIngester
+
+        runtime = resolve_graph_build_options(
+            preset=preset,
+            options=options,
+            embed_url=embed_url,
+            embed_model=embed_model,
+            rerank_url=rerank_url,
+            rerank_backend=rerank_backend,
+            rerank_model=rerank_model,
+            connect=connect,
+        )
 
         backend = await cls._open_backend(backend, db)
         graph = cls(backend)
@@ -1384,11 +1444,12 @@ class SynapticGraph:
 
         return await cls._finalize(
             backend,
-            embed_url=embed_url,
-            embed_model=embed_model,
-            rerank_url=rerank_url,
-            rerank_backend=rerank_backend,
-            rerank_model=rerank_model,
+            embed_url=runtime.embed_url,
+            embed_model=runtime.embed_model,
+            rerank_url=runtime.rerank_url,
+            rerank_backend=runtime.rerank_backend,
+            rerank_model=runtime.rerank_model,
+            connect=runtime.connect,
         )
 
     # --- Synchronous constructors ---

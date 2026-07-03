@@ -102,6 +102,7 @@ from synaptic.ontology import (
     TypeDef,
     build_agent_ontology,
 )
+from synaptic.options import GraphBuildOptions, SynapticPreset
 from synaptic.ppr import personalized_pagerank
 from synaptic.protocols import (
     Digester,
@@ -143,6 +144,7 @@ __all__ = [
     "EvidenceStep",
     "FeedbackSignal",
     "GraphTraversal",
+    "GraphBuildOptions",
     "HybridClassifier",
     "HybridEntityExtractor",
     "IndexFilter",
@@ -194,6 +196,7 @@ __all__ = [
     "StorageBackend",
     "StorageCandidateProvider",
     "SynapticGraph",
+    "SynapticPreset",
     "TableIngester",
     "TagExtractor",
     "TypeDef",

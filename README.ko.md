@@ -15,12 +15,12 @@ LLM 에이전트용 지식 그래프 + MCP 도구 서버. 하이브리드 검색
 
 ```bash
 pip install "synaptic-memory[sqlite,korean,vector]"
-python examples/quickstart.py
+synaptic-quickstart --db quickstart.db
 ```
 
-위 두 줄로 [`examples/data/products.csv`](examples/data/products.csv)를
-SQLite 기반 그래프로 인제스트하고 3개 쿼리를 실행합니다. 전 과정 **LLM 호출 0회**.
-전체 소스: [`examples/quickstart.py`](examples/quickstart.py).
+위 두 줄로 작은 SQLite 기반 그래프를 만들고 3개 쿼리를 실행합니다. 전 과정
+**LLM 호출 0회**입니다. `--db`를 빼면 의존성 없는 인메모리 smoke test로
+실행됩니다. 확장 예제: [`examples/quickstart.py`](examples/quickstart.py).
 
 ---
 
@@ -32,35 +32,30 @@ from synaptic import SynapticGraph
 
 async def main():
     # 아무 데이터 → 지식 그래프 (CSV, JSONL, 디렉터리)
-    graph = await SynapticGraph.from_data("./내_데이터/")
-
-    # 또는 DB에서 바로 — SQLite / PostgreSQL / MySQL / Oracle / MSSQL
-    graph = await SynapticGraph.from_database(
-        "postgresql://user:pass@host:5432/dbname"
-    )
-
-    # 라이브 DB? CDC 모드로 변경분만 다시 읽기
-    graph = await SynapticGraph.from_database(
-        "postgresql://user:pass@host:5432/dbname",
-        db="knowledge.db",
-        mode="cdc",       # deterministic node ID + sync state 기록
-    )
-    result = await graph.sync_from_database(
-        "postgresql://user:pass@host:5432/dbname"
-    )
-    print(result.added, result.updated, result.deleted)
-
-    # 또는 직접 청킹한 문서 전달 (LangChain, Unstructured, 자체 OCR 등)
-    chunks = my_parser.split("manual.pdf")
-    graph = await SynapticGraph.from_chunks(chunks)
-
-    # 검색
-    result = await graph.search("내 질문", engine="evidence")
+    graph = await SynapticGraph.from_data("./내_데이터/", preset="rag")
+    try:
+        result = await graph.search("내 질문", engine="evidence")
+        print(result.nodes[0].node.title if result.nodes else "결과 없음")
+    finally:
+        await graph.close()
 
 asyncio.run(main())
 ```
 
 파일 형식 또는 DB 스키마 자동 감지, 온톨로지 프로파일 자동 생성, 인제스트, 인덱싱, FK 엣지 구축까지 전부 자동.
+
+자주 쓰는 옵션은 preset으로 줄일 수 있습니다.
+
+```python
+# local: 기본값, 외부 서비스 없음
+graph = await SynapticGraph.from_chunks(chunks, preset="local")
+
+# rag: SYNAPTIC_EMBED_URL / SYNAPTIC_RERANK_URL 환경변수를 읽음
+graph = await SynapticGraph.from_data("./docs/", preset="rag")
+
+# agent: rag + 멀티턴 탐색용 deterministic component bridging
+graph = await SynapticGraph.from_data("./docs/", preset="agent")
+```
 
 > **라이브 DB 동기화 (CDC)** — `mode="cdc"`로 증분 업데이트:
 > `updated_at`류 컬럼이 있으면 워터마크 필터로 읽고, 없으면 row 내용 해시로 폴백.
@@ -83,7 +78,7 @@ asyncio.run(main())
   ├─ 문서: Category → Document → Chunk
   └─ 정형: 테이블 row → ENTITY 노드 + RELATED 엣지 (FK)
   ↓
-42개 MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
+MCP 도구 → LLM 에이전트가 그래프 기반 멀티턴으로 탐색
 ```
 
 **라이브러리가 하는 건 딱 두 가지:**
@@ -133,26 +128,19 @@ from synaptic import SynapticGraph
 async def main():
     # CSV 파일
     graph = await SynapticGraph.from_data("products.csv")
-
-    # JSONL 문서
-    graph = await SynapticGraph.from_data("documents.jsonl")
-
-    # 디렉터리 전체 (CSV/JSONL 자동 스캔)
-    graph = await SynapticGraph.from_data("./내_코퍼스/")
-
-    # 임베딩 추가 (선택, 의미 검색 품질 향상)
-    graph = await SynapticGraph.from_data(
-        "./내_코퍼스/",
-        embed_url="http://localhost:11434/v1",
-    )
-
-    # 검색
-    result = await graph.search("내 질문", engine="evidence")
-    for activated in result.nodes[:5]:
-        print(activated.node.title, activated.activation)
+    try:
+        result = await graph.search("내 질문", engine="evidence")
+        for activated in result.nodes[:5]:
+            print(activated.node.title, activated.activation)
+    finally:
+        await graph.close()
 
 asyncio.run(main())
 ```
+
+`preset="rag"`를 넘기면 `SYNAPTIC_EMBED_URL`, `SYNAPTIC_RERANK_URL`을 읽습니다.
+여러 `from_data()`, `from_chunks()`, `from_database()` 호출에 같은 설정을 쓰고
+싶다면 `GraphBuildOptions`를 사용할 수 있습니다.
 
 ### 방법 B: MCP 서버 (Claude Desktop / Code)
 
@@ -161,7 +149,7 @@ synaptic-mcp --db my_graph.db
 synaptic-mcp --db my_graph.db --embed-url http://localhost:11434/v1
 ```
 
-Claude가 42개 도구로 그래프를 직접 탐색합니다. 검색, 인제스트, CDC 동기화까지 CLI로 내려가지 않고 대화 안에서.
+Claude가 MCP 도구로 그래프를 직접 탐색합니다. 검색, 인제스트, CDC 동기화까지 CLI로 내려가지 않고 대화 안에서.
 
 복붙 가능한 `claude_desktop_config.json` 샘플:
 [`examples/mcp_claude_desktop.json`](examples/mcp_claude_desktop.json).
